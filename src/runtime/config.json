@@ -1,0 +1,42 @@
+{
+  "OutfitId": "KirbySuperStarUltra",
+  "SwordIds": [
+    "StartSword",
+    "QuickSword",
+    "RevengeSword",
+    "Bleeder",
+    "BroadSword",
+    "EvilSword",
+    "SpeedBlade",
+    "GiantKiller",
+    "BulletBlade",
+    "SismicBlade",
+    "Rapier",
+    "DashSword",
+    "OilSword",
+    "LowHealth",
+    "NotFlyingSword",
+    "Katana",
+    "HardLightSword",
+    "PureNail",
+    "QueenRapier",
+    "Starfury",
+    "TPSword",
+    "SnakeSwordWeapon",
+    "SnakeSwordWeaponAlt"
+  ],
+  "BowIds": [
+    "StartBow",
+    "DualBow",
+    "InfiniteBow",
+    "LongBow",
+    "CloseCombatBow",
+    "FastBow",
+    "FrostBow",
+    "MarkBow",
+    "PreciseBow",
+    "HeavyBow",
+    "MagicBow"
+  ],
+  "LoadDecodedAssetAtlases": false
+}
