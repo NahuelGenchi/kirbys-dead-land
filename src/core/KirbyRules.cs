@@ -61,23 +61,57 @@ public sealed class KirbyRules
     }
 
     /// <summary>
-    /// Complete a confirmed absorption and choose one copy ability uniformly when
-    /// using the default RNG. Repeated notifications cannot reroll one enemy.
-    /// Kirby must drop a copy ability before inhaling again, as in the source game.
+    /// Choose the contents of a confirmed absorption uniformly. Form changes
+    /// only when SetSourceAbility observes the original swallow/transform state;
+    /// multiple enemies may enter one mouthful before that happens. Repeated
+    /// notifications cannot reroll one enemy.
     /// </summary>
     public string? Absorb(long enemyId)
     {
         if (!IsBaseForm || consumedEnemies.Contains(enemyId))
             return null;
+        return ConfirmAbsorption(enemyId, SelectCopyAbility());
+    }
+
+    /// <summary>Assign a stable random source ability to a live enemy before it is inhaled.</summary>
+    public string SelectCopyAbility()
+    {
         int index = chooseIndex(abilityIds.Length);
         if ((uint)index >= (uint)abilityIds.Length)
             throw new InvalidOperationException("Ability selector returned an out-of-range index.");
-        consumedEnemies.Add(enemyId);
-        AbilityId = abilityIds[index];
-        return AbilityId;
+        return abilityIds[index];
+    }
+
+    /// <summary>Record an actual capture whose source enemy already carried this ability.</summary>
+    public string? ConfirmAbsorption(long enemyId, string abilityId)
+    {
+        if (!abilityIds.Contains(abilityId, StringComparer.Ordinal))
+            throw new ArgumentException("Absorbed ability is not in the original catalog.", nameof(abilityId));
+        if (!IsBaseForm || !consumedEnemies.Add(enemyId)) return null;
+        return abilityId;
     }
 
     public void DropAbility() => AbilityId = null;
+
+    /// <summary>Mirror a source transformation, including re-catching a discarded copy star.</summary>
+    public void SetSourceAbility(string? abilityId)
+    {
+        if (abilityId is not null && !abilityIds.Contains(abilityId, StringComparer.Ordinal))
+            throw new ArgumentException("Source copy ability is not in the original catalog.", nameof(abilityId));
+        AbilityId = abilityId;
+    }
+
+    /// <summary>Restore this mod's slot state after validating its ability catalog.</summary>
+    public void Restore(string? abilityId, string? retainedShieldId)
+    {
+        if (abilityId is not null && !abilityIds.Contains(abilityId, StringComparer.Ordinal))
+            throw new ArgumentException("Saved copy ability is not in the original catalog.", nameof(abilityId));
+        if (retainedShieldId is not null && string.IsNullOrWhiteSpace(retainedShieldId))
+            throw new ArgumentException("Saved shield must identify a physical item.", nameof(retainedShieldId));
+        AbilityId = abilityId;
+        RetainedShieldId = retainedShieldId;
+        consumedEnemies.Clear();
+    }
 
     /// <summary>Entity IDs can be reused in a different level; equipment and copy state survive.</summary>
     public void ResetForLevel() => consumedEnemies.Clear();

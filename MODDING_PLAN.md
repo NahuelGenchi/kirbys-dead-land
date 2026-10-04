@@ -1,32 +1,29 @@
-# Modding plan and acceptance gates
+# Mod implementation and acceptance
 
-Host: native Linux Steam Dead Cells v35, build 23762174, app 588650. HashLink
-gameplay bytecode; no anti-cheat detected. Existing Sonic asset modification must
-remain available. User source: KSSU USA YKWE rev0 ROM, SHA256 in `docs/GAMEPLAY_FIDELITY.md`.
+Host: Steam Linux Dead Cells v35 build23762174, DCCM35.13.6 and .NET10.0.401.
+Source: user-owned KSSU USA YKWE revision0. A separate selectable outfit and private
+runtime lab preserve the installed game and existing Sonic/Knuckles resources.
 
-Chosen route: local ROM conversion plus a DCCM C# gameplay plugin. Asset-only
-modding cannot provide inhaling, random copy abilities or original physics.
-DCCM v35.13.6 and .NET SDK 10.0.401 are pinned and available privately. The actual
-original-gameplay provider remains the blocking implementation work.
+The chosen route is now implemented: an embedded original-ROM controller,
+translated host terrain and enemy collisions, live original sprites/effects/audio,
+and DCCM equipment/damage/save integration.
 
-1. Decode the source assets and preserve original origins/facing. **Done for
-   supported palette parts; animation timing and shared palettes remain partial.**
-2. Verify pack formats and compile real host hooks. **Done, offline.**
-3. Recover an original-game oracle and establish the controller/collision/combat
-   bridge. **In progress; no original controller integration exists.**
-4. Prove one vertical slice in the real host: Kirby idle, walk, jump and inhale
-   one enemy, random copy, original ability attack, retained shield parry.
-   **Not reached.**
-5. Port and compare every original state and ability, then validate death, room
-   transitions, save/reload and input variants. **Not reached.**
-6. Package a new, selectable mod while preserving other outfits. Record live
-   evidence and retain a reversible installation. **Not reached.**
+| Milestone | Evidence |
+|---|---|
+| ROM extraction and host pack | Decoded archives, exhaustive pixel checks, independent PAK checks |
+| Original controller and terrain | Pinned native library and recorded source regression suite |
+| Real host vertical slice | Walk/jump, actual enemy inhale, random copy, original attack, retained shield counter |
+| Persistence | Fresh process resumes exact original frame/copy/position/shield |
+| Original graphics/audio | All standard form OBJ tests, helper/riding tests, source background comparisons, sound queue tests |
+| Host lifecycle | Outfit/stat health, actual biome transition, lethal source damage and normal New Game reset passed |
+| Host boundaries | Original Ice block, generated door, active Concierge resistance/damage and 31-enemy capacity passed |
+| Final input | All nine real binding masks, inverted directions, physical-reader movement/jump and upward sword preparation passed |
+| Local delivery | Final build staged; fresh-profile launch passed,20s real gameplay captured, test saves archived and play profile empty |
 
-Before any Dead Cells launch, use Universal Modder to snapshot actual host saves
-and configuration, prove that the lab cannot write to Steam/cloud progression,
-and get any required permission for live-game loader installation or desktop
-input control. No current work needs either action: all builds and asset tests
-run outside the installed game. No earlier mod's backup is restored.
+Each launch backs up original saves through Universal Modder, mounts installed
+files read-only and redirects file/Cloud saves to the private profile. Test input
+is internal to the isolated process. Normal play uses `./play-kirby`; no loader is
+installed into Steam's game directory. Nothing is published automatically.
 
-Completion means observed original Kirby gameplay in Dead Cells with only the
-requested changes, not successful compilation, sprite extraction or a costume.
+Completion requires the actual playable result and measured boundary behavior.
+All-ability sprite comparisons alone do not establish gameplay completeness.

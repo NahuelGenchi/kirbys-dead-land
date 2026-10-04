@@ -15,8 +15,7 @@ using ModCore.Utilities;
 namespace Kirby.Runtime;
 
 /// <summary>
-/// Compiled DCCM adapter, deliberately dormant without an original-gameplay
-/// provider. Loading decoded pose atlases is a separate, explicit developer option.
+/// DCCM host hooks for the selectable original-ROM Kirby character.
 /// </summary>
 public sealed class KirbyMod(ModInfo info) : ModBase(info), IOnHeroUpdate,
     IOnHeroDispose, IOnAfterLoadingAssets
@@ -27,19 +26,57 @@ public sealed class KirbyMod(ModInfo info) : ModBase(info), IOnHeroUpdate,
     private bool warnedNoProvider;
     public static KirbyMod? Instance { get; private set; }
     public KirbySession? ActiveSession => session;
+    public KirbyNdsProvider? NativeProvider => provider as KirbyNdsProvider;
 
     public override void Initialize()
     {
+        LabIsolation.Install();
         Instance = this;
         string path = Info.ModRoot.GetFilePath("config.json");
         if (File.Exists(path))
             config = JsonSerializer.Deserialize<RuntimeConfig>(File.ReadAllText(path))
                 ?? throw new InvalidDataException("Kirby runtime configuration is null.");
+        KirbyInput.Install();
+        KirbyEnemyHooks.Install();
+        KirbyDamage.Install();
+        if (config.EnableOriginalRuntime)
+        {
+            KirbyTutorials.Install(config.OutfitId);
+            RegisterProvider(new KirbyNdsProvider(config, Info.ModRoot.GetFilePath(".")));
+        }
+        dc.Hook_User.newGame += (orig, user, seed, level, custom, scoring, mode) =>
+        {
+            (provider as KirbyNdsProvider)?.ResetForNewRun();
+            orig(user, seed, level, custom, scoring, mode);
+        };
+        Hook_Hero.preUpdate += (orig, hero) =>
+        {
+            var state = Synchronize(hero);
+            if (state is not null && provider is KirbyNdsProvider native)
+                native.BeforeHostUpdate(state, () => orig(hero));
+            else orig(hero);
+        };
         Hook_Weapon.tryToUse += TryUseWeapon;
         Hook_Inventory.equip += Equip;
         Hook_Hero.fixedUpdate += FixedUpdate;
+        Hook_Hero.updateBodyHeight += (orig, hero) =>
+        {
+            if (session?.Hero.HashlinkPointer != hero.HashlinkPointer) { orig(hero); return; }
+            hero.bodyHei = 29.0 / 24;
+            hero.hei = 29; hero.radius = 9;
+            hero.smallHitbox = false;
+        };
+        Hook_Hero.applyAttackResult += (orig, hero, attack) =>
+        {
+            var state = Synchronize(hero);
+            if (state is not null && provider is KirbyNdsProvider native)
+                native.ReceiveHostAttack(state, attack, () => orig(hero, attack));
+            else orig(hero, attack);
+        };
         Hook_HeroWeaponsManager.onLevelChanged += LevelChanged;
-        Logger.Information("Kirby runtime adapter initialized. Faithful controller provider required; no gameplay approximation enabled.");
+        KirbyHurtbox.Install();
+        LabLifecycleProbe.Install();
+        Logger.Information("Kirby adapter initialized; original ROM provider enabled: {Enabled}.", provider is not null);
     }
 
     public void RegisterProvider(IKirbyGameplayProvider value)
@@ -55,17 +92,16 @@ public sealed class KirbyMod(ModInfo info) : ModBase(info), IOnHeroUpdate,
 
     void IOnAfterLoadingAssets.OnAfterLoadingAssets()
     {
-        // Decoded pose atlases are development resources, not a playable outfit.
-        if (provider is null && !config.LoadDecodedAssetAtlases)
-            return;
-        string path = Info.ModRoot.GetFilePath("res.pak");
-        if (!File.Exists(path))
+        if (provider is null && !config.LoadDecodedAssetAtlases) return;
+        foreach (string name in new[] { "res.pak", "outfit.pak" })
         {
-            Logger.Warning("Kirby res.pak is absent; no character assets were loaded.");
-            return;
+            string path = Info.ModRoot.GetFilePath(name);
+            if (!File.Exists(path)) continue;
+            FsPak.Instance.FileSystem.loadPak(path.AsHaxeString());
+            Logger.Information("Loaded Kirby assets from {Path}.", path);
         }
-        FsPak.Instance.FileSystem.loadPak(path.AsHaxeString());
-        Logger.Information("Loaded decoded Kirby pose atlases from {Path}; no outfit or animation mapping is registered.", path);
+        if (provider is not null)
+            CDBManager.Instance.LoadJsonData(CDBManager.Instance.GetAlteredCDB());
     }
 
     private bool IsKirby(Hero hero) => !hero.destroyed &&
@@ -81,7 +117,7 @@ public sealed class KirbyMod(ModInfo info) : ModBase(info), IOnHeroUpdate,
             if (hero is not null && provider is null && !warnedNoProvider)
             {
                 warnedNoProvider = true;
-                Logger.Warning("Kirby is not playable: NDS controller, inhale and ability implementations have not been supplied. Host controls remain unchanged.");
+                Logger.Warning("Kirby original runtime is disabled in config.json. Enable it after staging the ROM bridge and seed state.");
             }
             return null;
         }
@@ -194,6 +230,9 @@ public sealed class KirbyMod(ModInfo info) : ModBase(info), IOnHeroUpdate,
 
 public sealed class RuntimeConfig
 {
+    public bool EnableOriginalRuntime { get; set; }
+    public string RomPath { get; set; } = "/home/rayzza/Documents/ROMS/Nintendo DS/Kirby Super Star Ultra (USA).nds";
+    public string SeedStatePath { get; set; } = "/home/rayzza/.local/share/kirby-dead-cells/oracle/ready2/000.state";
     public string OutfitId { get; set; } = "KirbySuperStarUltra";
     public bool LoadDecodedAssetAtlases { get; set; }
     public string[] SwordIds { get; set; } = [];

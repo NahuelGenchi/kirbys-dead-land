@@ -11,6 +11,8 @@ import json
 import os
 from pathlib import Path
 import subprocess
+from nds_vendor import GPU_EDITS, check_gpu_patch
+from nds_graphics_patch import GRAPHICS_WRAPPER_FILES, GRAPHICS_CORE_FILES, check_graphics_patch
 
 ROOT = Path.home() / ".local/share/kirby-dead-cells/oracle"
 WRAPPER = "51f25edaf3b2df63f91d049eff8c38fb289150eb"
@@ -50,8 +52,9 @@ def main():
             raise SystemExit("Pinned bridge repair precondition failed; no edits applied.")
         repaired = repaired.replace(before, after)
     changed = git_output(vendor, "diff", "--name-only").splitlines()
-    if any(path != BRIDGE for path in changed):
+    if any(path not in (BRIDGE, "melonDS", *GPU_EDITS, *GRAPHICS_WRAPPER_FILES) for path in changed):
         raise SystemExit("Unexpected vendor modifications; left untouched.")
+    check_gpu_patch(vendor, WRAPPER)
     bridge = vendor / BRIDGE
     if bridge.read_text() not in (source, repaired):
         raise SystemExit("Existing bridge differs from both known variants; left untouched.")
@@ -59,8 +62,10 @@ def main():
         "update", "--init", "--depth", "1", "--recursive", cwd=vendor)
     if git_output(vendor / "melonDS", "rev-parse", "HEAD") != CORE:
         raise SystemExit("Unexpected melonDS submodule revision.")
-    if git_output(vendor / "melonDS", "diff", "--name-only"):
+    if any(path not in GRAPHICS_CORE_FILES for path in git_output(vendor / "melonDS", "diff", "--name-only").splitlines()):
         raise SystemExit("Unexpected melonDS submodule modifications; left untouched.")
+    check_graphics_patch(vendor, WRAPPER, CORE, apply=True)
+    check_gpu_patch(vendor, WRAPPER, apply=True)
     bridge.write_text(repaired)
     crate = ROOT / "runner"
     crate.mkdir(exist_ok=True)

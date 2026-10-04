@@ -1,3 +1,8 @@
+> Historical reconnaissance from the initial foundation. The playable original-ROM
+> runtime, outfit/CDB integration and live verification were implemented afterward.
+> See [RUNTIME_LAUNCH.md](RUNTIME_LAUNCH.md) and [GAMEPLAY_FIDELITY.md](GAMEPLAY_FIDELITY.md)
+> for the current behavior. Statements below about missing runtime features describe that earlier stage.
+
 # Runtime reconnaissance and adapter status
 
 Inspected on 2026-10-03. The new mod is **not yet a playable Kirby port**. The existing Sonic project changes assets only. This request needs a controller, collision and combat implementation driven by the original Nintendo DS game, plus host integration. No verified original-gameplay provider is available yet; the compiled adapter deliberately stays dormant instead of substituting Dead Cells movement or weapons for Kirby's moves.

@@ -5,9 +5,8 @@ using Kirby.Core;
 namespace Kirby.Runtime;
 
 /// <summary>
-/// Contract for the source-accurate controller port. No implementation is bundled:
-/// presenting Dead Cells physics or substitute weapons as NDS gameplay is incorrect.
-/// Providers must run on the game thread and validate their source timing/physics.
+/// Boundary between the host lifecycle and original-ROM controller.
+/// Providers run on the game thread and retain source timing and physics.
 /// </summary>
 public interface IKirbyGameplayProvider
 {
@@ -35,11 +34,12 @@ public sealed class KirbySession
     public KirbyRules Rules { get; }
 
     /// <summary>
-    /// Invoke only at the end of the original inhale/swallow sequence, after
+    /// Invoke only when original suction has placed an enemy in Kirby's mouth, after
     /// consumeEnemy has removed this exact live enemy through the host lifecycle.
-    /// Ordinary enemy death never calls this method. No copy is awarded on failure.
+    /// Ordinary enemy death never calls this method. The selected contents are
+    /// passed to the ROM; the current form changes only on its swallow transition.
     /// </summary>
-    public string? CompleteAbsorption(Mob enemy, Func<bool> consumeEnemy)
+    public string? CompleteAbsorption(Mob enemy, string abilityId, Func<bool> consumeEnemy)
     {
         ArgumentNullException.ThrowIfNull(enemy);
         ArgumentNullException.ThrowIfNull(consumeEnemy);
@@ -49,7 +49,7 @@ public sealed class KirbySession
         long enemyId = enemy.__uid;
         if (!consumeEnemy() || (!enemy.destroyed && enemy.life > 0))
             return null;
-        string? ability = Rules.Absorb(enemyId);
+        string? ability = Rules.ConfirmAbsorption(enemyId, abilityId);
         if (ability is not null)
             provider.OnAbilityChanged(this, ability);
         return ability;

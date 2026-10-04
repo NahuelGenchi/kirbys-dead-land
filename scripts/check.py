@@ -33,7 +33,7 @@ def main():
     for command in commands:
         print('Checking:', ' '.join(command), flush=True)
         subprocess.run(command, cwd=project, env=environment(root), check=True)
-    print('All requested offline checks passed. In-game Kirby gameplay remains unimplemented/unverified.')
+    print('All requested offline checks passed. This command does not validate in-game gameplay fidelity.')
 
 
 if __name__ == '__main__':

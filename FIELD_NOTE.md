@@ -1,6 +1,6 @@
 ---
 kind: game
-title: KSSU ROM extraction and Linux runtime bridge investigation
+title: Original KSSU controller embedded in Linux Dead Cells
 game: Dead Cells
 games_also: [Kirby Super Star Ultra]
 game_version: 'Steam Linux build 23762174, v35'
@@ -9,97 +9,121 @@ engine: haxe
 route: loader-api
 tools: [Universal Modder, DCCM 35.13.6, .NET SDK 10.0.401, Python, Pillow, melon-rs]
 anti_cheat: 'None detected; single-player local development'
-status: in-progress
+status: working
 agents:
 - Codex
 humans: []
-date: '2026-10-03'
+date: '2026-10-04'
 links:
 - https://github.com/rehan-remade/universal-modder
 - https://github.com/dead-cells-core-modding/core/releases/tag/v35.13.6
 - https://github.com/benhall-7/melon-kssu
 tags: [linux, hashlink, rom-conversion, gameplay-port]
 ---
-# KSSU ROM extraction and Linux runtime bridge investigation
+# Original KSSU controller embedded in Linux Dead Cells
 
-A new Kirby port requires an original gameplay controller, not only costume
-assets. This project decoded ROM sprites, converted them into verified host asset
-formats and compiled a DCCM adapter. No playable Kirby character was observed in
-Dead Cells; the adapter remains dormant pending the original controller.
+The original USA Kirby Super Star Ultra ROM now runs as a native library inside
+Dead Cells. A new selectable outfit renders its live graphics while source
+physics, abilities and collisions drive the host character. Actual game runs
+verified movement, real enemy absorption, random copying, retained-shield parries,
+exact damage, fresh-process save/resume, lifecycle, real boss resistance and
+31-enemy capacity. This field note does not claim exhaustive game equivalence.
 
 ## Setup
-Owned Steam Linux Dead Cells build 23762174 uses a loose `hlboot.dat` and `res.pak`.
-DCCM 35.13.6 supplies Linux x64 runtime and a C# API through .NET 10. Official SDK
-10.0.401 and the released MDK were installed in a private development directory.
-The user supplied the USA revision 0 KSSU NDS ROM. Its source files, extracted
-assets and game bytecode stayed outside the source repository.
+
+Steam Linux Dead Cells v35, build23762174; DCCM35.13.6; .NET SDK10.0.401.
+melon-rs51f25edaf3b2df63f91d049eff8c38fb289150eb and
+melonDS82fdbc78483f43b310e920e21acc47787cb43564, with checked local bridge patches.
+User-owned USA revision0 ROM SHA256:
+`b2573313a582c8dfaf2d93834a670c1ca8f389e5daa744e2dbe1a4ca903f3027`.
+ROM, decoded assets, host bytecode and generated packs remain private outside the
+source repository. FreeBIOS and generated firmware support direct boot.
 
 ## Route and why
-Use DCCM hooks for controller/weapon integration and per-mod asset packs to avoid
-overwriting the user's existing Sonic archive mod. The essential controller can
-come from a validated port or from the original game through emulation, but neither
-the host-world collision bridge nor a complete original gameplay provider exists
-in this project yet. Merely changing `gravity` and `runSpd` is not source fidelity.
 
-## How the game works (what we had to learn)
-- The host uses HashLink. `um scan` reported unknown native; inspect actual files.
-- Released DCCM proxy APIs expose `Hero.fixedUpdate`, `Weapon.tryToUse`,
-  `Inventory.equip`, and level lifecycle callbacks. Compilation validates their
-  signatures, not the installed game's live compatibility.
-- A physical shield needs its `InventItem.permanentId`; item kind alone cannot
-  distinguish two copies of the same shield.
-- NDS sprite `.b` archives contain groups, pose-pointer tables, palettes, tile
-  block pointers and extended OAM parts. The right and left facing OAM attributes
-  are separate. Alternate palette groups are not extra animation frames.
-- Ability body groups can pair with cap/weapon groups. A cap-only bank is not a
-  complete Kirby. Graphic pose indices do not encode frame timing or state logic.
-
-## Build steps
-Read the local README for exact commands: extract the user's ROM, build pose
-resources, verify them against decoded originals, build the runtime, and stage it
-in a disjoint lab. Source contains converters and new code only. No live-game
-loader installation or desktop input occurred; existing player saves were untouched.
+DCCM supplies actual Hero/input/inventory/attack/asset/save hooks. Original code
+executes through the embedded emulator instead of an estimated movement port.
+The adapter translates host collision cells into the source map, rebases linked
+objects and cached probes, pairs enemies with original collision objects, and
+mirrors source damage and capture results back through host lifecycle methods.
+Live OAM/VRAM/palettes provide character-only graphics. The source music player is
+muted; original effects mix with host music. The native clock stays independent
+of host render FPS. Swords/bows/shields in base form and the retained physical
+shield in copied form are explicit equipment rules.
 
 ## Verification
-Decoder synthetic and actual-ROM structure tests passed. Base Kirby has 491 fully
-decoded normal-color poses. All 61 sprite archives were decoded, giving 20,224
-group-indexed poses with separate left/right facing and 630 body/cap compositions.
-Unknown palette parts are explicitly recorded instead of guessed.
 
-Atlas checks compare visible RGBA pixels and original pivots to individual decoded
-PNGs. Independent verification opens the generated PAK through released
-`GameRes.Core.Pak.PakFile` and compares every payload hash/checksum with the build
-manifest. The hook adapter compiles without warnings/errors. The separate rule
-test runner passes 26 assertions. These checks do not establish live gameplay.
+Commands and exact run IDs are in `docs/RUNTIME_LAUNCH.md`. Native memory contracts
+and test scenarios are in `docs/NDS_BRIDGE.md`; pixel/audio evidence is in
+`docs/RENDERING.md` and `docs/AUDIO.md`. Live offscreen lab runs use normal game
+startup and virtual internal test controls. Universal Modder backs up original
+saves before each launch; read-only filesystem mounts and redirected file/Cloud
+save calls isolate the lab. Original save hashes are checked afterward. No loader
+was installed in the Steam game directory, and ownership checks remain intact.
 
 ## Gotchas
-1. **A pose sheet is mistaken for an animation.** Its frame numbers give graphics
-   references only. Recover or observe original timing and state selection.
-2. **Incomplete weapons appear in composed frames.** Some OAM parts use shared
-   palettes outside the archive. Preserve unknown metadata and exclude incomplete
-   frames from usable exports.
-3. **Long weapon effects clip in diagnostic sheets.** Some poses exceed a
-   128-pixel cell. Size cells from actual bounds and compose using union bounds.
-4. **DCCM unpack exits successfully but leaves empty files.** Its unpack command
-   calls asynchronous writes without awaiting them. Verify using the synchronous
-   archive reader; exit 0 alone is not proof of complete export.
-5. **Rebuilding keeps obsolete atlas pages.** Build in fresh staging, validate
-   ownership and replace only the previously generated output.
-6. **Two shields share a kind string.** Preserve the physical instance ID when
-   limiting copied Kirby to the shield held before transformation.
-7. **Framework availability looks like finished integration.** Signatures can
-   compile while gameplay is absent. Do not call an inert adapter a playable mod.
 
-## Assets
-Character artwork came from the user's ROM; no generated substitute art was used.
-Host palette encoding is lossless. Flat normal maps are renderer support data,
-not original NDS graphics. No game files or assets were published.
+1. `Hero.bodyHei` is measured in24px cells, while `Entity.hei` is in pixels.
+   Setting both to29 creates a transient696px body in native fixedUpdate.
+2. A physical foot exactly on a floor is `cy-1, yr=1`. `setPosPixel` instead gives
+   `yr=0` inside the floor, causing the host's stuck-in-wall rescue.
+3. `isGameTimeRunning()` is the speedrun clock, not simulation pause. It is false
+   in safe rooms; use actual game/level pause and cinematic state.
+4. `Weapon.tryToUse` is only a gate. A real parry must enter normal host input and
+   prepare/use paths; test actual counter callbacks, not a successful gate return.
+5. `useHeroScaling=false` alone does not remove every host multiplier. Preserve
+   original ability damage in a scoped target applyAttackResult hook.
+6. `InventItem.permanentId` identifies the retained physical shield. Database kind
+   cannot distinguish two copies of the same shield.
+7. Source enemy physical feet are17px below center, independently of host enemy
+   height. Shape top17-height maps tall host hurtboxes without burying their feet.
+8. Populate original per-enemy copy metadata before ingestion. Overwriting the
+   mouthful afterward destroys the original multi-enemy Mix state machine.
+9. In `h2d.Layers`, addChildAt's argument is a layer, not a flat child index.
+   Resolve the actual actor layer rather than drawing the overlay above the HUD.
+10. AssetsLibManager.flushCache explicitly destroys unused atlases despite
+    preventAutoDispose. Reacquire the equipment atlas to mark it used and handle
+    a replaced library across biome transitions.
+11. Full-screen palette effects cannot be inferred from end-of-frame blend
+    registers. Source scanline capture proved Crash's circle is OBJ and its later
+    flash changes background palettes; Paint/Mike are different palette transforms.
+12. Sprite pose indexes are not animation timings. Rendering original machine OAM
+    avoids inventing animation sequences from static archive groups.
+13. DCCM's CLI unpacker has an unawaited async-write path. Verify generated packs
+    with its synchronous archive reader, including payload hashes/checksums.
+14. Source collision-group HP changes before canonical enemy HP during recoil.
+    Read the pending collision result before resynchronizing host HP, or Ice and
+    other timed reactions can lose hits. Detach defeated original objects so
+    their ice blocks and death reactions can finish after host loot/death.
+15. Kirby's active hurt node disappears during Cook. Read health through the
+    persistent player-data health-group pointer; absence of an active hurtbox
+    means invulnerability, not death. Normalize the signed lethal HP sentinel.
+16. Pinned melonDS called SetRenderer before Reset with uninitialized VRAM capture
+    flags, causing intermittent null-renderer crashes. Initialize the flags and
+    regression-test construction with allocator poisoning; SDL was not the cause.
+17. Controller.suspendTimer is an absolute native sys_time deadline. Comparing it
+    with zero disables ordinary physical input after the first suspension, while
+    direct virtual DS-button fixtures still pass. Test the production binding
+    reader and actual resulting movement as well as virtual source inputs.
+18. Host directional action IDs are Up10, Left11, Down12 and Right13. Action14
+    is UI confirmation. Movement-stick Y is positive upward; respect dead zones
+    and the host's invertPlayerMovements option. Directional weapon preparation
+    needs a scoped view of real directions while host movement remains masked.
+19. Palette7 includes both legitimate Kirby effects and source stage decorations.
+    Green Greens exit-door sparkles live in a separate 16-record registry at
+    0x0209FBEC. Disable those confirmed door records when replacing source terrain;
+    filtering all stars or that palette would erase original ability effects.
 
-## Cost and time
-One local development session; no paid image-generation service used.
+## Assets and cost
 
-## Open questions
-Original physics, complete ability action graphs, shared palettes, animation
-timing, collision mapping, enemy lifecycle, host sprite rendering, persistent
-state and full in-game verification remain work. The project includes original
-ROM headless oracle research to help resolve these facts.
+Original artwork and sound come from the local ROM. No substitute generated art
+or paid generation service was used. Credits: Nintendo/HAL Laboratory, Motion Twin/
+Evil Empire, DCCM, melonDS/melon-rs, Codex and Universal Modder. No game files,
+extracted assets, decompiled code or field note have been published.
+
+## Coverage limits
+
+See `docs/GAMEPLAY_FIDELITY.md` for measured coverage and host adaptations. The
+bridge has31 nearby enemy slots, host palette blending has continuous precision,
+and the host camera does not reproduce source shake. Controlled boss/crowd
+fixtures are not exhaustive boss-phase or simultaneous-attacker coverage.

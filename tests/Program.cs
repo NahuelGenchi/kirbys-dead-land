@@ -17,6 +17,8 @@ Check(rules.EquipShield("shield-42"), "Record base-form shield");
 Check(rules.ResolveAttack(HostWeaponKind.Sword) == AttackRoute.HostWeapon, "Base sword");
 Check(rules.ResolveAttack(HostWeaponKind.Bow) == AttackRoute.HostWeapon, "Base bow");
 Check(rules.Absorb(100) == "fire", "Confirmed enemy gives ability");
+Check(rules.IsBaseForm, "A mouthful does not transform before the original swallow");
+rules.SetSourceAbility("fire");
 Check(!rules.CanEquip(HostWeaponKind.Shield) && !rules.CanEquip(HostWeaponKind.Sword), "No new equipment while copied");
 Check(!rules.CanUse(HostWeaponKind.Sword), "No host sword after copy");
 Check(!rules.CanUse(HostWeaponKind.Bow), "No host bow after copy");
@@ -30,12 +32,20 @@ rules.DropAbility();
 Check(rules.IsBaseForm && rules.CanUse(HostWeaponKind.Bow), "Drop restores base weapon actions");
 Check(rules.Absorb(100) is null, "Duplicate absorbed enemy cannot reroll");
 Check(rules.Absorb(101) == "sword", "Another enemy selects another random index");
+rules.SetSourceAbility("sword");
 rules.DropAbility();
 rules.ResetForLevel();
 Check(rules.Absorb(100) == "ice", "Entity IDs can be reused after level transition");
 Check(rules.RetainedShieldId == "shield-42", "Level transition retains shield");
 rules.Reset();
 Check(rules.IsBaseForm && rules.RetainedShieldId is null, "New run resets state");
+rules.Restore("ice", "physical-shield-7");
+Check(rules.AbilityId == "ice" && rules.ResolveAttack(HostWeaponKind.Shield, "physical-shield-7") == AttackRoute.Parry,
+    "Restored copy retains the exact shield");
+try { rules.Restore("unknown", null); throw new Exception("Invalid save ability accepted"); }
+catch (ArgumentException) { Check(rules.AbilityId == "ice", "Invalid save leaves current copy intact"); }
+rules.Restore(null, null);
+Check(rules.IsBaseForm && rules.RetainedShieldId is null, "Empty save restores base form");
 
 for (int selected = 0; selected < 3; selected++)
 {
@@ -47,4 +57,9 @@ for (int selected = 0; selected < 3; selected++)
 var bad = new KirbyRules(["fire"], _ => 1);
 try { bad.Absorb(1); throw new Exception("Invalid RNG accepted"); }
 catch (InvalidOperationException) { Check(bad.IsBaseForm, "Failed selection leaves state unchanged"); }
+var mouthful = new KirbyRules(["fire", "ice"], _ => 0);
+Check(mouthful.Absorb(1) == "fire" && mouthful.Absorb(2) == "fire", "Two enemies can enter the same mouthful");
+Check(mouthful.Absorb(1) is null && mouthful.IsBaseForm, "Repeated capture neither rerolls nor transforms");
+mouthful.SetSourceAbility("ice");
+Check(mouthful.Absorb(3) is null, "Original transformation closes the inhale window");
 Console.WriteLine($"PASS: {assertions} user-rule assertions. No claim of NDS physics or in-game verification.");
