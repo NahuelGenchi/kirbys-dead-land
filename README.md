@@ -31,12 +31,14 @@ The local build is staged and ready. Keep Steam running, then run from this fold
 ./play-kirby
 ```
 
-Choose **New Game** in the private game menu. It starts with the new Kirby outfit.
+Choose **New Game** for a new run, or continue your existing private Kirby save.
+New runs start with the new Kirby outfit.
 The launcher uses the real display, keyboard/controller and sound, with separate
 local saves, Cloud save redirection, backups and a read-only view of the installed
-game. It leaves no loader in the Steam game directory. Interactive desktop use
-has not been manually tested; automated live checks exercise the normal binding
-reader, actual movement, jump and directional weapon preparation.
+game. It leaves no loader in the Steam game directory. A complete user play
+recording was reviewed after the initial release; see the
+[recording review](docs/RECORDING_REVIEW_2026-10-04.md) for observed problems,
+corrections and the scope of subsequent live checks.
 
 Existing Dead Cells bindings are used:
 
@@ -54,6 +56,11 @@ Existing Dead Cells bindings are used:
 
 Shared bindings remain shared: if W is assigned to both Up and Jump, it sends
 both actions. Change either binding in the game's controls menu to separate them.
+In the recorded profile's default keyboard layout, **E** inhales/spits/attacks
+with a copy ability, **Q** discards it, **Space** jumps, and **right-click** uses
+the secondary weapon/shield. Keyboard X is a contextual menu binding; controller
+X is the primary weapon button. The adapter follows the configured actions, so
+remapping them in the game's controls menu also changes Kirby's controls.
 Host tutorials for replaced jump, dodge and Homunculus actions are suppressed
 while playing Kirby; healing, equipment and interaction tutorials remain available.
 
@@ -105,7 +112,7 @@ while playing Kirby; healing, equipment and interaction tutorials remain availab
 
 ## Build and verification
 
-The local project uses Python 3.12+, Pillow, the pinned .NET 10 SDK, DCCM 35.13.6,
+The local project uses Python 3.12+, Pillow, NumPy, the pinned .NET 10 SDK, DCCM 35.13.6,
 and the pinned melon-rs/melonDS sources. The setup tools download dependencies
 beneath `~/.local/share/kirby-dead-cells/`, not into system directories.
 

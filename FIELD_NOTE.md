@@ -113,6 +113,17 @@ was installed in the Steam game directory, and ownership checks remain intact.
     Green Greens exit-door sparkles live in a separate 16-record registry at
     0x0209FBEC. Disable those confirmed door records when replacing source terrain;
     filtering all stars or that palette would erase original ability effects.
+20. Equipment pickup calls updateMaxLife before freezing a HUD snapshot. Converting
+    back to source HP on the next frame is too late: preserve exact life, absolute
+    rally HP and bonus HP inside the recalculation hook before it returns. Keep
+    the recalculated host maximum separately for outfit changes.
+21. A separate HSprite needs the host actor blend mode and its own packed-atlas
+    NormalMap. Sharing the body's NormalMap samples unrelated UVs. Compare the
+    entire shader sequence, since non-head insertions/removals mutate list links.
+22. Prop2 can identify the off hand rather than the sword hand. Inspect the original
+    sprite and tracks before retargeting equipment. Body/weapon contact repairs
+    these sword grips, but tall bows touch the legs too; bows and shields retain
+    their verified native attachment tracks.
 
 ## Assets and cost
 

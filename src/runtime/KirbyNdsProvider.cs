@@ -41,6 +41,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         LabActivationTrace.Mark("OnActivated enter");
         bool firstActivation = nds is null;
         double hostHealthRatio = session.Hero.life / (double)Math.Max(1, session.Hero.maxLife);
+        double hostMaxLife = Math.Max(1, session.Hero.maxLife);
         bool hostAlive = session.Hero.life > 0;
         originalBody = new(session.Hero.radius, session.Hero.hei, session.Hero.bodyHei, session.Hero.maxLife);
         // Migrate private development checkpoints written before bodyHei was
@@ -62,6 +63,9 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         importHostHealth = false;
         session.Hero.maxLife = sourceMaxLife;
         session.Hero.life = Math.Clamp(nds.Health, 0, sourceMaxLife);
+        session.Hero.curRally *= sourceMaxLife / hostMaxLife;
+        session.Hero.bonusLife = (int)Math.Round(session.Hero.bonusLife * sourceMaxLife / hostMaxLife);
+        InitializeHealthDisplay(session.Hero);
         LabActivationTrace.Mark("Renderer begin");
         renderer = new KirbySpriteRenderer(session.Hero);
         firstRender = true;
@@ -85,8 +89,12 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
             var hero = session.Hero;
             importHostHealth = hero._level?.game?.user?.heroSkin?.ToString() != config.OutfitId;
             hero.radius = body.Radius; hero.hei = body.Height; hero.bodyHei = body.BodyHeight;
-            hero.life = (int)Math.Round(Math.Clamp(hero.life / (double)sourceMaxLife, 0, 1) * body.MaxLife);
+            double healthScale = body.MaxLife / (double)Math.Max(1, hero.maxLife);
+            hero.life = (int)Math.Round(Math.Clamp(hero.life / (double)Math.Max(1, hero.maxLife), 0, 1) * body.MaxLife);
+            hero.curRally *= healthScale;
+            hero.bonusLife = (int)Math.Round(hero.bonusLife * healthScale);
             hero.maxLife = body.MaxLife;
+            InitializeHealthDisplay(hero);
         }
         savedHostBody = originalBody;
         originalBody = null;
@@ -142,6 +150,29 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
     {
         input = KirbyInput.Read(session);
         KirbyInput.WithoutHostMovement(session.Hero, original);
+    }
+    /// <summary>Keep equipment/stat recalculation in the source health units before the HUD observes it.</summary>
+    public void UpdateHostMaxLife(KirbySession session, Action original)
+    {
+        if (nds is null || originalBody is null) { original(); return; }
+        var hero = session.Hero;
+        int life = hero.life, bonus = hero.bonusLife;
+        double rally = hero.curRally;
+        original();
+        // Retain the host's recalculated maximum for switching away from Kirby.
+        // Avoid a round-trip through host HP: repeated floor conversions would
+        // gradually lose wounded source HP and contaminate pickup HUD snapshots.
+        originalBody = originalBody with { MaxLife = hero.maxLife };
+        hero.maxLife = sourceMaxLife;
+        hero.life = life;
+        hero.curRally = rally;
+        hero.bonusLife = bonus;
+    }
+    private static void InitializeHealthDisplay(Hero hero)
+    {
+        if (hero._level?.game?.hud?.heroLifeBar is not { } bar) return;
+        bar.init(hero.life, hero.maxLife);
+        hero.updateLifeBar();
     }
     public void ReceiveHostAttack(KirbySession session, AttackData attack, Action original)
     {
@@ -210,9 +241,14 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         sourceLevel = level;
         if (hero.maxLife != sourceMaxLife && hero.maxLife > 0)
         {
+            double scale = sourceMaxLife / (double)hero.maxLife;
             if (originalBody is not null) originalBody = originalBody with { MaxLife = hero.maxLife };
             hero.life = Math.Clamp((int)Math.Round(hero.life / (double)hero.maxLife * sourceMaxLife),
                 hero.life > 0 ? 1 : 0, sourceMaxLife);
+            hero.curRally *= scale;
+            hero.bonusLife = (int)Math.Round(hero.bonusLife * scale);
+            hero.maxLife = sourceMaxLife;
+            InitializeHealthDisplay(hero);
         }
         hero.maxLife = sourceMaxLife;
         if (nds!.Health != hero.life && nds.Health >= 0)

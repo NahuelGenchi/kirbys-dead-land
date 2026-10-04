@@ -32,6 +32,7 @@ public sealed unsafe class KirbySpriteRenderer : IDisposable
     private Bitmap? bitmap;
     private HSprite? equipment;
     private SpriteLib? equipmentLibrary;
+    private dc.shader.NormalMap? equipmentNormal;
     private bool ready;
     private bool disposed;
     private uint lastSourceFrame = uint.MaxValue;
@@ -118,6 +119,7 @@ public sealed unsafe class KirbySpriteRenderer : IDisposable
             equipment?.remove();
             equipmentLayer = -1;
             equipmentLibrary = currentLibrary;
+            equipmentNormal = null;
             equipmentLibrary.preventAutoDispose();
             equipmentLibrary.ensureTexturesAllocated();
             equipment = new HSprite(equipmentLibrary, host.groupName, Ref<int>.In(host.frame), null!);
@@ -128,8 +130,11 @@ public sealed unsafe class KirbySpriteRenderer : IDisposable
         }
         AttachSibling(equipment, host, ref equipmentLayer, true);
         equipment.set(equipmentLibrary!, host.groupName, Ref<int>.In(host.frame), Ref<bool>.In(false));
-        // The outfit palette retains every original host equipment index.
-        equipment.shaders = host.shaders;
+        ConfigureEquipmentShaders(host);
+        // The host's palette and lighting shaders are rendered in its opaque
+        // actor pass. A new HSprite defaults to Alpha, which selects a different
+        // LightedLayers pass and does not reproduce the host material.
+        equipment.blendMode = host.blendMode;
         equipment.color = host.color;
         equipment.x = host.x;
         equipment.y = host.y;
@@ -139,6 +144,36 @@ public sealed unsafe class KirbySpriteRenderer : IDisposable
         equipment.alpha = host.alpha;
         equipment.visible = hero.visible && host.visible && (baseForm || shield);
         equipment.posChanged = true;
+    }
+
+    private void ConfigureEquipmentShaders(HSprite host)
+    {
+        // Palette/glow uniforms are intentionally shared with the equipped host
+        // items. Normal UVs, however, belong to this separately packed atlas.
+        // Sharing the host NormalMap also lets host updates overwrite its texture.
+        Texture normalTexture = equipmentLibrary!.getNormalMapFromSprite(equipment!);
+        equipmentNormal ??= new dc.shader.NormalMap(normalTexture);
+        equipmentNormal.texture__ = normalTexture;
+        equipmentNormal.scale__.x = host.scaleX < 0 ? -1 : 1;
+        // Host status changes can insert/remove a shader below the existing list
+        // head. Compare every shader identity rather than only that head pointer.
+        var copied = equipment!.shaders;
+        bool matches = copied?.s.HashlinkPointer == equipmentNormal.HashlinkPointer;
+        copied = copied?.next;
+        for (var entry = host.shaders; entry is not null; entry = entry.next)
+        {
+            if (entry.s is dc.shader.NormalMap) continue;
+            if (copied?.s.HashlinkPointer != entry.s.HashlinkPointer) matches = false;
+            copied = copied?.next;
+        }
+        if (matches && copied is null) return;
+        var shaders = new List<dc.hxsl.Shader>();
+        for (var entry = host.shaders; entry is not null; entry = entry.next)
+            if (entry.s is not dc.shader.NormalMap) shaders.Add(entry.s);
+        dc.hxsl.ShaderList? tail = null;
+        for (int i = shaders.Count - 1; i >= 0; i--)
+            tail = new dc.hxsl.ShaderList(shaders[i], tail!);
+        equipment!.shaders = new dc.hxsl.ShaderList(equipmentNormal, tail!);
     }
 
     private void EnsureTexture()
@@ -189,6 +224,7 @@ public sealed unsafe class KirbySpriteRenderer : IDisposable
         texture?.dispose();
         pixels?.dispose();
         bitmap = null; texture = null; pixels = null; equipment = null; equipmentLibrary = null;
+        equipmentNormal = null;
     }
 
     [DllImport("kssu_bridge", EntryPoint = "kssu_read_gpu", CallingConvention = CallingConvention.Cdecl)]

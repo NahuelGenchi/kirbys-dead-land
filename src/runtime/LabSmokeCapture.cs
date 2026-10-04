@@ -78,6 +78,8 @@ internal static class LabSmokeCapture
             LabBossCrowdProbe.Install(run, Environment.GetEnvironmentVariable("KIRBY_LAB_INPUT_PLAN")!);
         if (Environment.GetEnvironmentVariable("KIRBY_LAB_INPUT_PLAN") == "aim")
             LabWeaponAimProbe.Install(run);
+        if (Environment.GetEnvironmentVariable("KIRBY_LAB_INPUT_PLAN") == "repro")
+            LabReproProbe.Install(run);
         dc.Hook_Main.update += (orig, main) =>
         {
             orig(main);
@@ -88,6 +90,7 @@ internal static class LabSmokeCapture
             LabBreakableProbe.Poll();
             LabBossCrowdProbe.Poll();
             LabWeaponAimProbe.Poll();
+            LabReproProbe.Poll();
             var source = KirbyMod.Instance?.NativeProvider?.Machine;
             if (source is not null && source.State.Frame != lastSource)
             {

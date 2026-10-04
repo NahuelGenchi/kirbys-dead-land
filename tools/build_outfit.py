@@ -215,6 +215,7 @@ def build_equipment(pak, rows, tracks, out):
     x = y = 1
     shelf = 0
     nonempty = 0
+    attachments = {}
     for row in rows:
         if row['page'] not in source_pages:
             source_pages[row['page']] = (np.array(image_read(pak, 'atlas/' + row['page'])),
@@ -233,10 +234,9 @@ def build_equipment(pak, rows, tracks, out):
             normal = normals.crop(crop).crop(box)
             group, suffix = row['name'].rsplit('_', 1)
             t = int(suffix)
-            positions = tracks.get(group, {}).get('Bip001 Prop2', [])
-            hand = positions[t * 3:t * 3 + 2]
-            if len(hand) != 2:
-                hand = [row['ow'] / 2 + 12, row['oh'] / 2 - 27]
+            hand, attachment = equipment_grip(source[crop[1]:crop[3], crop[0]:crop[2]],
+                                               row, tracks, group, t)
+            attachments[attachment] = attachments.get(attachment, 0) + 1
             origin = [round(row['ox'] + box[0] - hand[0] + 8), round(row['oy'] + box[1] - hand[1] - 11)]
         else:
             tile = Image.new('RGBA', (1, 1))
@@ -270,7 +270,39 @@ def build_equipment(pak, rows, tracks, out):
     (out / f'{MODEL}Weapons.atlas').write_bytes(atlas_bytes(output))
     return dict(frames=len(output), nonempty_frames=nonempty, unique_tiles=len(packed), pages=len(pages),
                 body_palette_indices_removed=[478, 499], grip=[8, -11],
-                limitation='Host equipment placement uses native Prop2 track with a fixed Kirby hand offset.')
+                attachments=attachments,
+                limitation='Swords use the source body/equipment contact centroid; bow/shield tracks and missing-contact fallbacks use Prop2. The Kirby hand offset is a visual approximation.')
+
+
+def equipment_grip(pixels, row, tracks, group, frame):
+    """Find the source grip without confusing the off hand with the weapon hand.
+
+    Prop2/L Hand are the off hand in several native sword animations. The atlas
+    has no R Hand track. Use the interface between original body and equipment
+    pixels for swords; bow/shield animation tracks retain their verified grip.
+    """
+    positions = tracks.get(group, {}).get('Bip001 Prop2', [])
+    tracked = positions[frame * 3:frame * 3 + 2]
+    if group.lower().startswith(('block', 'parry')) and len(tracked) == 2:
+        return tracked, 'shield-track'
+    if 'bow' in group.lower() and len(tracked) == 2:
+        return tracked, 'bow-track'
+    ids = pixels[:, :, 0].astype(int) + pixels[:, :, 1].astype(int) // 64 * 256
+    opaque = pixels[:, :, 3] > 0
+    body = (ids >= 478) & (ids < 500) & opaque
+    weapon = ~body & opaque
+    # Padding avoids wrapping the opposite edge of the crop into its neighbors.
+    padded = np.pad(body, 1)
+    adjacent = np.zeros_like(body)
+    for dy in range(3):
+        for dx in range(3):
+            adjacent |= padded[dy:dy + body.shape[0], dx:dx + body.shape[1]]
+    yy, xx = np.where(adjacent & weapon)
+    if len(xx):
+        return [row['ox'] + float(np.mean(xx)), row['oy'] + float(np.mean(yy))], 'body-contact'
+    if len(tracked) == 2:
+        return tracked, 'missing-contact-track'
+    return [row['ow'] / 2 + 12, row['oh'] / 2 - 27], 'missing-contact-center'
 
 
 def validate_output(output):

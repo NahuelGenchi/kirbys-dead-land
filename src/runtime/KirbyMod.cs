@@ -59,6 +59,13 @@ public sealed class KirbyMod(ModInfo info) : ModBase(info), IOnHeroUpdate,
         Hook_Weapon.tryToUse += TryUseWeapon;
         Hook_Inventory.equip += Equip;
         Hook_Hero.fixedUpdate += FixedUpdate;
+        Hook_Hero.updateMaxLife += (orig, hero) =>
+        {
+            if (session?.Hero.HashlinkPointer == hero.HashlinkPointer && IsKirby(hero) &&
+                provider is KirbyNdsProvider native)
+                native.UpdateHostMaxLife(session, () => orig(hero));
+            else orig(hero);
+        };
         Hook_Hero.updateBodyHeight += (orig, hero) =>
         {
             if (session?.Hero.HashlinkPointer != hero.HashlinkPointer) { orig(hero); return; }

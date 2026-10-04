@@ -331,3 +331,46 @@ the all-ability rendering tests as full gameplay acceptance.
 - Final managed runtime SHA256:
   `df41ed4dfb8b5886d41eb4696ecb5c2a42a5c65780912737ebfb91b48e709123`.
   The local executable `play-kirby` starts normal desktop play with separate saves.
+
+## 2026-10-04 — user recording regression fixes
+
+- Reviewed the complete 96.82-second user recording, with denser final-corridor
+  and equipment/HP inspection. Created a separate reproduction root from a copy
+  of the user's current private profile; the four main profile files are unchanged.
+- Fixed pickup HP flicker at its source: active Kirby's updateMaxLife hook keeps
+  exact source life/rally/bonus values before the HUD caches them, while saving
+  the recalculated host maximum for outfit changes. Activation/deactivation also
+  synchronize HUD units. Live 033400 retained 57/76 through actual shield pickup,
+  24 recalculations and the 75/100 normal-outfit round trip.
+- Corrected equipment's lighting pass and packed normal-map texture. Synchronize
+  the full ordered host shader sequence because internal links can change without
+  a new head pointer. The normal wooden shield is visibly held; its secondary
+  tutorial clears on the first real right-click and seven shield-start callbacks ran.
+- Corrected sword grips derived from the wrong off-hand track. Use original
+  body/equipment contact for main weapons; verified bow/shield tracks remain intact.
+  Only atlas origins changed; original textures, normal maps and palettes are
+  identical. All 860 bow-named and 204 shield atlas rows retain their old positions.
+- Live 033651 shows the attached starting-sword combo and actual guard/movement.
+  Final 034038 verifies the held bow, arrow and 109-damage natural Zombie kill.
+  Enemy bitmap-hidden/normal-outfit comparison disproved the suspected canvas
+  occlusion. Normal enemy AI remained active. No new successful parry-counter claim.
+- Physical keyboard Down+X produces original Down/crouch only; X is a contextual
+  menu binding. Controller X instead invokes the main weapon. Original tunnel
+  comparison preserved all 600 post-settle frames under world rebasing; source
+  slide behavior is unchanged. Actual defaults: E inhale/copy, Q discard, Space jump.
+- Added an opt-in normal-binding reproduction probe with explicit copied-profile
+  fixture controls, plus five synthetic equipment-grip regressions. Twenty Python
+  tests, six source-parser tests and 33 rule assertions pass. Final Release builds
+  with zero warnings/errors; Universal Modder reports zero failures and six existing
+  private-path warnings; the field note schema passes.
+- Reviewed the real 20-second verification clip at
+  `showcase/recording-fixes/kirby-fixes-20s.mp4` in the private data root. It includes
+  source effects audio and documented cuts around fixture setup.
+- Final runtime SHA256:
+  `0866aceed61742c333e8fb73dae5384c5b24bfeefe94d50ad3887cdc941b61fe`.
+  Final outfit SHA256:
+  `6c141ee357dcdb5087acd55e12f79211338e6690de1e235238282b75bc5b8663`.
+  Native bridge remains `f94997d82877bcdce29ed8d8cb3741545f08044ad813fa61f59f9406c6314b2c`.
+  The last live DLL differs from the final build only by diagnostic event wording
+  and a comment; production fixes are identical. Detailed scope and evidence are
+  in `docs/RECORDING_REVIEW_2026-10-04.md`.
