@@ -23,7 +23,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
     private readonly SaveData<KirbySave> save = new("KirbySuperStarUltra.OriginalRuntime");
     private KirbySave? boundSave;
     private KirbySession? lastSession;
-    private readonly KirbyEnemies enemies = new();
+    private readonly KirbyEnemies enemies = new(new CopyDamageCurve(config.CopyDamageByBossCells));
     private readonly Queue<(dc.Entity? Source, int Damage, int Direction)> incoming = new();
     private bool applyingNativeDamage;
     private int sourceMaxLife = 76;

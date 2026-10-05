@@ -26,6 +26,9 @@ preserved; generated assets and native dependencies remain in the private data r
 - Original inhale, mouthful, Down-to-swallow, spit, flight, guard, slide and copy
   discard are executed by the ROM. All 24 original copy forms load through the
   original transformation code, rather than replacing them with host weapons.
+- Copy attacks deal original damage at 0 Boss Cells and scale up with each
+  active Boss Cell (×1.25, ×1.6, ×2, ×2.5, ×3 by default, set in
+  `src/runtime/config.json`). Dead Cells' own hero damage multiplier never applies.
 
 ## Play
 

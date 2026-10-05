@@ -2,11 +2,12 @@ using Entity = dc.Entity;
 using dc.en;
 using dc.en.inter;
 using dc.tool.atk;
+using Kirby.Core;
 
 namespace Kirby.Runtime;
 
 /// <summary>Pairs live host enemies with original enemy objects for source collision and capture logic.</summary>
-public sealed class KirbyEnemies
+public sealed class KirbyEnemies(CopyDamageCurve damageCurve)
 {
     private const int MaxSourceHp = 32760;
     private const int Capacity = 31;
@@ -15,6 +16,7 @@ public sealed class KirbyEnemies
     private readonly bool[] detached = new bool[Capacity + 1];
     private readonly bool[] controlled = new bool[Capacity + 1];
     private readonly byte[] abilities = new byte[Capacity + 1];
+    private int bossCells;
     private EnemyBinding[]? restoring;
     internal EnemyBinding[] Capture() => Enumerable.Range(1, Capacity)
         .Where(i => detached[i] || mobs[i] is { destroyed: false }).Select(i => detached[i]
@@ -62,6 +64,8 @@ public sealed class KirbyEnemies
             }
             restoring = null;
         }
+        // The host fixes Boss Cells for a whole run; sample it once per source tick.
+        bossCells = hero._level.game?.user?.bossRuneActivated ?? 0;
         double hx = (hero.cx + hero.xr) * 24, hy = (hero.cy + hero.yr) * 24;
         for (uint i = 1; i <= Capacity; i++)
         {
@@ -101,7 +105,7 @@ public sealed class KirbyEnemies
             if (mobs[i] is not { } mob) continue;
             int x = checked((int)Math.Round(((mob.cx + mob.xr) * 24 - ox) * 65536));
             int y = checked((int)Math.Round(((mob.cy + mob.yr) * 24 - 17 - oy) * 65536));
-            assignedHp[i] = Math.Clamp(mob.life, 1, MaxSourceHp);
+            assignedHp[i] = damageCurve.SourceHp(mob.life, bossCells, MaxSourceHp);
             nds.SetProxy(i, x, y, assignedHp[i]);
             nds.SetProxyOptions(i, abilities[i], mob is not Mob || mob is dc.en.mob.Boss);
             nds.SetProxyContact(i, mob is Mob);
@@ -135,11 +139,12 @@ public sealed class KirbyEnemies
                 Release(nds, i);
                 continue;
             }
-            // Native HP follows the host's actual remaining life. Lethal Ice
-            // hits must enter the original freeze reaction in the same tick.
+            // Native HP is the host's remaining life divided by the Boss Cell
+            // multiplier. Lethal Ice hits must enter the original freeze
+            // reaction in the same tick, so lethality agrees after scaling.
             int damage = assignedHp[i] - proxy.Hp;
             if (damage > 0 && !mob.destroyed && mob.life > 0)
-                KirbyDamage.Hit(session.Hero, mob, damage);
+                KirbyDamage.Hit(session.Hero, mob, damageCurve.HostDamage(damage, assignedHp[i], mob.life, bossCells));
             if (mob.destroyed || mob.life <= 0)
             {
                 if (!proxy.Gone && mob is Mob and not dc.en.mob.Boss)

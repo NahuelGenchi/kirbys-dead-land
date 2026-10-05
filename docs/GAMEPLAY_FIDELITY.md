@@ -24,7 +24,7 @@ in [NDS_BRIDGE.md](NDS_BRIDGE.md). The original bootstrap experiment remains in
 | Enemy collision | Live host enemies have paired source collision objects with their host dimensions; original routines resolve damage cadence, suction, grabs, throws and Cook |
 | Boss collision | Original resistance bits prevent inhale, Suplex capture and Cook; damage still uses original collision/debounce, while the host retains boss AI and phases |
 | Incoming damage | Host shield/parry resolves first; remaining damage enters the next original collision tick, preserving original guard, recoil and invulnerability |
-| Outgoing damage | Source HP deltas become exact host damage; the host's normal hero damage multiplier does not alter copy attacks |
+| Outgoing damage | Source HP deltas become host damage, multiplied only by the Boss Cell curve below; the host's normal hero damage multiplier does not alter copy attacks |
 | Player health | Original full health is 76. Host and source health are synchronized, including host healing and original food |
 | Saves | A versioned, ROM-checked native machine snapshot and physical shield/enemy bindings travel with the private host save slot |
 
@@ -59,6 +59,34 @@ All 24 standard source copy forms are included: Cutter, Mirror, Beam, Fighter,
 Suplex, Yo-Yo, Wheel, Bomb, Ice, Fire, Plasma, Ninja, Stone, Wing, Jet, Copy,
 Sword, Hammer, Parasol, Paint, Mike, Crash, Cook and Sleep. Special states reached
 through those forms, such as riding the Wheel helper, execute in the ROM too.
+
+### Boss Cell copy damage
+
+Intentional deviation from exact original damage. Fixed source values (Wheel 23,
+Sword 18+16) fall behind host enemy health as Boss Cells rise, so copy damage
+follows a deliberate per-Boss-Cell curve instead of the host hero multiplier:
+
+| Active Boss Cells | 0 | 1 | 2 | 3 | 4 | 5 |
+|---|---|---|---|---|---|---|
+| Copy damage multiplier | ×1 | ×1.25 | ×1.6 | ×2 | ×2.5 | ×3 |
+
+`CopyDamageByBossCells` in `src/runtime/config.json` overrides the table. It must
+start at 1, stay finite and never decrease; counts beyond it use the last entry.
+The count is `User.bossRuneActivated`, sampled each source tick by
+`KirbyEnemies.Prepare`. `CopyDamageCurve` in `src/core/` owns the arithmetic.
+
+The paired source enemy receives the host's remaining life divided by the
+multiplier (rounded up, then clamped to the native range). Each source HP drop
+is multiplied and rounded; a hit the source enemy survives is capped below the
+host's remaining life. Source and host lethality therefore agree, and original
+death reactions such as the Ice block still occur in the tick of the host kill.
+Source attack cadence, debounce and boss resistance are unchanged. At 0 Boss
+Cells the result is identical to the previous exact-damage behavior.
+
+The multipliers are a design choice, not measured from host enemy health growth.
+Source tests cover the curve and lethality agreement; no live run has been made
+at a nonzero Boss Cell count. Custom mode and Boss Rush difficulty are not
+specifically handled: both use whatever `bossRuneActivated` reports.
 
 ## Evidence and current limits
 

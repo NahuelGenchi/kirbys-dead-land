@@ -374,3 +374,15 @@ the all-ability rendering tests as full gameplay acceptance.
   The last live DLL differs from the final build only by diagnostic event wording
   and a comment; production fixes are identical. Detailed scope and evidence are
   in `docs/RECORDING_REVIEW_2026-10-04.md`.
+
+## 2026-10-05 — Boss Cell copy damage scaling (#7)
+
+- Copy attacks now scale by a configurable per-Boss-Cell curve (default
+  ×1/1.25/1.6/2/2.5/3 for 0–5 cells) read from `User.bossRuneActivated`. The
+  host hero multiplier remains bypassed; 0 Boss Cells keeps exact source damage.
+- Source enemies receive host life divided by the multiplier, and survivable
+  source hits are capped below host life, so original lethal reactions stay in
+  the same tick as the host kill.
+- `scripts/check.py`: Python, oracle-parser and 47 core rule assertions pass;
+  the runtime Release build has zero warnings/errors. No live run at nonzero
+  Boss Cells yet.

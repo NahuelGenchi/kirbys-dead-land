@@ -38,5 +38,6 @@
     "HeavyBow",
     "MagicBow"
   ],
+  "CopyDamageByBossCells": [1.0, 1.25, 1.6, 2.0, 2.5, 3.0],
   "LoadDecodedAssetAtlases": false
 }

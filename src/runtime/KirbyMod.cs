@@ -244,4 +244,6 @@ public sealed class RuntimeConfig
     public bool LoadDecodedAssetAtlases { get; set; }
     public string[] SwordIds { get; set; } = [];
     public string[] BowIds { get; set; } = [];
+    /// <summary>Copy-ability damage multiplier per active Boss Cell, starting at zero.</summary>
+    public double[] CopyDamageByBossCells { get; set; } = [.. CopyDamageCurve.Default];
 }
