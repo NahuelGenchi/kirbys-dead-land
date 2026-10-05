@@ -35,7 +35,10 @@ internal static unsafe class LabReproProbe
     private static nint originalBitmap;
     private static bool hideOriginalBitmap;
     private static double hideFrom = 12, hideUntil = 14;
-    private static bool healthFixture;
+    private static bool healthFixture, lethalDone, hitDone, mobScalingWritten, abilityReady, abilityFed;
+    private static uint? abilityStart;
+    private static string toggleMode = "";
+    private static double lastScheduledZoom = double.NaN;
     private static int healthPhase;
     private static HashSet<int> padHeld = [], padPressed = [];
     private static Step[]? steps;
@@ -57,10 +60,33 @@ internal static unsafe class LabReproProbe
         Hook_Controller.padIsPressed += (orig, controller, key) => padPressed.Contains(key) || orig(controller, key);
         dc.h2d.Hook_Bitmap.draw += (orig, bitmap, context) =>
         { if (!hideOriginalBitmap || bitmap.HashlinkPointer != originalBitmap) orig(bitmap, context); };
+        Hook_Hero.blink += (orig, hero, frames) =>
+        {
+            File.AppendAllText(Path.Combine(run!, "repro-events.jsonl"), JsonSerializer.Serialize(new
+            { elapsed, name = "hero-blink", frames, frame = KirbyMod.Instance?.NativeProvider?.Machine?.State.Frame }, TraceOptions) + "\n");
+            orig(hero, frames);
+        };
+        dc.Hook_Main.update += (orig, main) =>
+        {
+            orig(main);
+            var h = ModCore.Modules.Game.Instance.HeroInstance;
+            if (run is null || h?.spr is null || Environment.GetEnvironmentVariable("KIRBY_LAB_VISIBILITY") != "1") return;
+            var renderer = KirbyMod.Instance?.NativeProvider is { } prov ? RendererField.GetValue(prov) as KirbySpriteRenderer : null;
+            var bmp = renderer is null ? null : BitmapField.GetValue(renderer) as dc.h2d.Bitmap;
+            var light = h.selfLight;
+            File.AppendAllText(Path.Combine(run, "visibility.jsonl"), JsonSerializer.Serialize(new
+            { elapsed, frame = KirbyMod.Instance?.NativeProvider?.Machine?.State.Frame, heroVisible = h.visible,
+              light = light is null ? null : new { light.killed, light.coreColor, light.coreAlpha, light.intensity, light.globalAlpha,
+                  core = light.core is not null, coreVisible = light.core?.visible, coreA = light.core?.a, range = light.l?.range },
+              sprVisible = h.spr.visible, sprAlpha = h.spr.alpha, entityAlpha = h.sprAlpha, invis = h.invisibilityAlpha,
+              bitmapVisible = bmp?.visible, bitmapAlpha = bmp?.alpha, h.life }, TraceOptions) + "\n");
+        };
         Hook_BaseShield.onShieldStartParry += (orig, weapon) =>
         { Event("shield-start", weapon); orig(weapon); };
         Hook_BaseShield.onShieldCounterSuccessful += (orig, weapon, attack, flag) =>
         { Event("shield-counter", weapon); orig(weapon, attack, flag); };
+        KirbyNdsProvider.Diagnostic = (name, data) => File.AppendAllText(Path.Combine(run!, "repro-events.jsonl"),
+            JsonSerializer.Serialize(new { elapsed, name, frame = KirbyMod.Instance?.NativeProvider?.Machine?.State.Frame, data }, TraceOptions) + "\n");
         // Do not replace source buttons, inventory, tutorials, or weapon-manager queries.
     }
 
@@ -73,13 +99,116 @@ internal static unsafe class LabReproProbe
         var provider = KirbyMod.Instance?.NativeProvider;
         var nds = provider?.Machine;
         var hero = ModCore.Modules.Game.Instance.HeroInstance;
-        if (hero is not { destroyed: false } || hero._level is null || nds is null || provider is null)
+        // The normal outfit has no source machine; inputs and host positions
+        // are still traced so host movement can be compared with Kirby's.
+        if (hero is not { destroyed: false } || hero._level is null || provider is null)
         { held.Clear(); pressed.Clear(); padHeld.Clear(); padPressed.Clear(); return; }
         if (began is null && hero.awake && !hero._level.game.hasCinematic()) began = clock.Elapsed.TotalSeconds;
         elapsed = began is double at ? clock.Elapsed.TotalSeconds - at : -1;
-        if (healthFixture) HealthFixture(hero, nds);
+        if (healthFixture && nds is not null) HealthFixture(hero, nds);
+        if (nds is not null && !abilityReady && byte.TryParse(Environment.GetEnvironmentVariable("KIRBY_LAB_REPRO_ABILITY"), out byte wantedAbility) &&
+            wantedAbility is >= 2 and <= 25)
+        {
+            // Lab-only: prepare a copy ability through the original inhale, supplied
+            // contents and Down before the normal-binding timeline starts.
+            if (nds.State.Ability == wantedAbility) { abilityReady = true; KirbyInput.TestOverride = null; began = clock.Elapsed.TotalSeconds; }
+            else
+            {
+                abilityStart ??= nds.State.Frame;
+                uint since = nds.State.Frame - abilityStart.Value;
+                KirbyInput.TestOverride = _ =>
+                {
+                    if (since < 30) return 2;
+                    if (!abilityFed) { abilityFed = nds.Feed(wantedAbility); if (!abilityFed) return 2; }
+                    return 128;
+                };
+                return;
+            }
+        }
+        if (Environment.GetEnvironmentVariable("KIRBY_LAB_TOGGLES") is { } toggles)
+        {
+            string mode = "";
+            foreach (var part in toggles.Split(','))
+                if (part.Split(':') is [var from, var value] && double.TryParse(from, out double t) && elapsed >= t) mode = value;
+            if (mode != toggleMode)
+            {
+                toggleMode = mode;
+                var renderer2 = RendererField.GetValue(provider) as KirbySpriteRenderer;
+                var bmp2 = renderer2 is null ? null : BitmapField.GetValue(renderer2) as dc.h2d.Bitmap;
+                if (hero.selfLight?.l is { } pl) pl.visible = !mode.Contains("nolight");
+                if (hero.heroHead is { } head)
+                {
+                    if (head.eye is not null) head.eye.visible = mode != "nohead";
+                    if (head.headNormalSb is not null) head.headNormalSb.visible = mode != "nohead";
+                    if (head.headAddSb is not null) head.headAddSb.visible = mode != "nohead";
+                }
+                if (bmp2 is not null && mode.Contains("blend")) bmp2.blendMode = mode.Contains("blendnone") ? new dc.h2d.BlendMode.None() : new dc.h2d.BlendMode.Alpha();
+                File.AppendAllText(Path.Combine(run, "repro-events.jsonl"), JsonSerializer.Serialize(new
+                { elapsed, name = "toggle", mode, eye = hero.heroHead?.eye is not null, eyeVisible = hero.heroHead?.eye?.visible,
+                  eyeAlpha = hero.heroHead?.eye?.alpha, heroHasHead = hero.heroHead?.heroHasHead, lightRange = hero.selfLight?.l?.range }) + "\n");
+            }
+        }
+        if (Environment.GetEnvironmentVariable("KIRBY_LAB_ZOOM_SCHEDULE") is { } zooms && hero._level.viewport is { } vp)
+        {
+            double? wanted = null; bool update = false;
+            foreach (var part in zooms.Split(','))
+                if (part.Split(':') is [var from, var value] && double.TryParse(from, out double t) && elapsed >= t)
+                { update = value.EndsWith('u'); if (double.TryParse(value.TrimEnd('u'), out double z)) wanted = z; }
+            if (wanted is double target && target != lastScheduledZoom)
+            {
+                lastScheduledZoom = target;
+                vp.set_zoom(target);
+                if (update) vp.updateSizes();
+                File.AppendAllText(Path.Combine(run, "repro-events.jsonl"), JsonSerializer.Serialize(new
+                { elapsed, name = "zoom", target, update, vp.zoom, vp.minZoom, vp.wid, vp.hei }) + "\n");
+            }
+        }
+        if (nds is not null && !hitDone && double.TryParse(Environment.GetEnvironmentVariable("KIRBY_LAB_REPRO_HIT_AT"), out double hitAt) &&
+            elapsed >= hitAt && hero.life > 0)
+        {
+            hitDone = true;
+            var attacker = dc.en.mob.Zombie.Class.create(hero._level, hero.cx + 2, hero.cy, 1, 1);
+            attacker.lockAiS(10);
+            int before = hero.life;
+            dc.tool.atk.AttackUtils.Class.hit(dc.tool.atk.AttackUtils.Class.createFromMob(attacker, 20, null), hero);
+            File.AppendAllText(Path.Combine(run, "repro-events.jsonl"), JsonSerializer.Serialize(new
+            { elapsed, name = "host-attack-20", before, hero.life, hero.maxLife, sourceHealth = nds.Health, frame = nds.State.Frame }) + "\n");
+        }
+        if (nds is not null && !lethalDone && double.TryParse(Environment.GetEnvironmentVariable("KIRBY_LAB_REPRO_LETHAL_AT"), out double lethalAt) &&
+            elapsed >= lethalAt && hero.life > 0)
+        {
+            // Lab-only: a real host Zombie attack against low health, delivered
+            // through the normal host attack path into the original collision.
+            lethalDone = true;
+            hero.life = 3;
+            var attacker = dc.en.mob.Zombie.Class.create(hero._level, hero.cx + 2, hero.cy, 1, 1);
+            attacker.lockAiS(10);
+            var attack = dc.tool.atk.AttackUtils.Class.createFromMob(attacker, 10, null);
+            dc.tool.atk.AttackUtils.Class.hit(attack, hero);
+            File.AppendAllText(Path.Combine(run, "repro-events.jsonl"), JsonSerializer.Serialize(new
+            { elapsed, name = "lethal-host-attack", hero.life, sourceHealth = nds.Health, frame = nds.State.Frame }) + "\n");
+        }
         hideOriginalBitmap = Environment.GetEnvironmentVariable("KIRBY_LAB_HIDE_BITMAP") == "1" && elapsed >= hideFrom && elapsed < hideUntil;
         var bindings = hero.controller.parent.get_bindings();
+        if (!mobScalingWritten && elapsed >= 0.5 && Environment.GetEnvironmentVariable("KIRBY_LAB_MOB_SCALING") == "1")
+        {
+            mobScalingWritten = true;
+            var scale = dc.Const.Class.scaleMobLifeToTier;
+            var rows = new List<object>();
+            for (int i = 0; i < hero._level.entities.length; i++)
+                if (hero._level.entities.getDyn(i) is Mob mob && !mob.destroyed)
+                {
+                    double baseLife = 0;
+                    try { var lifeData = mob._infos.life; baseLife = Convert.ToDouble(lifeData is dc.hl.types.ArrayBase arr ? arr.getDyn(0) : lifeData); } catch { }
+                    rows.Add(new { type = mob.type?.ToString(), baseLife, mob.maxLife, mob.life, mob.elite, mob.trueLifeTier, boss = mob is dc.en.mob.Boss,
+                        scaled = scale.Invoke(baseLife, mob.trueLifeTier), unit = scale.Invoke(1000.0, mob.trueLifeTier) / 1000 });
+                }
+            var curve = Enumerable.Range(0, 25).Select(t => new { t, unit = scale.Invoke(1000.0, t) / 1000 }).ToArray();
+            File.WriteAllText(Path.Combine(run, "mob-scaling.json"), JsonSerializer.Serialize(new
+            { level = hero._level.GetType().FullName, brutality = hero.getTierValueFromTierId("Brutality".AsHaxeString()),
+              tactic = hero.getTierValueFromTierId("Tactic".AsHaxeString()), survival = hero.getTierValueFromTierId("Survival".AsHaxeString()),
+              rows, curve }, new JsonSerializerOptions { WriteIndented = true, NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.AllowNamedFloatingPointLiterals }));
+        }
         if (!itemsWritten && elapsed >= 0)
         {
             itemsWritten = true;
@@ -128,6 +257,11 @@ internal static unsafe class LabReproProbe
         held = next;
         padPressed = nextPad.Except(padHeld).ToHashSet();
         padHeld = nextPad;
+        File.AppendAllText(Path.Combine(run, "host-motion.jsonl"), JsonSerializer.Serialize(new
+        { elapsed, ms = clock.Elapsed.TotalMilliseconds, frame = nds?.State.Frame, x = (hero.cx + hero.xr) * 24, y = (hero.cy + hero.yr) * 24,
+          hero.dx, hero.dy, animation = hero.spr?.groupName?.ToString(), zoom = hero._level.viewport?.zoom,
+          vpWid = hero._level.viewport?.wid, vpHei = hero._level.viewport?.hei }, TraceOptions) + "\n");
+        if (nds is null) return;
         var state = nds.State;
         if (lastFrame == state.Frame) return;
         lastFrame = state.Frame;
@@ -148,7 +282,7 @@ internal static unsafe class LabReproProbe
         var bar = hero._level.game.hud.heroLifeBar;
         File.AppendAllText(Path.Combine(run, "repro-trace.jsonl"), JsonSerializer.Serialize(new
         {
-            elapsed, frame = state.Frame, input = InputField.GetValue(provider), held, pressed, padHeld, padPressed, hideOriginalBitmap,
+            elapsed, frame = state.Frame, input = InputField.GetValue(provider), flash = Flash(nds), bank0 = Bank0(nds), held, pressed, padHeld, padPressed, hideOriginalBitmap,
             source = new { state.Player, state.X, state.Y, state.VxRaw, state.VyRaw, state.Ability, state.Kind,
                 state.Flags, state.FacingRaw, state.Graphic, state.Animation, health = nds.Health, words },
             host = new { x = (hero.cx + hero.xr) * 24, y = (hero.cy + hero.yr) * 24, hero.life, hero.maxLife, hero.curRally,
@@ -164,6 +298,8 @@ internal static unsafe class LabReproProbe
             hud = new { bar.healTrail, bar.lastHealTime, bar.freezed,
                 current = new { bar.curState.life, bar.curState.maxLife, bar.curState.recover, bar.curState.bonusLife },
                 old = new { bar.oldState.life, bar.oldState.maxLife, bar.oldState.recover, bar.oldState.bonusLife } },
+            body = new { renderer?.RenderedObjects, renderer?.UnsupportedObjects, renderer?.BodyPixels, renderer?.TextureFrame,
+                bitmapVisible = bitmap?.visible, bitmapAlpha = bitmap?.alpha, bitmapX = bitmap?.x, bitmapY = bitmap?.y, parent = bitmap?.parent is not null },
             equipment = new { renderer?.EquipmentVisible, animation = equipment?.groupName?.ToString(),
                 frame = equipment?.frame, x = equipment?.x, y = equipment?.y,
                 scaleX = equipment?.scaleX, scaleY = equipment?.scaleY,
@@ -255,6 +391,19 @@ internal static unsafe class LabReproProbe
         { Record("before-normal-enemy-comparison"); hero.applySkin(null!); healthPhase++; }
         else if (healthPhase == 9 && elapsed >= 41)
         { Record("normal-enemy-comparison"); hero.applySkin("KirbySuperStarUltra".AsHaxeString()); healthPhase++; }
+    }
+
+    [System.Runtime.InteropServices.DllImport("kssu_bridge", EntryPoint = "kssu_read_gpu")]
+    private static extern int ReadGpu(nint handle, uint address, byte* data, nuint length);
+    private static string Bank0(NdsRuntime nds)
+    {
+        byte* data = stackalloc byte[32];
+        return ReadGpu(nds.Handle, 0x05000200, data, 32) == 0 ? Convert.ToHexString(new ReadOnlySpan<byte>(data, 32)) : "";
+    }
+    private static int Flash(NdsRuntime nds)
+    {
+        ushort value = 0;
+        return ReadGpu(nds.Handle, 0x05000202, (byte*)&value, 2) == 0 ? value : -1;
     }
 
     private static int[] Values(ArrayBytes_Int array) => Enumerable.Range(0, array.length).Select(i => Get(array, i)).ToArray();

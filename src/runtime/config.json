@@ -38,5 +38,11 @@
     "HeavyBow",
     "MagicBow"
   ],
-  "LoadDecodedAssetAtlases": false
+  "LoadDecodedAssetAtlases": false,
+  "CameraZoom": 1,
+  "AlwaysDash": true,
+  "MatchHostSpeed": true,
+  "OriginalTouchDamage": false,
+  "CopyDamageScale": 3.5,
+  "FlashStrength": 0.35
 }

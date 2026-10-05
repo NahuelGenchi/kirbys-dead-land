@@ -11,6 +11,13 @@ public sealed unsafe class NdsAudio : IDisposable
     // 0x0205EBC4 + 0x20. Other players, including jump/ability SFX, are retained.
     public const uint SourceMusicVolume = 0x0205EBE4;
     private readonly short[] samples = new short[65536];
+    private readonly short[] adjusted = new short[65536 + 1024];
+    // Vsync-locked stepping runs the original machine at the display rate,
+    // within 3% of the DS's. Keep the queue near one device period by dropping
+    // or repeating one stereo frame in a hundred: inaudible, and without the
+    // periodic clear that the slow drift would otherwise eventually trigger.
+    private const uint HighWater = 4096, LowWater = 512;
+    private const int AdjustInterval = 100;
     private uint device;
     private bool initialized, disposed;
     public string? DeviceError { get; private set; }
@@ -58,7 +65,29 @@ public sealed unsafe class NdsAudio : IDisposable
         LabPcmObserver?.Invoke(samples, count);
         // A host pause or stall must not leave old actions sounding much later.
         if (Sdl.Queued(device) > SampleRate * 4 / 10) Sdl.Clear(device);
-        fixed (short* pointer = samples)
+        uint queued = Sdl.Queued(device) / 4;
+        int frames = count / 2;
+        short[] source = samples;
+        if (queued > HighWater || (queued < LowWater && SubmittedFrames > 0))
+        {
+            bool drop = queued > HighWater;
+            int written = 0;
+            for (int frame = 0; frame < frames; frame++)
+            {
+                bool marked = frame % AdjustInterval == AdjustInterval - 1;
+                if (drop && marked) continue;
+                adjusted[written++] = samples[frame * 2];
+                adjusted[written++] = samples[frame * 2 + 1];
+                if (!drop && marked)
+                {
+                    adjusted[written++] = samples[frame * 2];
+                    adjusted[written++] = samples[frame * 2 + 1];
+                }
+            }
+            source = adjusted;
+            count = written;
+        }
+        fixed (short* pointer = source)
             if (Sdl.Queue(device, pointer, (uint)(count * sizeof(short))) != 0)
                 throw new InvalidOperationException("Original audio queue failed: " + Error());
         SubmittedFrames += count / 2;

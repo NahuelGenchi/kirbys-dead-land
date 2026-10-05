@@ -1,0 +1,330 @@
+using Kirby.Core;
+using Kirby.Runtime;
+using static System.Linq.Enumerable;
+
+// Kirby's movement against the original controller with SpeedMatch, replaying
+// KirbyNdsProvider.Step's movement path on synthetic host terrain (24 px cells),
+// checked against the Beheaded's speeds measured in the host.
+if (args.Length != 3) throw new ArgumentException("native-library ROM private-seed-state");
+using var nds = new NdsRuntime(args[0], args[1], args[2]);
+string seed = args[2];
+int failures = 0;
+void Check(bool ok, string what) { Console.WriteLine((ok ? "PASS " : "FAIL ") + what); if (!ok) failures++; }
+IEnumerable<ushort> R(ushort mask, int frames) => Repeat(mask, frames);
+IEnumerable<ushort> P(params IEnumerable<ushort>[] parts) => parts.SelectMany(p => p);
+double Speed(List<Row> r, int a, int b) => (r[b].X - r[a].X) / (b - a) * 60;
+
+{
+    var sim = new Sim(nds, seed);
+    var r = sim.Run(P(R(16, 120), R(0, 20), R(16, 30), R(32, 40)));
+    Check(Math.Abs(Speed(r, 60, 119) - 236.5) < 3, "Runs at the Beheaded's 236.5 px/s");
+    Check(r[139].X - r[119].X < 4.5, "Releasing the direction stops within the Beheaded's distance");
+    int full = Range(170, 40).FirstOrDefault(i => r[i].X - r[i - 1].X <= -3.9, -1);
+    Check(full >= 0 && full - 170 <= 16, "Turning reaches full speed the other way within a quarter second");
+}
+{
+    var sim = new Sim(nds, seed);
+    for (int y = 20; y < 30; y++) sim.Tiles[(30, y)] = 3;
+    var r = sim.Run(R(16, 200));
+    Check(r.Max(x => x.X) <= 711.5 + 1e-6 && r.TakeLast(30).All(x => Math.Abs(x.X - 711.5) < 0.01),
+        "Running into a wall stops at the original contact, never inside and without jitter");
+}
+{
+    var sim = new Sim(nds, seed);
+    var r = sim.Run(R(1, 60));
+    int apex = Range(0, r.Count).MinBy(i => r[i].Feet);
+    int land = Range(4, r.Count - 4).First(i => r[i].Feet >= 720 - 1e-6);
+    Check(Math.Abs(720 - r[apex].Feet - 49.9) < 1.5 && apex + 1 is >= 14 and <= 16, "A jump keeps Kirby's 50 px and peaks after 0.25 s");
+    Check(land + 1 is >= 30 and <= 38 && r.All(x => x.Feet <= 720 + 1e-6), "It lands after about half a second, never inside the floor");
+}
+{
+    var sim = new Sim(nds, seed);
+    var r = sim.Run(P(R(16, 60), R(17, 10), R(16, 40)));
+    int land = Range(65, 45).First(i => r[i].Feet >= 720 - 1e-6);
+    Check(Math.Abs(Speed(r, 62, land - 3) - 236.5) < 4, "A running jump keeps the run speed in the air");
+}
+{
+    var sim = new Sim(nds, seed, floor: 60, feet: 720);
+    for (int x = 0; x <= 13; x++) sim.Tiles[(x, 30)] = 3;
+    var r = sim.Run(P(R(0, 10), R(16, 260)));
+    double vmax = Range(11, r.Count - 12).Max(i => r[i].Feet - r[i - 1].Feet) * 60;
+    Check(Math.Abs(vmax - 403) < 8 && r.All(x => x.Feet <= 1440 + 1e-6), "Falls at the Beheaded's 403 px/s and lands on the floor");
+}
+{
+    var sim = new Sim(nds, seed);
+    var r = sim.Run(P(R(1, 4), R(0, 4), new ushort[] { 1, 0, 1, 0, 1, 0 }, R(16, 80)));
+    Check(Math.Abs(Speed(r, 40, 80) - 236.5) < 4, "Floats across at the run speed");
+    var ceiling = new Sim(nds, seed);
+    for (int x = 0; x < 40; x++) ceiling.Tiles[(x, 25)] = 3;
+    var c = ceiling.Run(P(R(1, 4), R(0, 4), Range(0, 120).Select(i => (ushort)(i % 2))));
+    Check(c.Min(x => x.Feet) >= 642.5 - 1e-6, "Flapping into a ceiling never puts Kirby's head inside it");
+}
+{
+    var sim = new Sim(nds, seed);
+    var r = sim.Run(P(R(128, 3), new ushort[] { 129 }, R(128, 50)));
+    double peak = Range(1, r.Count - 1).Max(i => r[i].X - r[i - 1].X) * 60;
+    Check(Math.Abs(r[^1].X - r[0].X - 131) < 4 && Math.Abs(peak - 339) < 10, "Slides as far and as fast as the Beheaded rolls");
+    var wall = new Sim(nds, seed);
+    for (int y = 20; y < 30; y++) wall.Tiles[(17, y)] = 3;
+    Check(wall.Run(P(R(128, 3), new ushort[] { 129 }, R(128, 50))).Max(x => x.X) <= 399.5 + 1e-6, "A slide into a wall stops at the original contact");
+}
+{
+    var sim = new Sim(nds, seed);
+    for (int y = 15; y < 30; y++) sim.Tiles[(12, y)] = 134;
+    var up = sim.Run(R(64, 90));
+    var down = sim.Run(R(128, 60));
+    Check(Math.Abs(up[20].Feet - up[80].Feet - 97.5) < 3 && Math.Abs((down[40].Feet - down[10].Feet) * 2 - 97.5) < 3,
+        "Climbs ladders at the Beheaded's 97.5 px/s both ways");
+}
+foreach (ushort t in new ushort[] { SpeedMatch.SlopeUpRight, SpeedMatch.SlopeUpLeft })
+{
+    var sim = new Sim(nds, seed);
+    int dir = t == SpeedMatch.SlopeUpRight ? 1 : -1;
+    int Col(int k) => 12 + dir * k;
+    sim.Tiles[(Col(4), 29)] = t; sim.Tiles[(Col(5), 28)] = t; sim.Tiles[(Col(5), 29)] = 3;
+    sim.Tiles[(Col(6), 27)] = t; sim.Tiles[(Col(6), 28)] = 3; sim.Tiles[(Col(6), 29)] = 3;
+    for (int k = 7; k < 14; k++) for (int y = 27; y < 30; y++) sim.Tiles[(Col(k), y)] = 3;
+    ushort go = (ushort)(dir > 0 ? 16 : 32), back = (ushort)(dir > 0 ? 32 : 16);
+    var r = sim.Run(P(R(go, 70), R(0, 10), R(back, 70)));
+    Check(Math.Abs(r.Min(x => x.Feet) - 648) < 0.5 && r.Take(70).All(x => x.Action is not (KirbyActions.Fall or KirbyActions.Jump)) &&
+          Math.Abs(r[^1].Feet - 720) < 0.01, $"Runs up slope {t} without leaving the ground and back down to the floor");
+}
+{
+    var sim = new Sim(nds, seed);
+    for (int x = 8; x < 20; x++) sim.Tiles[(x, 28)] = SpeedMatch.OneWay;
+    Check(Math.Abs(sim.Run(R(1, 70))[^1].Feet - 672) < 0.01, "Jumps up through a two-cell one-way platform and lands on it");
+}
+{
+    var sim = new Sim(nds, seed);
+    for (int x = 16; x < 30; x++) sim.Tiles[(x, 28)] = 3;
+    Check(Math.Abs(Speed(sim.Run(R(16, 150)), 100, 149) - 236.5) < 3, "Runs through a one-cell tunnel at full speed");
+}
+{
+    var sim = new Sim(nds, seed, floor: 34, feet: 720);
+    for (int x = 0; x <= 20; x++) sim.Tiles[(x, 30)] = 3;
+    var r = sim.Run(R(16, 150));
+    Check(r.FindIndex(x => x.Feet >= 34 * 24 - 1e-6) > 0 && r.All(x => x.Feet <= 34 * 24 + 1e-6), "Runs off a ledge and lands below, never inside the floor");
+}
+{
+    // Bomb Kirby holds a bomb overhead, lobs it and runs off. Kirby's added speed
+    // must not carry the bomb (or any other original object) along with him.
+    List<double> BombPath(bool match)
+    {
+        var sim = new Sim(nds, seed, match: match);
+        if (!sim.Transform(9)) throw new Exception("Bomb transformation failed");
+        foreach (ushort m in R(2, 25).Concat(R(0, 3))) sim.Step(m);
+        var path = new List<double>();
+        for (int i = 0; i < 45; i++)
+        {
+            sim.Step(16);
+            var bombs = sim.Actors().Where(a => a.Kind == 60).ToList();
+            path.Add(bombs.Count == 1 ? bombs[0].X : double.NaN);
+        }
+        return path;
+    }
+    var native = BombPath(false);
+    var matched = BombPath(true);
+    int compared = Range(0, native.Count).Count(i => !double.IsNaN(native[i]) && !double.IsNaN(matched[i]));
+    double worst = Range(0, native.Count).Where(i => !double.IsNaN(native[i]) && !double.IsNaN(matched[i]))
+        .Select(i => Math.Abs(native[i] - matched[i])).DefaultIfEmpty(double.MaxValue).Max();
+    Check(compared >= 30 && worst < 0.01, $"A lobbed bomb keeps its original path while Kirby runs off ({compared} frames, {worst:0.###} px)");
+}
+{
+    // Copy abilities that carry Kirby run under the shared ability action and
+    // keep their original motion: Wheel's roll, Jet's charged dash, Yo-Yo's dash.
+    foreach (var (ability, name, plan) in new (byte, string, ushort[])[]
+    {
+        (8, "Wheel's roll", R(0, 5).Concat(R(2, 2)).Concat(R(0, 100)).ToArray()),
+        (16, "Jet's charged dash", R(0, 5).Concat(R(2, 70)).Concat(R(0, 100)).ToArray()),
+        (6, "Yo-Yo's dash", R(0, 5).Concat(R(2, 2)).Concat(R(0, 100)).ToArray()),
+    })
+    {
+        var ends = new List<(double X, double Feet)>();
+        foreach (bool match in new[] { false, true })
+        {
+            var sim = new Sim(nds, seed, match: match);
+            if (!sim.Transform(ability)) throw new Exception($"Ability {ability} transformation failed");
+            Row last = default!;
+            foreach (ushort m in plan) last = sim.Step(m);
+            ends.Add((last.X, last.Feet));
+        }
+        Check(Math.Abs(ends[0].X - ends[1].X) < 0.01 && Math.Abs(ends[0].Feet - ends[1].Feet) < 0.01 && Math.Abs(ends[0].X - 300) > 50,
+            $"{name} keeps its original distance ({ends[0].X - 300:0} px)");
+    }
+}
+{
+    // Fire's and Plasma's head emitters are placed by an offset from Kirby; the
+    // window moving by whole cells while he climbs or runs must leave them on him.
+    foreach (var (ability, name) in new (byte, string)[] { (11, "Fire's head flame"), (12, "Plasma's spark") })
+    {
+        var sim = new Sim(nds, seed);
+        if (!sim.Transform(ability)) throw new Exception($"Ability {ability} transformation failed");
+        for (int y = 0; y < 30; y++) sim.Tiles[(12, y)] = SpeedMatch.Ladder;
+        double worst = 0;
+        int seen = 0;
+        foreach (ushort m in R(64, 50).Concat(R(128, 50)).Concat(R(16, 60)).Concat(R(32, 60)))
+        {
+            sim.Step(m);
+            foreach (var (dx, dy) in sim.Emitters()) { worst = Math.Max(worst, Math.Max(Math.Abs(dx), Math.Abs(dy))); seen++; }
+        }
+        Check(seen >= 200 && worst < 6, $"{name} stays on Kirby while he climbs and runs ({worst:0.#} px)");
+    }
+}
+{
+    // The original draws only what is on its 256-pixel screen. A placement far from
+    // the seed position frames Kirby at once, and the camera moves with the window,
+    // so he stays near the centre while running instead of jumping at each cell.
+    nds.LoadState(seed);
+    var cells = new ushort[900];
+    for (int y = 0; y < 9; y++) for (int x = 0; x < 100; x++) cells[y * 100 + x] = y >= 5 ? SpeedMatch.Solid : SpeedMatch.Free;
+    nds.World(cells, 700 << 16, (int)(105.5 * 65536));
+    nds.Step(0);
+    NdsState placed = nds.State;
+    int placedX = (int)placed.X - placed.CameraX;
+    var sim = new Sim(nds, seed);
+    var screen = new List<int>();
+    foreach (ushort m in R(16, 120).Concat(R(32, 120))) { sim.Step(m); NdsState s = nds.State; screen.Add((int)s.X - s.CameraX); }
+    int jump = Range(1, screen.Count - 1).Max(i => Math.Abs(screen[i] - screen[i - 1]));
+    Check(placedX is >= 96 and <= 160 && screen.All(x => x is >= 96 and <= 160) && jump <= 4,
+        $"Kirby is framed on the original screen after a placement (x {placedX}) and while running (x {screen.Min()}-{screen.Max()}, steps of {jump} px at most)");
+}
+{
+    // Kirby's feet: the matched run covers about as much ground per walk cycle as
+    // the original (41.3 px), instead of nearly twice as much.
+    double PerCycle(bool match)
+    {
+        var sim = new Sim(nds, seed, match: match);
+        foreach (ushort m in R(16, 30)) sim.Step(m);
+        var poses = new List<(ushort Pose, double X)>();
+        foreach (ushort m in R(16, 120)) { var r = sim.Step(m); poses.Add(((ushort)nds.State.Graphic, r.X)); }
+        var starts = Range(1, poses.Count - 1).Where(i => poses[i].Pose == poses[0].Pose && poses[i - 1].Pose != poses[0].Pose).ToList();
+        return (poses[starts[^1]].X - poses[starts[0]].X) / (starts.Count - 1);
+    }
+    double native = PerCycle(false), matched = PerCycle(true);
+    Check(matched / native < 1.2, $"Kirby's walk cycle keeps up with the matched run ({matched:0.0} px a cycle, original {native:0.0})");
+}
+Console.WriteLine(failures == 0 ? "PASS: Kirby's movement matches the Beheaded's speeds on the original controller." : $"{failures} FAILED");
+return failures;
+
+record Row(ushort Action, double X, double Feet, int Vx, int Vy);
+
+/// <summary>KirbyNdsProvider.Step's movement path: world rebase, velocity matching, original frame, added motion.</summary>
+sealed class Sim
+{
+    readonly NdsRuntime nds;
+    readonly DashAssist dash = new();
+    readonly SpeedMatch.ActionFilter motionActions = new();
+    readonly AnimationPacer walkCycle = new();
+    public readonly Dictionary<(int, int), ushort> Tiles = [];
+    readonly int floor;
+    readonly bool match;
+    double hostX = 12 * 24 + 12, feet;
+    int lastVx, lastVy;
+    (int X, int Y)? window;
+    int ox, oy;
+    public double X => hostX;
+    public Sim(NdsRuntime nds, string seed, int floor = 30, double? feet = null, bool match = true)
+    {
+        this.nds = nds; this.floor = floor; this.match = match;
+        nds.LoadState(seed);
+        this.feet = floor * 24;
+        for (int i = 0; i < 20; i++) Step(0);
+        if (feet is { } start) this.feet = start;
+    }
+    /// <summary>The original inhale, fed content and swallow, as in the lab ability probe.</summary>
+    public bool Transform(byte ability)
+    {
+        for (int i = 0; i < 20; i++) Step(2);
+        if ((nds.ActionFlags & 1) == 0 || !nds.Feed(ability)) return false;
+        Step(2); Step(0); Step(128);
+        for (int i = 0; i < 180; i++) Step(0);
+        return nds.State.Ability == ability;
+    }
+    /// <summary>Original actors other than Kirby, by kind, in host pixels.</summary>
+    public List<(uint Node, byte Kind, double X, double Y)> Actors()
+    {
+        var list = new List<(uint, byte, double, double)>();
+        var word = new byte[4];
+        uint Read32(uint a) { nds.Read(a, word); return BitConverter.ToUInt32(word); }
+        uint player = nds.State.Player;
+        for (uint slot = 0; slot < 7; slot++)
+            for (uint a = Read32(0x02049dec + slot * 4), guard = 0; a >= 0x02000000 && a < 0x02400000 && guard < 256; a = Read32(a), guard++)
+                if (a != player)
+                {
+                    byte kind = (byte)Read32(a + 0x16);
+                    list.Add((a, kind, (int)Read32(a + 0x80) / 65536.0 + ox * 24, (int)Read32(a + 0x84) / 65536.0 + oy * 24));
+                }
+        return list;
+    }
+    /// <summary>Fire's and Plasma's head emitters (effect particles in state 1): drawn position relative to Kirby, in pixels.</summary>
+    public List<(double Dx, double Dy)> Emitters()
+    {
+        var list = new List<(double, double)>();
+        var word = new byte[4];
+        uint Read32(uint a) { nds.Read(a, word); return BitConverter.ToUInt32(word); }
+        NdsState s = nds.State;
+        for (uint slot = 0; slot < 7; slot++)
+            for (uint a = Read32(0x02049dec + slot * 4), guard = 0; a >= 0x02000000 && a < 0x02400000 && guard < 256; a = Read32(a), guard++)
+                if (Read32(a + 0x30) is 0x020CD588 or 0x020CE8FC && (byte)(Read32(a + 0x44) >> 8) == 1)
+                    list.Add((((int)Read32(a + 0x78) - s.XRaw) / 65536.0, ((int)Read32(a + 0x7C) - s.YRaw) / 65536.0));
+        return list;
+    }
+    ushort TileAt(int cx, int cy) => Tiles.TryGetValue((cx, cy), out var t) ? t : cy >= floor ? SpeedMatch.Solid : SpeedMatch.Free;
+    public List<Row> Run(IEnumerable<ushort> plan) => plan.Select(Step).ToList();
+    public Row Step(ushort raw)
+    {
+        double centerY = feet - 14.5;
+        ox = (int)Math.Floor(hostX / 24) - 16; oy = (int)Math.Floor(centerY / 24) - 4;
+        var cells = new ushort[900];
+        for (int y = 0; y < 9; y++) for (int x = 0; x < 100; x++) cells[y * 100 + x] = TileAt(ox + x, oy + y);
+        // KirbyNdsProvider.PlaceSource: the window moves every object by whole
+        // cells; host movement then moves Kirby alone.
+        int tx = checked((int)Math.Round((hostX - ox * 24) * 65536)), ty = checked((int)Math.Round((centerY - oy * 24) * 65536));
+        NdsState before = nds.State;
+        if (window is { } previous)
+        {
+            int fx = before.XRaw + (previous.X - ox) * 24 * 65536, fy = before.YRaw + (previous.Y - oy) * 24 * 65536;
+            nds.World(cells, fx, fy);
+            if (Math.Abs(tx - fx) > 1 || Math.Abs(ty - fy) > 1) nds.MovePlayer(tx - fx, ty - fy);
+        }
+        else nds.World(cells, tx, ty);
+        window = (ox, oy);
+        ushort action = nds.Action;
+        int direction = (raw & 48) switch { 16 => 1, 32 => -1, _ => 0 };
+        NdsState current = nds.State;
+        Span<byte> value = stackalloc byte[2];
+        if (!match) { }
+        else if (SpeedMatch.Brakes(motionActions.Effective, direction, current.VxRaw))
+        {
+            value.Clear();
+            nds.Write(current.Player + 0x88, value);
+            nds.Write(current.Player + 0x98, value);
+        }
+        int rise = match ? SpeedMatch.RiseVelocity(action, current.VyRaw) : current.VyRaw;
+        if (rise != current.VyRaw)
+        {
+            System.Buffers.Binary.BinaryPrimitives.WriteInt16LittleEndian(value, (short)rise);
+            nds.Write(current.Player + 0x8A, value);
+        }
+        double x0 = hostX, f0 = feet;
+        // KirbyNdsProvider.PaceWalkCycle: the pose count at player+0x40 -> +0x6C8.
+        if (match && action is KirbyActions.Walk or KirbyActions.Dash)
+        {
+            Span<byte> word = stackalloc byte[4];
+            nds.Read(current.Player + 0x40, word);
+            uint count = BitConverter.ToUInt32(word) + 0x6C8;
+            nds.Read(count, word[..1]);
+            byte next = walkCycle.Next(SpeedMatch.GroundScale, word[0]);
+            if (next != word[0]) { word[0] = next; nds.Write(count, word[..1]); }
+        }
+        else walkCycle.Reset();
+        nds.Step(dash.Filter(raw, true, lastVx, lastVy));
+        NdsState s = nds.State;
+        lastVx = s.VxRaw; lastVy = s.VyRaw;
+        ushort after = nds.Action;
+        ushort motion = motionActions.Next(after);
+        (hostX, feet) = match ? SpeedMatch.Move(motion, direction, s.VxRaw, x0, f0, s.X + ox * 24, s.Y + oy * 24 + 14.5, TileAt)
+            : (s.X + ox * 24, s.Y + oy * 24 + 14.5);
+        return new Row(after, hostX, feet, s.VxRaw, s.VyRaw);
+    }
+}

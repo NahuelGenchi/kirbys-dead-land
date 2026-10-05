@@ -124,6 +124,121 @@ was installed in the Steam game directory, and ownership checks remain intact.
     sprite and tracks before retargeting equipment. Body/weapon contact repairs
     these sword grips, but tall bows touch the legs too; bows and shields retain
     their verified native attachment tracks.
+23. Host weapon frames sit at the Beheaded's torso height and glow through GlowKey.
+    Child order in the shared layer decides whether that blade covers Kirby; keep
+    the original body after the equipment. Check the source palette before blaming
+    the host: KSSU itself flashes bank 0 after hits and while guarding.
+24. The arrival corpse draws the hero atlas before Hero.initGfx, and the death
+    corpse after the hero is destroyed. Resolve the outfit atlas through
+    Assets.lib.get each frame instead of from the hero.
+25. Hero.kill destroys the hero synchronously and fires the dispose event inside
+    the source step. Continue a death animation from the frame event, and stop
+    about 30 frames before the source starts its own life-lost transition.
+26. Wall-time accumulation against a 59.96 Hz display drops a 59.83 Hz source frame
+    every few seconds. Lock one source frame per host frame near the DS rate and
+    let the audio queue absorb the drift.
+27. Hero.applyAttackResult calls Hero.blink, an alpha pulse to 0.3. An overlay that
+    copies the host sprite alpha vanishes every other frame on each hit.
+28. Viewport.set_zoom scales from the view's corner; call updateSizes afterwards
+    so tracking uses the zoomed size. The viewport is about 400 host px tall.
+29. Host mob life is base x Const.scaleMobLifeToTier(trueLifeTier) x elite/boss
+    extras. Give paired source enemies HP in source units so both games agree
+    on the lethal hit; Ice freezes and death reactions depend on it.
+30. The original dashes only on a double tap (walk 352, dash 528 in 1/256 px).
+    A synthesized one-frame release after a press, and after landing, dashes.
+31. The ROM's hurt/guard flash swaps palette banks 0-1 to orange, then to a
+    half-whitened set, 3-of-6 frames. Fine on a DS screen; on a large monitor the
+    whitened Kirby vanishes for a frame. Soften the flash, never hide objects.
+32. Do not change the player's camera framing without asking; a zoom that makes
+    the DS proportions "right" is still a surprise to someone used to the host view.
+33. Hardware OAM after a source frame shows the previous frame's positions. Pair
+    it with the state captured before the next World rebase, or Kirby jumps a whole
+    cell for one frame at every window shift. Track positions, not just pixel
+    counts, when reviewing "flicker": a moved sprite keeps all its pixels.
+34. Host collision data: 1|2 solid, 8 one-way, 16 ladder, 64 roll zone (65 with
+    bit 1), 128 breakable ground, 512/1024 slopes. A roll zone is a one-cell tunnel
+    the Beheaded passes only rolling; exporting it as plain solid blocks Kirby.
+35. The original action code is the u16 at 0x020BAF80 and is shared by every copy
+    ability: 0406 stand/crouch, 060B walk, 060C dash, 070D jump, 070E fall, 070F
+    float, 142C ability use (inhale, exhale, spit and every copy-ability attack), 0507
+    landing, 0B18 slide.
+36. The original clamps falling at 3.5 px per frame (896 in 1/256) for every state;
+    writing a larger vy is clamped back. Add speed through the world rebase instead,
+    and stop short of the floor so the original collision makes the contact.
+37. Landing during an exhale keeps action 142C for several frames after the feet
+    touch down. Detect a landing from the floor under the feet as well.
+38. Starting a host skill from outside its input check works: DiveAttack.start and
+    onOwnerLand bring the host's own sounds, effects, damage and floor breaking.
+    Mask its dedicated action (36) from the host so it never starts on its own.
+39. Never refuse Inventory.equip: Inventory.add has already listed the item with
+    posID -1, and the HUD throws "unexpected posId" on the pickup. Decline items in
+    InventItem.isUsefulFor, which every drop, altar, shop and timed reward checks
+    first and answers with the host's own "Can't use that right now".
+40. The original never stands on ladder cells, top included, and climbing is action
+    0916; A kicks Kirby off a ladder at once (left or right takes seven frames).
+    A floor probe for added movement must skip ladders and count one-way
+    platforms only from above.
+41. The default keyboard binds W and the Up arrow to both Up and jump. The host
+    climbs with them at a ladder; send the original only Up from such a key while
+    Kirby overlaps or holds a ladder, until it is released.
+42. KirbyHurtbox projects the original hurtbox onto the host hero for all of
+    Level.update (foot about 9 px higher, radius 6, height 12). Anything inside the
+    level update that asks "is the hero on the ground here", like PressurePlate
+    and HiddenTrigger, needs the physical body restored around it.
+43. The original moves on a copy of the horizontal velocity at player+0x98;
+    +0x88 is only what it reports. Writing +0x88 alone changes nothing, on the
+    ground or in the air; clear both. Vertical velocity is read from +0x8A.
+44. The original's floor test starts from where its previous frame ended. A host
+    move that leaves less than one fall step (3.5 px) to a floor carries Kirby a
+    fraction of a pixel into it for a frame; leave a full step. Walls and
+    ceilings are tested fresh.
+45. Slopes (bridge 132 rising right, 133 rising left) are sampled at Kirby's
+    centre in whole pixel columns: surface = cell bottom - (column + 1) for 132,
+    cell bottom - (24 - column) for 133. Running downhill across a slope-cell
+    boundary leaves the ground briefly, natively too.
+46. The original jump: take-off burst vy -2682, -2036, -1390, -744, then 44 of
+    gravity a frame; its height is fixed at 49.9 px, tapped or held, and 32
+    frames after take-off it turns into a fall with one motionless frame. Walls
+    stop Kirby's centre 8.5 px away; ceilings stop his feet 18.5 px below.
+47. Beheaded, measured in the lab at 30 host steps a second: run 236.5 px/s
+    (0.329 cells a step), stop within ~3 px, roll 131 px at 339 px/s, fall
+    terminal ~0.56 cells a step (403 px/s), dive ~30 px a step, ladder pulses of
+    26 px every 0.267 s (97.5 px/s), jump 43 px (47 running) peaking at 0.25 s.
+48. kssu_world moves every original actor by the player's delta: right for a
+    window rebase, wrong for host movement of Kirby alone. Fed every frame (speed
+    match), it dragged a lobbed Bomb along behind Kirby at his added speed, and on
+    a chain it pulled a bomb under his feet. Move the window by whole cells and
+    Kirby alone with kssu_move_player. Some actors (held-bomb parts) keep
+    coordinates that are not world positions; never shift them for Kirby.
+49. 142C is not just the exhale: every copy-ability attack runs under it, and
+    Wheel's roll, Jet's charged dash, Yo-Yo's and Suplex's dashes carry Kirby with
+    their own velocity. Braking it on a released direction left Wheel and Jet in
+    place. Only the exhale that follows a float may move like floating.
+50. Some original actors are attached: +0x80/+0x84 is an offset from the parent
+    and +0x78/+0x7C (drawn position) = parent's drawn position (or sprite anchor,
+    parent+0x40 -> +0x748) + offset, read before or after the parent moved that
+    frame. Shifting the offset on a window rebase pushed Fire's head emitter 24
+    px off Kirby per cell (flame left at the foot of a chain, embers trailing a
+    run) and made 17 other effect classes jump. Rebase drawn positions; keep
+    offsets. Recognize them by that equation, not by class: classes switch
+    between attached and absolute.
+51. The source camera's state is the i16 scroll pair at 0x0209F3A8 (x, y);
+    0x0204222C/0x0204222E are recomputed from it every frame, so writes there
+    vanish. It scrolls at most 16 px a frame and the original draws only its
+    256x192 screen: a placement that left Kirby at screen x 376 hid him for six
+    frames, and each window cell jumped his screen x by 24. Move the scroll with
+    the window; recentre after a placement.
+52. Kirby's pose count is a byte at (player+0x40)+0x6C8 (0x020BB630 in the
+    seed); the pose advances on the frame it reads zero. Decrementing it (never
+    below zero) plays the 2- and 3-frame walk poses in 1 and 2 frames at most,
+    1.67 times the rate. The climb cycle is not timer-driven (hand-over-hand
+    pulses) and does not respond to it.
+53. KSSU and Dead Cells disagree on touching: the original hurts Kirby (7 HP)
+    and bumps weak enemies to death; Dead Cells hurts neither (only attacks,
+    plus Mob.contactAttack overrides on Spiker, Shocker, Shield, BackShield,
+    Enforcer and two tentacle types). Excluding the original body-contact
+    category (hit-node +0x46 mask 0x4000) keeps inhale, swallow, Suplex grabs
+    and attacks working.
 
 ## Assets and cost
 

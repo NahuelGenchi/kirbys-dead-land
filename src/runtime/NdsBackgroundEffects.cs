@@ -77,6 +77,11 @@ public sealed unsafe class NdsBackgroundEffects : IDisposable
         overlay.posChanged = true;
     }
 
+    public void Hide()
+    {
+        if (overlay is not null) overlay.visible = false;
+    }
+
     private static void Read(NdsRuntime nds, uint[] data, uint plane)
     {
         fixed (uint* pointer = data)
