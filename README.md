@@ -1,4 +1,6 @@
-# Kirby Super Star Ultra for Dead Cells
+# Kirby's Dead Land
+
+*Kirby Super Star Ultra in Dead Cells.*
 
 A new Linux character mod built with [Universal Modder](https://github.com/rehan-remade/universal-modder),
 using the supplied Kirby Super Star Ultra USA ROM as the running gameplay engine.
