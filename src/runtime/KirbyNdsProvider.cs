@@ -36,6 +36,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
     private nint sourceLevel;
     private readonly Dictionary<(int, int), bool> water = [];
     public NdsRuntime? Machine => nds;
+    internal KirbyEnemies Enemies => enemies;
     public void OnActivated(KirbySession session)
     {
         LabActivationTrace.Mark("OnActivated enter");

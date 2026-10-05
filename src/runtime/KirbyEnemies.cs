@@ -2,6 +2,7 @@ using Entity = dc.Entity;
 using dc.en;
 using dc.en.inter;
 using dc.tool.atk;
+using Kirby.Core;
 
 namespace Kirby.Runtime;
 
@@ -16,6 +17,12 @@ public sealed class KirbyEnemies
     private readonly bool[] controlled = new bool[Capacity + 1];
     private readonly byte[] abilities = new byte[Capacity + 1];
     private EnemyBinding[]? restoring;
+    /// <summary>Highest scroll tier sampled for the current source tick.</summary>
+    internal int ColorlessTier { get; private set; } = 1;
+    /// <summary>The host's colorless damage multiplier for <see cref="ColorlessTier"/>.</summary>
+    internal double ColorlessMultiplier { get; private set; } = 1;
+    /// <summary>Lab-only observer of (target, source HP drop, host damage) for each copy hit.</summary>
+    internal static Action<Entity, int, int>? TestObserver;
     internal EnemyBinding[] Capture() => Enumerable.Range(1, Capacity)
         .Where(i => detached[i] || mobs[i] is { destroyed: false }).Select(i => detached[i]
             ? new EnemyBinding { Slot = i, Detached = true }
@@ -62,6 +69,10 @@ public sealed class KirbyEnemies
             }
             restoring = null;
         }
+        // Copy attacks scale like colorless gear: the highest scroll tier,
+        // passed through the host's own Const.scaleHeroValueToTier.
+        ColorlessTier = ColorlessDamage.Tier(hero.brutalityTier, hero.tacticTier, hero.survivalTier);
+        ColorlessMultiplier = dc.Const.Class.scaleHeroValueToTier(1.0, ColorlessTier);
         double hx = (hero.cx + hero.xr) * 24, hy = (hero.cy + hero.yr) * 24;
         for (uint i = 1; i <= Capacity; i++)
         {
@@ -101,7 +112,7 @@ public sealed class KirbyEnemies
             if (mobs[i] is not { } mob) continue;
             int x = checked((int)Math.Round(((mob.cx + mob.xr) * 24 - ox) * 65536));
             int y = checked((int)Math.Round(((mob.cy + mob.yr) * 24 - 17 - oy) * 65536));
-            assignedHp[i] = Math.Clamp(mob.life, 1, MaxSourceHp);
+            assignedHp[i] = ColorlessDamage.SourceHp(mob.life, ColorlessMultiplier, MaxSourceHp);
             nds.SetProxy(i, x, y, assignedHp[i]);
             nds.SetProxyOptions(i, abilities[i], mob is not Mob || mob is dc.en.mob.Boss);
             nds.SetProxyContact(i, mob is Mob);
@@ -135,11 +146,16 @@ public sealed class KirbyEnemies
                 Release(nds, i);
                 continue;
             }
-            // Native HP follows the host's actual remaining life. Lethal Ice
-            // hits must enter the original freeze reaction in the same tick.
+            // Native HP is the host's remaining life divided by the colorless
+            // multiplier. Lethal Ice hits must enter the original freeze
+            // reaction in the same tick, so lethality agrees after scaling.
             int damage = assignedHp[i] - proxy.Hp;
             if (damage > 0 && !mob.destroyed && mob.life > 0)
-                KirbyDamage.Hit(session.Hero, mob, damage);
+            {
+                int hostDamage = ColorlessDamage.HostDamage(damage, assignedHp[i], mob.life, ColorlessMultiplier);
+                TestObserver?.Invoke(mob, damage, hostDamage);
+                KirbyDamage.Hit(session.Hero, mob, hostDamage);
+            }
             if (mob.destroyed || mob.life <= 0)
             {
                 if (!proxy.Gone && mob is Mob and not dc.en.mob.Boss)

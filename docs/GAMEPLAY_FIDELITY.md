@@ -24,7 +24,7 @@ in [NDS_BRIDGE.md](NDS_BRIDGE.md). The original bootstrap experiment remains in
 | Enemy collision | Live host enemies have paired source collision objects with their host dimensions; original routines resolve damage cadence, suction, grabs, throws and Cook |
 | Boss collision | Original resistance bits prevent inhale, Suplex capture and Cook; damage still uses original collision/debounce, while the host retains boss AI and phases |
 | Incoming damage | Host shield/parry resolves first; remaining damage enters the next original collision tick, preserving original guard, recoil and invulnerability |
-| Outgoing damage | Source HP deltas become exact host damage; the host's normal hero damage multiplier does not alter copy attacks |
+| Outgoing damage | Source HP deltas become host damage scaled like Dead Cells colorless gear (see below); no other host hero multiplier alters copy attacks |
 | Player health | Original full health is 76. Host and source health are synchronized, including host healing and original food |
 | Saves | A versioned, ROM-checked native machine snapshot and physical shield/enemy bindings travel with the private host save slot |
 
@@ -59,6 +59,54 @@ All 24 standard source copy forms are included: Cutter, Mirror, Beam, Fighter,
 Suplex, Yo-Yo, Wheel, Bomb, Ice, Fire, Plasma, Ninja, Stone, Wing, Jet, Copy,
 Sword, Hammer, Parasol, Paint, Mike, Crash, Cook and Sleep. Special states reached
 through those forms, such as riding the Wheel helper, execute in the ROM too.
+
+### Colorless copy damage
+
+Intentional deviation from exact original damage, requested in issue #10. Copy
+attacks count as Dead Cells colorless (gray) gear. They scale with the player's
+highest scroll stat, using the host's own formula. Decompiled from `hlboot.dat`
+SHA-256 `59350cad475a2375b9e39d7cd13fdb6e4ed9a027fd827ae5140f913c1c07ce7e`:
+
+- `Hero.computeTiers` sets each tier to 1 + that stat's scroll count.
+- `Entity.getRelevantTierFor` gives an item with the `Colorless` affix
+  `max(brutalityTier, tacticTier, survivalTier)`.
+- `AttackUtils.computeFinalDmg` applies `Const.scaleHeroValueToTier(damage, tier)`,
+  which is `damage × 1.15^(tier − 1)`, then truncates with `Std.int`.
+
+| Highest scroll stat (scrolls) | 0 | 1 | 2 | 4 | 8 |
+|---|---|---|---|---|---|
+| Multiplier | ×1 | ×1.15 | ×1.3225 | ×1.749 | ×3.059 |
+| Wheel hit of 23 | 23 | 26 | 30 | 40 | 70 |
+
+Each source tick, `KirbyEnemies.Prepare` reads the three host tiers and calls the
+host's `Const.scaleHeroValueToTier(1, tier)` for the multiplier.
+`ColorlessDamage` in `src/core/` holds the arithmetic and an independent copy of
+the formula for tests. Each source HP drop becomes `Std.int(drop × multiplier)`
+host damage. One source tick's drop is scaled as one value, as the host scales one
+attack.
+
+Lethality stays in agreement. The paired source enemy receives the smallest HP
+whose truncated, scaled damage reaches the host's remaining life (rounded up from
+life ÷ multiplier and checked with the host's arithmetic). Original death
+reactions such as the Ice block therefore still occur in the tick of the host
+kill. Source HP stays clamped to the native range (32,760); a single-tick source
+kill at that cap kills the host enemy.
+
+Unchanged: base-form host weapons, incoming damage, retained-shield parries, boss
+capture resistance, source attack cadence and repeat-hit debounce. Only the scroll
+multiplier is applied. Host weapon quality, affixes, mutations/perks, critical hits
+and other hero bonuses still do not alter copy attacks.
+
+This replaces the per-Boss-Cell curve proposed in #7 / PR #8, which was not merged.
+At 0 scrolls the result is identical to the previous exact-damage behavior.
+
+Evidence: core tests compare every hit with host truncation for tiers 1–40 and
+host lives 1–400, including the floating-point case that division alone gets
+wrong. Live runs `204919` (Wheel), `205107` (Ice) and `205246` (no scrolls) are
+recorded in [RUNTIME_LAUNCH.md](RUNTIME_LAUNCH.md#colorless-copy-damage-2026-10-05).
+With 4/0/2 scrolls, the host returned the same multiplier as the core copy.
+Wheel 23/14 became 40/24, and lethal Ice still left the original frozen object.
+Other copy forms, bosses and breakables have not been run live with scrolls.
 
 ## Evidence and current limits
 

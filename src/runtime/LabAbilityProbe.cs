@@ -1,7 +1,11 @@
+using Path = System.IO.Path;
 using System.Text.Json;
 using dc.en;
 using dc.en.mob;
+using dc.tool;
 using dc.tool.atk;
+using Kirby.Core;
+using ModCore.Utilities;
 
 namespace Kirby.Runtime;
 
@@ -20,10 +24,33 @@ internal static class LabAbilityProbe
     private static uint? setupStart;
     private static bool setupFed, setupDone;
     private static bool savedAttackState;
+    private static int[]? scrolls;
+    private static bool scrollsGiven;
+    private static int[]? tiers;
+    private static readonly List<object> copyHits = [];
 
     public static void Install(string output)
     {
         run = output;
+        string? requestedScrolls = Environment.GetEnvironmentVariable("KIRBY_LAB_TEST_SCROLLS");
+        if (requestedScrolls is not null)
+            scrolls = requestedScrolls.Split(',').Select(c => int.Parse(c, System.Globalization.CultureInfo.InvariantCulture)).ToArray();
+        KirbyEnemies.TestObserver = (mob, sourceDamage, hostDamage) =>
+        {
+            var enemies = KirbyMod.Instance?.NativeProvider?.Enemies;
+            if (target?.HashlinkPointer != mob.HashlinkPointer || enemies is null) return;
+            copyHits.Add(new
+            {
+                frame = KirbyMod.Instance?.NativeProvider?.Machine?.State.Frame,
+                hostLifeBefore = mob.life,
+                sourceDamage,
+                hostDamage,
+                colorlessTier = enemies.ColorlessTier,
+                hostMultiplier = enemies.ColorlessMultiplier,
+                // What the host itself computes for colorless gear with this base damage.
+                hostColorlessDamage = (int)dc.Const.Class.scaleHeroValueToTier((double)sourceDamage, enemies.ColorlessTier),
+            });
+        };
         dc.tool.Hook_Tutorial.tryToStart += (_, _, _) => false;
         dc.Hook_Entity.kill += (orig, entity) =>
         {
@@ -91,6 +118,18 @@ internal static class LabAbilityProbe
                 }
                 return 128;
             }
+        }
+        if (scrolls is not null && !scrollsGiven)
+        {
+            // Real scroll items through the normal inventory, then the host's
+            // own tier computation (Hero.computeTiers counts these item IDs).
+            string[] ids = ["BrutalityUp", "TacticUp", "SurvivalUp"];
+            for (int stat = 0; stat < 3; stat++)
+                for (int n = 0; n < scrolls[stat]; n++)
+                    session.Hero.inventory.add(InventItem.Class.fromItem(ids[stat].AsHaxeString(), null));
+            session.Hero.computeTiers();
+            tiers = [session.Hero.brutalityTier, session.Hero.tacticTier, session.Hero.survivalTier];
+            scrollsGiven = true;
         }
         start ??= machine.State.Frame;
         uint elapsed = machine.State.Frame - start.Value;
@@ -173,6 +212,13 @@ internal static class LabAbilityProbe
             incomingFrame,
             afterAttackHostLife,
             afterAttackSourceHealth,
+            scrolls,
+            tiers,
+            currentTiers = new[] { session.Hero.brutalityTier, session.Hero.tacticTier, session.Hero.survivalTier },
+            colorlessTier = KirbyMod.Instance?.NativeProvider?.Enemies.ColorlessTier,
+            hostMultiplier = KirbyMod.Instance?.NativeProvider?.Enemies.ColorlessMultiplier,
+            coreMultiplier = KirbyMod.Instance?.NativeProvider?.Enemies is { } e ? ColorlessDamage.Multiplier(e.ColorlessTier) : (double?)null,
+            copyHits,
         }, new JsonSerializerOptions { WriteIndented = true }));
     }
 }
