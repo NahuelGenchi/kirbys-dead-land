@@ -374,3 +374,25 @@ the all-ability rendering tests as full gameplay acceptance.
   The last live DLL differs from the final build only by diagnostic event wording
   and a comment; production fixes are identical. Detailed scope and evidence are
   in `docs/RECORDING_REVIEW_2026-10-04.md`.
+
+## 2026-10-05 — Cook drops host healing food (#11)
+
+- Each ordinary host enemy consumed by original Cook now gets one host food item
+  (`LootGen.getSmallHealingKind`) in its own loot before the existing kill. The
+  host death path drops it as a normal `ItemDrop`. Cook damage is unchanged;
+  Bosses (original Cook resistance) and Elites get no food. One item per entity ID,
+  cleared with level, run and restore (`KirbyRules.ClaimCookFood`).
+- Host routines were read from the lab `hlboot.dat` with crashlink: `Mob.onDie`,
+  `Mob.dropLoot`, `Level.dropMobLoots`, `Level.updatedDelayedLoots`,
+  `LootGen.pickHealing`/`getSmallHealingKind`, `ItemDrop.onActivate` and
+  `Hero.updateInteraction` (interact is action 6). No host food drop rule exists
+  for Bosses or Elites.
+- Core rule test: 44 assertions pass. `scripts/check.py` passes, and the Release
+  runtime builds with zero warnings.
+- New `--input-plan cook` probe. Live `20261005-205320`: one `SmallMeat` dropped
+  from a cooked Zombie and real R pickup healed host/source 48 → 59. The original
+  Cook food separately healed 36 → 48. Runs `204940` and `205147` also picked up
+  one drop. Run `204739` dropped one item but the fixture lacked a key-press edge.
+- Not run: native bridge tests (no native change), boss/elite live checks, and
+  save/resume with an uneaten drop.
+
