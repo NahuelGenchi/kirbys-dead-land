@@ -5,7 +5,14 @@ Keep the work small, traceable, and honest about its current limitations. Agents
 ## One work item, one delivery trail
 
 1. **Start with an issue.** Reuse the issue that already owns the work, or open the work-item form. Record the goal, scope, completion criteria, dependencies, and milestone before editing files. Bugs, enhancements, documentation, research and repository operations are work items too.
-2. **Use an issue-numbered branch.** Name it `<type>/<issue>-<slug>`, for example `fix/7-shield-parry-timing`. Types are `feat`, `fix`, `enh`, `docs`, `research` and `ops`. Use focused commits such as `fix: keep shield after biome change (#7)`. Do not commit directly to `main`.
+2. **Create a new branch for the issue.** Every new feature, and every other work item, is developed on its own new branch, created from the latest `main`:
+
+   ```sh
+   git fetch origin
+   git switch -c feat/7-hammer-ability origin/main
+   ```
+
+   Name it `<type>/<issue>-<slug>`. Types are `feat`, `fix`, `enh`, `docs`, `research` and `ops`. One branch holds one issue: never reuse a merged or existing branch for a new feature, and never mix two features on one branch. Use focused commits such as `feat: add Hammer swing timing (#7)`. Do not commit directly to `main`. Delete the branch after its PR merges.
 3. **Open a linked PR.** Include a standalone `Closes #N` line for each completed, same-repository issue. Set the PR to the same milestone as its primary issue. Split cross-milestone changes into separate PRs. Use `Refs #N` for unfinished parent or related work; it does not replace a closing reference to the scoped issue.
 4. **Record the outcome.** Describe exactly what changed, which tests and live checks ran, and what was not run. Close the issue only when its stated scope is complete.
 
