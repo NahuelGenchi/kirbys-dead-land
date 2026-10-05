@@ -49,7 +49,8 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         if (originalBody.BodyHeight > 4) originalBody = new(16.8, 54, 2.25, originalBody.MaxLife);
         nds ??= new NdsRuntime(Path.Combine(modRoot, "libkssu_bridge.so"), config.RomPath, config.SeedStatePath);
         LabActivationTrace.Mark("Native runtime ready");
-        session.Rules.Restore(lastSession?.Rules.AbilityId, lastSession?.Rules.RetainedShieldId ?? session.Rules.RetainedShieldId);
+        session.Rules.Restore(lastSession?.Rules.AbilityId, lastSession?.Rules.RetainedShieldId ?? session.Rules.RetainedShieldId,
+            lastSession?.Rules.AbilityEmpowered ?? false, lastSession?.Rules.PendingEmpowerment);
         lastSession = session;
         LabActivationTrace.Mark("BindSave begin");
         var binding = BindSave(session);
@@ -118,7 +119,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
             string path = Path.Combine(modRoot, $".restore-{Guid.NewGuid():N}.state");
             try { System.IO.File.WriteAllBytes(path, value.Machine); nds!.LoadState(path); }
             finally { System.IO.File.Delete(path); }
-            session.Rules.Restore(value.Ability, value.Shield);
+            session.Rules.Restore(value.Ability, value.Shield, value.AbilityEmpowered, value.PendingEmpowerment);
             if (value.KirbyActive && value.HostBody is not null) originalBody = value.HostBody;
             pendingCopy = value.PendingCopy;
             enemies.Restore(value.Enemies);
@@ -140,7 +141,8 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         {
             nds.SaveState(path);
             return new KirbySnapshot { Ability = lastSession.Rules.AbilityId, Shield = lastSession.Rules.RetainedShieldId,
-                PendingCopy = pendingCopy, KirbyActive = KirbyMod.Instance?.ActiveSession is not null,
+                PendingCopy = pendingCopy, AbilityEmpowered = lastSession.Rules.AbilityEmpowered,
+                PendingEmpowerment = lastSession.Rules.PendingEmpowerment, KirbyActive = KirbyMod.Instance?.ActiveSession is not null,
                 HostBody = originalBody ?? savedHostBody,
                 Enemies = enemies.Capture(), Machine = System.IO.File.ReadAllBytes(path) }.Encode();
         }

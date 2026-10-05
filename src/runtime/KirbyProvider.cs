@@ -38,6 +38,7 @@ public sealed class KirbySession
     /// consumeEnemy has removed this exact live enemy through the host lifecycle.
     /// Ordinary enemy death never calls this method. The selected contents are
     /// passed to the ROM; the current form changes only on its swallow transition.
+    /// An Elite's ability empowers Kirby if that transition produces it.
     /// </summary>
     public string? CompleteAbsorption(Mob enemy, string abilityId, Func<bool> consumeEnemy)
     {
@@ -47,9 +48,10 @@ public sealed class KirbySession
             enemy._level.HashlinkPointer != Hero._level.HashlinkPointer)
             return null;
         long enemyId = enemy.__uid;
+        bool elite = enemy.elite;
         if (!consumeEnemy() || (!enemy.destroyed && enemy.life > 0))
             return null;
-        string? ability = Rules.ConfirmAbsorption(enemyId, abilityId);
+        string? ability = Rules.ConfirmAbsorption(enemyId, abilityId, elite);
         if (ability is not null)
             provider.OnAbilityChanged(this, ability);
         return ability;

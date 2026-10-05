@@ -21,6 +21,9 @@ internal sealed class KirbySnapshot
     public string? Ability { get; set; }
     public string? Shield { get; set; }
     public bool PendingCopy { get; set; }
+    // Absent in older saves, which therefore restore an ordinary copy.
+    public bool AbilityEmpowered { get; set; }
+    public string? PendingEmpowerment { get; set; }
     public bool KirbyActive { get; set; } = true;
     public EnemyBinding[] Enemies { get; set; } = [];
     public HostBodySnapshot? HostBody { get; set; }

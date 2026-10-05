@@ -2,6 +2,7 @@ using Entity = dc.Entity;
 using dc.en;
 using dc.en.inter;
 using dc.tool.atk;
+using Kirby.Core;
 
 namespace Kirby.Runtime;
 
@@ -15,6 +16,10 @@ public sealed class KirbyEnemies
     private readonly bool[] detached = new bool[Capacity + 1];
     private readonly bool[] controlled = new bool[Capacity + 1];
     private readonly byte[] abilities = new byte[Capacity + 1];
+    /// <summary>Swallowing an Elite always yields original Sword.</summary>
+    private static readonly byte EliteAbility = checked((byte)(Array.IndexOf(KirbyNdsProvider.Abilities, "Sword") + 2));
+    // Sampled when source HP is assigned so the matching delta scales identically.
+    private double damageMultiplier = 1;
     private EnemyBinding[]? restoring;
     internal EnemyBinding[] Capture() => Enumerable.Range(1, Capacity)
         .Where(i => detached[i] || mobs[i] is { destroyed: false }).Select(i => detached[i]
@@ -62,6 +67,7 @@ public sealed class KirbyEnemies
             }
             restoring = null;
         }
+        damageMultiplier = session.Rules.DamageMultiplier;
         double hx = (hero.cx + hero.xr) * 24, hy = (hero.cy + hero.yr) * 24;
         for (uint i = 1; i <= Capacity; i++)
         {
@@ -99,9 +105,11 @@ public sealed class KirbyEnemies
         for (uint i = 1; i <= Capacity; i++)
         {
             if (mobs[i] is not { } mob) continue;
+            // Checked every tick: a host mob can also become an Elite after binding.
+            if (mob is Mob { elite: true }) abilities[i] = EliteAbility;
             int x = checked((int)Math.Round(((mob.cx + mob.xr) * 24 - ox) * 65536));
             int y = checked((int)Math.Round(((mob.cy + mob.yr) * 24 - 17 - oy) * 65536));
-            assignedHp[i] = Math.Clamp(mob.life, 1, MaxSourceHp);
+            assignedHp[i] = CopyDamageScale.SourceHp(mob.life, damageMultiplier, MaxSourceHp);
             nds.SetProxy(i, x, y, assignedHp[i]);
             nds.SetProxyOptions(i, abilities[i], mob is not Mob || mob is dc.en.mob.Boss);
             nds.SetProxyContact(i, mob is Mob);
@@ -135,11 +143,12 @@ public sealed class KirbyEnemies
                 Release(nds, i);
                 continue;
             }
-            // Native HP follows the host's actual remaining life. Lethal Ice
-            // hits must enter the original freeze reaction in the same tick.
+            // Native HP is the host's remaining life divided by the copy damage
+            // multiplier. Lethal Ice hits must enter the original freeze
+            // reaction in the same tick, so lethality agrees after scaling.
             int damage = assignedHp[i] - proxy.Hp;
             if (damage > 0 && !mob.destroyed && mob.life > 0)
-                KirbyDamage.Hit(session.Hero, mob, damage);
+                KirbyDamage.Hit(session.Hero, mob, CopyDamageScale.HostDamage(damage, assignedHp[i], mob.life, damageMultiplier));
             if (mob.destroyed || mob.life <= 0)
             {
                 if (!proxy.Gone && mob is Mob and not dc.en.mob.Boss)

@@ -32,6 +32,11 @@ internal static unsafe class LabCombatProbe
     private static string? copiedAbility, abilityAtParry;
     private static byte? copiedSourceAbility;
     private static int shieldKey = -1;
+    // KIRBY_LAB_COMBAT_ELITE=1 makes the swallowed Zombie an Elite and records
+    // the copy damage that the second Zombie takes from each original hit.
+    private static readonly bool eliteVictim = Environment.GetEnvironmentVariable("KIRBY_LAB_COMBAT_ELITE") == "1";
+    private static bool? empoweredAfterSwallow;
+    private static readonly List<int> attackerHits = [];
     private static void Stage(string phase) => System.IO.File.AppendAllText(Path.Combine(run, "combat-events.txt"), $"{lastTick}: {phase}\n");
 
     public static void Install(string output)
@@ -53,6 +58,13 @@ internal static unsafe class LabCombatProbe
             (ShieldHeld(weapon) && lastTick == parryAt) || orig(manager, weapon);
         dc.hxd.Hook__Key.isDown += (orig, key) =>
             (key == shieldKey && parryAt is uint at && lastTick - at < 3) || orig(key);
+        Hook_Mob.applyAttackResult += (orig, mob, attack) =>
+        {
+            int before = mob.life;
+            orig(mob, attack);
+            if (attacker is not null && mob.HashlinkPointer == attacker.HashlinkPointer && before > mob.life)
+                attackerHits.Add(before - mob.life);
+        };
         KirbyInput.TestOverride = Input;
     }
 
@@ -104,6 +116,7 @@ internal static unsafe class LabCombatProbe
                 }
             Stage($"Shield weapon found={equipped}; creating Zombie");
             victim = Spawn(hero, 36);
+            if (eliteVictim) victim.setElite(true); // No Elite skills: keep the swallow deterministic.
             absorbedUid = victim.__uid;
             Stage($"Zombie created uid={absorbedUid}");
         }
@@ -128,6 +141,7 @@ internal static unsafe class LabCombatProbe
             return evolvedAt is null ? (ushort)128 : (ushort)0; // Original swallow/transform action.
         evolvedAt ??= tick;
         copiedSourceAbility ??= machine.State.Ability;
+        empoweredAfterSwallow ??= session.Rules.AbilityEmpowered;
         uint abilityFrames = tick - evolvedAt.Value;
         if (abilityFrames < 5) return 0;
         if (!parryTried && hostShield is not null)
@@ -163,6 +177,12 @@ internal static unsafe class LabCombatProbe
             elapsedSourceFrames = start is null ? 0 : machine.State.Frame - start.Value,
             equipped,
             absorbedUid,
+            eliteVictim,
+            victimElite = victim?.elite,
+            empoweredAfterSwallow,
+            empowered = session.Rules.AbilityEmpowered,
+            damageMultiplier = session.Rules.DamageMultiplier,
+            attackerHits,
             enemyConsumed = victim is not null && (victim.destroyed || victim.life <= 0),
             selectedAbility = session.Rules.AbilityId,
             sourceAbility = machine.State.Ability,

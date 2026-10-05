@@ -24,7 +24,7 @@ in [NDS_BRIDGE.md](NDS_BRIDGE.md). The original bootstrap experiment remains in
 | Enemy collision | Live host enemies have paired source collision objects with their host dimensions; original routines resolve damage cadence, suction, grabs, throws and Cook |
 | Boss collision | Original resistance bits prevent inhale, Suplex capture and Cook; damage still uses original collision/debounce, while the host retains boss AI and phases |
 | Incoming damage | Host shield/parry resolves first; remaining damage enters the next original collision tick, preserving original guard, recoil and invulnerability |
-| Outgoing damage | Source HP deltas become exact host damage; the host's normal hero damage multiplier does not alter copy attacks |
+| Outgoing damage | Source HP deltas become exact host damage; the host's normal hero damage multiplier does not alter copy attacks. The only exception is the deliberate Elite Sword bonus below |
 | Player health | Original full health is 76. Host and source health are synchronized, including host healing and original food |
 | Saves | A versioned, ROM-checked native machine snapshot and physical shield/enemy bindings travel with the private host save slot |
 
@@ -54,6 +54,33 @@ to the original ability and keeps only the exact previously equipped shield for
 host parries. Shield identity uses the physical item's permanent ID. Source copy
 loss, discarded-star recovery, helper creation and limited-use ability expiration
 update the same equipment policy.
+
+### Elite Sword (intentional deviation)
+
+Elite host mobs do not roll a random ability: their source collision metadata
+always carries original Sword (ability 18). The ROM still performs the inhale,
+swallow and transformation. Swallowing an Elite marks a pending empowerment.
+Kirby becomes empowered only when the original transform produces that Elite's
+Sword; a mouthful that the original Mix machinery turns into another ability is
+not empowered.
+
+While empowered, copy damage to host targets is doubled
+(`KirbyRules.EmpoweredDamageMultiplier`). This is a deliberate design choice, not
+original behavior. To keep source and host lethality in agreement, the paired
+source enemy receives host life divided by the multiplier
+(`CopyDamageScale.SourceHp`), and each source HP drop is scaled for the host. A
+hit that the source enemy survives never kills the host enemy
+(`CopyDamageScale.HostDamage`). Original death reactions therefore stay in the
+same tick as the host kill.
+
+The bonus ends whenever the copy is lost: a hit that knocks it off, a discard
+(a re-caught star is an ordinary Sword), creating a helper, spitting the Elite
+out before swallowing, or a new run. It survives saves and biome transitions.
+Ordinary enemies keep the uniform random roll, and a Sword copied from them is
+not doubled. Bosses are unchanged because they resist inhale. Known limit: source
+damage is attributed per paired enemy, not per attacker. If an earlier helper is
+still alive when Kirby later becomes empowered, that helper's hits are doubled
+too. No visual cue shows the empowered state yet.
 
 All 24 standard source copy forms are included: Cutter, Mirror, Beam, Fighter,
 Suplex, Yo-Yo, Wheel, Bomb, Ice, Fire, Plasma, Ninja, Stone, Wing, Jet, Copy,
@@ -88,6 +115,11 @@ and took 32 original Sword damage. A controlled crowd of 31 live host Zombies
 had 31 simultaneous source bindings; 21 targets each took exactly 18 damage.
 The boss fixture blocked incoming hits and the crowd fixture locked enemy AI;
 these verify the adapter paths, not full boss fights or simultaneous crowd attacks.
+Live run `20261005-204132` swallowed a real Elite Zombie, which gave original
+Sword (ability 18) with the empowered flag set; a second real Zombie then took
+original Sword hits of 36, 36 and 32 (the original 18/18/16, doubled). That run
+did not exercise empowered-state loss, save/resume or biome transitions live;
+the source rule tests cover those paths.
 See [HOST_BOUNDARY_TESTS.md](HOST_BOUNDARY_TESTS.md) for exact evidence.
 Ice damage and its surviving frozen block, background-effect placement, and an
 actual biome transition have passed live checks. The final native suite passes
