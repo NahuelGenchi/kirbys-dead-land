@@ -2,6 +2,8 @@
 
 *Kirby Super Star Ultra in Dead Cells.*
 
+[Issues](https://github.com/NahuelGenchi/kirbys-dead-land/issues) · [Milestones](https://github.com/NahuelGenchi/kirbys-dead-land/milestones) · [Pull requests](https://github.com/NahuelGenchi/kirbys-dead-land/pulls) · [Contributing](CONTRIBUTING.md) · [Agent instructions](AGENTS.md)
+
 A new Linux character mod built with [Universal Modder](https://github.com/rehan-remade/universal-modder),
 using the supplied Kirby Super Star Ultra USA ROM as the running gameplay engine.
 Kirby is playable in the actual Dead Cells game, with original ROM movement,
@@ -157,8 +159,24 @@ See the detailed fidelity report for measured coverage and these boundaries.
 
 Details: [ROM format](docs/ROM_FORMAT.md), [renderer](docs/RENDERING.md),
 [runtime launch](docs/RUNTIME_LAUNCH.md), [gameplay fidelity](docs/GAMEPLAY_FIDELITY.md),
-[tutorial integration](docs/TUTORIALS.md), and [work journal](MODLOG.md). Older research notes describe the initial foundation;
+[tutorial integration](docs/TUTORIALS.md), [work tracking](docs/TRACKING.md), and [work journal](MODLOG.md). Older research notes describe the initial foundation;
 the dated journal records subsequent implementation.
+
+## Roadmap and tracking
+
+| Milestone | Outcome |
+| :--- | :--- |
+| **M0 · Project foundation** | Repository, documentation, agent instructions and traceable delivery ([#1](https://github.com/NahuelGenchi/kirbys-dead-land/issues/1)) |
+| **M1 · Playable mod** | Kirby playable in Dead Cells with original-ROM gameplay; play-test bugs and fixes |
+| **M2 · Gameplay coverage** | Measured parity across host enemies, hazards, items, bosses and biomes |
+| **M3 · Release** | Packaging and publishing without ROM, game files or generated packs |
+
+Every change, whether a feature, bug fix, enhancement, document or repository
+operation, starts with an issue assigned to a milestone and is delivered through a
+pull request that closes it. Nothing is pushed directly to `main`. Read
+[CONTRIBUTING.md](CONTRIBUTING.md) before working; agents start with
+[AGENTS.md](AGENTS.md). The [tracking guide](docs/TRACKING.md) covers templates,
+labels and the metadata workflow.
 
 ## Credits
 
