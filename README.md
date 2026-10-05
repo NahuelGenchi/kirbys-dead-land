@@ -173,7 +173,8 @@ the dated journal records subsequent implementation.
 
 Every change, whether a feature, bug fix, enhancement, document or repository
 operation, starts with an issue assigned to a milestone and is delivered through a
-pull request that closes it. Nothing is pushed directly to `main`. Read
+pull request that closes it. Each new feature gets its own new branch from
+`main`, and nothing is pushed directly to `main`. Read
 [CONTRIBUTING.md](CONTRIBUTING.md) before working; agents start with
 [AGENTS.md](AGENTS.md). The [tracking guide](docs/TRACKING.md) covers templates,
 labels and the metadata workflow.

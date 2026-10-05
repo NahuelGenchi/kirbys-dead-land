@@ -32,7 +32,7 @@ The work-item form requires a work type, milestone, scope, completion criteria, 
 Milestone: M1 — Playable mod
 ```
 
-Issue and PR titles may start with a type prefix (`feat:`, `fix:`, `enh:`, `docs:`, `research:`, `ops:`), which the workflow turns into a label. Name branches `<type>/<issue>-<slug>`. Every PR must include a standalone closing reference to its scoped issue:
+Issue and PR titles may start with a type prefix (`feat:`, `fix:`, `enh:`, `docs:`, `research:`, `ops:`), which the workflow turns into a label. Every new feature, and every other work item, gets its own new branch created from the latest `origin/main`, named `<type>/<issue>-<slug>`. One branch holds one issue; branches are not reused after merge and are deleted once their PR merges. Every PR must include a standalone closing reference to its scoped issue:
 
 ```text
 Closes #123
