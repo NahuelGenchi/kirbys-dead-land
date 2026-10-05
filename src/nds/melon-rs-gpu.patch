@@ -1,0 +1,36 @@
+diff --git a/src/melon/nds.rs b/src/melon/nds.rs
+index 0b039c8..662a94f 100644
+--- a/src/melon/nds.rs
++++ b/src/melon/nds.rs
+@@ -151,6 +151,18 @@ impl Nds {
+         unsafe { sys::CurrentFrame(self.0.as_ref().expect("Couldn't get ref to pin")) }
+     }
+ 
++    pub fn bus_read8(&mut self, address: u32) -> u8 { self.0.pin_mut().ARM9Read8(address) }
++
++    pub fn read_savestate_bytes(&mut self, contents: &mut [u8]) -> bool {
++        if contents.len() < 16 || contents.len() > i32::MAX as usize { return false; }
++        unsafe { sys::ReadSavestate(self.0.pin_mut(), contents.as_mut_ptr(), contents.len() as i32) }
++    }
++
++    pub fn layer_capture(&mut self, plane: u32, dest: &mut [u32]) -> bool {
++        if plane > 4 || dest.len() < 256*192 { return false; }
++        unsafe { sys::Copy_LayerCapture(self.0.pin_mut(), dest.as_mut_ptr(), plane, dest.len() as u32) }
++    }
++
+     pub fn main_ram(&self) -> &[u8] {
+         unsafe {
+             let max_size = sys::MainRAMMaxSize(&self.0) as usize;
+diff --git a/src/melon/sys.rs b/src/melon/sys.rs
+index d0d2077..6857cbc 100644
+--- a/src/melon/sys.rs
++++ b/src/melon/sys.rs
+@@ -290,6 +290,8 @@ mod sys {
+ 
+         pub unsafe fn CurrentFrame(nds: &NDS) -> u32;
+ 
++        pub fn ARM9Read8(self: Pin<&mut NDS>, addr: u32) -> u8;
++        pub unsafe fn Copy_LayerCapture(nds: Pin<&mut NDS>, dest: *mut u32, plane: u32, count: u32) -> bool;
+         pub unsafe fn MainRAM(nds: &NDS) -> *const u8;
+         pub unsafe fn MainRAMMut(nds: Pin<&mut NDS>) -> *mut u8;
+         pub unsafe fn MainRAMMaxSize(nds: &NDS) -> u32;

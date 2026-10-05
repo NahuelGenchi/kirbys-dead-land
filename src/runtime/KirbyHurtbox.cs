@@ -1,0 +1,139 @@
+using dc.en;
+
+namespace Kirby.Runtime;
+
+/// <summary>Projects original collision bounds only while the host queries combat geometry.</summary>
+internal static unsafe class KirbyHurtbox
+{
+    private static Projection? active;
+    private static NdsRuntime? cachedMachine;
+    private static uint cachedFrame;
+    private static NdsState state;
+    private static (int Left, int Top, int Right, int Bottom)? bounds;
+    private static readonly NdsHit[] hits = new NdsHit[512];
+    private static long projections, restorations;
+    internal static object Diagnostics => new
+    {
+        projections, restorations, active = active?.IsProjected ?? false,
+        sourceFrame = cachedFrame,
+        sourceBounds = bounds is { } box ? new[] { box.Left, box.Top, box.Right, box.Bottom } : null,
+    };
+
+    internal static void Install()
+    {
+        dc.pr.Hook_Level.update += (orig, level) =>
+        {
+            using var scope = Project(level);
+            orig(level);
+        };
+        // Skills can update as separate Process children outside Level.update.
+        dc.tool.skill.Hook_SkillArea.touches += (orig, area, entity) =>
+        { using var scope = Project(); return orig(area, entity); };
+        dc.tool.skill.Hook_SkillArea.getTouchingOpponents += (orig, area) =>
+        { using var scope = Project(); return orig(area); };
+        dc.tool.skill.Hook_SkillArea.getTouchingAllies += (orig, area) =>
+        { using var scope = Project(); return orig(area); };
+        dc.tool.skill.Hook_SkillArea.getTouchingQuadElements += (orig, area) =>
+        { using var scope = Project(); return orig(area); };
+        dc.tool.skill.Hook_OldMobSkill.getTouchingAreaFor += (orig, skill, entity) =>
+        { using var scope = Project(); return orig(skill, entity); };
+        dc.tool.skill.Hook_OldMobSkill.executeOnArea += (orig, skill, area) =>
+        { using var scope = Project(); orig(skill, area); };
+        dc.tool.Hook_TargetHelper.filterByArea += (orig, helper, area) =>
+        { using var scope = Project(); orig(helper, area); };
+        // Own movement, equipment placement, save data, and sprite positioning
+        // must continue to use the physical foot, even inside Level.update.
+        dc.en.Hook_Hero.preUpdate += (orig, hero) => Physical(hero, () => orig(hero));
+        dc.en.Hook_Hero.fixedUpdate += (orig, hero) => Physical(hero, () => orig(hero));
+        dc.en.Hook_Hero.postUpdate += (orig, hero) => Physical(hero, () => orig(hero));
+        dc.Hook_Entity.spriteUpdate += (orig, entity) => Physical(entity, () => orig(entity));
+        dc.Hook_Entity.serialize += (orig, entity, serializer) =>
+            Physical(entity, () => orig(entity, serializer));
+    }
+
+    private static bool IsActive(Hero hero) => !hero.destroyed && hero.life > 0 &&
+        KirbyMod.Instance?.ActiveSession?.Hero.HashlinkPointer == hero.HashlinkPointer &&
+        ModCore.Modules.Game.Instance.HeroInstance?.HashlinkPointer == hero.HashlinkPointer;
+
+    private static Projection? Project(dc.pr.Level? level = null)
+    {
+        if (active is { IsProjected: true }) return null;
+        var mod = KirbyMod.Instance;
+        if (mod?.ActiveSession?.Hero is not { } hero || !IsActive(hero) ||
+            !hero.awake || hero._level.game.hasCinematic() ||
+            (level is not null && level.HashlinkPointer != hero._level.HashlinkPointer) ||
+            mod.NativeProvider?.Machine is not { } machine) return null;
+        var source = machine.State;
+        if (cachedMachine != machine || cachedFrame != source.Frame)
+        {
+            cachedMachine = machine; cachedFrame = source.Frame; state = source; bounds = null;
+            int count = machine.ReadHits(hits);
+            for (int i = 0; i < count; i++)
+            {
+                ref var hit = ref hits[i];
+                if (hit.Slot != 14 || hit.Owner != source.Player) continue;
+                int left = hit.Bounds[0], top = hit.Bounds[1], right = hit.Bounds[2], bottom = hit.Bounds[3];
+                if (right <= left || bottom <= top) continue;
+                bounds = bounds is { } previous
+                    ? (Math.Min(previous.Left, left), Math.Min(previous.Top, top),
+                        Math.Max(previous.Right, right), Math.Max(previous.Bottom, bottom))
+                    : (left, top, right, bottom);
+            }
+        }
+        if (bounds is not { } box) return null;
+        var value = new Projection(hero, box, state, active);
+        active = value;
+        value.Apply();
+        return value;
+    }
+
+    private static void Physical(dc.Entity entity, Action original)
+    {
+        var value = active;
+        if (value is not { IsProjected: true } || value.Hero.HashlinkPointer != entity.HashlinkPointer)
+        { original(); return; }
+        value.Restore();
+        try { original(); }
+        finally { if (IsActive(value.Hero)) value.Apply(); }
+    }
+
+    private sealed class Projection(Hero hero, (int Left, int Top, int Right, int Bottom) box,
+        NdsState source, Projection? parent) : IDisposable
+    {
+        internal Hero Hero => hero;
+        internal bool IsProjected { get; private set; }
+        private int cx, cy;
+        private double xr, yr, height, radius;
+        private bool rectangle;
+        internal void Apply()
+        {
+            if (IsProjected) return;
+            cx = hero.cx; cy = hero.cy; xr = hero.xr; yr = hero.yr;
+            height = hero.hei; radius = hero.radius; rectangle = hero.useRectHitbox;
+            double originX = (cx + xr) * 24 - source.X;
+            double originY = (cy + yr) * 24 - 14.5 - source.Y;
+            double x = originX + (box.Left + box.Right) * 0.5;
+            double y = originY + box.Bottom;
+            hero.cx = (int)Math.Floor(x / 24); hero.xr = x / 24 - hero.cx;
+            hero.cy = (int)Math.Floor(y / 24); hero.yr = y / 24 - hero.cy;
+            hero.radius = (box.Right - box.Left) * 0.5;
+            hero.hei = box.Bottom - box.Top;
+            hero.useRectHitbox = true;
+            IsProjected = true;
+            projections++;
+        }
+        internal void Restore()
+        {
+            if (!IsProjected) return;
+            hero.cx = cx; hero.cy = cy; hero.xr = xr; hero.yr = yr;
+            hero.hei = height; hero.radius = radius; hero.useRectHitbox = rectangle;
+            IsProjected = false;
+            restorations++;
+        }
+        public void Dispose()
+        {
+            try { Restore(); }
+            finally { active = parent; }
+        }
+    }
+}

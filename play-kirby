@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+kirby_project_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+exec python3 "$kirby_project_dir/scripts/launch_runtime.py" --play "$@"

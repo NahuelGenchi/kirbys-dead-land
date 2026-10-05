@@ -1,0 +1,17 @@
+{
+  "id": "kirby-super-star-ultra-dead-cells",
+  "name": "Kirby's Dead Land",
+  "version": "0.1.0-dev",
+  "status": "development",
+  "source_game": "Kirby Super Star Ultra (USA)",
+  "host_game": "Dead Cells",
+  "host_steam_app_id": 588650,
+  "assets": "converted locally from user-supplied ROM",
+  "required_fidelity": "original gameplay except random enemy copy ability and host equipment rules",
+  "rules": {
+    "copy_ability_selection": "random on absorption",
+    "base_host_equipment": ["sword", "bow", "shield"],
+    "copy_host_equipment": ["shield_parry"],
+    "copy_attack": "original ability moveset"
+  }
+}

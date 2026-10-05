@@ -1,0 +1,132 @@
+[
+  {
+    "frames": 240,
+    "mask": 0,
+    "label": "initial boot"
+  },
+  {
+    "frames": 2,
+    "mask": 8,
+    "label": "press start"
+  },
+  {
+    "frames": 180,
+    "mask": 0,
+    "label": "after start"
+  },
+  {
+    "frames": 1800,
+    "mask": 0,
+    "label": "finish initializing new isolated save"
+  },
+  {
+    "frames": 2,
+    "mask": 8,
+    "label": "start"
+  },
+  {
+    "frames": 120,
+    "mask": 0,
+    "label": "file menu"
+  },
+  {
+    "frames": 2,
+    "mask": 1,
+    "label": "file 1"
+  },
+  {
+    "frames": 120,
+    "mask": 0,
+    "label": "player menu"
+  },
+  {
+    "frames": 2,
+    "mask": 1,
+    "label": "one player"
+  },
+  {
+    "frames": 120,
+    "mask": 0,
+    "label": "mode menu"
+  },
+  {
+    "frames": 2,
+    "mask": 1,
+    "label": "select Spring Breeze"
+  },
+  {
+    "frames": 240,
+    "mask": 0,
+    "label": "Spring Breeze intro"
+  },
+  {
+    "frames": 2,
+    "mask": 1,
+    "label": "confirm default"
+  },
+  {
+    "frames": 240,
+    "mask": 0,
+    "label": "enter game"
+  },
+  {
+    "frames": 2,
+    "mask": 8,
+    "label": "skip intro"
+  },
+  {
+    "frames": 240,
+    "mask": 0,
+    "label": "after intro"
+  },
+  {
+    "frames": 2,
+    "mask": 128,
+    "label": "select played before"
+  },
+  {
+    "frames": 2,
+    "mask": 0,
+    "label": "release"
+  },
+  {
+    "frames": 2,
+    "mask": 1,
+    "label": "skip tutorial"
+  },
+  {
+    "frames": 240,
+    "mask": 0,
+    "label": "first stage start"
+  },
+  {
+    "frames": 2,
+    "mask": 128,
+    "label": "select played before"
+  },
+  {
+    "frames": 2,
+    "mask": 0,
+    "label": "release"
+  },
+  {
+    "frames": 2,
+    "mask": 1,
+    "label": "skip tutorial"
+  },
+  {
+    "frames": 240,
+    "mask": 0,
+    "label": "first stage start"
+  },
+  {
+    "frames": 180,
+    "mask": 0,
+    "label": "wait for stage entry"
+  },
+  {
+    "frames": 180,
+    "mask": 0,
+    "label": "wait for stage entry"
+  }
+]

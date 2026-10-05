@@ -1,0 +1,191 @@
+using Entity = dc.Entity;
+using dc.en;
+using dc.en.inter;
+using dc.tool.atk;
+
+namespace Kirby.Runtime;
+
+/// <summary>Pairs live host enemies with original enemy objects for source collision and capture logic.</summary>
+public sealed class KirbyEnemies
+{
+    private const int MaxSourceHp = 32760;
+    private const int Capacity = 31;
+    private readonly Entity?[] mobs = new Entity?[Capacity + 1];
+    private readonly int[] assignedHp = new int[Capacity + 1];
+    private readonly bool[] detached = new bool[Capacity + 1];
+    private readonly bool[] controlled = new bool[Capacity + 1];
+    private readonly byte[] abilities = new byte[Capacity + 1];
+    private EnemyBinding[]? restoring;
+    internal EnemyBinding[] Capture() => Enumerable.Range(1, Capacity)
+        .Where(i => detached[i] || mobs[i] is { destroyed: false }).Select(i => detached[i]
+            ? new EnemyBinding { Slot = i, Detached = true }
+            : new EnemyBinding { Slot = i, Uid = mobs[i]!.__uid, Type = Kind(mobs[i]!), Ability = abilities[i],
+                X = (mobs[i]!.cx + mobs[i]!.xr) * 24, Y = (mobs[i]!.cy + mobs[i]!.yr) * 24 }).ToArray();
+    internal void Restore(EnemyBinding[] bindings)
+    {
+        Array.Clear(mobs); Array.Clear(controlled); Array.Clear(abilities); Array.Clear(detached); Array.Clear(assignedHp); restoring = bindings;
+    }
+    public bool Controls(Mob mob) => Enumerable.Range(1, Capacity).Any(i => controlled[i] && mobs[i]?.HashlinkPointer == mob.HashlinkPointer);
+    public void Clear(NdsRuntime nds)
+    {
+        for (uint i = 1; i <= Capacity; i++) Release(nds, i);
+    }
+    private void Release(NdsRuntime nds, uint i)
+    {
+        nds.SetProxy(i, 0, 0, 1, false);
+        mobs[i] = null; controlled[i] = false; abilities[i] = 0; assignedHp[i] = 0; detached[i] = false;
+    }
+    public void Prepare(KirbySession session, NdsRuntime nds, int ox, int oy)
+    {
+        var hero = session.Hero;
+        if (restoring is not null)
+        {
+            foreach (var binding in restoring)
+            {
+                if (binding.Slot < 1 || binding.Slot > Capacity) throw new InvalidDataException("Invalid saved source enemy slot.");
+                if (binding.Detached) { detached[binding.Slot] = true; continue; }
+                for (int j = 0; j < hero._level.entities.length; j++)
+                {
+                    if (hero._level.entities.getDyn(j) is not Entity candidate || candidate.destroyed || candidate.life <= 0 ||
+                        Kind(candidate) != binding.Type || mobs.Any(m => m?.HashlinkPointer == candidate.HashlinkPointer)) continue;
+                    double x = (candidate.cx + candidate.xr) * 24, y = (candidate.cy + candidate.yr) * 24;
+                    // Hxbit may regenerate __uid when loading. The host's saved
+                    // type and exact world position identify the restored object.
+                    if (Math.Abs(x - binding.X) > 0.01 || Math.Abs(y - binding.Y) > 0.01) continue;
+                    mobs[binding.Slot] = candidate;
+                    abilities[binding.Slot] = candidate is not Mob ? (byte)0 :
+                        binding.Ability is >= 2 and <= 25 ? binding.Ability : RollAbility(session);
+                    controlled[binding.Slot] = candidate is Mob and not dc.en.mob.Boss && nds.Proxy((uint)binding.Slot).Controlled;
+                    break;
+                }
+                if (mobs[binding.Slot] is null) Release(nds, (uint)binding.Slot);
+            }
+            restoring = null;
+        }
+        double hx = (hero.cx + hero.xr) * 24, hy = (hero.cy + hero.yr) * 24;
+        for (uint i = 1; i <= Capacity; i++)
+        {
+            if (detached[i])
+            {
+                var remnant = nds.Proxy(i);
+                if (remnant.Gone || remnant.Flags == 0) Release(nds, i);
+                continue;
+            }
+            var mob = mobs[i];
+            if (mob is null) continue;
+            if (mob.destroyed || mob.life <= 0 || mob._level.HashlinkPointer != hero._level.HashlinkPointer)
+            { Release(nds, i); continue; }
+            var distance = Distance(mob, hx, hy);
+            if (!controlled[i] && (distance.X > 320 || distance.Y > 120)) Release(nds, i);
+        }
+        List<(Entity Mob, double Distance)> candidates = [];
+        var entities = hero._level.entities;
+        for (int j = 0; j < entities.length; j++)
+        {
+            if (entities.getDyn(j) is not Entity mob || mob.destroyed || mob.life <= 0 ||
+                !Eligible(mob) || !mob.canBeHitBy(hero)) continue;
+            if (mobs.Any(m => m?.HashlinkPointer == mob.HashlinkPointer)) continue;
+            var (x, y) = Distance(mob, hx, hy);
+            if (x <= 300 && y <= 96) candidates.Add((mob, x * x + y * y));
+        }
+        candidates.Sort((a, b) => a.Distance.CompareTo(b.Distance));
+        foreach (var candidate in candidates)
+        {
+            int slot = Enumerable.Range(1, Capacity).FirstOrDefault(i => mobs[i] is null && !detached[i], -1);
+            if (slot < 0) break;
+            mobs[slot] = candidate.Mob;
+            abilities[slot] = candidate.Mob is Mob ? RollAbility(session) : (byte)0;
+        }
+        for (uint i = 1; i <= Capacity; i++)
+        {
+            if (mobs[i] is not { } mob) continue;
+            int x = checked((int)Math.Round(((mob.cx + mob.xr) * 24 - ox) * 65536));
+            int y = checked((int)Math.Round(((mob.cy + mob.yr) * 24 - 17 - oy) * 65536));
+            assignedHp[i] = Math.Clamp(mob.life, 1, MaxSourceHp);
+            nds.SetProxy(i, x, y, assignedHp[i]);
+            nds.SetProxyOptions(i, abilities[i], mob is not Mob || mob is dc.en.mob.Boss);
+            nds.SetProxyContact(i, mob is Mob);
+            nds.SetProxySize(i, (ushort)Math.Clamp(Math.Ceiling(mob.radius * 2), 1, 1024),
+                (ushort)Math.Clamp(Math.Ceiling(mob.hei), 1, 1024));
+        }
+    }
+    public string? Complete(KirbySession session, NdsRuntime nds, int ox, int oy)
+    {
+        string? copied = null;
+        for (uint i = 1; i <= Capacity; i++)
+        {
+            if (mobs[i] is not { } mob) continue;
+            NdsProxy proxy = nds.Proxy(i);
+            if (proxy.Pending) continue;
+            // Cook can also change the source mouthful byte. Classify its
+            // destruction before ordinary inhale so it cannot award a copy.
+            if (proxy.Gone && (proxy.Flags & 128) != 0)
+            {
+                if (!mob.destroyed && mob.life > 0) mob.kill();
+                Release(nds, i); continue;
+            }
+            if (proxy.Swallowed && mob is Mob absorbed)
+            {
+                string abilityId = KirbyNdsProvider.Abilities[abilities[i] - 2];
+                string? ability = session.CompleteAbsorption(absorbed, abilityId, () => { mob.kill(); return mob.life <= 0 || mob.destroyed; });
+                if (ability is not null)
+                {
+                    copied = ability;
+                }
+                Release(nds, i);
+                continue;
+            }
+            // Native HP follows the host's actual remaining life. Lethal Ice
+            // hits must enter the original freeze reaction in the same tick.
+            int damage = assignedHp[i] - proxy.Hp;
+            if (damage > 0 && !mob.destroyed && mob.life > 0)
+                KirbyDamage.Hit(session.Hero, mob, damage);
+            if (mob.destroyed || mob.life <= 0)
+            {
+                if (!proxy.Gone && mob is Mob and not dc.en.mob.Boss)
+                {
+                    // Loot/death belong to the host; the original defeated
+                    // object's ice cube, star or other reaction keeps running.
+                    // Reserve the slot until its native destructor completes.
+                    nds.DetachProxy(i);
+                    mobs[i] = null; controlled[i] = false; detached[i] = true;
+                }
+                else Release(nds, i);
+                continue;
+            }
+            if (proxy.Gone) { Release(nds, i); continue; }
+            bool sourceControls = proxy.Controlled && mob is Mob and not dc.en.mob.Boss;
+            if (sourceControls)
+            {
+                var enemy = (Mob)mob;
+                if (!controlled[i]) enemy.interruptSkills();
+                enemy.lockAiS(0.1);
+                enemy.dx = enemy.dy = 0;
+                enemy.setPosPixel(proxy.XRaw / 65536.0 + ox, proxy.YRaw / 65536.0 + oy + 17);
+                enemy.fallStartY = (enemy.cy + enemy.yr) * 24;
+                if (enemy.yr == 0) { enemy.cy--; enemy.yr = 1; }
+                enemy.spriteUpdate();
+            }
+            controlled[i] = sourceControls;
+        }
+        return copied;
+    }
+    private static bool Eligible(Entity entity) => entity is Mob or Door or BreakableProp or ExplosiveBarrel || entity.isBreakableByHero();
+    private static (double X, double Y) Distance(Entity entity, double heroX, double heroY) =>
+        (Math.Max(0, Math.Abs((entity.cx + entity.xr) * 24 - heroX) - entity.radius),
+         Math.Max(0, Math.Abs((entity.cy + entity.yr) * 24 - entity.hei / 2 - (heroY - 14.5)) - (entity.hei + 29) / 2));
+    private static string Kind(Entity entity) => entity is Mob mob ? mob.type.ToString() : "entity:" + entity.GetType().FullName;
+    private static byte RollAbility(KirbySession session) => checked((byte)(Array.IndexOf(KirbyNdsProvider.Abilities,
+        session.Rules.SelectCopyAbility()) + 2));
+}
+
+internal sealed class EnemyBinding
+{
+    public int Slot { get; set; }
+    public int Uid { get; set; }
+    public string Type { get; set; } = "";
+    public byte Ability { get; set; }
+    public bool Detached { get; set; }
+    public double X { get; set; }
+    public double Y { get; set; }
+}

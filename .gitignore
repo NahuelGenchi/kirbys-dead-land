@@ -1,0 +1,14 @@
+build/
+dist/
+evidence/
+__pycache__/
+*.pyc
+bin/
+obj/
+*.nds
+*.pak
+*.dat
+*.dll
+*.so
+*.hdll
+.venv/

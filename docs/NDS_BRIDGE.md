@@ -1,0 +1,110 @@
+# Original ROM execution bridge
+
+`src/nds/lib.rs` is a headless C ABI around a pinned melonDS build. The supplied Kirby Super Star Ultra USA ROM executes its original ARM controller, physics, animation, ability loading and collision routines. Host terrain and enemy proxies enter that running machine through emulated RAM. No desktop keyboard, emulator window, DS save file or original ROM writes are used.
+
+## Reproducible private build
+
+Run `python3 tools/oracle_build.py`, then `python3 tools/nds_build.py`. The latter accepts only the pinned vendor revisions and the checked wrapper additions in `tools/nds_vendor.py`. Libraries, source ROM, captured states, rendered sprites and generated evidence remain under `~/.local/share/kirby-dead-cells`.
+
+- ROM: USA `YKWE`, 134217728 bytes, SHA256 `b2573313a582c8dfaf2d93834a670c1ca8f389e5daa744e2dbe1a4ca903f3027`.
+- melon-rs: `51f25edaf3b2df63f91d049eff8c38fb289150eb`.
+- melonDS: `82fdbc78483f43b310e920e21acc47787cb43564`.
+- Initial private state: `oracle/ready2/000.state`, SHA256 `37166a991f37a4e84f7392fd33ca487672d65efae7f32b38e22b7cc2454a9a76`.
+- Built library: `oracle/vendor/melon-rs/target/release/libkssu_bridge.so`.
+- Provenance: `oracle/bridge-provenance.json`.
+
+The initial state places base Kirby in Green Greens at source center `(43,153.5)`. Its tile map has100 columns and9 rows of24-pixel blocks. Static source RAM facts were checked with the supplied ROM, source traces and disassembly. The external research repositories identified candidate layouts; they were not treated as authoritative gameplay specifications.
+
+## C ABI
+
+All calls use a single owning thread. Pointer arguments must reference valid caller-owned buffers. UTF-8 file paths are null terminated. Integers are little endian; standard C layout applies. Negative returns indicate failure. Do not execute two live emulators concurrently in one process.
+
+| Entry point | Contract |
+| --- | --- |
+| `kssu_open(rom,state)` | Returns opaque handle or null; validates exact ROM hash. |
+| `kssu_close(handle)` | Disposes the isolated machine. |
+| `kssu_step(handle,u16 mask,u32 frames)` | Executes0–600 original DS frames. |
+| `kssu_state(handle,State*)` | Copies100-byte player state. |
+| `kssu_hits(handle,Hit*,capacity)` | Returns active native collision graph count. Hit records are52 bytes. |
+| `kssu_player_owns(handle,address)` | Tests original parent/descendant ownership, including ability projectiles and original CPU-helper roots. |
+| `kssu_world(handle,u16 cells[900],900,i32 x,i32 y)` | Replaces source block map and rebases player/world positions to signed16.16 coordinates. |
+| `kssu_action_flags(handle)` | Bit0: active original inhale hit; bit1: original mouthful. |
+| `kssu_feed(handle,u8 ability)` | Test helper: inserts source swallowed contents only during active empty inhale. Real host enemies use proxies. |
+| `kssu_set_swallowed_ability(handle,u8 ability)` | Changes copy result of an already swallowed enemy; original DOWN action subsequently loads/transforms the ability. |
+| `kssu_proxy_set(handle,u32 slot,i32 x,i32 y,i32 hp,bool active)` | Binds/updates one of31 host enemies, slots1–31. Original capture states own their movement. |
+| `kssu_proxy_capacity()` | Returns31 available host slots; slot0 is the internal damage carrier. |
+| `kssu_proxy_options(handle,slot,u8 ability,bool boss)` | Assigns original enemy copy metadata before ingestion; boss mode excludes original grab/Cook/inhale collision classes and accepts host position updates during native recoil. |
+| `kssu_proxy_contact(handle,slot,bool enabled)` | Disables only original Kirby-body contact for neutral props; ordinary original attacks still damage them. Enabled by default. |
+| `kssu_proxy_detach(handle,slot)` | Restores the original hurtbox pointer and relinquishes host size/copy overrides without destroying a native corpse or Ice block. Reserve its slot until Gone. |
+| `kssu_proxy_size(handle,slot,u16 width,u16 height)` | Sets host hurtbox size aligned to the original physical foot (`centerY+17`); copies its normal source definition into its own spawn record parameter tail. |
+| `kssu_room_cleanup(handle)` | Returns count of normal orphaned food/food-owned effects scheduled for original destruction at a host room boundary; preserves player/helper/held objects. |
+| `kssu_health(handle)`, `kssu_max_health(handle)` | Return original current/maximum Kirby HP. The seed is full at76/76. |
+| `kssu_set_health(handle,u16 current,u16 maximum)` | Synchronizes health while retaining native hurt/action/guard timers. |
+| `kssu_hurt(handle,u16 damage,i32 direction)` | Queues a source contact hit on the next frame after carrier initialization; direction−1 means attacker left, +1 means right. Native guard, invulnerability, recoil and copy-drop decide its result. |
+| `kssu_proxy_state(handle,slot,Proxy*)` | Copies24-byte source enemy state. |
+| `kssu_save_state(handle,path)` | Writes full emulator snapshot plus bridge proxy metadata trailer. |
+| `kssu_load_state(handle,path)` | Restores the existing machine, including in-progress source capture states when saved by this bridge. |
+| `kssu_read_audio(handle,i16*,sampleCapacity)` | Drains signed16-bit interleaved stereo at48000Hz; count is interleaved samples, always even. Queue bounded to65536 samples. The original BGM-only player volume at0x0205EBE4 can be set to0 while leaving jump/attack sounds intact. |
+| `kssu_read_gpu(handle,address,u8*,length)` | Reads ARM9-visible GPU registers, palettes, VRAM and OAM. |
+| `kssu_read_layers(handle,u32*,49152,u32 plane)` | Original engine-A scanout planes:0 top RGB6/layer flags,1 underneath,2 valid/blend/window control,3 composite RGB6,4 scanline background palette. |
+| `kssu_framebuffer(handle,u8*,196608,bool bottom)` | Native256×192 BGRA display; useful for verification. |
+| `kssu_read/write(handle,address,bytes,length)` | Bounded4MiB main-RAM access for research and explicit host integration. |
+
+`State` field order: `u32 frame,player; i32 x_raw,y_raw; i16 vx_raw,vy_raw,camera_x,camera_y; u8 ability,kind,flags,facing_raw; u32 graphic,animation,state_words[16]`. Positions are16.16 and velocities8.8. `graphic` low16 selects the pose; upper16 identifies original move-frame data.
+
+`Hit`: `u32 address,owner,slot; i16 bounds[4]; u32 definition; u16 words[14]`. Bounds are world `[left,top,right,bottom]`, not width/height. `words[2]` is signed damage. Use original proxy HP changes for native debounce, recoil and repeated hits; comparing an attack slot alone does not implement source collision semantics.
+
+`Proxy`: `u32 entity,flags; i32 x_raw,y_raw,hp; u32 update`. Flags:1 present,2 original capture/control state,4 swallowed,8 gone/dead,16 pending initialization,32 original inhaling state,64 native destruction pending,128 original Cook capture. Cook consumes its proxy with flags136 and does not produce a copy evolution. Suplex exposes the visible grabbed clone’s world position and HP while its original node remains hidden. Coordinates are source world render coordinates; the native entity's raw coordinates become relative during inhaling. A completed lifecycle must be acknowledged with `active=false` before rebinding. This runs the original destructor on its normal update turn, freeing original collision/AI allocations before reuse. Pending destruction can take a source frame.
+
+## Terrain and input
+
+Source block IDs0 and3 mean empty and solid. The bridge reserves130 water,131 one-way,132/133 the two original45-degree slopes, and134 ladders, using original essence bytes80,2F,40,41,0E. Rebase the source local window around the host player each frame; preserve the fractional position within its24-pixel host cell. The original base Kirby center is14.5 pixels above its foot on a flat floor. Source terrain probe caches are rebased along with entity coordinates; velocities and action timers are untouched.
+
+The normal local origin places the source player around X384 and Y96, leaving a100×9 source tile neighborhood. Arbitrary activation teleports may trigger the original short landing animation; allow initial settling before visual comparison. Source flight/jump physics run through the injected terrain, including jumping through one-way platforms and swimming.
+
+Input mask: A1 jump; B2 attack/inhale; Select4 drop ability; Start8 pause; Right16; Left32; Up64; Down128; R256/L512 guard; X1024 helper; Y2048 jump. **Select drops the copy ability; Y does not.**
+
+Ability IDs:1 base;2 Cutter;3 Mirror;4 Beam;5 Fighter;6 Suplex;7 Yo-Yo;8 Wheel;9 Bomb;10 Ice;11 Fire;12 Plasma;13 Ninja;14 Stone;15 Wing;16 Jet;17 Copy;18 Sword;19 Hammer;20 Parasol;21 Paint;22 Mike;23 Crash;24 Cook;25 Sleep. Writing the ability byte alone does not load its graphics/controller and can crash the original game. Always use a real swallow or validated content insertion followed by original DOWN.
+
+## Verification and remaining limits
+
+`python3 tools/nds_tests.py` runs isolated headless cases and writes `oracle/bridge-test-results.json`. It checks rebased motion against an unrebased source scene, ladder climb/release/descent, one-way versus solid ceiling behavior, water motion, actual native enemy inhale/swallow, Suplex clone grab/throw damage, Cook pot consumption, exact Sword combo damage18+16 with native hit debounce, repeated native destructor/reuse, snapshot restore during native suction, audio sample rate, original guard and hurt immunity, health synchronization, host-sized normal hurtboxes,31-proxy allocation/save/destruction, native multi-inhale Mix, source boss resistance, dropped-copy reabsorption, Wheelie riding/dismount, and original load/standing attacks for all24 copy abilities. The current complete run passes59 cases, including newborn contact/capture resistance, contact toggle with original Sword damage, lethal-hit reporting, and Ice death/detach/save continuation. Idle blink phase can depend on source RNG activity; movement/action poses are compared separately from idle blinking.
+
+A real proxy requires21 original inhaling frames in the fixed test scene before the source mouthful event. Source Sword hits reduce a100HP proxy to66 across the tested combo. Native proxy health updates include both hit-group current and maximum HP; otherwise the original engine clamps damage results to Waddle Dee's16HP maximum.
+
+The bridge currently uses original Waddle Dee enemy proxies with host-supplied normal hurtbox size. Native capture/recoil variants retain their own temporary collision definitions. Boss source capture resistance is validated for inhale, Suplex and Cook, with Sword damage retained. Other special capture/throw variants still require further validation. The31-enemy neighborhood and9-row terrain window are current limits. Dropped abilities and parentless original food/effects are preserved during play; normal Cook food is retired at host room boundaries; collision and sprite behavior of every rebased spawned effect has not yet been exhaustively compared. These limits must not be described as complete gameplay parity.
+
+
+The reserved slot0 damage carrier initializes during normal source warmup. It continues original AI, physics and collision-graph maintenance while parked outside the playable scene; only its off-screen despawn callback is suppressed. Freezing its normal update was rejected because it left stale native collision state and changed ceiling physics. The corrected carrier preserves the exact172.5 source ceiling stopping position and supports a next-frame7HP hit, a rejected repeat10 frames later, and another7HP hit after130 frames. Holding original L guard blocks the tested contact hit entirely. Slot0 is internal and must not be bound to a host enemy.
+
+Bridge snapshots have a versioned proxy metadata trailer. The checked wrapper passes only the original emulator payload to melonDS and restores proxy metadata separately. This preserves a capture already in progress; a30-frame continuation after saving halfway through native suction matches the uninterrupted source trace exactly. The host must persist slot-to-host-enemy identity along with this snapshot.
+
+Normal enemy proxy positions use the original Waddle Dee center, which rests exactly17 pixels above a flat floor (center151 on floor168). The host must supply `sourceCenterY=hostFootY-17` and recover its foot with `proxyY+17`. Native hurtboxes use horizontal centering and top=`17-hostHeight`, bottom=`17`; changing their dimensions does not replace original source physical movement. During Suplex, resetting a host damage sentinel also resets the visible native clone's current/max HP. The test records one50HP slam and one2HP later impact, preserving native debounce without applying the slam repeatedly. The Cook test follows191 native capture frames through final proxy removal with flags136.
+
+The original8-slot scene is expanded to32 records (31 host enemies plus the internal carrier). A single1936-byte reservation follows the supplied ROM's NitroSystem ExpHeap layout and alignment4 allocation path, verified against source routines0x0201911C/0x0201929C. Both complete free/used linked lists are validated before changing any pointer. Original basic-item/52-byte spawn records are copied into the reserved block; source scene pointers/count and existing enemy record references move together. A private marker prevents repeated allocation. Tests spawn all31 enemies simultaneously, run their original collisions, save/reload them and execute all31 original destructors. Snapshot footer05 stores32 metadata records of40 bytes, including each overridden original hit-definition pointer. It reads footer04 and earlier8-record footer versions.
+
+`ProxyOptions` writes each enemy hit-group's original copy byte atgroup+0x239 before source consumption. Original function0x020A93BC aggregates the inhaled enemies and0x020A9320 retains separate copy results; the host must not overwrite Kirby's aggregate after consumption. The two-enemy test swallows source results18 and4 independently, observes both original mouth-buffer entries, and executes the original DOWN/Mix roulette through a real B selection. Boss resistance uses original hit-node+0x46 mask0x53, excluding grab/Cook/inhale categories while preserving ordinary damage categories; the boss test takes18+16 Sword damage twice with original debounce. Host bosses retain their own AI and position and must not follow proxy recoil.
+
+The Wheelie test creates its original helper with X, jumps onto its center, rides49 source frames and dismounts with UP+A. Kirby remains ability1 while mounted; main graphic65535 hides the separate body while original helper OAM renders the combined rider. Parentless dropped copy stars remain active: the SELECT→inhale→DOWN regression reacquires its original Sword ability through the native star.
+
+
+Host enemy health should be assigned as its current remaining HP (bounded to32760), then source damage is the assigned value minus the reported native HP. Do not use an effectively infinite sentinel when a native lethal reaction matters: original Ice freezes only when the original collision reduces its victim to zero. When the host enemy dies, call `kssu_proxy_detach` and stop updating its HP/position; reserve the source slot until the original corpse or ice block disappears. Detach restores the original hit-definition pointer only if the node still points to the bridge's private definition, clears host geometry/copy overrides, and retains source AI/collision state. The Ice regression delivers11+5 damage to a16HP host-sized proxy, reports zero HP at frame25, and preserves its original frozen block for214 observed frames, including snapshot restore. Afterward Kirby walks into the block; the original kick moves it4 pixels per frame and it inflicts38+38 on a second source proxy with native debounce. A1HP Sword victim reports zero HP at frame5 and Gone at14; the killing damage is observable before destruction.
+
+Neutral breakables use original hit-node+0x46 exclusion mask0x4000, removing category14 body contact while retaining offensive collision categories. The contact test overlaps Kirby for105 frames at full76HP, then re-enables contact and receives the original7HP hit. A separate neutral-prop Sword combo still yields18+16. Newborn proxies are tested both inside an already active inhale and overlapping the body from their first frame; no unmasked contact/capture occurs.
+
+Native Sword recoil changes both render and raw source coordinates by up to3 pixels during hitstop shake (callback0x021574B4). Thus `proxyY+17` may briefly penetrate a host floor. Host fall/stuck-wall correction must not introduce additional damage during source-controlled motion. Replacing render coordinates with raw coordinates cannot fix this because both contain the same native shake. Mid-capture retirement was also checked privately: the original scheduler defers Suplex/Cook destruction until those actions safely release the entity.
+
+
+Room cleanup is deliberately restricted to an observed source lifecycle: Cook emits free food as parentless entity kind104 using update0x021715F8. `kssu_room_cleanup` schedules that food and its owned sparkle children through the original generic destructor0x0200E668. The test runs500 native Cook frames, verifies a real food object exists, cleans it, and confirms all Kirby-owned objects survive another60 frames. The Wheelie test cleans the room before mounting and still mounts/rides/dismounts. Host enemy bindings and detached frozen blocks are retired separately via `proxy_set(active=false)`; held/captured entities retain their source scheduler until safe release.
+
+Set `KSSU_NATIVE_TRACE=1` for opt-in stderr milestones around machine construction, snapshot restore, and the first source-frame/GPU/audio operations. A recovered native core identified allocation-dependent construction crashes in `GPU::SyncAllVRAMCaptures`: `NDS` called `SetRenderer` before `Reset`, so uninitialized `VRAMCaptureBlockFlags` could request capture through a null renderer. The checked vendor patch zero-initializes those flags. `tools/verify_native_init.py` validates64 allocator-poison construction/frame/disposal cases; the previous binary deterministically crashed with `MALLOC_PERTURB_=111`.
+
+
+Proxy HP includes the original collision group's pending damage, not just the enemy controller's canonical HP. The collision graph writes current HP immediately, while the controller may copy it only on a later recoil tick. Reporting only canonical HP allowed the next host synchronization to overwrite unreported damage. The current implementation returns the minimum valid current HP across canonical and original active hit groups, including Suplex's visible clone. This repairs the reproduced live Ice case without changing source attack strength or debounce. Original Kirby's lethal current-HP sentinel0xFFFF is exported as0; after a lethal3HP→10-damage hit, the host must resolve its death and stop stepping that source session.
+
+The collision carrier originally emitted Waddle Dee's ambient walking sound every31 source frames despite being parked outside the scene. Six exact sound calls in the original Waddle walking VM at0x021999B0,0x02199A2C,0x02199AAC,0x02199B28,0x02199BA8,0x02199C24 are validated against their ARM branch encoding and replaced by NOPs in emulated RAM. This suppresses only proxy walking audio; it leaves original AI, physics, collision maintenance, Kirby/helper walking, and ability sounds intact. The source ROM file is untouched. The strict audio verification again measures exact idle silence and original jump/landing peaks1571/5597.
+
+
+Player health access uses the persistent health-group pointer at player data+0x288, with owner/range validation. Cook temporarily unlinks its active hurt node while leaving this allocation alive; searching only the active collision list incorrectly reported an error during that invulnerable action. All24 ability tests now assert valid76HP on every observed frame, and Wheelie riding also preserves valid health access. The dedicated Cook test verifies that its active hurt node is absent, synchronizes HP to50, queues10 damage successfully, and observes50HP throughout12 source frames because native invulnerability rejects the hit. Negative health API results therefore indicate invalid state/arguments; zero alone represents a valid source death.
+
+The initial Green Greens room caches exit-door decorations outside the actor tree. Its door at original coordinates(396,132) drew recurring yellow stars when the bridge moved the source camera to that area, even after host terrain replaced the room. The original registration routine0x020821E0 accepts door terrain essence0x0F and fills sixteen8-byte records at0x0209FBEC; drawing0x0208B3CC skips records with type0. `kssu_world` clears only those type words. Kirby, helper and ability particle systems remain active. Private source-only teleport and record-clear comparisons identified this scenery independently of the host renderer; the `scene_doors` regression checks its removal while retaining Kirby's live OBJ and health.
