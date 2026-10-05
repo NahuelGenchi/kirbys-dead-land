@@ -13,6 +13,7 @@ public sealed class KirbyRules
     private readonly string[] abilityIds;
     private readonly Func<int, int> chooseIndex;
     private readonly HashSet<long> consumedEnemies = [];
+    private readonly HashSet<long> cookedEnemies = [];
 
     public KirbyRules(IEnumerable<string> abilityIds, Func<int, int>? chooseIndex = null)
     {
@@ -93,6 +94,14 @@ public sealed class KirbyRules
 
     public void DropAbility() => AbilityId = null;
 
+    /// <summary>
+    /// Decide whether an enemy actually consumed by the original Cook drops one
+    /// host food item. Bosses and Elites never do, and repeated notifications
+    /// for one entity cannot drop a second item. Cook damage is unaffected.
+    /// </summary>
+    public bool ClaimCookFood(long enemyId, bool boss, bool elite) =>
+        !boss && !elite && cookedEnemies.Add(enemyId);
+
     /// <summary>Mirror a source transformation, including re-catching a discarded copy star.</summary>
     public void SetSourceAbility(string? abilityId)
     {
@@ -111,15 +120,21 @@ public sealed class KirbyRules
         AbilityId = abilityId;
         RetainedShieldId = retainedShieldId;
         consumedEnemies.Clear();
+        cookedEnemies.Clear();
     }
 
     /// <summary>Entity IDs can be reused in a different level; equipment and copy state survive.</summary>
-    public void ResetForLevel() => consumedEnemies.Clear();
+    public void ResetForLevel()
+    {
+        consumedEnemies.Clear();
+        cookedEnemies.Clear();
+    }
 
     public void Reset()
     {
         AbilityId = null;
         RetainedShieldId = null;
         consumedEnemies.Clear();
+        cookedEnemies.Clear();
     }
 }
