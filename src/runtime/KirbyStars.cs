@@ -82,11 +82,12 @@ internal sealed unsafe class KirbyStars
     /// source body's records in the same frame, so the host-sized box the source
     /// object was given also counts.
     /// </summary>
-    public StarKind SourceStrike(uint sourceEntity, Entity target, int ox, int oy, out int direction)
+    public StarKind SourceStrike(uint sourceEntity, Entity target, int ox, double oy, out int direction)
     {
         direction = 0;
         if (stars.Count == 0) return StarKind.None;
-        var body = HostBody(target).Offset(-ox, -oy);
+        // The window origin is fractional while an elevator lifts it; boxes are whole pixels.
+        var body = HostBody(target).Offset(-ox, -(int)Math.Round(oy));
         if (bodies.TryGetValue(sourceEntity, out var source)) body = body.Union(source);
         foreach (var star in stars.Values)
         {
@@ -102,13 +103,13 @@ internal sealed unsafe class KirbyStars
     /// every enemy the ability star crosses. Damage is the star's source damage,
     /// scaled like any other copy hit on that enemy.
     /// </summary>
-    public void StrikeHost(Hero hero, KirbyEnemies enemies, int ox, int oy, Func<Entity, double> scale)
+    public void StrikeHost(Hero hero, KirbyEnemies enemies, int ox, double oy, Func<Entity, double> scale)
     {
         if (stars.Count == 0) return;
         var entities = hero._level.entities;
         foreach (var star in stars.Values)
         {
-            var box = star.Box.Offset(ox, oy);
+            var box = star.Box.Offset(ox, (int)Math.Round(oy));
             TestTrace?.Invoke(star.Address, star.Kind, box);
             for (int j = 0; j < entities.length; j++)
             {

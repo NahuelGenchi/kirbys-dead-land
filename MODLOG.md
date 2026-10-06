@@ -754,6 +754,29 @@ the all-ability rendering tests as full gameplay acceptance.
   spits hit the shooter for 52; the swallow gave no copy. Saves unchanged.
 
 
+## 2026-10-06 — Kirby rides host elevators (#28)
+
+- Owner recording 2026-10-05 23:51: the elevator left without Kirby, who then
+  fell into the shaft. The host `Elevator.fixedUpdate` (read with crashlink) carries
+  entities within 2 px of its foot, keeps only the cell row under its foot solid,
+  writes its `yr` as that cell's ground height and copies its `cy`/`yr` to them.
+  The original saw the floor at the cell row, up to 24 px below the moving
+  surface, so Kirby left the 2 px reach after the first carry.
+- `src/core/ElevatorRide.cs`: over an elevator (its carry width, from the surface
+  to three cells above), lift the source window to the surface and raise Kirby
+  onto a rising elevator that passed his feet. The provider places the window
+  with Kirby while an elevator moves him and copies the elevator's cell position
+  to the hero exactly; enemies use the same lifted origin.
+- Live runs in `repros/elevator-20261006` used a spawned and initialized
+  `SimpleElevator`. Moving original objects apart from Kirby, then Kirby back
+  alone, dropped him for a frame every few frames (`000609`–`001130`). The
+  final runs (`002051`, `002312`) ride up and down standing, catch Kirby after a
+  jump and leave health at 76/76. The Beheaded comparison (`001557`) had no host
+  landings; Kirby keeps one of height 0 at departure.
+- Core rule tests: 181 assertions; `scripts/check.py` passes; Release build has
+  zero warnings. The bridge was rebuilt from this branch's unchanged `lib.rs`.
+  Not run: `tools/nds_tests.py` (no native change), other elevator types,
+  walking off a moving elevator, and floating platforms.
 ## 2026-10-06 — shield swap while copied (#31)
 
 - Owner recording `00-02-14`: Sword Kirby with a wooden shield stood on a dropped

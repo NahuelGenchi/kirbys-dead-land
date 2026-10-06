@@ -165,6 +165,11 @@ while playing Kirby; healing, equipment and interaction tutorials remain availab
 - Original Crash, Paint and Mike effects were verified in the running host game,
   with the HUD outside the background tint.
 - Original ladder, Suplex, Cook, helper and Wheel helper riding have source tests.
+- Kirby rides a real host `SimpleElevator` up and down in isolated live runs,
+  standing on its surface, and can jump on a rising one and land on it again.
+  Original objects ride with him while it moves (an intentional deviation; see
+  [Host elevators](docs/GAMEPLAY_FIDELITY.md#host-elevators-deviation)). Other
+  elevator types and generated elevator levels were not run live.
 - In live runs `20261005-232657` and `20261005-232901`, Kirby climbed natural
   vines grown through the host's own `VineLadder.activate`, hung, climbed down,
   stood on the ledge at the top and climbed back down from it.
