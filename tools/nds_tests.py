@@ -351,6 +351,92 @@ def run_case(name):
             return {'capture_frame':released,'original_mouth_buffer':buffer,'mouthful_action':'spit' if name=='hazard_spit' else 'swallow',
                     'action_frame':spit,'star_damage_events':[-d for d in damage],'ability_after':1,'minimum_health':76,
                     **({'next_b_inhales':reinhale} if name=='hazard_swallow' else {})}
+        if name.startswith('star_'):
+            # Kirby's original star objects, told apart by their update routine
+            # (src/core/StarProjectiles.cs); boxes and damage come from the native
+            # hit list, as the runtime reads them. Inclusive edges, like the source.
+            routines={0x020bd718:'spit',0x020bdd08:'big',0x02166a54:'ability'}
+            wall={'star_spit_wall':5,'star_ability':4}.get(name)
+            floor=[3 if y>=7 or x==wall else 0 for y in range(9) for x in range(100)]
+            overlap=lambda a,c:a[0]<=c[2] and c[0]<=a[2] and a[1]<=c[3] and c[1]<=a[3]
+            def stars():
+                found={}
+                for h in b.hits():
+                    o=h['owner']
+                    if not 0x02000000<=o<0x023ffff0:continue
+                    kind=routines.get(struct.unpack('<I',b.read(o+0x30,4))[0])
+                    if not kind:continue
+                    l,t,r,bottom=h['bounds'];s=found.setdefault(o,{'kind':kind,'box':[l,t,r,bottom],'damage':0})
+                    s['box']=[min(s['box'][0],l),min(s['box'][1],t),max(s['box'][2],r),max(s['box'][3],bottom)]
+                    s['damage']=max(s['damage'],-C.c_int16(h['words'][2]).value)
+                return found
+            def body(entity):
+                boxes=[h['bounds'] for h in b.hits() if h['owner']==entity]
+                return [min(x[0] for x in boxes),min(x[1] for x in boxes),max(x[2] for x in boxes),max(x[3] for x in boxes)] if boxes else None
+            b.world(floor,43*65536,int(153.5*65536));b.step(0,60)
+            if name=='star_ability':
+                transform(b,18);press=4;target_x=60
+            else:
+                # Copyless host-projectile proxies, acknowledged like the adapter does.
+                shots=[(1,85,140)] if name!='star_big' else [(1,80,151),(2,92,151)];caught=set();q=Proxy()
+                for i in range(120):
+                    state=b.state();b.world(floor,state['x_raw'],state['y_raw'])
+                    for slot,x,y in shots:
+                        if slot in caught:continue
+                        b.lib.kssu_proxy_set(b.handle,slot,x*65536,y*65536,1,True);b.lib.kssu_proxy_options(b.handle,slot,0,False)
+                        b.lib.kssu_proxy_contact(b.handle,slot,False);b.lib.kssu_proxy_size(b.handle,slot,10,6)
+                    b.step(2 if 5<=i<70 and len(caught)<len(shots) else 0)
+                    for slot,_,_ in shots:
+                        b.lib.kssu_proxy_state(b.handle,slot,C.byref(q))
+                        if slot not in caught and q.flags&4:caught.add(slot);b.lib.kssu_proxy_set(b.handle,slot,0,0,0,False)
+                assert len(caught)==len(shots) and b.action_flags()&2,(caught,b.action_flags())
+                press=2;target_x=None if name=='star_spit_wall' else 170
+            target=Proxy();target_hp=32760;damage=[];trace=[]
+            for i in range(240):
+                state=b.state();b.world(floor,state['x_raw'],state['y_raw'])
+                if target_x is not None:
+                    b.lib.kssu_proxy_set(b.handle,3,target_x*65536,151*65536,target_hp,True);b.lib.kssu_proxy_options(b.handle,3,18,True)
+                    b.lib.kssu_proxy_contact(b.handle,3,False);b.lib.kssu_proxy_size(b.handle,3,24,34)
+                b.step(press if i<4 else 0);found=stars()
+                assert len(found)<=1,found
+                star=next(iter(found.values()),None);hit=False
+                if target_x is not None:
+                    b.lib.kssu_proxy_state(b.handle,3,C.byref(target))
+                    if target.flags&1 and not target.flags&16 and target.hp<target_hp:
+                        hit=True;damage.append({'frame':i,'damage':target_hp-target.hp,'star_touching':bool(star) and overlap(star['box'],body(target.entity))})
+                        target_hp=target.hp
+                trace.append(star and {'frame':i,**star,'touching':target_x is not None and target.entity!=0 and body(target.entity) is not None and overlap(star['box'],body(target.entity))})
+                assert b.lib.kssu_health(b.handle)==76
+            seen=[s for s in trace if s];assert seen,'No original star appeared'
+            kinds={s['kind'] for s in seen};last=max(s['frame'] for s in seen)
+            if name in ('star_spit','star_spit_wall'):
+                assert kinds=={'spit'} and {s['damage'] for s in seen}=={52},(kinds,{s['damage'] for s in seen})
+            if name=='star_spit':
+                # The single spit star bursts on its first enemy, in the frame of its hit.
+                assert len(damage)==1 and damage[0]['damage']==52 and damage[0]['star_touching'],damage
+                assert last<=damage[0]['frame']+2,(last,damage)
+                return {'routine':'0x020BD718','damage_word':52,'hits':damage,'last_star_frame':last,'bursts_on_enemy':True}
+            if name=='star_spit_wall':
+                # The wall cell starts at x=120: the star bursts when its center
+                # reaches it, instead of bouncing back.
+                centers=[(s['box'][0]+s['box'][2])/2 for s in seen]
+                assert max(centers)<=120 and centers==sorted(centers) and last<60,(max(centers),last)
+                return {'routine':'0x020BD718','wall_left':120,'furthest_center':max(centers),'last_star_frame':last,'bounced':False}
+            if name=='star_big':
+                assert kinds=={'big'} and {s['damage'] for s in seen}=={60},(kinds,{s['damage'] for s in seen})
+                assert damage and damage[0]['damage']==60 and damage[0]['star_touching'],damage
+                after=[s for s in seen if s['frame']>damage[0]['frame']+2]
+                assert after and after[-1]['box'][0]>body(target.entity)[2],'The big star must pass through the enemy'
+                return {'routine':'0x020BDD08','damage_word':60,'first_hit':damage[0],'hits':len(damage),'passes_through':True}
+            assert kinds=={'ability'} and {s['damage'] for s in seen}=={0},(kinds,{s['damage'] for s in seen})
+            # Harmless to enemies in the ROM; bounces off the wall cell starting at x=96.
+            touching=[s['frame'] for s in seen if s['touching']]
+            assert touching and not damage,(touching,damage)
+            centers=[(s['box'][0]+s['box'][2])/2 for s in seen];rights=[s['box'][2] for s in seen]
+            turns=[seen[k]['box'][2] for k in range(1,len(seen)-1) if centers[k]>centers[k-1] and centers[k+1]<centers[k]]
+            assert max(rights)<=96 and any(r>=94 for r in turns),(max(rights),turns)
+            return {'routine':'0x02166A54','damage_word':0,'frames_touching_enemy':len(touching),'enemy_damage':0,
+                    'wall_left':96,'bounce_right_edges':turns,'still_present_at':last}
         if name=='proxy_reuse':
             floor=[3 if y>=7 else 0 for y in range(9) for x in range(100)];q=Proxy();entities=[]
             for cycle in range(8):
@@ -430,7 +516,7 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--case');parser.add_argument('--skip-abilities',action='store_true');args=parser.parse_args()
     if args.case:
         print('RESULT '+json.dumps({'case':args.case,'result':run_case(args.case)}),flush=True);return
-    cases=['scene_doors','room_food','proxy_birth_contact','proxy_birth_inhale','proxy_contact','proxy_contact_sword','proxy_touch_off','proxy_swallow_touch_off','proxy_suplex_touch_off','proxy_ice_detach','proxy_lethal','motion','ladder','one_way','solid_ceiling','water','proxy_swallow','hazard_spit','hazard_swallow','proxy_sword','proxy_reuse','proxy_save','proxy_mix','boss_inhale','boss_suplex','boss_cook','boss_sword','proxy_capacity','copy_drop_reabsorb','wheelie_ride','proxy_suplex','proxy_cook','audio','hurt','hurt_lethal','hurt_cold','guard','health_invulnerable','health_sync','proxy_size']
+    cases=['scene_doors','room_food','proxy_birth_contact','proxy_birth_inhale','proxy_contact','proxy_contact_sword','proxy_touch_off','proxy_swallow_touch_off','proxy_suplex_touch_off','proxy_ice_detach','proxy_lethal','motion','ladder','one_way','solid_ceiling','water','proxy_swallow','hazard_spit','hazard_swallow','star_spit','star_spit_wall','star_big','star_ability','proxy_sword','proxy_reuse','proxy_save','proxy_mix','boss_inhale','boss_suplex','boss_cook','boss_sword','proxy_capacity','copy_drop_reabsorb','wheelie_ride','proxy_suplex','proxy_cook','audio','hurt','hurt_lethal','hurt_cold','guard','health_invulnerable','health_sync','proxy_size']
     if not args.skip_abilities:cases += [f'ability-{i}' for i in range(2,26)]
     results=[]
     for name in cases:

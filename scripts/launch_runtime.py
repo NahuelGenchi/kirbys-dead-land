@@ -49,7 +49,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--data-root', type=Path, default=DEFAULT_ROOT)
     parser.add_argument('--play', action='store_true', help='Open the game for normal play, with isolated saves and no time limit.')
-    parser.add_argument('--input-plan', choices=['movement', 'combat', 'ability', 'cook', 'visual', 'breakable', 'boss', 'crowd', 'aim', 'repro', 'hazard'], help='Run an isolated input test (repro tests normal keyboard/controller bindings).')
+    parser.add_argument('--input-plan', choices=['movement', 'combat', 'ability', 'cook', 'visual', 'breakable', 'boss', 'crowd', 'aim', 'repro', 'hazard', 'stars'], help='Run an isolated input test (repro tests normal keyboard/controller bindings).')
     parser.add_argument('--probe-ability', type=int, choices=range(2, 26), metavar='2..25', help='Prepare this original ability through inhale/feed/swallow before the ability probe.')
     parser.add_argument('--probe-scrolls', metavar='B,T,S', help='Give the ability probe this many Brutality, Tactics and Survival scrolls before measuring damage.')
     parser.add_argument('--capture-fps', type=int, choices=range(1, 31), metavar='1..30', help='Capture real gameplay frames at this rate for a private showcase recording.')

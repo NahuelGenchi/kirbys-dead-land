@@ -28,12 +28,14 @@ internal static class KirbyDamage
             orig(mob, attack);
         };
     }
-    public static void Hit(Hero hero, dc.Entity mob, int damage)
+    /// <returns>True when the host resolved a successful hit (not blocked, parried or missed).</returns>
+    public static bool Hit(Hero hero, dc.Entity mob, int damage)
     {
         var attack = AttackUtils.Class.createFromHero(hero, damage, null);
         attack.useHeroScaling = false;
         sourceHits.Add(attack.HashlinkPointer, damage);
         try { AttackUtils.Class.hit(attack, mob); }
         finally { sourceHits.Remove(attack.HashlinkPointer); }
+        return attack.isSuccess();
     }
 }

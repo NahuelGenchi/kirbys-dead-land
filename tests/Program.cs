@@ -75,6 +75,45 @@ Check(MouthfulHazards.Resolve(false, false, false, sourceDamage: 1, controlled: 
 Check(MouthfulHazards.Resolve(false, false, false, 0, controlled: true) == HazardAction.Hold, "Suction holds the host projectile");
 Check(MouthfulHazards.Resolve(false, false, false, 0, false) == HazardAction.Follow, "Free projectiles keep host physics");
 Check(MouthfulHazards.Resolve(false, false, gone: true, 0, false) == HazardAction.Release, "A vanished source object only frees its slot");
+
+Check(StarProjectiles.Identify(0x020BD718) == StarKind.Spit && StarProjectiles.Identify(0x020BDD08) == StarKind.BigSpit &&
+      StarProjectiles.Identify(0x02166A54) == StarKind.Ability, "The three original star routines are recognized");
+Check(StarProjectiles.Identify(0x020C3700) == StarKind.None && StarProjectiles.Identify(0x020B2714) == StarKind.None,
+    "Copy-ability attacks and Kirby's body are not stars");
+Check(StarProjectiles.SourceDamage(StarKind.Spit, 52) == 52 && StarProjectiles.SourceDamage(StarKind.BigSpit, 60) == 60,
+    "Spit stars strike with their own original damage word");
+Check(StarProjectiles.SourceDamage(StarKind.Ability, 0) == 52, "The discarded star strikes like a single spit star");
+Check(StarProjectiles.SourceDamage(StarKind.None, 52) == 0 && StarProjectiles.SourceDamage(StarKind.Spit, -3) == 0,
+    "Non-stars and invalid damage words strike for nothing");
+Check(StarProjectiles.Route(StarKind.Spit, paired: true) == StarRoute.Source &&
+      StarProjectiles.Route(StarKind.BigSpit, paired: true) == StarRoute.Source,
+    "A paired enemy takes spit-star damage once, through its source object");
+Check(StarProjectiles.Route(StarKind.Spit, paired: false) == StarRoute.Host &&
+      StarProjectiles.Route(StarKind.BigSpit, paired: false) == StarRoute.Host,
+    "The host strikes enemies that have no source object");
+Check(StarProjectiles.Route(StarKind.Ability, paired: true) == StarRoute.Host &&
+      StarProjectiles.Route(StarKind.Ability, paired: false) == StarRoute.Host,
+    "The ability star, harmless in the ROM, is always struck by the host");
+// Original records are inclusive: the spit star [137,157] hit the proxy body [157,181] in the bridge.
+Check(new StarBox(137, 140, 157, 166).Overlaps(new StarBox(157, 134, 181, 168)), "Touching edges overlap");
+Check(!new StarBox(137, 140, 156, 166).Overlaps(new StarBox(157, 134, 181, 168)) &&
+      !new StarBox(137, 100, 157, 133).Overlaps(new StarBox(157, 134, 181, 168)), "Separated boxes do not");
+Check(new StarBox(45, 143, 65, 163).Union(new StarBox(45, 140, 65, 166)) == new StarBox(45, 140, 65, 166) &&
+      new StarBox(45, 140, 65, 166).Offset(-24, 48) == new StarBox(21, 188, 41, 214), "Box union and window offset");
+Check(StarProjectiles.BumpDirection(100, 120, -1) == 1 && StarProjectiles.BumpDirection(100, 80, 1) == -1,
+    "Stagger pushes the enemy away from the star");
+Check(StarProjectiles.BumpDirection(100, 100, -1) == -1 && StarProjectiles.BumpDirection(100, 100, 0) == 1,
+    "A centered hit follows the star's travel");
+Check(StarProjectiles.BumpSpeed(0) == 0.2 && Math.Abs(StarProjectiles.BumpSpeed(1) - 0.3) < 1e-12 &&
+      StarProjectiles.BumpSpeed(7) == StarProjectiles.BumpSpeed(1), "Bump speed is the dive's 0.2 to 0.3");
+{
+    var strikes = new StarStrikes();
+    Check(strikes.TryStrike(0x0204A1D0, 1) && !strikes.TryStrike(0x0204A1D0, 1), "A star strikes each enemy once");
+    Check(strikes.TryStrike(0x0204A1D0, 2) && strikes.TryStrike(0x0204A308, 1), "Other enemies and other stars still strike");
+    strikes.Retain([0x0204A308]);
+    Check(strikes.TryStrike(0x0204A1D0, 1), "A star that left the scene frees its address for a new star");
+    Check(!strikes.TryStrike(0x0204A308, 1), "A star still present keeps its strikes");
+}
 var cook = new KirbyRules(["cook"], _ => 0);
 cook.SetSourceAbility("cook");
 Check(cook.ClaimCookFood(10, boss: false, elite: false), "Cooked ordinary enemy drops food");

@@ -753,3 +753,33 @@ the all-ability rendering tests as full gameplay acceptance.
   Grenader grenades and one mid-jump Archer arrow captured at full health; both
   spits hit the shooter for 52; the swallow gave no copy. Saves unchanged.
 
+## 2026-10-05 — spat and discarded stars as host projectiles (#20)
+
+- Measured in the bridge, the original stars are:
+  - the spit star, `0x020BD718`: 52 damage, bursts on its first enemy and on walls;
+  - the big star, `0x020BDD08`: 60 damage, passes through enemies, bursts on walls;
+  - the discarded ability star, `0x02166A54`: 0 damage, passes through enemies,
+    bounces off walls and floors.
+
+  Kind 60 is shared with copy attacks, so the update routine identifies each star.
+- `src/runtime/KirbyStars.cs` reads the stars from the native hit list after every
+  source frame. Paired enemies keep the original star damage (proxy HP delta), and
+  a star hit now also staggers them. Unpaired enemies are struck by the host with
+  the star's damage word. The discarded star strikes every enemy for 52, an owner
+  request and a deviation from the ROM. The host strikes an enemy once per star;
+  for paired enemies the original collision decides how often. The stagger is the
+  host dive landing's affect 16 for 0.7 s, a bump of 0.2–0.3 and Stun (affect 8)
+  for 1 s with diminishing returns, read from `hlboot.dat`.
+  `src/core/StarProjectiles.cs` holds the rules.
+- Native `star_spit`, `star_spit_wall`, `star_big` and `star_ability` pass. The
+  full suite has 68 cases; the docs previously said 61, but main already had 64.
+  Core rule test: 188 assertions.
+- Live `20261005-221418` (separate root `repros/stars-20261005`) passed all five
+  phases at 76/76 HP:
+  - Each of the paired spit, unpaired spit and discarded-star hits dealt 182
+    damage, stunned the Zombie for about a second and set affect 16.
+  - A spit star burst on a real wall face, and a discarded star bounced off it.
+- Found: the bridge's facing byte read 0 in all 7151 traced frames, including
+  left-facing ones, so `hero.dir` may not follow Kirby's turns. This was not fixed
+  here.
+
