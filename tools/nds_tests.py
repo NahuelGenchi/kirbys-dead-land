@@ -316,6 +316,41 @@ def run_case(name):
             assert b.lib.kssu_load_state(b.handle,bytes(ROOT/'oracle/ready2/000.state'))==0
             assert b.state()['ability']==1
             return {'original_inhale_frames':controlled,'source_swallow_evolution':18,'in_place_reload':True}
+        if name in ('hazard_spit','hazard_swallow'):
+            # A host projectile: no copy byte, no body contact, a small hurtbox and
+            # one HP. Its mouthful is acknowledged like the adapter does (released).
+            floor=[3 if y>=7 else 0 for y in range(9) for x in range(100)];shot,target=Proxy(),Proxy()
+            b.world(floor,43*65536,int(153.5*65536));b.step(0,60)
+            released=None;buffer=None;target_hp=32760;damage=[];health=[];spit=None;reinhale=False
+            for i in range(240):
+                state=b.state();b.world(floor,state['x_raw'],state['y_raw'])
+                if released is None:
+                    assert b.lib.kssu_proxy_set(b.handle,1,85*65536,140*65536,1,True)==0
+                    assert b.lib.kssu_proxy_options(b.handle,1,0,False)==0
+                    assert b.lib.kssu_proxy_contact(b.handle,1,False)==0
+                    assert b.lib.kssu_proxy_size(b.handle,1,10,6)==0
+                assert b.lib.kssu_proxy_set(b.handle,2,170*65536,151*65536,target_hp,True)==0
+                assert b.lib.kssu_proxy_options(b.handle,2,18,True)==0
+                mask=2 if 5<=i<60 else 0
+                if released is not None and i==released+40:mask=2 if name=='hazard_spit' else 128;spit=i
+                if name=='hazard_swallow' and released is not None and released+120<=i<released+140:mask=2
+                b.step(mask);health.append(b.lib.kssu_health(b.handle))
+                if name=='hazard_swallow' and released is not None and released+120<=i<released+140:reinhale|=bool(b.action_flags()&1)
+                b.lib.kssu_proxy_state(b.handle,1,C.byref(shot));b.lib.kssu_proxy_state(b.handle,2,C.byref(target))
+                if released is None and shot.flags&4:
+                    buffer=list(b.read(0x020bb210,8));assert b.action_flags()&2
+                    assert b.lib.kssu_proxy_set(b.handle,1,0,0,0,False)==0;released=i
+                if target.flags&1 and not target.flags&16 and target.hp<target_hp:damage.append(target.hp-target_hp);target_hp=target.hp
+            assert released is not None and buffer[1]==1 and buffer[3]==0, buffer
+            assert min(health)==76 and b.state()['ability']==1, (min(health),b.state()['ability'])
+            # Spitting clears the original mouth count. A copyless swallow returns
+            # Kirby to base idle but leaves that count byte (action bit1) set until
+            # the next inhale; B then inhales again instead of firing a star.
+            if name=='hazard_spit':assert len(damage)==1 and damage[0]<0 and not b.action_flags()&2, damage
+            else:assert not damage and reinhale, (damage,reinhale)
+            return {'capture_frame':released,'original_mouth_buffer':buffer,'mouthful_action':'spit' if name=='hazard_spit' else 'swallow',
+                    'action_frame':spit,'star_damage_events':[-d for d in damage],'ability_after':1,'minimum_health':76,
+                    **({'next_b_inhales':reinhale} if name=='hazard_swallow' else {})}
         if name=='proxy_reuse':
             floor=[3 if y>=7 else 0 for y in range(9) for x in range(100)];q=Proxy();entities=[]
             for cycle in range(8):
@@ -395,7 +430,7 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--case');parser.add_argument('--skip-abilities',action='store_true');args=parser.parse_args()
     if args.case:
         print('RESULT '+json.dumps({'case':args.case,'result':run_case(args.case)}),flush=True);return
-    cases=['scene_doors','room_food','proxy_birth_contact','proxy_birth_inhale','proxy_contact','proxy_contact_sword','proxy_touch_off','proxy_swallow_touch_off','proxy_suplex_touch_off','proxy_ice_detach','proxy_lethal','motion','ladder','one_way','solid_ceiling','water','proxy_swallow','proxy_sword','proxy_reuse','proxy_save','proxy_mix','boss_inhale','boss_suplex','boss_cook','boss_sword','proxy_capacity','copy_drop_reabsorb','wheelie_ride','proxy_suplex','proxy_cook','audio','hurt','hurt_lethal','hurt_cold','guard','health_invulnerable','health_sync','proxy_size']
+    cases=['scene_doors','room_food','proxy_birth_contact','proxy_birth_inhale','proxy_contact','proxy_contact_sword','proxy_touch_off','proxy_swallow_touch_off','proxy_suplex_touch_off','proxy_ice_detach','proxy_lethal','motion','ladder','one_way','solid_ceiling','water','proxy_swallow','hazard_spit','hazard_swallow','proxy_sword','proxy_reuse','proxy_save','proxy_mix','boss_inhale','boss_suplex','boss_cook','boss_sword','proxy_capacity','copy_drop_reabsorb','wheelie_ride','proxy_suplex','proxy_cook','audio','hurt','hurt_lethal','hurt_cold','guard','health_invulnerable','health_sync','proxy_size']
     if not args.skip_abilities:cases += [f'ability-{i}' for i in range(2,26)]
     results=[]
     for name in cases:

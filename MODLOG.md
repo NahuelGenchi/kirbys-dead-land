@@ -737,3 +737,19 @@ the all-ability rendering tests as full gameplay acceptance.
 - Not run: native bridge tests (no native change), boss/elite live checks, and
   save/resume with an uneaten drop.
 
+## 2026-10-05 — enemy projectiles as mouthful hazards (#13)
+
+- Hostile host `Bullet`/`Grenade` entities (`isOpponent(hero)`) now pair with
+  copyless, inhalable, contact-free 1 HP source proxies. Original suction holds
+  them (host update suspended), the original mouthful removes them without a
+  copy, and the spat star damages host enemies through the existing HP-delta path.
+  Decisions live in `src/core/MouthfulHazards.cs`.
+- Native `hazard_spit`/`hazard_swallow` pass: mouth buffer `[0,1,0,…]`, a
+  52-damage star, no copy on swallow, Kirby at 76 HP. Copyless swallow leaves
+  the mouth count byte (action bit1) set until the next inhale. Full suite: 61 cases.
+- Measured original inhale box: 2px behind to 60px ahead, 34px above to 4px below
+  the foot. Archer arrows pass above it on flat ground (live `205347` frames).
+- Live `20261005-205827` (separate data root `repros/hazard-20261005`): two
+  Grenader grenades and one mid-jump Archer arrow captured at full health; both
+  spits hit the shooter for 52; the swallow gave no copy. Saves unchanged.
+

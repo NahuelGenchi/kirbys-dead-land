@@ -26,6 +26,7 @@ in [NDS_BRIDGE.md](NDS_BRIDGE.md). The original bootstrap experiment remains in
 | Background effects | Original captured palette changes supply Crash/Paint/Mike timing and colors; host scenery receives the corresponding blend |
 | Sound | Original stereo sound effects continue; the source music player is muted so Dead Cells music remains |
 | Enemy collision | Live host enemies have paired source collision objects with their host dimensions; original routines resolve damage cadence, suction, grabs, throws and Cook |
+| Enemy projectiles | Live hostile host arrows/grenades have paired copyless source objects; original suction, mouthful, spit star and swallow decide their fate |
 | Boss collision | Original resistance bits prevent inhale, Suplex capture and Cook; damage still uses original collision/debounce, while the host retains boss AI and phases |
 | Host triggers | Pressure plates (trap plates and pulley points too) and hidden triggers test Kirby's physical foot on the ground, as for the Beheaded; enemy attacks still test the projected original hurtbox |
 | Incoming damage | Host shield/parry resolves first; remaining damage, converted to the same fraction of Kirby's 76 HP as of the host's current maximum, enters the next original collision tick, preserving original guard, recoil and invulnerability |
@@ -55,6 +56,39 @@ does not overwrite the mouthful aggregate afterward. Thus multiple captures use
 the original Mix machinery. Each actual captured host enemy is removed once, and
 Kirby's form changes when the ROM performs the swallow/transformation. Spitting
 keeps the original source behavior.
+
+### Projectiles in the mouthful
+
+Hostile host projectiles (`dc.en.Bullet`, such as Archer arrows, and
+`dc.en.Grenade`, such as Grenader grenades) are paired with source objects
+exactly like enemies, through `KirbyEnemies`. Only projectiles for which
+`Entity.isOpponent(hero)` holds are paired, so Kirby's own bow arrows, repelled
+grenades and countered bullets stay host-only. A projectile's source object:
+
+- keeps Waddle Dee's native copy byte 0, so the ROM builds its ordinary copyless
+  mouthful (mouth buffer `[0,1,0,…]`): B spits the original star and DOWN
+  swallows into nothing;
+- stays inhalable (no boss resistance) but has no source body contact; the host
+  projectile still hits Kirby through the normal host damage path when it is
+  not caught;
+- uses the host projectile's radius/height as its hurtbox and has 1 HP.
+
+While the original suction controls it, `KirbyEnemyHooks` suspends the host
+projectile's update (`Entity.canUpdate`, `Bullet.fixedUpdate`,
+`Grenade.fixedUpdate`, `updatePositionXY`) and it follows the source object, so
+it neither hits Kirby nor detonates. When the source reports the mouthful (or a
+Cook capture), the host projectile is destroyed without a copy, loot or
+explosion. The spat star then damages paired host enemies through the existing
+source-HP-delta path. An original attack that damages a projectile's source
+object also destroys it; this is the deliberate host mapping of a lethal source
+hit on a 1 HP object. `MouthfulHazards` in `src/core/` holds these decisions.
+
+The original inhale box spans 2px behind to 60px in front of Kirby and 34px
+above to 4px below his foot. Archer arrows fly at the Beheaded's chest height,
+about 55–60px above the floor, so on flat ground they pass over both that box
+and Kirby's 12×12 hurtbox. Kirby catches them by inhaling in the air; low
+projectiles such as grenades are caught from the ground. This is the ROM's
+geometry, not an adapter limit.
 
 Base form permits host swords, bows and shields. Copied form maps attack buttons
 to the original ability and keeps only the exact previously equipped shield for
@@ -219,13 +253,20 @@ no pickup occurred; that fixture was corrected. Bosses, Elites, several cooked
 enemies at once and save/resume with an uneaten drop were not exercised live.
 Ice damage and its surviving frozen block, background-effect placement, and an
 actual biome transition have passed live checks. The final native suite passes
-59 cases; source audio and host SDL coexistence tests also pass. Confirmed source
+61 cases; source audio and host SDL coexistence tests also pass. Confirmed source
 death ends the host run, and an actual new run resets Kirby's state. Cook's
 temporary invulnerability preserves health through its persistent health group.
 The host scenery blend has continuous RGB precision, whereas the original uses
 integer RGB5 palettes. Original camera shake is not applied to the host camera.
 Original Green Greens exit-door sparkle records are disabled when exporting host
 terrain; original player, helper and ability effects remain active.
+Live run `20261005-205827` caught two natural Grenader grenades and one natural
+Archer arrow (`dc.en.Bullet`, caught mid-jump) with Kirby at full health
+throughout. Each spat star hit its shooter for 52 host damage, and the swallowed
+grenade left Kirby in base form with no copy. Only `EnemyGrenade` and the
+Archer's plain `Bullet` were exercised live; other bullet subclasses (homing,
+piercing, boss bullet patterns), Kirby's own bow arrows near the inhale box,
+and saving during a projectile's suction were not.
 Complete one-to-one behavior for every host enemy, hazard,
 item and boss has not been established. These boundaries must remain explicit;
 a successful native or renderer test alone is not proof of every host interaction.
