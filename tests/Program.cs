@@ -100,6 +100,16 @@ Check(MouthfulHazards.Resolve(false, false, false, 0, controlled: true) == Hazar
 Check(MouthfulHazards.Resolve(false, false, false, 0, false) == HazardAction.Follow, "Free projectiles keep host physics");
 Check(MouthfulHazards.Resolve(false, false, gone: true, 0, false) == HazardAction.Release, "A vanished source object only frees its slot");
 
+Check(IceFreeze.FreezeAffect == 23 && IceFreeze.FreezeSeconds == 3 && (IceFreeze.DiminishingKey, IceFreeze.DiminishingFullPowerUses,
+      IceFreeze.DiminishingMaxUses) == (3, 1, 8), "Ice uses the host Frost Blast freeze and its diminishing returns");
+Check(IceFreeze.Freezes(sourceAbility: 10, sourceDamage: 4, hostAlive: true, frozen: false), "An Ice hit freezes a living host enemy");
+Check(!IceFreeze.Freezes(10, 4, hostAlive: true, frozen: true), "A frozen enemy is not refrozen by the continuing breath");
+Check(!IceFreeze.Freezes(10, 4, hostAlive: false, frozen: false), "A killed enemy is not frozen");
+Check(!IceFreeze.Freezes(10, sourceDamage: 0, true, false), "No Ice damage, no freeze");
+Check(!IceFreeze.Freezes(sourceAbility: 11, 4, true, false) && !IceFreeze.Freezes(1, 4, true, false), "Other forms never freeze");
+Check(IceFreeze.Applies(10) && !IceFreeze.Applies(18) && !IceFreeze.Applies(1),
+      "Only Ice deals host Frost damage and skips the original remnant (no ice block)");
+
 Check(StarProjectiles.Identify(0x020BD718) == StarKind.Spit && StarProjectiles.Identify(0x020BDD08) == StarKind.BigSpit &&
       StarProjectiles.Identify(0x02166A54) == StarKind.Ability, "The three original star routines are recognized");
 Check(StarProjectiles.Identify(0x020C3700) == StarKind.None && StarProjectiles.Identify(0x020B2714) == StarKind.None,
@@ -581,5 +591,20 @@ Check(SpeedMatch.RiseVelocity(KirbyActions.Jump, -2682) == -2682 && SpeedMatch.R
     AbilityIcon.Decode(new AbilityIcon.Sprite(0, 0, true, true), tiles, iconPalette, icon);
     Check(icon.AsSpan(Pixel(31, 31), 4).SequenceEqual(new byte[] { 255, 0, 0, 255 }) &&
           icon.AsSpan(Pixel(16, 23), 4).SequenceEqual(new byte[] { 0, 255, 0, 255 }), "Apply both OBJ flips");
+}
+{
+    // Same IDs and order as KirbyNdsProvider.Abilities (original abilities 2..25).
+    string[] abilityIds = ["Cutter", "Mirror", "Beam", "Fighter", "Suplex", "YoYo", "Wheel", "Bomb", "Ice", "Fire", "Plasma", "Ninja",
+        "Stone", "Wing", "Jet", "Copy", "Sword", "Hammer", "Parasol", "Paint", "Mike", "Crash", "Cook", "Sleep"];
+    Check(abilityIds.All(AbilityDescriptions.Summaries.ContainsKey) && AbilityDescriptions.Summaries.Count == abilityIds.Length,
+        "Every copy ability has exactly one description");
+    Check(AbilityDescriptions.Summaries.Values.All(text => text.Length is > 20 and <= 110),
+        "Descriptions stay short enough for the pause card");
+    // The host's ui.Text treats braces, @ and angle brackets as markup.
+    Check(AbilityDescriptions.Summaries.Values.Append(AbilityDescriptions.Controls).All(text => text.IndexOfAny(['{', '}', '@', '<', '>']) < 0),
+        "Descriptions contain no host text markup");
+    Check(AbilityDescriptions.Describe("Fire") == AbilityDescriptions.Summaries["Fire"] + "\n" + AbilityDescriptions.Controls,
+        "A description ends with the shared controls line");
+    Check(AbilityDescriptions.Describe("Unknown") == AbilityDescriptions.Controls, "An unknown ability still shows the controls");
 }
 Console.WriteLine($"PASS: {assertions} user-rule assertions. No claim of NDS physics or in-game verification.");

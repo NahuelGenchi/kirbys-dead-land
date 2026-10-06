@@ -35,6 +35,7 @@ Relevant environment variables are used only by the lab helper:
 - `KIRBY_LAB_TEST_ABILITY`: optional source ability ID for the ability probe, exposed as `--probe-ability 2..25`. The probe prepares it through original inhale, supplied swallowed content, and Down before measuring combat. The separate `combat` probe uses a real enemy's random copy result.
 - `KIRBY_LAB_TEST_SCROLLS`: optional `B,T,S` scroll counts for the ability probe, exposed as `--probe-scrolls`. Before measuring, the probe adds that many real `BrutalityUp`, `TacticUp` and `SurvivalUp` items (`InventItem.fromItem`) through the normal inventory and calls the host's `Hero.computeTiers`. `ability-damage.json` then records the tiers, the host and core colorless multipliers, and each copy hit's source HP drop and host damage.
 - `KIRBY_LAB_TEST_HUD=1`: with the ability probe, exposed as `--probe-hud`. After the new run settles, it adds a real `StartShield` beside the starting sword through the normal inventory. It later discards the copy with the original Select button, and writes `hud.jsonl` whenever a HUD weapon slot changes: real item, slot item, icon texture, frame group, icon size and scale, and ammo flag. Each distinct decoded icon is saved as private `hud-icon-<hash>.rgba`.
+- `KIRBY_LAB_TEST_PAUSE=1`: with `--probe-hud`, exposed as `--probe-pause`. At 700 probe frames it opens the normal pause screen (`new DefaultPause()`, whose constructor pauses the game), instead of the discard. It writes `pause-cards.jsonl` for every pause equipment card: whether it was drawn as the ability, the real item, and the card's object tree with texts. The run ends paused; set `KIRBY_LAB_CAPTURE_ALL=1` to capture the paused screen.
 - `KIRBY_LAB_COMBAT_ELITE=1`: with the `combat` plan, makes the swallowed Zombie an Elite (Elite skills disabled) and records in `combat.json` whether the copy was empowered and the damage that the second Zombie takes from each hit. Set it in the environment of `launch_runtime.py`.
 - `KIRBY_LAB_PLAY=1`: keep outfit selection but disable all smoke capture and automatic input.
 
@@ -188,6 +189,52 @@ Earlier attempts while building the fixture are not evidence:
 The lab-added shield never reached its HUD slot (`slotItem` null) in any run. This
 fixture limitation means the shield slot's own drawing was not observed.
 
+### Pause equipment card (2026-10-06)
+
+Issue #41. Same root, `repros/colorless-20261005`. Bridge from current `main`'s
+`src/nds/lib.rs`: `3b9f9055b3a69290947e5a147afa363382de0c7156b4c7a53459cd0f1f4c57b1`. Runtime DLL: `af89b15e2ae9624e3d442bc8cb407bbc289dd4c5d343d38e1d74fa78429c1f1d`.
+Each run used `--start-game --input-plan ability --probe-hud --probe-pause` for 75
+seconds with `KIRBY_LAB_CAPTURE_ALL=1`, the starting sword in the Left-Click slot
+and the shield beside it. Each ended by the expected timeout without fatal log
+lines and left the real saves unchanged.
+
+- `124012` (`--probe-ability 11 --probe-scrolls 0,0,4`): the pause opened as Fire
+  Kirby (source frame 5119).
+  - The `StartSword` card was drawn as the ability: name markup `{Fire@CL}`
+    (shown in `#D8D8D8`), main line "Copy ability", the host's "Colorless (the
+    highest level applies)" line, and the original Fire icon in the card's icon
+    slot.
+  - The captured screen shows that card in the gray colorless frame beside the
+    unchanged "Old Wooden Shield I" and "Prisoner's Collar I" cards.
+- `124145` (no ability): the same fixture in base form drew the normal "Rusty
+  Sword I / 138 DPS" card.
+
+Earlier attempts while building this:
+- `123608`: before relabeling. It showed "Rusty Sword I / 241 DPS" on the
+  colorless card.
+- `123814`: `ui.Text.set_text` escaped raw HTML, so the name showed literal tags.
+  Fixed by editing the host's own markup (`rawText`).
+Correction (#36): the red background in `215606` and `215830` was not the highest
+stat. Both runs had the starting sword in the slot, the same kind as the
+`StartSword` stand-in. Through the host's same-item-kind path, the colors then came
+from the real Brutality sword. The owner saw the same red with Survival highest.
+
+### HUD slot stat color (2026-10-06)
+
+Issue #36. Same root. Bridge rebuilt from current `main`'s `src/nds/lib.rs`:
+`3b9f9055b3a69290947e5a147afa363382de0c7156b4c7a53459cd0f1f4c57b1`. Runtime DLL: `86f969f092cc464cf225affea2d2e0d06b4906413aab9b918fc42d8df1bae779`. Each run used
+`--start-game --input-plan ability --probe-ability 18 --probe-hud` for 90 seconds,
+with the starting sword in the Left-Click slot. Each ended by the expected timeout
+without fatal log lines and left the real saves unchanged. `hud.jsonl` now records
+the slot's two background shader colors.
+
+- `013806` (`--probe-scrolls 0,0,4`, tiers 1/1/5): the copied Sword slot had
+  colors `17ce75` (Survival green) and `b2c0dd` (colorless gray), and the captured
+  frame shows the green background. The starting sword's `ec2424` red returned
+  after the discard.
+- `013956` (`--probe-scrolls 0,4,0`, tiers 1/5/1): `a051ff` (Tactics purple) and
+  `b2c0dd`; `ec2424` again after the discard.
+
 ## Private showcase capture
 
 `--capture-fps 15` records actual gameplay framebuffer frames and the original PCM submitted by the mod. It leaves desktop audio untouched. The capture manifest records wall-clock timestamps; machine/RAM diagnostic snapshots remain limited to every two seconds. The optional combat take adds walking, jumping, floating, and attacks after absorption/parry. Normal play never enables these helpers.
@@ -197,6 +244,26 @@ Use `scripts/build_showcase.py RUN OUTPUT.mp4 --ffmpeg /path/to/ffmpeg --duratio
 The earlier `022250` take used native bridge SHA-256 `b799d1482911f62f975a1484bfc6e324d2baa246ff1cac05377bb672bde5e690`. Its real Zombie supplied random Wing (ability 15); shield ID 910 countered successfully while evolved. The 65-second process completed without fatal errors and preserved real saves. Its 20- and 30-second cuts remain private in the showcase directory.
 
 The final `025145` take uses native bridge `f94997d82877bcdce29ed8d8cb3741545f08044ad813fa61f59f9406c6314b2c`, with source-stage door decorations removed. A real Zombie supplied random Fire (ability 11), and retained shield 919 successfully countered while evolved. The 65-second process completed without fatal errors and preserved real saves. The selected video is `~/.local/share/kirby-dead-cells/showcase/kirby-dead-cells-clean-20s.mp4`: 20 seconds, 1024×768, 264 actual captured frames encoded at 15 fps, with original 48 kHz stereo effects. The universal-modder probe passed and `contact-clean-20s.png` was inspected. Absorption, evolution, parry, walking, jumping, flight, and original Fire attacks are visible.
+
+### Ability descriptions (2026-10-06)
+
+Issue #45. The pause card itself comes from #41 (PR #43, not yet on `main` at the
+time). These runs therefore used a local-only test branch: this branch merged with
+`fix/41-pause-ability-card`, never pushed. Same root, `repros/colorless-20261005`,
+with `KIRBY_LAB_CAPTURE_ALL=1 ... --start-game --input-plan ability --probe-hud
+--probe-pause` for 75 seconds. Every run ended by the expected timeout without
+fatal log lines and left the real saves unchanged.
+
+- `125345` Fire, `125617` Yo-Yo and `125747` Stone (the longest summary): the card
+  showed the ability name, "Copy ability", the summary and the controls line,
+  then the host's Colorless line. The host wrapped the text inside the card. Yo-Yo
+  was named "Yo-Yo".
+- `125923` Fire, after the controls line was shortened to fit one line (runtime
+  DLL `716140dae4c43f628687419a28c33417a13122b1b8b8cf1b66a3e1efb4d5fb4e`): the
+  captured card shows the summary on two lines and the controls on one.
+- `125501` Cook: the probe's attack presses used up single-use Cook before the
+  pause opened, so the card was the normal "Rusty Sword I". This is expected and
+  is not evidence for Cook's text.
 
 ## Recording-driven regressions
 
@@ -230,6 +297,29 @@ Run `20261005-205827` (runtime SHA-256 `3b2d1291428646fc59a38301f0e9e94204193f6b
 | Archer, jump-inhale, spit | `dc.en.Bullet` | Caught in the air; one star hit on the Archer for 52 (56 → 4) |
 
 All four hostile projectiles seen were paired; no hero-owned projectile was paired, but Kirby fired no bow in this run, so that exclusion was not exercised live. The process reached its time limit without fatal errors, and the real save inventories were unchanged.
+
+## Gold deposits
+
+`KIRBY_LAB_BREAKABLE_TARGET=gold` makes the `breakable` plan spawn a real
+`PileOfGold` at Kirby (constructor, then `init`), copy Sword, and tap attack until
+it breaks. `breakable-hits.jsonl` records each host `onDamage`; `breakable.json`
+counts `PileOfGold.dropLoot` calls. Separate data root `repros/gold-20261006`
+(the owner's play session held the main lab); the bridge was unchanged.
+
+```sh
+KIRBY_LAB_BREAKABLE_TARGET=gold python3 scripts/launch_runtime.py \
+  --data-root ~/.local/share/kirby-dead-cells/repros/gold-20261006 \
+  --seconds 60 --start-game --outfit KirbySuperStarUltra --input-plan breakable
+```
+
+| Run | Build | Result |
+| :--- | :--- | :--- |
+| `20261006-013823` | #35, attack held 130 frames | Two hits, life 4 → 2, two gold drops |
+| `013937` | #35, repeated attack | Four hits of 1 life each, life 4 → 0, pile destroyed, four gold drops |
+| `014052` | control: #35 pairing change reverted | No hits, life 4, no gold |
+
+Each run reached its time limit without fatal errors, and real saves were unchanged.
+`GoldNugget` and copy forms other than Sword were not run.
 
 ## Host elevators
 
@@ -311,6 +401,28 @@ python3 scripts/launch_runtime.py --data-root ~/.local/share/kirby-dead-cells/re
 | `20261006-002601` | `4967f6f4ac84` | 12-cell pool | 0 | Consumed 37 frames in, mouthful | No copy observed; Kirby kept the inhale pose after consumption (not investigated) |
 
 Every run kept the real saves unchanged and logged no fatal errors. Natural enemies near the pool hurt Kirby in some runs; the probe does not control them. Sword or other attacks on an enemy in water, and a walkway-over-pool site with the fixed bridge, were checked only in the native suite (`proxy_water_sword`, `proxy_water_below`), not live.
+
+## Ice host freeze (2026-10-06)
+
+Issue #42; behavior in [GAMEPLAY_FIDELITY.md](GAMEPLAY_FIDELITY.md#ice-freezes-with-the-host-status-intentional-deviation).
+The ability probe with `--probe-ability 10` now keeps the Zombie's full life. `KIRBY_LAB_TEST_TARGET_LIFE` sets a life that outlasts the breath. `ability-target-trace.jsonl` adds `hostFrozen`, `hostFreezeSeconds` and `sourceIceBlocks` (original objects running the frozen-block routine `0x021583EC`). `ability-target-affects.jsonl` logs every host status change and pop text on the target. All runs used the separate data root `repros/ice-freeze-20261006` with the shared bridge `654c2023ff6a…`, built from this branch's unchanged `lib.rs` (source `586a15a349c9…`).
+
+```sh
+KIRBY_LAB_TEST_TARGET_LIFE=2000 python3 scripts/launch_runtime.py --data-root <root> --seconds 80 \
+  --start-game --outfit KirbySuperStarUltra --input-plan ability --probe-ability 10 --capture-fps 10
+```
+
+| Run | Build | Target | Result |
+| :--- | :--- | :--- | :--- |
+| `20261006-124355` | First version: freeze only | Zombie, 130 life | Freeze 3.0 s on the first hit (frame 4383); killed on the fourth (4401). No original ice block in 2,606 traced frames. |
+| `20261006-124601`, `124804` | Same | 2,000 life | The freeze seemed continuous, but captures showed a "Slowed" pop on every hit. |
+| `20261006-125326` | Same, with the affect log | 2,000 life | Each later breath hit shattered the freeze (thaw slow 133, stun 8, "Slowed") and the next tick refroze it. This led to Frost-typed hits. |
+| `20261006-125935` | Frost hits (`5fc9c63bbf46…`) | 2,000 life | Freeze on at 4385. The next six hits (1962 → 1782) left it on; no "Slowed". It ended at 4564 (179 source frames) with one host thaw: "Slowed", slow 133 until 4634, stun 8 until 4601. Captures show the host ice encasement and freeze icon, with frost-coloured damage numbers. No original ice block. |
+| `20261006-130140` | Frost hits | Zombie, 120 life | Freeze on the first hit (4382); hits 38, 31, 31, 21 without a thaw; killed at 4400. The proxy was retired in the same tick (flags 80, then unbound). Captures show the normal host death and no ice block. No original ice block in 2,684 traced frames. |
+| `20261006-130608` | Final: freeze only after a host-resolved hit (`f11d17a85139…`) | 2,000 life | Same as `125935`: freeze on at 4382, seven hits (2000 → 1782) with no thaw, one natural thaw at 4562 (stun until 4598, slow until 4633). No original ice block in 2,763 traced frames. |
+| `20261006-130738` | Final | Zombie, 131 life | Freeze on the first hit (4382), hits 38, 31, 31, 31 with no thaw, killed at 4400. No original ice block in 2,845 traced frames. |
+
+Each run ended by the expected timeout, logged no fatal errors and left the real saves unchanged. The probe's incoming 10-damage hit took Kirby from 76 to 68 in these runs. Other branches' recent ability runs recorded 68–75 for the same hit, so this change did not cause the difference. Not run live: freeze resistance on bosses and Elites, the diminishing factor across repeated freezes, Ice against breakables and hazards, and an Ice kill other than the breath.
 ## Star projectiles
 
 `--input-plan stars` (`LabStarProbe`, issue #20) runs five phases with real Zombies:

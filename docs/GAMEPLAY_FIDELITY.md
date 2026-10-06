@@ -120,6 +120,21 @@ recording is the dropped Cudgel's sprite overlapping a standing Kirby; no guard
 input was involved. Live `20261006-004147` (Sword copy) and `20261006-004316`
 (base form) each took a Warrior's Shield, then swapped it for a Cudgel through the
 host replace dialog; see `docs/RUNTIME_LAUNCH.md`. Guard and parry code is unchanged.
+### Gold deposits (#35)
+
+Copied attacks reach a host entity only through a source proxy that
+`KirbyEnemies` pairs with it. Before #35 the pairing accepted mobs, doors,
+breakable props, explosive barrels and `isBreakableByHero` tiles, so the host
+gold deposits (`en.inter.PileOfGold`, `en.inter.GoldNugget`) were never hit by a
+copy attack; base-form host weapons broke them. Both now pair like breakable
+props: not inhalable, no copy, no touch damage. Per `hlboot.dat` both call
+`Entity.initLife` and `set_targetable(true)` in their constructors and drop gold
+from their own `onDamage`/`onDie`, so the host still decides every gold drop.
+Live (`docs/RUNTIME_LAUNCH.md`, "Gold deposits"): Sword Kirby broke a real
+`PileOfGold` in four hits (life 4 → 0, four host gold drops); the same fixture
+without the change did no damage. `GoldNugget` was not run live. Other host hittables outside the pairing list (`PiggyBank`,
+`Gift`, `BreakableWall`, `HiddenBlock`, `Flower`, …) are unchanged and unchecked.
+
 ### Star projectiles
 
 Issue #20. Kirby's stars act as host projectiles. The ROM still spawns, moves and
@@ -255,8 +270,9 @@ attack.
 Lethality stays in agreement. The paired source enemy receives the smallest HP
 whose truncated, scaled damage reaches the host's remaining life (rounded up from
 life ÷ combined multiplier and checked with the host's arithmetic). Original death
-reactions such as the Ice block therefore still occur in the tick of the host
-kill. Source HP stays clamped to the native range (32,760); a single-tick source
+reactions therefore still occur in the tick of the host kill. (Ice now leaves no
+original block; see [Ice freezes with the host status](#ice-freezes-with-the-host-status-intentional-deviation).)
+Source HP stays clamped to the native range (32,760); a single-tick source
 kill at that cap kills the host enemy.
 
 Unchanged: base-form host weapons, incoming damage, retained-shield parries, boss
@@ -346,6 +362,54 @@ therefore points that one table entry at the original return-zero stub
 `0x020CF36C` (`mov r0,#0; bx lr`) in emulated RAM, after validating both the stub
 and the entry. Kirby's swimming, the exit-water handler and other enemies' water
 reactions are unchanged. Water itself still works on Kirby as before.
+### Ice freezes with the host status (intentional deviation)
+
+Issue #42. In the original game an enemy reduced to zero HP by Ice becomes a
+kickable ice block; the runtime used to detach that source object so the block
+stayed in Dead Cells beside the host death. The owner asked for Dead Cells' own
+freeze status instead. Host routines were read from `hlboot.dat` (SHA-256
+`59350cad…07ce7e`) with crashlink:
+
+- `tool.weap.Freeze.onExecute` (Frost Blast) applies affect 23 for the weapon's
+  `props.duration` × `getDiminishingFactor(3, 1, 8)`. The MDK's v35 `data.cdb`
+  gives that duration as 3 s.
+- `Entity.getDiminishingFactor` counts uses per key; the count resets 5 s after
+  the last use.
+- `en.Mob.onAffectChange`: when affect 23 ends the host pops "Slowed" and applies
+  its thaw slow (133) and stun (8).
+- `MobAttackTarget.preHitResultUpdate`: a hit on a frozen mob removes affect 23
+  (the thaw above) unless the attack has tag 13 or its damage type is
+  `ExtraDamage`, `Poison`, `Bleed` or `Frost`; small hits that are not `Fire`
+  also leave it. The type is compared with the game's global enum value by
+  identity, so a newly allocated `Frost` value does not count.
+
+While the source step runs with Ice (ability 10), `KirbyEnemies.Complete`:
+
+- deals each copy hit as host `Frost` damage. `KirbyDamage.Frost` finds the
+  game's own singleton among the module globals (type `DamageType`, constructor
+  `Frost`). A continuing breath therefore damages a frozen enemy without
+  shattering the freeze, like the host's ice weapons; other attacks still
+  shatter it as usual.
+- freezes a host enemy that survives a hit the host resolved (not blocked or
+  parried) and is not already frozen: affect 23 for 3 s × the host diminishing
+  factor, as Frost Blast does. Host resistances apply inside `setAffectS`.
+  Unlike Frost Blast, it neither resets the factor after 18 s nor pops
+  "Resists" at factor 0.
+- retires the source object at once (`proxy_set(active=false)`) when the host
+  enemy dies, instead of detaching it, so the original ice block never appears.
+  The host death, loot and death effects are unchanged.
+
+Ice damage, its timing and the lethal hit still come from the original breath.
+Other abilities keep their original death remnants. Limit: the choice is made from
+Kirby's ability in that source step, so a non-breath kill while Kirby holds Ice
+(for example an Ice slide) also has no original remnant.
+
+Evidence: `nds_tests.py` case `proxy_ice_release` kills a 16-HP proxy with the
+original breath (11 + 5), retires it in the lethal frame and finds no object
+running the frozen-block routine `0x021583EC` in the 94 frames after. The same
+scan on the old detach path finds the block in all 94. Live runs are in
+[RUNTIME_LAUNCH.md](RUNTIME_LAUNCH.md#ice-host-freeze-2026-10-06).
+
 ### Vines (#25)
 
 `VineLadder.buildLadder` (run when the Vine rune grows a vine, and again on load
@@ -461,6 +525,24 @@ Live run `20261005-214713` took the T_Courtyard door: 148 of 149 cinematic polls
 were in the original Walk action (`0x060B`), facing right, with no Fall. Captured
 frames show changing walk poses up the steps until the fade. Exits where the
 host drops the hero, and walks to the left, have not been checked live.
+### Ability descriptions
+
+Issue #45. Intentional addition, mod-written text: these descriptions do not come
+from the ROM. The original game's ability explanations name DS buttons, which do
+not match Dead Cells bindings, so the owner chose text written for the mod's
+controls. `AbilityDescriptions` in `src/core/` holds one short summary per copy
+ability, followed by the shared line "Skill 1 or this button: attack. Skill 2:
+discard."
+
+The summaries name only well-established moves of the original game, such as
+Fire's dash fireball or Stone's drop, and give no damage numbers. Not every listed
+move has been checked live in the mod.
+
+They appear on the pause screen's ability card (#41). Cards describe their item
+through `InventItem.getGameplayDesc`; for the colorless stand-in, `KirbyHud`
+returns the current ability's text, and the host lays it out, wraps it and
+scrolls it. Nothing else describes the stand-in.
+
 ### HUD ability slot
 
 Issue #18. In copied form every weapon button whose slot does not hold a shield
@@ -480,11 +562,30 @@ the equipment Kirby cannot use while copied; shield slots keep the real shield.
   for colorless gear. It then puts the real item back as the slot's item, so
   inventory, equip and cooldown logic are unchanged, and hides ammo pips. Like
   colorless gear in Dead Cells, the background takes the color of the highest
-  scroll stat. With a tie the host picks Brutality, so a run with no scrolls shows
-  the gray frame on a red background.
+  scroll stat, paired with the colorless gray.
+  The slot's item is cleared before the stand-in is passed (#36). The host's
+  same-item-kind path in `useItem` colors the slot from its previous item before
+  switching. With the starting sword in the slot, that made every copy slot red.
+  Ties take the first tier the host lists; no tie has been run live since #36.
 - **Refresh:** the HUD is redrawn when the ability, its icon or the scroll tiers
   change. Base form, discard, ability loss and deactivation redraw the real
   equipment.
+- **Pause equipment screen (#41):** `ui.pause.DefaultPause` builds each weapon
+  card as a `ui.NewItemDesc` from the slot's item. While copied, the card of an
+  equipped non-shield weapon is built from the same colorless stand-in, then the
+  real item is put back. The host therefore draws the colorless card frame, its
+  own "Colorless (the highest level applies)" line, and the card's icon slot. The
+  existing `Skill.useItem` hook fills that slot with the original icon.
+  `KirbyHud` then renames the card's first two texts:
+  - The name becomes the ability (`YoYo` is shown as "Yo-Yo"). Only the name
+    inside the host markup changes, so the colorless name color stays.
+  - The main info line becomes "Copy ability". The stand-in sword's DPS does not
+    describe copy damage, which also includes the original-unit and Elite
+    scaling.
+
+  Shield cards, other equipment and base form are unchanged. Only cards whose
+  process is the pause screen are affected. An empty weapon slot, which also
+  fires the ability, keeps the host's empty card.
 
 Limits: the stand-in's own data (Brutality starting sword) is only drawn, never
 equipped. A host weapon that changes its own HUD icon (Shovel, via

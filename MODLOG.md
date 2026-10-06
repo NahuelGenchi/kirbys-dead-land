@@ -754,6 +754,48 @@ the all-ability rendering tests as full gameplay acceptance.
   spits hit the shooter for 52; the swallow gave no copy. Saves unchanged.
 
 
+## 2026-10-06 — Ice uses the host freeze status (#42)
+
+- Owner report: an Ice kill turned the Dead Cells enemy into the original ice
+  block instead of using Dead Cells' freeze. The runtime detached the source
+  object on the host death, so its original frozen block stayed.
+- Host routines read from `hlboot.dat` (`59350cad…07ce7e`) with crashlink:
+  `tool.weap.Freeze.onExecute` (affect 23, `props.duration` 3 s from the MDK
+  `data.cdb`, `getDiminishingFactor(3, 1, 8)`), `Entity.getDiminishingFactor`,
+  `en.Mob.onAffectChange` (thaw: "Slowed", slow 133, stun 8) and
+  `MobAttackTarget.preHitResultUpdate` (a hit shatters a freeze unless it is
+  `Frost`, `Poison`, `Bleed`, `ExtraDamage`, tag 13 or small and not `Fire`; the
+  type is compared by identity with the game's global value).
+- `src/core/IceFreeze.cs` and `KirbyEnemies.Complete`: while the source step has
+  Ice, copy hits are host `Frost` damage (`KirbyDamage.Frost` finds the game's
+  singleton among the module globals), a surviving unfrozen enemy gets affect 23
+  for 3 s × the host diminishing factor, and a host death retires the source
+  object at once instead of detaching it.
+- First live version froze only; the affect log (`125326`) showed every later
+  breath hit shattering and refreezing the enemy with a "Slowed" each time. The
+  Frost-typed hits fixed that (`125935`: one freeze, six hits, one natural thaw
+  after 179 source frames; `130140`: frozen kill with no original block). The
+  final build only freezes after a host-resolved hit and repeats both results
+  (`130608`, `130738`).
+- Native: new `proxy_ice_release` case; `tools/nds_tests.py` passes 74 cases.
+  `scripts/check.py` passes (228 assertions) and the Release runtime builds with
+  zero warnings. The shared bridge was built from this branch's unchanged
+  `lib.rs`.
+- Not run: bosses/Elites and freeze resistance, repeated freezes (diminishing
+  factor), Ice on breakables and hazards, Ice kills other than the breath.
+## 2026-10-06 — copy attacks break gold deposits (#35)
+
+- Owner report: with Wing copied, the host "Break" gold deposit never broke;
+  base-form weapons broke it.
+- Cause: `KirbyEnemies.Eligible` left out `PileOfGold` and `GoldNugget`, so no
+  source proxy existed for original attacks to hit. Both are now eligible.
+  Disassembly of `hlboot.dat` (constructors, `onDamage`, `canBeActivated`)
+  confirmed host life, targetable and gold drops in `onDamage`.
+- `LabBreakableProbe` gained `KIRBY_LAB_BREAKABLE_TARGET=gold`, which spawns a
+  real `PileOfGold` beside Kirby. Live (`repros/gold-20261006`): `013937` Sword
+  broke it in four hits with four gold drops; control `014052` without the
+  change: no damage. `GoldNugget` not run live.
+
 ## 2026-10-06 — Kirby rides host elevators (#28)
 
 - Owner recording 2026-10-05 23:51: the elevator left without Kirby, who then
@@ -948,3 +990,59 @@ the all-ability rendering tests as full gameplay acceptance.
   3.94 then Condor Head 7.64 px a frame; Wheel `124135` dash 3.94 then roll
   6.69 px a frame, stopping outside a wall. No fatal logs. Not run live: other
   abilities, slopes, ledges, Wheel turning. Details in `docs/GAMEPLAY_FIDELITY.md`.
+
+## 2026-10-06 — Ability descriptions (#45)
+
+- The owner asked whether the pause card says what each ability does; it did not.
+  The owner chose mod-written text over ROM text, because ROM text names DS
+  buttons.
+- `src/core/AbilityDescriptions.cs`: a short summary for each of the 24 abilities,
+  naming only well-established original moves in the mod's controls, plus a
+  shared "Skill 1 or this button: attack. Skill 2: discard." line. Tests cover all
+  24 IDs, length and host-markup characters.
+- `KirbyHud` hooks `InventItem.getGameplayDesc` for the colorless stand-in, so
+  the host's own card layout shows the text.
+- `python3 scripts/check.py` passes (226 core assertions; Release build 0
+  warnings/errors).
+- Live checks used a local-only merge with #41's branch: `125345` Fire, `125617`
+  Yo-Yo, `125747` Stone and `125923` Fire (final text). Real saves were unchanged.
+  Not every listed move has been checked live.
+## 2026-10-06 — Pause equipment card (#41)
+
+- The owner's recording showed the pause screen listing "Rusty Sword I" while
+  Kirby had Fire.
+- `ui.pause.DefaultPause` builds each card as a `ui.NewItemDesc` from the slot
+  item (DefaultPause.hx:210–218). The card's icon is its own `ui.hud.Skill`; its
+  name and main info are its first two direct `ui.Text` children.
+- `KirbyHud` hooks `NewItemDesc.onResize` for pause cards of an equipped
+  non-shield weapon while copied:
+  - It builds the card from the colorless stand-in, then restores the real item.
+    This gives the host colorless card and affix line, and the original icon
+    through the `Skill.useItem` hook.
+  - It renames the card in the host markup (`{Fire@CL}`) and replaces the DPS
+    line with "Copy ability".
+- Lab: `--probe-pause` opens the pause screen while copied and dumps each card's
+  tree.
+- `python3 scripts/check.py` passes (221 core assertions; Release build 0
+  warnings/errors).
+- Live checks:
+  - `124012`: Fire card in the colorless frame; shield and collar cards unchanged.
+  - `124145`: base form keeps "Rusty Sword I / 138 DPS".
+  - Real saves were unchanged.
+## 2026-10-06 — HUD slot stat color (#36)
+
+- The owner reported a red colorless ability slot while Survival was highest.
+- Cause: the host's `Skill.useItem` same-item-kind path (Skill.hx:540–545) calls
+  `setBgColors` before it assigns the new item, and `setBgColors` takes the tier
+  from the slot's current item. The `StartSword` stand-in matched the real starting
+  sword, so the colors came from that Brutality sword. The #18 runs could not show
+  this.
+- Fix: `KirbyHud` clears the slot item before passing the stand-in, so the host
+  takes its full path (item assigned first).
+- The HUD fixture now records the background shader colors.
+- `python3 scripts/check.py` passes (221 core assertions; Release build 0
+  warnings/errors).
+- Live checks:
+  - `013806` (tiers 1/1/5): Survival green `17ce75` + gray `b2c0dd`.
+  - `013956` (tiers 1/5/1): Tactics purple `a051ff` + gray.
+  - In both, discard restored the sword's red. Real saves were unchanged.
