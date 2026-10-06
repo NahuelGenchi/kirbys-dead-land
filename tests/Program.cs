@@ -62,6 +62,23 @@ Check(mouthful.Absorb(1) == "fire" && mouthful.Absorb(2) == "fire", "Two enemies
 Check(mouthful.Absorb(1) is null && mouthful.IsBaseForm, "Repeated capture neither rerolls nor transforms");
 mouthful.SetSourceAbility("ice");
 Check(mouthful.Absorb(3) is null, "Original transformation closes the inhale window");
+
+var cook = new KirbyRules(["cook"], _ => 0);
+cook.SetSourceAbility("cook");
+Check(cook.ClaimCookFood(10, boss: false, elite: false), "Cooked ordinary enemy drops food");
+Check(!cook.ClaimCookFood(10, boss: false, elite: false), "One cooked enemy cannot drop food twice");
+Check(cook.ClaimCookFood(11, boss: false, elite: false), "Each cooked enemy drops its own food");
+Check(!cook.ClaimCookFood(12, boss: true, elite: false), "Cooked boss drops no food");
+Check(!cook.ClaimCookFood(13, boss: false, elite: true), "Cooked elite drops no food");
+Check(!cook.ClaimCookFood(14, boss: true, elite: true), "Elite boss drops no food");
+Check(cook.ClaimCookFood(13, boss: false, elite: false), "Excluded elite does not reserve its ID");
+Check(cook.AbilityId == "cook" && cook.IsBaseForm == false, "Food claims do not change the copy form");
+cook.ResetForLevel();
+Check(cook.ClaimCookFood(10, boss: false, elite: false), "Entity IDs can drop food again after level transition");
+cook.Restore("cook", null);
+Check(cook.ClaimCookFood(10, boss: false, elite: false), "Restored slot clears food claims");
+cook.Reset();
+Check(cook.ClaimCookFood(10, boss: false, elite: false), "New run clears food claims");
 Check(ColorlessDamage.Tier(1, 1, 1) == 1 && ColorlessDamage.Tier(4, 9, 2) == 9 &&
       ColorlessDamage.Tier(7, 3, 5) == 7 && ColorlessDamage.Tier(2, 2, 6) == 6, "Colorless uses the highest scroll tier");
 Check(ColorlessDamage.Multiplier(1) == 1, "No scrolls keeps original damage");

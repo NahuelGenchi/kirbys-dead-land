@@ -70,6 +70,8 @@ internal static class LabSmokeCapture
             LabCombatProbe.Install(run);
         if (Environment.GetEnvironmentVariable("KIRBY_LAB_INPUT_PLAN") == "ability")
             LabAbilityProbe.Install(run);
+        if (Environment.GetEnvironmentVariable("KIRBY_LAB_INPUT_PLAN") == "cook")
+            LabCookProbe.Install(run);
         if (Environment.GetEnvironmentVariable("KIRBY_LAB_INPUT_PLAN") == "visual")
             LabVisualProbe.Install(run);
         if (Environment.GetEnvironmentVariable("KIRBY_LAB_INPUT_PLAN") == "breakable")
@@ -90,6 +92,7 @@ internal static class LabSmokeCapture
             frames++;
             LabCombatProbe.Poll();
             LabAbilityProbe.Poll();
+            LabCookProbe.Poll();
             LabVisualProbe.Poll();
             LabBreakableProbe.Poll();
             LabBossCrowdProbe.Poll();

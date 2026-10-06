@@ -98,6 +98,26 @@ Suplex, Yo-Yo, Wheel, Bomb, Ice, Fire, Plasma, Ninja, Stone, Wing, Jet, Copy,
 Sword, Hammer, Parasol, Paint, Mike, Crash, Cook and Sleep. Special states reached
 through those forms, such as riding the Wheel helper, execute in the ROM too.
 
+### Cook food drops (intentional addition)
+
+The original Cook consumes bound ordinary enemies (proxy flags 136) and pops out
+original food inside the ROM, which Kirby eats through source health. By owner
+request, each host enemy that Cook consumes also drops one Dead Cells healing food
+item. Just before the existing host kill, the adapter adds
+`LootType.InvItem(InventItem.fromItem(LootGen.getSmallHealingKind()))` to that
+mob's own loot. The host's death path (`Mob.onDie` → `dropLoot` →
+`Level.dropMobLoots` → `updatedDelayedLoots`) then creates an ordinary `ItemDrop`
+at the mob's last stable ground point with the host's normal loot scatter. The
+item follows the player's food option, and the host's interaction, heal amount
+and pickup rules apply unchanged. `KirbyRules.ClaimCookFood` allows one item per
+host entity ID until the next level, run or restore.
+
+Cook damage is unchanged. Bosses keep their original Cook resistance (the native
+`boss_cook` case records no damage and a rejected capture), so they neither take
+Cook damage nor drop food. Elites are consumed by Cook exactly as before and keep
+their own host loot, but receive no food; the host has no existing food drop rule
+for Bosses or Elites. Because the ROM's Cook food also remains, one Cook can heal
+Kirby twice: once from original food and once from host food.
 ### Colorless copy damage
 
 Intentional deviation from exact original damage, requested in issue #10. Copy
@@ -186,6 +206,17 @@ predates the original-unit scale from #3, so it shows the doubling, not today's
 absolute numbers. It also did not exercise empowered-state loss, save/resume or biome transitions live;
 the source rule tests cover those paths.
 See [HOST_BOUNDARY_TESTS.md](HOST_BOUNDARY_TESTS.md) for exact evidence.
+Live run `20261005-205320` (`--input-plan cook`) verified the Cook food path with
+one real Zombie. Cook consumed it (life 120), the mob's loot held exactly one food
+item when the host killed it, and exactly one new host `SmallMeat` `ItemDrop`
+appeared in a level that had none. The drop landed 104 px from the kill point,
+from the host's own loot scatter. Kirby reached it with original directions, and
+a real interact (R) press ran `Hero.pickItem`. Host and source health then rose
+together from 48 to 59. The earlier jump from 36 to 48 was the original Cook food.
+Earlier runs `204940` and `205147` repeated the single drop and pickup. In run
+`204739` the drop appeared but the fixture held R without a key-press edge, so
+no pickup occurred; that fixture was corrected. Bosses, Elites, several cooked
+enemies at once and save/resume with an uneaten drop were not exercised live.
 Ice damage and its surviving frozen block, background-effect placement, and an
 actual biome transition have passed live checks. The final native suite passes
 59 cases; source audio and host SDL coexistence tests also pass. Confirmed source

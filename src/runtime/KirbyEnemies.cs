@@ -2,6 +2,7 @@ using Entity = dc.Entity;
 using dc.en;
 using dc.en.inter;
 using dc.tool.atk;
+using HaxeProxy.Runtime;
 using Kirby.Core;
 
 namespace Kirby.Runtime;
@@ -153,7 +154,11 @@ public sealed class KirbyEnemies
             // destruction before ordinary inhale so it cannot award a copy.
             if (proxy.Gone && (proxy.Flags & 128) != 0)
             {
-                if (!mob.destroyed && mob.life > 0) mob.kill();
+                if (!mob.destroyed && mob.life > 0)
+                {
+                    if (mob is Mob cooked) AddCookFood(session, cooked);
+                    mob.kill();
+                }
                 Release(nds, i); continue;
             }
             if (proxy.Swallowed && mob is Mob absorbed)
@@ -207,6 +212,16 @@ public sealed class KirbyEnemies
             controlled[i] = sourceControls;
         }
         return copied;
+    }
+    /// <summary>
+    /// Cook's requested host reward: one host food item joins the cooked
+    /// enemy's own loot, so the host death path drops it at that enemy.
+    /// </summary>
+    private static void AddCookFood(KirbySession session, Mob mob)
+    {
+        if (!session.Rules.ClaimCookFood(mob.__uid, mob is dc.en.mob.Boss, mob.elite)) return;
+        var food = dc.tool.InventItem.Class.fromItem(dc.level.LootGen.Class.getSmallHealingKind(), 1);
+        mob.addToLoot(new dc.LootType.InvItem(food), Ref<bool>.In(false));
     }
     private static bool Eligible(Entity entity) => entity is Mob or Door or BreakableProp or ExplosiveBarrel || entity.isBreakableByHero();
     private static (double X, double Y) Distance(Entity entity, double heroX, double heroY) =>

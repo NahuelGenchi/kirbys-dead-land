@@ -110,6 +110,20 @@ The final physical-input test `025047` passed using native bridge `f94997d82877b
 
 The final `025627` test started from an empty private save directory with no automated input plan. The normal new-game path activated Kirby, kept the hero awake at full 76 health, and advanced the original engine normally. The incompatible host jump/dodge/helper tutorials did not appear; the ordinary `attackM` prompt remained available. The 45-second launch completed without fatal errors or changes to real saves. Both the preceding fixture profile and this fresh-profile smoke save were preserved by directory rename under `lab/checkpoints`; the final `lab/save` directory is empty for the user's New Game. `lab/final-stage.json` records the exact runtime/native/outfit hashes and preserved checkpoint path.
 
+`--start-game --input-plan cook` (`LabCookProbe`) checks Cook food drops. It
+hurts Kirby in base form with a 40-damage host hit, prepares original Cook through
+inhale, supplied content and Down, spawns one factory Zombie, and holds original
+B. It records new healing `ItemDrop`s, walks Kirby onto the food with original
+directions, and presses the real interact binding (`isDown` plus a `isPressed`
+edge). `cook-food.json` and `cook-events.txt` record the kill, the cooked mob's
+food loot, each new food item, the host `pickItem` call and every health change.
+A passing run has `victimFoodLoot` and `newFoodCount` equal to 1, a `pickedItem`,
+and matching host/source health rising after the pickup.
+
+Run `20261005-205320` passed: one `SmallMeat` dropped from the cooked Zombie and
+host pickup healed host and source 48 → 59. The original Cook food separately
+healed 36 → 48 before the pickup. The 75-second run finished without fatal errors
+and real saves were unchanged.
 ### Colorless copy damage (2026-10-05)
 
 Issue #10. These runs used a separate data root, `repros/colorless-20261005`, so

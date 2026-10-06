@@ -32,9 +32,12 @@ preserved; generated assets and native dependencies remain in the private data r
 - Original inhale, mouthful, Down-to-swallow, spit, flight, guard, slide and copy
   discard are executed by the ROM. All 24 original copy forms load through the
   original transformation code, rather than replacing them with host weapons.
-- Copy attacks count as colorless gear: original damage × 1.15^(tier − 1),
-  where tier is 1 + your highest scroll count (Brutality, Tactics or Survival).
-  With no scrolls, damage is exactly the original. See
+- Each ordinary enemy consumed by the original Cook also drops one Dead Cells
+  healing food item through the game's own loot drop. Cook's original damage is
+  unchanged; Bosses and Elites drop no food.
+- Copy attacks count as colorless gear: their damage is multiplied by
+  1.15^(tier − 1), where tier is 1 + your highest scroll count (Brutality,
+  Tactics or Survival). With no scrolls this factor is ×1. See
   [colorless copy damage](docs/GAMEPLAY_FIDELITY.md#colorless-copy-damage).
 
 ## Play
@@ -147,6 +150,12 @@ while playing Kirby; healing, equipment and interaction tutorials remain availab
 - Original Crash, Paint and Mike effects were verified in the running host game,
   with the HUD outside the background tint.
 - Original ladder, Suplex, Cook, helper and Wheel helper riding have source tests.
+- In live run `20261005-205320`, original Cook consumed a real Zombie and the host
+  dropped exactly one `SmallMeat` food item from that enemy's loot. Kirby walked
+  onto it and a real R press ran the host pickup, healing host and source health
+  together from 48 to 59 (15% of 76). Kirby also ate the original Cook food in the
+  ROM (36 to 48). Bosses and Elites were not exercised live; their exclusion has
+  source tests only.
   Enemy capacity supports 31 simultaneous native proxies; bosses use original
   capture resistance and source damage timing while retaining host AI.
 - In the real Concierge arena, original inhale could not capture the boss, while

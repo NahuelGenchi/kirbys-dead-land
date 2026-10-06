@@ -13,6 +13,7 @@ public sealed class KirbyRules
     private readonly string[] abilityIds;
     private readonly Func<int, int> chooseIndex;
     private readonly HashSet<long> consumedEnemies = [];
+    private readonly HashSet<long> cookedEnemies = [];
 
     public KirbyRules(IEnumerable<string> abilityIds, Func<int, int>? chooseIndex = null)
     {
@@ -112,6 +113,14 @@ public sealed class KirbyRules
     }
 
     /// <summary>
+    /// Decide whether an enemy actually consumed by the original Cook drops one
+    /// host food item. Bosses and Elites never do, and repeated notifications
+    /// for one entity cannot drop a second item. Cook damage is unaffected.
+    /// </summary>
+    public bool ClaimCookFood(long enemyId, bool boss, bool elite) =>
+        !boss && !elite && cookedEnemies.Add(enemyId);
+
+    /// <summary>
     /// Mirror a source transformation, including re-catching a discarded copy star.
     /// Only the swallow of a pending Elite empowers, and only if the original
     /// transform produced that Elite's ability; a re-caught star is never empowered.
@@ -144,10 +153,15 @@ public sealed class KirbyRules
         AbilityEmpowered = empowered;
         PendingEmpowerment = pendingEmpowerment;
         consumedEnemies.Clear();
+        cookedEnemies.Clear();
     }
 
     /// <summary>Entity IDs can be reused in a different level; equipment and copy state survive.</summary>
-    public void ResetForLevel() => consumedEnemies.Clear();
+    public void ResetForLevel()
+    {
+        consumedEnemies.Clear();
+        cookedEnemies.Clear();
+    }
 
     public void Reset()
     {
@@ -156,5 +170,6 @@ public sealed class KirbyRules
         PendingEmpowerment = null;
         RetainedShieldId = null;
         consumedEnemies.Clear();
+        cookedEnemies.Clear();
     }
 }
