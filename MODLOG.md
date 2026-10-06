@@ -928,3 +928,26 @@ the all-ability rendering tests as full gameplay acceptance.
   from behind through. Saves unchanged.
 - Not resolved: raising the shield while holding the opposite direction. The
   original guard keeps Kirby's facing while the host turns its shield.
+
+## 2026-10-06 — Pause equipment card (#41)
+
+- The owner's recording showed the pause screen listing "Rusty Sword I" while
+  Kirby had Fire.
+- `ui.pause.DefaultPause` builds each card as a `ui.NewItemDesc` from the slot
+  item (DefaultPause.hx:210–218). The card's icon is its own `ui.hud.Skill`; its
+  name and main info are its first two direct `ui.Text` children.
+- `KirbyHud` hooks `NewItemDesc.onResize` for pause cards of an equipped
+  non-shield weapon while copied:
+  - It builds the card from the colorless stand-in, then restores the real item.
+    This gives the host colorless card and affix line, and the original icon
+    through the `Skill.useItem` hook.
+  - It renames the card in the host markup (`{Fire@CL}`) and replaces the DPS
+    line with "Copy ability".
+- Lab: `--probe-pause` opens the pause screen while copied and dumps each card's
+  tree.
+- `python3 scripts/check.py` passes (221 core assertions; Release build 0
+  warnings/errors).
+- Live checks:
+  - `124012`: Fire card in the colorless frame; shield and collar cards unchanged.
+  - `124145`: base form keeps "Rusty Sword I / 138 DPS".
+  - Real saves were unchanged.

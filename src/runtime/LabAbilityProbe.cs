@@ -27,6 +27,8 @@ internal static class LabAbilityProbe
     private static int[]? scrolls;
     private static bool scrollsGiven;
     private static readonly bool hudFixture = Environment.GetEnvironmentVariable("KIRBY_LAB_TEST_HUD") == "1";
+    private static readonly bool pauseFixture = Environment.GetEnvironmentVariable("KIRBY_LAB_TEST_PAUSE") == "1";
+    private static bool pauseOpened;
     private static bool hudEquipped;
     private static uint? hudSettle;
     private static string? lastHud;
@@ -44,6 +46,16 @@ internal static class LabAbilityProbe
         string? requestedScrolls = Environment.GetEnvironmentVariable("KIRBY_LAB_TEST_SCROLLS");
         if (requestedScrolls is not null)
             scrolls = requestedScrolls.Split(',').Select(c => int.Parse(c, System.Globalization.CultureInfo.InvariantCulture)).ToArray();
+        if (pauseFixture)
+            KirbyHud.TestCardDrawn = (card, ability) => System.IO.File.AppendAllText(Path.Combine(output, "pause-cards.jsonl"),
+                JsonSerializer.Serialize(new
+                {
+                    frame = KirbyMod.Instance?.NativeProvider?.Machine?.State.Frame,
+                    ability,
+                    abilityId = KirbyMod.Instance?.ActiveSession?.Rules.AbilityId,
+                    item = card.ii?.getItemKind()?.ToString(),
+                    tree = Tree(card, 0),
+                }) + "\n");
         KirbyEnemies.TestObserver = (mob, sourceDamage, hostDamage) =>
         {
             var enemies = KirbyMod.Instance?.NativeProvider?.Enemies;
@@ -174,7 +186,13 @@ internal static class LabAbilityProbe
         }
         if (elapsed is >= 135 and < 225) return 2;
         // The HUD fixture later discards the copy (original Select) to check the slot returns to its weapon.
-        if (hudFixture && elapsed is >= 900 and < 904) return 4;
+        if (hudFixture && elapsed is >= 900 and < 904 && !pauseFixture) return 4;
+        if (pauseFixture && elapsed >= 700 && !pauseOpened)
+        {
+            // Open the normal pause/equipment screen while copied (its constructor pauses the game). The run ends paused.
+            pauseOpened = true;
+            _ = new dc.ui.pause.DefaultPause();
+        }
         if (elapsed == 226 && machine.State.Ability == 8) return 2;
         if (elapsed >= 350 && attacker is null)
         {
@@ -205,6 +223,23 @@ internal static class LabAbilityProbe
             frame = lastFrame, elapsed, action = machine.Action, ability = machine.State.Ability,
             x = (hero.cx + hero.xr) * 24, feet = (hero.cy + hero.yr) * 24, actors,
         }) + "\n");
+    }
+
+    /// <summary>A pause card's drawn objects: type, text and position, for locating the parts to verify.</summary>
+    private static object Tree(dc.h2d.Object node, int depth)
+    {
+        var children = node.children;
+        return new
+        {
+            type = node.GetType().Name,
+            text = node is dc.h2d.Text text ? text.text?.ToString() : null,
+            rawText = node is dc.ui.Text raw ? raw.rawText?.ToString() : null,
+            tile = node is dc.h2d.Bitmap bitmap ? bitmap.tile?.innerTex?.name?.ToString() : null,
+            x = node.x, y = node.y, node.visible,
+            children = depth >= 6 || children is null ? [] :
+                Enumerable.Range(0, children.length).Select(i => children.getDyn(i)).OfType<dc.h2d.Object>()
+                    .Select(child => Tree(child, depth + 1)).ToArray(),
+        };
     }
 
     /// <summary>Record each HUD weapon slot whenever its drawn state changes.</summary>
