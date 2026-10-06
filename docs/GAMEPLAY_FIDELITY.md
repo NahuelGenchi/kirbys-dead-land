@@ -440,6 +440,22 @@ the equipment Kirby cannot use while copied; shield slots keep the real shield.
 - **Refresh:** the HUD is redrawn when the ability, its icon or the scroll tiers
   change. Base form, discard, ability loss and deactivation redraw the real
   equipment.
+- **Pause equipment screen (#41):** `ui.pause.DefaultPause` builds each weapon
+  card as a `ui.NewItemDesc` from the slot's item. While copied, the card of an
+  equipped non-shield weapon is built from the same colorless stand-in, then the
+  real item is put back. The host therefore draws the colorless card frame, its
+  own "Colorless (the highest level applies)" line, and the card's icon slot. The
+  existing `Skill.useItem` hook fills that slot with the original icon.
+  `KirbyHud` then renames the card's first two texts:
+  - The name becomes the ability (`YoYo` is shown as "Yo-Yo"). Only the name
+    inside the host markup changes, so the colorless name color stays.
+  - The main info line becomes "Copy ability". The stand-in sword's DPS does not
+    describe copy damage, which also includes the original-unit and Elite
+    scaling.
+
+  Shield cards, other equipment and base form are unchanged. Only cards whose
+  process is the pause screen are affected. An empty weapon slot, which also
+  fires the ability, keeps the host's empty card.
 
 Limits: the stand-in's own data (Brutality starting sword) is only drawn, never
 equipped. A host weapon that changes its own HUD icon (Shovel, via

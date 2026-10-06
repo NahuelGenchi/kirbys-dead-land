@@ -35,6 +35,7 @@ Relevant environment variables are used only by the lab helper:
 - `KIRBY_LAB_TEST_ABILITY`: optional source ability ID for the ability probe, exposed as `--probe-ability 2..25`. The probe prepares it through original inhale, supplied swallowed content, and Down before measuring combat. The separate `combat` probe uses a real enemy's random copy result.
 - `KIRBY_LAB_TEST_SCROLLS`: optional `B,T,S` scroll counts for the ability probe, exposed as `--probe-scrolls`. Before measuring, the probe adds that many real `BrutalityUp`, `TacticUp` and `SurvivalUp` items (`InventItem.fromItem`) through the normal inventory and calls the host's `Hero.computeTiers`. `ability-damage.json` then records the tiers, the host and core colorless multipliers, and each copy hit's source HP drop and host damage.
 - `KIRBY_LAB_TEST_HUD=1`: with the ability probe, exposed as `--probe-hud`. After the new run settles, it adds a real `StartShield` beside the starting sword through the normal inventory. It later discards the copy with the original Select button, and writes `hud.jsonl` whenever a HUD weapon slot changes: real item, slot item, icon texture, frame group, icon size and scale, and ammo flag. Each distinct decoded icon is saved as private `hud-icon-<hash>.rgba`.
+- `KIRBY_LAB_TEST_PAUSE=1`: with `--probe-hud`, exposed as `--probe-pause`. At 700 probe frames it opens the normal pause screen (`new DefaultPause()`, whose constructor pauses the game), instead of the discard. It writes `pause-cards.jsonl` for every pause equipment card: whether it was drawn as the ability, the real item, and the card's object tree with texts. The run ends paused; set `KIRBY_LAB_CAPTURE_ALL=1` to capture the paused screen.
 - `KIRBY_LAB_COMBAT_ELITE=1`: with the `combat` plan, makes the swallowed Zombie an Elite (Elite skills disabled) and records in `combat.json` whether the copy was empowered and the damage that the second Zombie takes from each hit. Set it in the environment of `launch_runtime.py`.
 - `KIRBY_LAB_PLAY=1`: keep outfit selection but disable all smoke capture and automatic input.
 
@@ -188,6 +189,31 @@ Earlier attempts while building the fixture are not evidence:
 The lab-added shield never reached its HUD slot (`slotItem` null) in any run. This
 fixture limitation means the shield slot's own drawing was not observed.
 
+### Pause equipment card (2026-10-06)
+
+Issue #41. Same root, `repros/colorless-20261005`. Bridge from current `main`'s
+`src/nds/lib.rs`: `3b9f9055b3a69290947e5a147afa363382de0c7156b4c7a53459cd0f1f4c57b1`. Runtime DLL: `af89b15e2ae9624e3d442bc8cb407bbc289dd4c5d343d38e1d74fa78429c1f1d`.
+Each run used `--start-game --input-plan ability --probe-hud --probe-pause` for 75
+seconds with `KIRBY_LAB_CAPTURE_ALL=1`, the starting sword in the Left-Click slot
+and the shield beside it. Each ended by the expected timeout without fatal log
+lines and left the real saves unchanged.
+
+- `124012` (`--probe-ability 11 --probe-scrolls 0,0,4`): the pause opened as Fire
+  Kirby (source frame 5119).
+  - The `StartSword` card was drawn as the ability: name markup `{Fire@CL}`
+    (shown in `#D8D8D8`), main line "Copy ability", the host's "Colorless (the
+    highest level applies)" line, and the original Fire icon in the card's icon
+    slot.
+  - The captured screen shows that card in the gray colorless frame beside the
+    unchanged "Old Wooden Shield I" and "Prisoner's Collar I" cards.
+- `124145` (no ability): the same fixture in base form drew the normal "Rusty
+  Sword I / 138 DPS" card.
+
+Earlier attempts while building this:
+- `123608`: before relabeling. It showed "Rusty Sword I / 241 DPS" on the
+  colorless card.
+- `123814`: `ui.Text.set_text` escaped raw HTML, so the name showed literal tags.
+  Fixed by editing the host's own markup (`rawText`).
 Correction (#36): the red background in `215606` and `215830` was not the highest
 stat. Both runs had the starting sword in the slot, the same kind as the
 `StartSword` stand-in. Through the host's same-item-kind path, the colors then came
