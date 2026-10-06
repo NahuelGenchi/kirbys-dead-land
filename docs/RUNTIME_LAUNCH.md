@@ -188,6 +188,27 @@ Earlier attempts while building the fixture are not evidence:
 The lab-added shield never reached its HUD slot (`slotItem` null) in any run. This
 fixture limitation means the shield slot's own drawing was not observed.
 
+Correction (#36): the red background in `215606` and `215830` was not the highest
+stat. Both runs had the starting sword in the slot, the same kind as the
+`StartSword` stand-in. Through the host's same-item-kind path, the colors then came
+from the real Brutality sword. The owner saw the same red with Survival highest.
+
+### HUD slot stat color (2026-10-06)
+
+Issue #36. Same root. Bridge rebuilt from current `main`'s `src/nds/lib.rs`:
+`3b9f9055b3a69290947e5a147afa363382de0c7156b4c7a53459cd0f1f4c57b1`. Runtime DLL: `86f969f092cc464cf225affea2d2e0d06b4906413aab9b918fc42d8df1bae779`. Each run used
+`--start-game --input-plan ability --probe-ability 18 --probe-hud` for 90 seconds,
+with the starting sword in the Left-Click slot. Each ended by the expected timeout
+without fatal log lines and left the real saves unchanged. `hud.jsonl` now records
+the slot's two background shader colors.
+
+- `013806` (`--probe-scrolls 0,0,4`, tiers 1/1/5): the copied Sword slot had
+  colors `17ce75` (Survival green) and `b2c0dd` (colorless gray), and the captured
+  frame shows the green background. The starting sword's `ec2424` red returned
+  after the discard.
+- `013956` (`--probe-scrolls 0,4,0`, tiers 1/5/1): `a051ff` (Tactics purple) and
+  `b2c0dd`; `ec2424` again after the discard.
+
 ## Private showcase capture
 
 `--capture-fps 15` records actual gameplay framebuffer frames and the original PCM submitted by the mod. It leaves desktop audio untouched. The capture manifest records wall-clock timestamps; machine/RAM diagnostic snapshots remain limited to every two seconds. The optional combat take adds walking, jumping, floating, and attacks after absorption/parry. Normal play never enables these helpers.

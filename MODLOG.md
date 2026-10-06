@@ -928,3 +928,21 @@ the all-ability rendering tests as full gameplay acceptance.
   from behind through. Saves unchanged.
 - Not resolved: raising the shield while holding the opposite direction. The
   original guard keeps Kirby's facing while the host turns its shield.
+
+## 2026-10-06 — HUD slot stat color (#36)
+
+- The owner reported a red colorless ability slot while Survival was highest.
+- Cause: the host's `Skill.useItem` same-item-kind path (Skill.hx:540–545) calls
+  `setBgColors` before it assigns the new item, and `setBgColors` takes the tier
+  from the slot's current item. The `StartSword` stand-in matched the real starting
+  sword, so the colors came from that Brutality sword. The #18 runs could not show
+  this.
+- Fix: `KirbyHud` clears the slot item before passing the stand-in, so the host
+  takes its full path (item assigned first).
+- The HUD fixture now records the background shader colors.
+- `python3 scripts/check.py` passes (221 core assertions; Release build 0
+  warnings/errors).
+- Live checks:
+  - `013806` (tiers 1/1/5): Survival green `17ce75` + gray `b2c0dd`.
+  - `013956` (tiers 1/5/1): Tactics purple `a051ff` + gray.
+  - In both, discard restored the sword's red. Real saves were unchanged.
