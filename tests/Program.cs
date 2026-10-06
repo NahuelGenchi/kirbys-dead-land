@@ -478,14 +478,35 @@ Check(SpeedMatch.Brakes(KirbyActions.Dash, 0, 528) && SpeedMatch.Brakes(KirbyAct
 Check(!SpeedMatch.Brakes(KirbyActions.Dash, 1, 528) && !SpeedMatch.Brakes(KirbyActions.Slide, 0, 704) && !SpeedMatch.Brakes(0x0B1A, 0, 300),
     "Held directions, slides and recoils keep their velocity");
 Check(!SpeedMatch.Brakes(KirbyActions.Ability, 0, 2048) && SpeedMatch.Move(KirbyActions.Ability, 1, 2048, 300, 700, 308, 698, MFlat) == (308, 698),
-    "Ability moves (Wheel, Jet, Yo-Yo, Suplex dashes) keep their original velocity and motion");
+    "Ability moves slower than the dash, not started from one, keep their original velocity and motion");
 {
     var actions = new SpeedMatch.ActionFilter();
     actions.Next(KirbyActions.Float);
     bool exhale = actions.Next(KirbyActions.Ability) == KirbyActions.Float && actions.Next(KirbyActions.Ability) == KirbyActions.Float;
     bool after = actions.Next(KirbyActions.Standing) == KirbyActions.Standing && actions.Next(KirbyActions.Ability) == KirbyActions.Ability;
     Check(exhale && after, "The exhale ending a float moves like floating; an attack from the ground keeps the ability action");
+    actions.Reset();
+    actions.Next(KirbyActions.Dash, -528);
+    bool attack = actions.Next(KirbyActions.Ability, 256) == SpeedMatch.Carry && actions.Direction(1) == -1 &&
+                  actions.Next(KirbyActions.Ability, 0) == SpeedMatch.Carry && actions.Direction(0) == -1;
+    bool ends = actions.Next(KirbyActions.Standing) == KirbyActions.Standing && actions.Direction(1) == 1 &&
+                actions.Next(KirbyActions.Ability) == KirbyActions.Ability && actions.Direction(0) == 0;
+    Check(attack && ends, "An ability used straight from a dash carries Kirby in the dash's direction until it ends");
+    actions.Reset();
+    bool belowDash = actions.Next(KirbyActions.Ability, 256) == KirbyActions.Ability && actions.Next(KirbyActions.Ability, -528) == KirbyActions.Ability;
+    bool roll = actions.Next(KirbyActions.Ability, -896) == SpeedMatch.Carry && actions.Direction(1) == -1 &&
+                actions.Next(KirbyActions.Ability, 100) == SpeedMatch.Carry && actions.Direction(0) == -1 &&
+                actions.Next(KirbyActions.Ability, 896) == SpeedMatch.Carry && actions.Direction(-1) == 1;
+    Check(belowDash && roll, "An ability move faster than the dash (Wheel's roll) carries Kirby, turning with him");
 }
+var mAttack = SpeedMatch.Move(SpeedMatch.Carry, 1, 1024, 300, 720, 304, 720, MFlat);
+Check(MNear(mAttack.X - 300, 4 * SpeedMatch.GroundScale) && mAttack.Feet == 720 && !SpeedMatch.Brakes(SpeedMatch.Carry, 0, 1024) &&
+      SpeedMatch.Move(SpeedMatch.Carry, 1, -256, 300, 720, 299, 720, MFlat).X == 299,
+    "A carrying move keeps its lead over the run whatever is held; motion back keeps its original speed");
+var mHop = SpeedMatch.Move(SpeedMatch.Carry, 1, 384, 300, 720, 301.5, 719.1, MFlat);
+Check(MNear(mHop.X - 300, 1.5 * SpeedMatch.GroundScale) && mHop.Feet == 719.1 &&
+      MNear(SpeedMatch.Move(SpeedMatch.Carry, 1, 512, 420, 720, 422, 720, MWall).X, 432 - SpeedMatch.HalfWidth - SpeedMatch.Margin),
+    "A carrying move keeps the original's hops and stops a pixel short of a wall");
 Check(SpeedMatch.RiseVelocity(KirbyActions.Jump, -2682) == -2682 && SpeedMatch.RiseVelocity(KirbyActions.Jump, -744) == SpeedMatch.JumpRiseVelocity &&
       SpeedMatch.RiseVelocity(KirbyActions.Jump, -940) == -940 + SpeedMatch.JumpGravity && SpeedMatch.RiseVelocity(KirbyActions.Jump, 100) == 100 &&
       SpeedMatch.RiseVelocity(KirbyActions.Float, -546) == -546, "The jump keeps its take-off, then rises and peaks at the Beheaded's tempo");

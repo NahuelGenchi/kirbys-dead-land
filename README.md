@@ -92,8 +92,10 @@ falls at 403 px/s, stomps at the dive's 900 px/s, climbs at 97.5 px/s and
 floats across at running speed. He climbs ladders, chains and vines grown with
 the Vine rune, and climbs from a vine onto the ledge it leads to. He stops when the direction is released and
 turns at once, and his jump keeps its height but peaks as fast as the
-Beheaded's. His animations are the original ones; the walk and dash cycles
-play faster with the run so his feet keep up.
+Beheaded's. Dash attacks, Wheel's roll and other copy-ability moves faster
+than his dash keep their original lead over the run. His animations are the
+original ones; the walk and dash cycles play faster with the run so his feet
+keep up.
 
 As in Dead Cells, touching an enemy does not hurt Kirby: only enemy attacks do
 (and the few Dead Cells enemies whose bodies are spiked or electric). Bumping
@@ -243,7 +245,8 @@ dotnet run --project tests/speed -c Release -- \
 
 `tests/speed` runs Kirby's movement on the original controller with the speed
 match and checks it against the Beheaded's measured speeds, walls, ceilings,
-slopes, ledges and one-way platforms, and that thrown objects and attached
+slopes, ledges and one-way platforms, that dash attacks and Wheel's roll keep
+their original lead over the run, and that thrown objects and attached
 effects (Bomb's bombs, Fire's and Plasma's head emitters) keep their original
 places as the source window moves, that Kirby stays framed on the original
 screen, and that his walk cycle keeps up with the run.
