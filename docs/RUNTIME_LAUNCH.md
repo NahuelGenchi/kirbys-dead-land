@@ -30,7 +30,7 @@ Relevant environment variables are used only by the lab helper:
 - `KIRBY_LAB_RESUME_GAME=1`: call the game's normal saved-run launch action once.
 - `KIRBY_LAB_SAVE_AFTER`: request a normal host save after this many original engine frames.
 - `KIRBY_LAB_OUTFIT`: outfit ID assigned before starting that private run.
-- `KIRBY_LAB_INPUT_PLAN`: `movement`, `combat`, `ability`, `visual`, `breakable`, `boss`, `crowd`, `aim`, `repro`, or `hazard`, for a reproducible offscreen test. `repro` tests normal keyboard/controller bindings and keeps the normal tutorials.
+- `KIRBY_LAB_INPUT_PLAN`: `movement`, `combat`, `ability`, `visual`, `breakable`, `boss`, `crowd`, `aim`, `repro`, `hazard`, or `stars`, for a reproducible offscreen test. `repro` tests normal keyboard/controller bindings and keeps the normal tutorials.
 - `KIRBY_LAB_TEST_ABILITY`: optional source ability ID for the ability probe, exposed as `--probe-ability 2..25`. The probe prepares it through original inhale, supplied swallowed content, and Down before measuring combat. The separate `combat` probe uses a real enemy's random copy result.
 - `KIRBY_LAB_TEST_SCROLLS`: optional `B,T,S` scroll counts for the ability probe, exposed as `--probe-scrolls`. Before measuring, the probe adds that many real `BrutalityUp`, `TacticUp` and `SurvivalUp` items (`InventItem.fromItem`) through the normal inventory and calls the host's `Hero.computeTiers`. `ability-damage.json` then records the tiers, the host and core colorless multipliers, and each copy hit's source HP drop and host damage.
 - `KIRBY_LAB_TEST_HUD=1`: with the ability probe, exposed as `--probe-hud`. After the new run settles, it adds a real `StartShield` beside the starting sword through the normal inventory. It later discards the copy with the original Select button, and writes `hud.jsonl` whenever a HUD weapon slot changes: real item, slot item, icon texture, frame group, icon size and scale, and ammo flag. Each distinct decoded icon is saved as private `hud-icon-<hash>.rgba`.
@@ -230,6 +230,48 @@ Run `20261005-205827` (runtime SHA-256 `3b2d1291428646fc59a38301f0e9e94204193f6b
 
 All four hostile projectiles seen were paired; no hero-owned projectile was paired, but Kirby fired no bow in this run, so that exclusion was not exercised live. The process reached its time limit without fatal errors, and the real save inventories were unchanged.
 
+## Star projectiles
+
+`--input-plan stars` (`LabStarProbe`, issue #20) runs five phases with real Zombies:
+
+1. **Spit, paired target:** Kirby inhales one Zombie 36 px ahead, then spits the original star at a second Zombie 150 px ahead.
+2. **Spit, unpaired target:** the same, with the target kept without a source object (`KirbyEnemies.TestUnpaired`).
+3. **Discarded star:** Kirby swallows a Zombie for a copy, then SELECT discards the star backwards through a Zombie 60 px behind him.
+4. **Spit into a wall:** the probe searches the host collision map for a flat floor ending in a solid wall at least six cells tall, places Kirby five to seven cells from it facing the wall, and spits.
+5. **Discarded star into a wall:** at the same wall, with Kirby facing away.
+
+Enemy AI is locked until each star is fired. Targets get 5000 life, so a star does not kill them and their stagger stays visible. `stars.json` records, per phase:
+- the strikes reported by `KirbyStars.TestObserver`, and whether each went through the source object;
+- target life;
+- the first and last source frames with Stun (affect 8), and whether affect 16 was set;
+- the target's displacement 12 frames after the hit;
+- every star's host box per source frame, and its horizontal turns.
+
+The run used a separate data root, `repros/stars-20261005`, so the owner's main lab was not restaged.
+
+```sh
+python3 scripts/stage_runtime.py --data-root ~/.local/share/kirby-dead-cells/repros/stars-20261005 \
+  --original-runtime --outfit-pack "$HOME/.local/share/kirby-dead-cells/outfit-build/res.pak"
+python3 scripts/launch_runtime.py --data-root ~/.local/share/kirby-dead-cells/repros/stars-20261005 \
+  --seconds 150 --start-game --outfit KirbySuperStarUltra --input-plan stars
+```
+
+Earlier probe versions:
+- `20261005-220106` (three phases): every star killed its Zombie outright. The paired hit in phase 1 was not recognized as a star hit, because a lethal source hit removes the target's own collision records in that frame. The adapter now also tests the enemy's host-sized box, and targets get 5000 life.
+- `220438` (three phases): all three passed with stun and affect 16.
+- `221013` (five phases): phases 1–3 and 5 passed. Phase 4 turned Kirby toward the wall but spawned its victim from `hero.dir`, which stayed +1, so it was never inhaled and the phase timed out. The bridge's facing byte read 0 for all 7151 traced frames, including left-facing ones. Wall phases now use the side they turned Kirby to.
+
+Run `20261005-221418` passed all five phases with Kirby at 76/76. It used runtime SHA-256 `21773889b035b4f05f10847e85778544a623d1a7ab3920f4e148edc03d52dd1d` and bridge `278518576c2174c65c9041a3577bdb7fbe1361aef45ed13416618ff7a80652a0`, unchanged by this work.
+
+| Phase | Result |
+| :--- | :--- |
+| Spit, paired target | Source path, 182 damage (5000 → 4818); Stun frames 4463–4523; affect 16; moved 5 px with the original recoil |
+| Spit, unpaired target | Host path, 182 damage; Stun 4697–4758; affect 16; pushed 25 px away |
+| Discarded Parasol star | Host path, 182 damage; Stun 5007–5066; affect 16; pushed 27 px away; four floor bounces 64 frames apart |
+| Spit into a wall (face x 984) | The star's last box was 974–994, centered on the wall face; no turn |
+| Discarded Sword star into the same wall | Turned with its left edge at 983, then came back |
+
+The process reached its time limit without fatal errors, and the real save inventories were unchanged. The captures show the discarded star above Kirby right after SELECT. Near the wall, about 156 px from Kirby, no star is drawn, because the original leaves objects outside its 256-pixel screen out of OAM.
 ## Exit-door walk (2026-10-05)
 
 Issue #17. The lifecycle probe (`KIRBY_LAB_LIFECYCLE=1`) now places Kirby 1.5

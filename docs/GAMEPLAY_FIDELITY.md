@@ -27,6 +27,7 @@ in [NDS_BRIDGE.md](NDS_BRIDGE.md). The original bootstrap experiment remains in
 | Sound | Original stereo sound effects continue; the source music player is muted so Dead Cells music remains |
 | Enemy collision | Live host enemies have paired source collision objects with their host dimensions; original routines resolve damage cadence, suction, grabs, throws and Cook |
 | Enemy projectiles | Live hostile host arrows/grenades have paired copyless source objects; original suction, mouthful, spit star and swallow decide their fate |
+| Star projectiles | The ROM moves Kirby's spit, big spit and discarded ability stars through host terrain (spit stars burst on walls, the ability star bounces). Each star strikes host enemies once and staggers them with the host dive's stun and bump; paired enemies take spit-star damage through their source object, all others from the host (see below) |
 | Boss collision | Original resistance bits prevent inhale, Suplex capture and Cook; damage still uses original collision/debounce, while the host retains boss AI and phases |
 | Host triggers | Pressure plates (trap plates and pulley points too) and hidden triggers test Kirby's physical foot on the ground, as for the Beheaded; enemy attacks still test the projected original hurtbox |
 | Facing | The host hero's direction follows the original facing (bit 31 of player+0x6C) every source frame, so host shields block, and base-form host weapons aim, the way Kirby faces |
@@ -103,6 +104,58 @@ reward. The host then shows its own "Can't use that right now" message, leaves
 the item in place and charges nothing. Shield identity uses the physical item's permanent ID. Source copy
 loss, discarded-star recovery, helper creation and limited-use ability expiration
 update the same equipment policy.
+
+### Star projectiles
+
+Issue #20. Kirby's stars act as host projectiles. The ROM still spawns, moves and
+removes them. The host terrain window is their world, so the wall behavior is
+original. The three original objects, told apart by their update routine
+(`src/core/StarProjectiles.cs`), measured in the native bridge:
+
+| Original object | Routine | Damage word | Enemies | Walls |
+|---|---|---|---|---|
+| Spit star (one object in the mouth) | `0x020BD718` | 52 | Bursts on the first enemy, in the frame of the hit | Bursts when its center reaches the wall |
+| Big spit star (two or more) | `0x020BDD08` | 60 | Passes through, hitting each enemy it crosses | Bursts |
+| Discarded ability star (SELECT, or a hit that knocks the copy off) | `0x02166A54` | 0 | Passes through without damage | Bounces off walls and floors |
+
+The spit stars do not bounce in the ROM, so the adapter does not make them
+bounce. After every source frame `KirbyStars` reads each star's original hit
+records from the native hit list and strikes host enemies with them:
+
+- **Paired enemies, spit stars:** the original collision stays the authority.
+  The star's 52 or 60 source damage reaches the host through the existing
+  source-HP-delta path, and the single star bursts on the source object as in
+  the ROM. When that HP drop coincides with a spit star touching the enemy's
+  source body (or, for a lethal hit, whose body records are already gone, its
+  host-sized box), the host adds the stagger below.
+- **Enemies without a source object** (outside the pairing window, or beyond
+  the 31 slots): the host applies the star's own original damage word, converted
+  as a paired enemy's HP drop would be (unit scale, Elite and colorless
+  multipliers). The ROM star does not burst on them.
+- **Discarded ability star, every enemy (intentional deviation):** the original
+  star is a harmless collectible. By owner request it strikes each host enemy it
+  crosses once for 52 source damage, the single spit star's original value. It
+  keeps bouncing and can still be inhaled again to recover the ability.
+
+The host strikes each enemy at most once per star (`StarStrikes`). On a paired
+enemy the original collision decides how often a big star hits: `star_big`
+recorded five 60-damage hits on one boss-mode proxy. The stagger is applied once
+per star. Stagger follows the
+host's own dive landing (`tool.mainSkills.DiveAttack.onOwnerLand`, read from
+`hlboot.dat`). Before the hit come affect 16 for 0.7 s and a horizontal
+`bump` of 0.2–0.3 away from the star. After a successful hit comes Stun
+(affect 8) for the `DiveAttack` skill's `props.affect` of 1 s, times
+`getDiminishingFactor(9, 3, 6)`. Host resistances, such as bosses, apply
+inside those host calls. While the original recoil of a source hit holds a
+paired enemy, the source controls its position, so that enemy moves with the
+original recoil (5 px measured) instead of the host bump.
+
+Limits: the original culls objects outside its 256-pixel screen from OAM, so a
+star more than about 128 px from Kirby keeps flying and striking but is not
+drawn. The ability star's room edge is the edge of the 100×9 source terrain
+window, which starts 16 cells to Kirby's left. In the bridge it bounced off
+that left edge, not a host wall, so far from Kirby it can turn in open air. A star that hits an unpaired enemy does not burst on it. Only Zombies
+were struck live.
 
 ### Elite Sword (intentional deviation)
 
@@ -323,7 +376,7 @@ provider resets the host direction to Kirby's facing every source frame. The
 direction a hit is checked against in that case was not measured.
 Ice damage and its surviving frozen block, background-effect placement, and an
 actual biome transition have passed live checks. The final native suite passes
-61 cases; source audio and host SDL coexistence tests also pass. Confirmed source
+68 cases; source audio and host SDL coexistence tests also pass. Confirmed source
 death ends the host run, and an actual new run resets Kirby's state. Cook's
 temporary invulnerability preserves health through its persistent health group.
 The host scenery blend has continuous RGB precision, whereas the original uses
@@ -337,6 +390,25 @@ grenade left Kirby in base form with no copy. Only `EnemyGrenade` and the
 Archer's plain `Bullet` were exercised live; other bullet subclasses (homing,
 piercing, boss bullet patterns), Kirby's own bow arrows near the inhale box,
 and saving during a projectile's suction were not.
+Live run `20261005-221418` (`--input-plan stars`, issue #20) checked the star
+projectiles with real Zombies given 5000 life, so that their stagger was
+visible. In five phases, with Kirby at 76/76 throughout:
+- A spit star hit a paired Zombie through its source object for 182 host
+  damage. It was stunned (affect 8) and given affect 16, and it moved 5 px with
+  the original recoil.
+- A spit star struck a Zombie kept without a source object for 182 through the
+  host path. It was stunned and pushed 25 px away.
+- A discarded Parasol star crossed a Zombie behind Kirby for 182. It was stunned
+  and pushed 27 px away, while the star bounced on the host floor every 64 frames.
+- Beside a real level wall, a spit star burst with its center on the wall face.
+- A discarded Sword star bounced off the wall face (its left edge at 983, the
+  wall at 984).
+
+Stun lasted about one second (59–61 source frames in that run, 85–88 in the
+earlier run `221013`). Big stars, bosses, Elites, other enemy types, several
+enemies struck by one star, and save/resume with a star in flight were not
+exercised live; the native `star_big` case covers the big star's original
+damage and piercing.
 Complete one-to-one behavior for every host enemy, hazard,
 item and boss has not been established. These boundaries must remain explicit;
 a successful native or renderer test alone is not proof of every host interaction.
