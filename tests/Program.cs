@@ -13,20 +13,24 @@ Check(rules.IsBaseForm, "Start in base form");
 Check(rules.CanEquip(HostWeaponKind.Sword) && rules.CanEquip(HostWeaponKind.Bow) &&
       rules.CanEquip(HostWeaponKind.Shield), "Base equipment whitelist");
 Check(!rules.CanEquip(HostWeaponKind.Other), "Reject unsupported host equipment");
-Check(rules.EquipShield("shield-42"), "Record base-form shield");
+rules.EquipShield("shield-42");
+Check(rules.RetainedShieldId == "shield-42", "Record base-form shield");
 Check(rules.ResolveAttack(HostWeaponKind.Sword) == AttackRoute.HostWeapon, "Base sword");
 Check(rules.ResolveAttack(HostWeaponKind.Bow) == AttackRoute.HostWeapon, "Base bow");
 Check(rules.Absorb(100) == "fire", "Confirmed enemy gives ability");
 Check(rules.IsBaseForm, "A mouthful does not transform before the original swallow");
 rules.SetSourceAbility("fire");
-Check(!rules.CanEquip(HostWeaponKind.Shield) && !rules.CanEquip(HostWeaponKind.Sword), "No new equipment while copied");
+Check(!rules.CanEquip(HostWeaponKind.Sword) && !rules.CanEquip(HostWeaponKind.Bow) &&
+      !rules.CanEquip(HostWeaponKind.Other), "No new weapons while copied");
+Check(rules.CanEquip(HostWeaponKind.Shield), "A shield can still be taken while copied");
 Check(!rules.CanUse(HostWeaponKind.Sword), "No host sword after copy");
 Check(!rules.CanUse(HostWeaponKind.Bow), "No host bow after copy");
 Check(rules.ResolveAttack(HostWeaponKind.Sword) == AttackRoute.Ability, "Sword button becomes ability");
 Check(rules.ResolveAttack(HostWeaponKind.Bow) == AttackRoute.Ability, "Bow button becomes ability");
 Check(rules.ResolveAttack(HostWeaponKind.Shield, "shield-42") == AttackRoute.Parry, "Retained shield parries");
 Check(rules.ResolveAttack(HostWeaponKind.Shield, "shield-43") == AttackRoute.None, "Different shield rejected");
-Check(!rules.EquipShield("shield-43") && rules.RetainedShieldId == "shield-42", "Copy cannot replace retained shield");
+rules.FollowEquippedShields(["shield-42"]);
+Check(rules.RetainedShieldId == "shield-42", "Equipped retained shield is kept");
 Check(rules.Absorb(101) is null, "Cannot inhale while copied");
 rules.DropAbility();
 Check(rules.IsBaseForm && rules.CanUse(HostWeaponKind.Bow), "Drop restores base weapon actions");
@@ -57,6 +61,26 @@ for (int selected = 0; selected < 3; selected++)
 var bad = new KirbyRules(["fire"], _ => 1);
 try { bad.Absorb(1); throw new Exception("Invalid RNG accepted"); }
 catch (InvalidOperationException) { Check(bad.IsBaseForm, "Failed selection leaves state unchanged"); }
+var swap = new KirbyRules(["sword"], _ => 0);
+swap.FollowEquippedShields(["wooden"]);
+Check(swap.RetainedShieldId == "wooden", "Base form follows the equipped shield");
+swap.SetSourceAbility("sword");
+swap.EquipShield("cudgel");
+swap.FollowEquippedShields(["cudgel"]);
+Check(swap.RetainedShieldId == "cudgel" && swap.ResolveAttack(HostWeaponKind.Shield, "cudgel") == AttackRoute.Parry &&
+      swap.ResolveAttack(HostWeaponKind.Shield, "wooden") == AttackRoute.None, "Copied Take swap: the new shield parries");
+Check(swap.AbilityId == "sword" && swap.ResolveAttack(HostWeaponKind.Sword) == AttackRoute.Ability, "A shield swap keeps the copy");
+swap.EquipShield("second");
+swap.FollowEquippedShields(["cudgel", "second"]);
+Check(swap.RetainedShieldId == "second", "The most recently taken of two equipped shields is retained");
+swap.FollowEquippedShields(["cudgel"]);
+Check(swap.RetainedShieldId == "cudgel", "A retained shield that left falls back to an equipped shield");
+swap.FollowEquippedShields([]);
+Check(swap.RetainedShieldId is null && swap.ResolveAttack(HostWeaponKind.Shield, "cudgel") == AttackRoute.None,
+    "No equipped shield, no retained shield");
+swap.DropAbility();
+Check(swap.CanUse(HostWeaponKind.Shield, "anything"), "Base form uses any equipped shield");
+
 var mouthful = new KirbyRules(["fire", "ice"], _ => 0);
 Check(mouthful.Absorb(1) == "fire" && mouthful.Absorb(2) == "fire", "Two enemies can enter the same mouthful");
 Check(mouthful.Absorb(1) is null && mouthful.IsBaseForm, "Repeated capture neither rerolls nor transforms");
@@ -75,6 +99,45 @@ Check(MouthfulHazards.Resolve(false, false, false, sourceDamage: 1, controlled: 
 Check(MouthfulHazards.Resolve(false, false, false, 0, controlled: true) == HazardAction.Hold, "Suction holds the host projectile");
 Check(MouthfulHazards.Resolve(false, false, false, 0, false) == HazardAction.Follow, "Free projectiles keep host physics");
 Check(MouthfulHazards.Resolve(false, false, gone: true, 0, false) == HazardAction.Release, "A vanished source object only frees its slot");
+
+Check(StarProjectiles.Identify(0x020BD718) == StarKind.Spit && StarProjectiles.Identify(0x020BDD08) == StarKind.BigSpit &&
+      StarProjectiles.Identify(0x02166A54) == StarKind.Ability, "The three original star routines are recognized");
+Check(StarProjectiles.Identify(0x020C3700) == StarKind.None && StarProjectiles.Identify(0x020B2714) == StarKind.None,
+    "Copy-ability attacks and Kirby's body are not stars");
+Check(StarProjectiles.SourceDamage(StarKind.Spit, 52) == 52 && StarProjectiles.SourceDamage(StarKind.BigSpit, 60) == 60,
+    "Spit stars strike with their own original damage word");
+Check(StarProjectiles.SourceDamage(StarKind.Ability, 0) == 52, "The discarded star strikes like a single spit star");
+Check(StarProjectiles.SourceDamage(StarKind.None, 52) == 0 && StarProjectiles.SourceDamage(StarKind.Spit, -3) == 0,
+    "Non-stars and invalid damage words strike for nothing");
+Check(StarProjectiles.Route(StarKind.Spit, paired: true) == StarRoute.Source &&
+      StarProjectiles.Route(StarKind.BigSpit, paired: true) == StarRoute.Source,
+    "A paired enemy takes spit-star damage once, through its source object");
+Check(StarProjectiles.Route(StarKind.Spit, paired: false) == StarRoute.Host &&
+      StarProjectiles.Route(StarKind.BigSpit, paired: false) == StarRoute.Host,
+    "The host strikes enemies that have no source object");
+Check(StarProjectiles.Route(StarKind.Ability, paired: true) == StarRoute.Host &&
+      StarProjectiles.Route(StarKind.Ability, paired: false) == StarRoute.Host,
+    "The ability star, harmless in the ROM, is always struck by the host");
+// Original records are inclusive: the spit star [137,157] hit the proxy body [157,181] in the bridge.
+Check(new StarBox(137, 140, 157, 166).Overlaps(new StarBox(157, 134, 181, 168)), "Touching edges overlap");
+Check(!new StarBox(137, 140, 156, 166).Overlaps(new StarBox(157, 134, 181, 168)) &&
+      !new StarBox(137, 100, 157, 133).Overlaps(new StarBox(157, 134, 181, 168)), "Separated boxes do not");
+Check(new StarBox(45, 143, 65, 163).Union(new StarBox(45, 140, 65, 166)) == new StarBox(45, 140, 65, 166) &&
+      new StarBox(45, 140, 65, 166).Offset(-24, 48) == new StarBox(21, 188, 41, 214), "Box union and window offset");
+Check(StarProjectiles.BumpDirection(100, 120, -1) == 1 && StarProjectiles.BumpDirection(100, 80, 1) == -1,
+    "Stagger pushes the enemy away from the star");
+Check(StarProjectiles.BumpDirection(100, 100, -1) == -1 && StarProjectiles.BumpDirection(100, 100, 0) == 1,
+    "A centered hit follows the star's travel");
+Check(StarProjectiles.BumpSpeed(0) == 0.2 && Math.Abs(StarProjectiles.BumpSpeed(1) - 0.3) < 1e-12 &&
+      StarProjectiles.BumpSpeed(7) == StarProjectiles.BumpSpeed(1), "Bump speed is the dive's 0.2 to 0.3");
+{
+    var strikes = new StarStrikes();
+    Check(strikes.TryStrike(0x0204A1D0, 1) && !strikes.TryStrike(0x0204A1D0, 1), "A star strikes each enemy once");
+    Check(strikes.TryStrike(0x0204A1D0, 2) && strikes.TryStrike(0x0204A308, 1), "Other enemies and other stars still strike");
+    strikes.Retain([0x0204A308]);
+    Check(strikes.TryStrike(0x0204A1D0, 1), "A star that left the scene frees its address for a new star");
+    Check(!strikes.TryStrike(0x0204A308, 1), "A star still present keeps its strikes");
+}
 var cook = new KirbyRules(["cook"], _ => 0);
 cook.SetSourceAbility("cook");
 Check(cook.ClaimCookFood(10, boss: false, elite: false), "Cooked ordinary enemy drops food");
@@ -313,7 +376,18 @@ Check(ElevatorRide.Over(8, 252, 10, 4, 10, 0.5, 0) is not null && ElevatorRide.O
       ElevatorRide.Over(7, 252, 10, 4, 10, 0.5, 0) is null, "Across, Kirby rides where the host carries an entity");
 Check(ElevatorRide.Over(10, 241, 10, 4, 10, 0, 0) is { Lift: -24 }, "A surface at the top of its cell is a whole cell above the solid row");
 
-Check(KirbyActions.CanStomp(KirbyActions.Jump) &&KirbyActions.CanStomp(KirbyActions.Fall) && KirbyActions.CanStomp(KirbyActions.Float),
+var doorWalk = new CinematicWalk();
+Check(doorWalk.Update(100, 1 / 60.0) == 0, "A cinematic starts with Kirby standing");
+Check(doorWalk.Update(101.5, 1 / 60.0) == 1, "The host walking the hero right holds right");
+Check(doorWalk.Update(101.5, 1 / 60.0) == 1, "A rendered frame between host updates keeps walking");
+for (int frame = 0; frame < 12; frame++) doorWalk.Update(101.5, 1 / 60.0);
+Check(doorWalk.Direction == 0, "Kirby stops once the host stops moving him");
+Check(doorWalk.Update(99, 1 / 60.0) == -1, "The host walking the hero left holds left");
+Check(doorWalk.Update(400, 1 / 60.0) == 0, "A host placement is not a walk");
+doorWalk.Update(401, 1 / 60.0); doorWalk.Reset();
+Check(doorWalk.Direction == 0 && doorWalk.Update(500, 1 / 60.0) == 0, "Reset forgets the previous position");
+
+Check(KirbyActions.CanStomp(KirbyActions.Jump) && KirbyActions.CanStomp(KirbyActions.Fall) && KirbyActions.CanStomp(KirbyActions.Float),
     "Stomps start from rising, falling and floating");
 Check(!KirbyActions.CanStomp(KirbyActions.Standing) && !KirbyActions.CanStomp(KirbyActions.Slide) && !KirbyActions.CanStomp(KirbyActions.Ability),
     "No stomp on the ground, while sliding or during an exhale or inhale");
@@ -448,5 +522,43 @@ Check(SpeedMatch.RiseVelocity(KirbyActions.Jump, -2682) == -2682 && SpeedMatch.R
     var pacer = new AnimationPacer();
     Check(Enumerable.Range(0, 10).All(_ => pacer.Next(3, 0) == 0), "A pose about to change is never counted below zero");
 }
+}
+{
+    // Sub OAM entry 0 is hidden, 1 is a 32×32 OBJ elsewhere, 2 is the icon at (4, 4).
+    byte[] iconOam = new byte[1024];
+    void Obj(int index, ushort a0, ushort a1, ushort a2)
+    {
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(iconOam.AsSpan(index * 8), a0);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(iconOam.AsSpan(index * 8 + 2), a1);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(iconOam.AsSpan(index * 8 + 4), a2);
+    }
+    for (int index = 3; index < 128; index++) Obj(index, 0x0200, 0, 0);
+    Obj(0, 0x0204, 0x8004, 7);
+    Obj(1, 0x0004, 0x8024, 9);
+    Obj(2, 0x0004, 0x8004, (ushort)(8 << 12 | 52));
+    const uint subDisplay = 0x40111710; // 1D OBJ mapping with a 64-byte tile boundary.
+    Check(AbilityIcon.Find(subDisplay, iconOam) == new AbilityIcon.Sprite(52 * 64, 8, false, false),
+        "Find the 32×32 icon OBJ at (4, 4) with its tile address and palette");
+    Check(AbilityIcon.Find(subDisplay & ~0x10u, iconOam) is null, "Reject 2D OBJ mapping");
+    Obj(2, 0x0004, 0x9004, (ushort)(8 << 12 | 52));
+    Check(AbilityIcon.Find(subDisplay, iconOam)?.FlipX == true, "Report a horizontally flipped icon");
+    Obj(2, 0x2004, 0x8004, 52);
+    Check(AbilityIcon.Find(subDisplay, iconOam) is null, "Ignore an 8bpp OBJ");
+
+    byte[] tiles = new byte[AbilityIcon.TileBytes], iconPalette = new byte[32], icon = new byte[AbilityIcon.Size * AbilityIcon.Size * 4];
+    tiles[0] = 0x21;          // (0,0) colour 1, (1,0) colour 2.
+    tiles[5 * 32 + 3] = 0x30; // Tile (1,1) row 0: (15,8) colour 3.
+    System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(iconPalette.AsSpan(2), 0x001F);  // Red.
+    System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(iconPalette.AsSpan(4), 0x7C00);  // Blue.
+    System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(iconPalette.AsSpan(6), 0x03E0);  // Green.
+    int Pixel(int x, int y) => (x + y * AbilityIcon.Size) * 4;
+    AbilityIcon.Decode(new AbilityIcon.Sprite(0, 0, false, false), tiles, iconPalette, icon);
+    Check(icon.AsSpan(Pixel(0, 0), 4).SequenceEqual(new byte[] { 255, 0, 0, 255 }) &&
+          icon.AsSpan(Pixel(1, 0), 4).SequenceEqual(new byte[] { 0, 0, 255, 255 }) &&
+          icon.AsSpan(Pixel(15, 8), 4).SequenceEqual(new byte[] { 0, 255, 0, 255 }), "Decode 1D 4bpp tiles and BGR555 colours");
+    Check(icon.AsSpan(Pixel(2, 0), 4).SequenceEqual(new byte[4]), "Colour 0 is transparent");
+    AbilityIcon.Decode(new AbilityIcon.Sprite(0, 0, true, true), tiles, iconPalette, icon);
+    Check(icon.AsSpan(Pixel(31, 31), 4).SequenceEqual(new byte[] { 255, 0, 0, 255 }) &&
+          icon.AsSpan(Pixel(16, 23), 4).SequenceEqual(new byte[] { 0, 255, 0, 255 }), "Apply both OBJ flips");
 }
 Console.WriteLine($"PASS: {assertions} user-rule assertions. No claim of NDS physics or in-game verification.");

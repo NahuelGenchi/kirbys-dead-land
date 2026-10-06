@@ -777,3 +777,154 @@ the all-ability rendering tests as full gameplay acceptance.
   zero warnings. The bridge was rebuilt from this branch's unchanged `lib.rs`.
   Not run: `tools/nds_tests.py` (no native change), other elevator types,
   walking off a moving elevator, and floating platforms.
+## 2026-10-06 — shield swap while copied (#31)
+
+- Owner recording `00-02-14`: Sword Kirby with a wooden shield stood on a dropped
+  Cudgel V after the Concierge; every R press gave "Can't use that right now".
+  Cause: `KirbyRules.CanEquip` was false for every kind while copied, so
+  `IsUsefulFor` declined the shield, and `EquipShield` refused a new shield while
+  copied. The "guard pose" is the dropped Cudgel's sprite overlapping Kirby.
+- Shields can now be taken in either form; the newly equipped shield becomes the
+  retained shield (`EquipShield` in the equip hook), and `FollowEquippedShields`
+  keeps the retained ID in step with the host inventory every frame. Swords and
+  bows while copied, and skills in any form, are still declined. Guard/parry code
+  is unchanged.
+- Core rule test: 178 assertions pass. `scripts/check.py` passes and the Release
+  runtime builds with zero warnings.
+- Live (separate data root `repros/shield-swap-20261006`): `20261006-004147`
+  (Sword) and `20261006-004316` (base) each swapped a Warrior's Shield for a Cudgel
+  through the host replace dialog; the old shield dropped, the Cudgel became the
+  retained shield, held guard gave original guard 512 and the host block, and a
+  20-damage hit resolved `Partial` 5 with Kirby at 76/76. Real saves unchanged.
+- Not run: native bridge tests (no native change), the owner's exact order (take
+  in base form, then swap after copying), a parry-timed counter with the new shield,
+  save/resume after a copied swap.
+## 2026-10-06 — enemies in water (#27)
+
+- Owner recording 2026-10-05 23:45: a Zombie standing in a shallow pool could not
+  be inhaled or hit and stayed frozen, with small yellow stars around it.
+- Cause: the paired original Waddle Dee is defeated by source water (enter-water
+  handler `0x02159440` → defeat `0x02158FC0`). The dying proxy reported source
+  control (flags 3), so the adapter pinned the host enemy; it ignored inhale and
+  attacks and was rebound in the same water about 60 frames later. The damage
+  carrier also died beside a swimming Kirby, so host hits missed him in water.
+- Fix: `keep_proxies_alive_in_water` in `src/nds/lib.rs` points Waddle Dee's
+  enter-water entry at the original return-zero stub `0x020CF36C`. An empty entry
+  is not enough: the recoil handler `0x02156540` falls back to the defeat.
+- Native: new `proxy_water`, `proxy_water_sword`, `proxy_water_below` and
+  `hurt_water` fail on the previous bridge and pass; the full suite passes 68
+  cases on this branch's build.
+- Live (`--input-plan water`, `repros/water-20261005`): before the fix the pool
+  Zombie was claimed for every idle frame and the inhale timed out; with it, five
+  runs never claimed it before input and consumed it 37–38 frames into the inhale.
+  One run then showed no copy after DOWN (unexplained). Details in
+  `docs/RUNTIME_LAUNCH.md`.
+- Another session rebuilt the shared oracle bridge from its own branch during
+  this work; this branch's bridge for tests and live runs was then built into the
+  repro root's own `target/`.
+
+## 2026-10-05 — climbing Dead Cells vines (#25)
+
+- Owner recording 22:43: Kirby hopped and floated beside a grown vine but never
+  grabbed it. Host bytecode (crashlink): `VineLadder.buildLadder` only calls
+  `LevelMap.addSpot` (spots 0 and 18 per cell, 1 and 18 above the top block);
+  `Hero.preUpdate` climbs on spot 0, which `initSpots` derives from collision
+  bit 16 for ordinary ladders. The terrain export read collision bits only.
+- `KirbyVines` hooks `buildLadder`, records the vine's column and re-reads its
+  spots on each query. Vine cells become source ladders (134); solid cells the
+  vine passes through or ends under become one-way ladder tops (131). `AtLadder`
+  includes vine cells, so W climbs instead of jumping.
+- New bridge case `ladder_top`: a solid top stops the original climb at y 52.5,
+  a one-way top lets it reach y 20. New lab scenario `vine@t` grows the level's
+  first natural vine through `VineLadder.activate` and stands Kirby at its seed.
+- Live (separate data root `repros/vine-20261005`): `232657` climbs at ~99 px/s
+  and stands on the ledge; `232901` climbs, hangs, descends, reaches the ledge
+  and climbs back down from it; `233002` ordinary ladder unchanged. Saves
+  unchanged in all three. Not run: hanging vines, stomp from a vine, a grown
+  vine after loading a save.
+## 2026-10-05 — spat and discarded stars as host projectiles (#20)
+
+- Measured in the bridge, the original stars are:
+  - the spit star, `0x020BD718`: 52 damage, bursts on its first enemy and on walls;
+  - the big star, `0x020BDD08`: 60 damage, passes through enemies, bursts on walls;
+  - the discarded ability star, `0x02166A54`: 0 damage, passes through enemies,
+    bounces off walls and floors.
+
+  Kind 60 is shared with copy attacks, so the update routine identifies each star.
+- `src/runtime/KirbyStars.cs` reads the stars from the native hit list after every
+  source frame. Paired enemies keep the original star damage (proxy HP delta), and
+  a star hit now also staggers them. Unpaired enemies are struck by the host with
+  the star's damage word. The discarded star strikes every enemy for 52, an owner
+  request and a deviation from the ROM. The host strikes an enemy once per star;
+  for paired enemies the original collision decides how often. The stagger is the
+  host dive landing's affect 16 for 0.7 s, a bump of 0.2–0.3 and Stun (affect 8)
+  for 1 s with diminishing returns, read from `hlboot.dat`.
+  `src/core/StarProjectiles.cs` holds the rules.
+- Native `star_spit`, `star_spit_wall`, `star_big` and `star_ability` pass. The
+  full suite has 68 cases; the docs previously said 61, but main already had 64.
+  Core rule test: 188 assertions.
+- Live `20261005-221418` (separate root `repros/stars-20261005`) passed all five
+  phases at 76/76 HP:
+  - Each of the paired spit, unpaired spit and discarded-star hits dealt 182
+    damage, stunned the Zombie for about a second and set affect 16.
+  - A spit star burst on a real wall face, and a discarded star bounced off it.
+- Found: the bridge's facing byte read 0 in all 7151 traced frames, including
+  left-facing ones, so `hero.dir` may not follow Kirby's turns. This was not fixed
+  here.
+
+## 2026-10-05 — Kirby walks through exit doors (#17)
+
+- Owner recording: after Leave at an exit door, Kirby glided into the doorway
+  and faded in one frozen standing frame. `OnFrame` stopped the source during any
+  host cinematic and only redrew the last frame.
+- While a cinematic moves the hero sideways, `CinematicWalk` (`src/core/`) holds
+  the matching DS direction, and `StepCinematicWalk` steps the original
+  controller. The host keeps position and fade. The door's `stairs` phase lifts
+  the hero where the host has no floor, so the original walks on a flat floor
+  at the starting height instead. The level-change cleanup moved into `EnterLevel`
+  for both step paths.
+- Lifecycle probe: starts 1.5 cells beside the exit, records `door-cinematic`,
+  and accepts `KIRBY_LAB_EXIT`.
+- Source checks: `python3 scripts/check.py` passes (177 core assertions, 7 new),
+  and the Release runtime builds with 0 warnings.
+- Live (`repros/door-walk-20261005`): `214244` with host terrain showed Walk, then
+  Fall on the doorway steps. `214713` with the flat floor stayed in original Walk
+  for 148 of 149 polls, and the frames show walk poses until the fade. Saves were
+  unchanged.
+- Not run: native bridge tests (no native change), drop-type exits, leftward
+  cinematic walks, and normal play with real input.
+
+## 2026-10-05 — HUD ability slot (#18)
+
+- While copied, the HUD weapon slots that fire the ability (non-shield, as in
+  `KirbyInput`) show the original bottom-screen ability icon in a host colorless
+  slot. Base form and discard restore the real equipment icon.
+- Icon: found in the live sub engine as a 32×32 4bpp OBJ at (4, 4) (Wheel state:
+  OAM 20, tile 52, palette 8). `src/core/AbilityIcon.cs` decodes it.
+  `KirbyHud` accepts it after 30 unchanged source frames, which skips the original
+  copy flash and hurt icon seen in live run `215110`. It is drawn in whole screen
+  pixels near the host's `Skill.ICON_SIZE`.
+- Frame and colors: host `Skill.useItem` with a cached `StartSword` + `Colorless`
+  stand-in (decompiled `setBgColors`, `useItem`, `onResize`), then the real item is
+  restored as the slot item. Colorless backgrounds follow the highest scroll stat;
+  ties show Brutality red.
+- Source: decoder tests (OBJ lookup, 2D/8bpp rejection, flips, palette,
+  transparency). `python3 scripts/check.py`: 20 Python, 6 oracle-parser and 177
+  core assertions; Release build 0 warnings/errors.
+- Live checks: `215606` (scrolls 4/0/2) and `215830` (no scrolls, discard). Both
+  confirmed the colorless Sword slot and an untouched shield slot. `215830` also
+  confirmed the restored weapon slot. Real saves were unchanged.
+## 2026-10-05 — shield parries in Kirby's facing direction (#19)
+
+- Owner recording: the host shield and parry arc stayed on Kirby's right while he
+  faced left. `hero.dir` came from player+0x15, which never changes with facing,
+  so the host always saw Kirby facing right.
+- `hero.dir` now follows bit 31 of player+0x6C (`NdsState.FacesLeft`). That bit
+  matched the walking direction on every moving frame of live trace `214458`.
+  The native bridge test now walks left and right and checks the bit.
+- Live (separate data root `repros/left-parry-20261005`): run `215025` mirrored
+  the host block for left-facing guards; run `215320` parried a real Zombie hit
+  from the left (counter callback, `Block`, no damage); run `215401` let a hit
+  from behind through. Saves unchanged.
+- Not resolved: raising the shield while holding the opposite direction. The
+  original guard keeps Kirby's facing while the host turns its shield.

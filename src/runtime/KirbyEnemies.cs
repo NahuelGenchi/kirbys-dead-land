@@ -13,7 +13,7 @@ namespace Kirby.Runtime;
 /// </summary>
 public sealed class KirbyEnemies
 {
-    private const int MaxSourceHp = 32760;
+    internal const int MaxSourceHp = 32760;
     private const int Capacity = 31;
     private readonly Entity?[] mobs = new Entity?[Capacity + 1];
     private readonly int[] assignedHp = new int[Capacity + 1];
@@ -25,18 +25,28 @@ public sealed class KirbyEnemies
     // Sampled when source HP is assigned so the matching delta scales identically.
     private double damageMultiplier = 1;
     private EnemyBinding[]? restoring;
+    private readonly KirbyStars stars = new();
     /// <summary>Highest scroll tier sampled for the current source tick.</summary>
     internal int ColorlessTier { get; private set; } = 1;
     /// <summary>The host's colorless damage multiplier for <see cref="ColorlessTier"/>.</summary>
     internal double ColorlessMultiplier { get; private set; } = 1;
     /// <summary>Lab-only observer of (target, source HP drop, host damage) for each copy hit.</summary>
     internal static Action<Entity, int, int>? TestObserver;
+    /// <summary>Lab-only: host entities kept without a source object, as if out of range.</summary>
+    internal static Func<Entity, bool>? TestUnpaired;
     /// <summary>
     /// Host life per source damage point: the original-unit scale, times the Elite
     /// empowerment, times the colorless scroll multiplier, all sampled in Prepare.
     /// </summary>
-    private double HostMultiplier(Func<Entity, double> scale, Entity mob) =>
+    internal double HostMultiplier(Func<Entity, double> scale, Entity mob) =>
         scale(mob) * damageMultiplier * ColorlessMultiplier;
+    /// <summary>The host enemy has a live source object (not a detached corpse).</summary>
+    internal bool Pairs(Entity mob)
+    {
+        for (int i = 1; i <= Capacity; i++)
+            if (mobs[i]?.HashlinkPointer == mob.HashlinkPointer) return true;
+        return false;
+    }
     internal EnemyBinding[] Capture() => Enumerable.Range(1, Capacity)
         .Where(i => detached[i] || mobs[i] is { destroyed: false }).Select(i => detached[i]
             ? new EnemyBinding { Slot = i, Detached = true }
@@ -50,6 +60,7 @@ public sealed class KirbyEnemies
     public void Clear(NdsRuntime nds)
     {
         for (uint i = 1; i <= Capacity; i++) Release(nds, i);
+        stars.Clear();
     }
     private void Release(NdsRuntime nds, uint i)
     {
@@ -116,7 +127,7 @@ public sealed class KirbyEnemies
             if (entities.getDyn(j) is not Entity mob || !Live(mob)) continue;
             if (IsHazard(mob) ? !MouthfulHazards.CanPair(mob.isOpponent(hero), live: true, mob is Bullet { disabled: true })
                 : !Eligible(mob) || !mob.canBeHitBy(hero)) continue;
-            if (mobs.Any(m => m?.HashlinkPointer == mob.HashlinkPointer)) continue;
+            if (mobs.Any(m => m?.HashlinkPointer == mob.HashlinkPointer) || TestUnpaired?.Invoke(mob) == true) continue;
             var (x, y) = Distance(mob, hx, hy);
             if (x <= 300 && y <= 96) candidates.Add((mob, x * x + y * y));
         }
@@ -153,6 +164,7 @@ public sealed class KirbyEnemies
     public string? Complete(KirbySession session, NdsRuntime nds, int ox, double oy, Func<Entity, double> scale)
     {
         string? copied = null;
+        stars.Scan(nds);
         for (uint i = 1; i <= Capacity; i++)
         {
             if (mobs[i] is not { } mob) continue;
@@ -190,7 +202,13 @@ public sealed class KirbyEnemies
             {
                 int hostDamage = Math.Max(1, ColorlessDamage.HostDamage(damage, assignedHp[i], mob.life, HostMultiplier(scale, mob)));
                 TestObserver?.Invoke(mob, damage, hostDamage);
-                KirbyDamage.Hit(session.Hero, mob, hostDamage);
+                // A spit star's original hit (and burst) on its source object also staggers the host enemy.
+                if (mob is Mob struck && stars.SourceStrike(proxy.Entity, mob, ox, oy, out int direction) is var star and not StarKind.None)
+                {
+                    KirbyStars.TestObserver?.Invoke(star, mob, hostDamage, true);
+                    KirbyStars.Stagger(struck, direction, () => KirbyDamage.Hit(session.Hero, mob, hostDamage));
+                }
+                else KirbyDamage.Hit(session.Hero, mob, hostDamage);
             }
             if (mob.destroyed || mob.life <= 0)
             {
@@ -220,6 +238,7 @@ public sealed class KirbyEnemies
             }
             controlled[i] = sourceControls;
         }
+        stars.StrikeHost(session.Hero, this, ox, oy, scale);
         return copied;
     }
     private void CompleteHazard(NdsRuntime nds, uint i, Entity projectile, NdsProxy proxy, int ox, double oy)

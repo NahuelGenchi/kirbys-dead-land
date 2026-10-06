@@ -16,4 +16,11 @@ if(BitConverter.ToInt32(read)!=walking.XRaw) throw new Exception("RAM/struct ABI
 try {nds.Read(0x01ffffff,read);throw new Exception("Out-of-bounds read accepted");} catch(InvalidOperationException){}
 Span<NdsHit> hits=stackalloc NdsHit[256];int count=nds.ReadHits(hits);
 if(count<1)throw new Exception("Original live collision graph is empty");
-Console.WriteLine($"Native ABI, seed, deterministic original motion, RAM bounds and {count} live hits verified.");
+if(idle.FacesLeft || walking.FacesLeft) throw new Exception("Original facing is not right after walking right");
+nds.Step(32,20);
+if(!nds.State.FacesLeft || nds.State.VxRaw>=0) throw new Exception("Original facing did not turn left");
+nds.Step(0,30);
+if(!nds.State.FacesLeft) throw new Exception("Original facing did not stay left while idle");
+nds.Step(16,20);
+if(nds.State.FacesLeft) throw new Exception("Original facing did not turn back right");
+Console.WriteLine($"Native ABI, seed, deterministic original motion, facing, RAM bounds and {count} live hits verified.");
