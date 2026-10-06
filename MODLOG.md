@@ -753,3 +753,26 @@ the all-ability rendering tests as full gameplay acceptance.
   Grenader grenades and one mid-jump Archer arrow captured at full health; both
   spits hit the shooter for 52; the swallow gave no copy. Saves unchanged.
 
+## 2026-10-06 — enemies in water (#27)
+
+- Owner recording 2026-10-05 23:45: a Zombie standing in a shallow pool could not
+  be inhaled or hit and stayed frozen, with small yellow stars around it.
+- Cause: the paired original Waddle Dee is defeated by source water (enter-water
+  handler `0x02159440` → defeat `0x02158FC0`). The dying proxy reported source
+  control (flags 3), so the adapter pinned the host enemy; it ignored inhale and
+  attacks and was rebound in the same water about 60 frames later. The damage
+  carrier also died beside a swimming Kirby, so host hits missed him in water.
+- Fix: `keep_proxies_alive_in_water` in `src/nds/lib.rs` points Waddle Dee's
+  enter-water entry at the original return-zero stub `0x020CF36C`. An empty entry
+  is not enough: the recoil handler `0x02156540` falls back to the defeat.
+- Native: new `proxy_water`, `proxy_water_sword`, `proxy_water_below` and
+  `hurt_water` fail on the previous bridge and pass; the full suite passes 68
+  cases on this branch's build.
+- Live (`--input-plan water`, `repros/water-20261005`): before the fix the pool
+  Zombie was claimed for every idle frame and the inhale timed out; with it, five
+  runs never claimed it before input and consumed it 37–38 frames into the inhale.
+  One run then showed no copy after DOWN (unexplained). Details in
+  `docs/RUNTIME_LAUNCH.md`.
+- Another session rebuilt the shared oracle bridge from its own branch during
+  this work; this branch's bridge for tests and live runs was then built into the
+  repro root's own `target/`.
