@@ -120,6 +120,21 @@ recording is the dropped Cudgel's sprite overlapping a standing Kirby; no guard
 input was involved. Live `20261006-004147` (Sword copy) and `20261006-004316`
 (base form) each took a Warrior's Shield, then swapped it for a Cudgel through the
 host replace dialog; see `docs/RUNTIME_LAUNCH.md`. Guard and parry code is unchanged.
+### Gold deposits (#35)
+
+Copied attacks reach a host entity only through a source proxy that
+`KirbyEnemies` pairs with it. Before #35 the pairing accepted mobs, doors,
+breakable props, explosive barrels and `isBreakableByHero` tiles, so the host
+gold deposits (`en.inter.PileOfGold`, `en.inter.GoldNugget`) were never hit by a
+copy attack; base-form host weapons broke them. Both now pair like breakable
+props: not inhalable, no copy, no touch damage. Per `hlboot.dat` both call
+`Entity.initLife` and `set_targetable(true)` in their constructors and drop gold
+from their own `onDamage`/`onDie`, so the host still decides every gold drop.
+Live (`docs/RUNTIME_LAUNCH.md`, "Gold deposits"): Sword Kirby broke a real
+`PileOfGold` in four hits (life 4 → 0, four host gold drops); the same fixture
+without the change did no damage. `GoldNugget` was not run live. Other host hittables outside the pairing list (`PiggyBank`,
+`Gift`, `BreakableWall`, `HiddenBlock`, `Flower`, …) are unchanged and unchecked.
+
 ### Star projectiles
 
 Issue #20. Kirby's stars act as host projectiles. The ROM still spawns, moves and

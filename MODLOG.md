@@ -754,6 +754,19 @@ the all-ability rendering tests as full gameplay acceptance.
   spits hit the shooter for 52; the swallow gave no copy. Saves unchanged.
 
 
+## 2026-10-06 — copy attacks break gold deposits (#35)
+
+- Owner report: with Wing copied, the host "Break" gold deposit never broke;
+  base-form weapons broke it.
+- Cause: `KirbyEnemies.Eligible` left out `PileOfGold` and `GoldNugget`, so no
+  source proxy existed for original attacks to hit. Both are now eligible.
+  Disassembly of `hlboot.dat` (constructors, `onDamage`, `canBeActivated`)
+  confirmed host life, targetable and gold drops in `onDamage`.
+- `LabBreakableProbe` gained `KIRBY_LAB_BREAKABLE_TARGET=gold`, which spawns a
+  real `PileOfGold` beside Kirby. Live (`repros/gold-20261006`): `013937` Sword
+  broke it in four hits with four gold drops; control `014052` without the
+  change: no damage. `GoldNugget` not run live.
+
 ## 2026-10-06 — Kirby rides host elevators (#28)
 
 - Owner recording 2026-10-05 23:51: the elevator left without Kirby, who then

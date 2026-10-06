@@ -252,6 +252,29 @@ Run `20261005-205827` (runtime SHA-256 `3b2d1291428646fc59a38301f0e9e94204193f6b
 
 All four hostile projectiles seen were paired; no hero-owned projectile was paired, but Kirby fired no bow in this run, so that exclusion was not exercised live. The process reached its time limit without fatal errors, and the real save inventories were unchanged.
 
+## Gold deposits
+
+`KIRBY_LAB_BREAKABLE_TARGET=gold` makes the `breakable` plan spawn a real
+`PileOfGold` at Kirby (constructor, then `init`), copy Sword, and tap attack until
+it breaks. `breakable-hits.jsonl` records each host `onDamage`; `breakable.json`
+counts `PileOfGold.dropLoot` calls. Separate data root `repros/gold-20261006`
+(the owner's play session held the main lab); the bridge was unchanged.
+
+```sh
+KIRBY_LAB_BREAKABLE_TARGET=gold python3 scripts/launch_runtime.py \
+  --data-root ~/.local/share/kirby-dead-cells/repros/gold-20261006 \
+  --seconds 60 --start-game --outfit KirbySuperStarUltra --input-plan breakable
+```
+
+| Run | Build | Result |
+| :--- | :--- | :--- |
+| `20261006-013823` | #35, attack held 130 frames | Two hits, life 4 → 2, two gold drops |
+| `013937` | #35, repeated attack | Four hits of 1 life each, life 4 → 0, pile destroyed, four gold drops |
+| `014052` | control: #35 pairing change reverted | No hits, life 4, no gold |
+
+Each run reached its time limit without fatal errors, and real saves were unchanged.
+`GoldNugget` and copy forms other than Sword were not run.
+
 ## Host elevators
 
 `LabMovesProbe` has three elevator scenarios for `KIRBY_LAB_MOVES_SETUP`: `elevator-spawn` builds a real `SimpleElevator` in the tallest open three-cell shaft and initializes it as `Level.spawnEntitiesFromMarkers` does (the first Prisoners' Quarters level has none), `elevator` stands Kirby on the first elevator, and `elevator-use` activates it through `canBeActivated`/`onActivate`. `moves-trace.jsonl` then records the elevator surface beside Kirby's feet on every source frame. The runs used a separate data root, `repros/elevator-20261006`, and a bridge rebuilt from this branch (`libkssu_bridge.so` SHA-256 `b2545e79b5fcbfd9670e252e369255be571122d169d05166ee2ef942fd40f8a8`).
