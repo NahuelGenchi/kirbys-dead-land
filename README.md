@@ -20,6 +20,9 @@ preserved; generated assets and native dependencies remain in the private data r
 ## Requested rules
 
 - Absorbing a Dead Cells enemy selects a random original copy ability.
+  While copied, the pause screen (Escape) describes the ability and its main
+  moves in the mod's controls; see
+  [ability descriptions](docs/GAMEPLAY_FIDELITY.md#ability-descriptions).
 - Absorbing an Elite always gives original Sword, which deals double damage
   until the ability is lost (hit off, discarded, made into a helper, or a new run).
   This is a deliberate deviation; see `docs/GAMEPLAY_FIDELITY.md`.
