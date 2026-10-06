@@ -97,14 +97,27 @@ projectiles such as grenades are caught from the ground. This is the ROM's
 geometry, not an adapter limit.
 
 Base form permits host swords, bows and shields. Copied form maps attack buttons
-to the original ability and keeps only the exact previously equipped shield for
-host parries. Other pickups are declined through `InventItem.isUsefulFor`, the
-check the host makes before every item drop, altar, shop purchase and timed-door
-reward. The host then shows its own "Can't use that right now" message, leaves
-the item in place and charges nothing. Shield identity uses the physical item's permanent ID. Source copy
+to the original ability and keeps only the exact retained shield for host
+parries. A shield can be taken in either form: as in Dead Cells, Take swaps it
+for the equipped one (the old one drops), and the newly equipped shield becomes
+the retained shield (#31). The retained shield follows the host inventory every
+frame: it stays while equipped, otherwise the first equipped shield, or none, is
+retained. If two shields are equipped, the most recently taken one parries while
+copied. Swords, bows and skills while copied, and skills or other weapons in base
+form, are declined through `InventItem.isUsefulFor`, the check the host makes
+before every item drop, altar, shop purchase and timed-door reward. The host then
+shows its own "Can't use that right now" message, leaves the item in place and
+charges nothing. Shield identity uses the physical item's permanent ID. Source copy
 loss, discarded-star recovery, helper creation and limited-use ability expiration
 update the same equipment policy.
 
+Before #31, copied Kirby also declined shields, so the owner's 2026-10-06
+recording (Sword copy, wooden shield, dropped Cudgel V after the Concierge) showed
+"Can't use that right now" on every R press. The apparent guard pose in that
+recording is the dropped Cudgel's sprite overlapping a standing Kirby; no guard
+input was involved. Live `20261006-004147` (Sword copy) and `20261006-004316`
+(base form) each took a Warrior's Shield, then swapped it for a Cudgel through the
+host replace dialog; see `docs/RUNTIME_LAUNCH.md`. Guard and parry code is unchanged.
 ### Star projectiles
 
 Issue #20. Kirby's stars act as host projectiles. The ROM still spawns, moves and

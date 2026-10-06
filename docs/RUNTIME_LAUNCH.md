@@ -231,6 +231,40 @@ Run `20261005-205827` (runtime SHA-256 `3b2d1291428646fc59a38301f0e9e94204193f6b
 
 All four hostile projectiles seen were paired; no hero-owned projectile was paired, but Kirby fired no bow in this run, so that exclusion was not exercised live. The process reached its time limit without fatal errors, and the real save inventories were unchanged.
 
+## Shield swap
+
+Issue #31. `LabItemProbe` (`KIRBY_LAB_ITEM`) can drop `shield`: the first
+droppable host shield kind that is neither equipped nor already dropped. It logs
+every `Inventory.equip`, the host replace dialog's result, the item drops left on
+the level, and Kirby's retained shield with `CanUse` for each equipped shield.
+`KIRBY_LAB_REPLACE_SIDE=right` replaces the right-hand item. With
+`KIRBY_LAB_REPRO_ABILITY`, the probe's clock starts once Kirby holds the copy, as
+the repro plan's does. Both runs used a separate data root,
+`repros/shield-swap-20261006`, staged from this branch (runtime SHA-256
+`bf8baed2140f15b3764642138007753e800e88de78487dd14d89c94cb382a5da`; bridge
+`b2545e79b5fcbfd9670e252e369255be571122d169d05166ee2ef942fd40f8a8`, built from the
+unchanged `src/nds/lib.rs`).
+
+```sh
+KIRBY_LAB_REPRO_ABILITY=18 KIRBY_LAB_REPRO_HIT_AT=7.4 KIRBY_LAB_REPRO_PLAN=<plan> \
+KIRBY_LAB_ITEM=shield@1,shield@3,sword@11 KIRBY_LAB_REPLACE_AT=5 KIRBY_LAB_REPLACE_SIDE=right \
+python3 scripts/launch_runtime.py --data-root <root> --seconds 70 --start-game \
+  --outfit KirbySuperStarUltra --input-plan repro
+```
+
+The plan presses the real interact binding (action 6) at 1.6, 3.6, 11.6 and 13.6 s
+and holds the slot-2 weapon binding (action 3) over 7.0–7.8 and 9.0–9.8 s.
+
+| Run | Form | Result |
+| :--- | :--- | :--- |
+| `20261006-004147` | Sword (source ability 18) | Interact took a Warrior's Shield (permanent ID 257) into the empty slot; retained 257. The second interact opened the host replace dialog for a Cudgel (`Shield`, `StunShield`); validating the right-hand item ran `Inventory.equip` and left the Cudgel (260) in slot 2, with the Warrior's Shield dropped on the level. Retained 260, `CanUse` true, copy still Sword. Holding the shield binding gave original guard input 512 and the host `block` animation; a 20-damage host Zombie hit at 7.4 s resolved `Partial` (5 after the Cudgel's 75% absorb) and Kirby stayed at 76/76. The dropped BroadSword reported `isUsefulFor` false. |
+| `20261006-004316` | Base form | Same swap: Warrior's Shield 252 → Cudgel 255, retained 255, same guard, block and `Partial` 5 result, 76/76. BroadSword `isUsefulFor` true. |
+| `20261006-004027` | Base form, no hit | First run of the same swap (253 → 256); guard 512 and `block` while held. |
+
+All three runs reached their time limit without fatal log lines, and real saves
+were unchanged. A first take in base form before copying, then a swap while
+copied (the owner's exact order), and a parry-timed counter with the new shield
+were not run; the shield's existing parry path was not changed.
 ## Enemies in water
 
 `--input-plan water` (`LabWaterProbe`) looks for a host pool cell with a floor beside a dry bank (the bank may be up to three cells higher), places Kirby on the bank and creates a real Zombie in the pool, holding its AI so it stays in the water. For 120 source frames it records whether the source claims the Zombie, then it taps toward the pool, holds the original inhale until the Zombie is consumed (600-frame limit) and presses DOWN. `water.json` records the site, the frames the Zombie was source-controlled before any input, consumption and mouthful, the first copy after DOWN, and Kirby's life. A generated level may have no usable pool (`site: null`); launch again. All runs used the separate data root `repros/water-20261005`, whose bridge is built from this branch into its own `target/` so other sessions' builds of the shared oracle bridge cannot replace it.

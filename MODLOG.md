@@ -753,6 +753,29 @@ the all-ability rendering tests as full gameplay acceptance.
   Grenader grenades and one mid-jump Archer arrow captured at full health; both
   spits hit the shooter for 52; the swallow gave no copy. Saves unchanged.
 
+
+## 2026-10-06 — shield swap while copied (#31)
+
+- Owner recording `00-02-14`: Sword Kirby with a wooden shield stood on a dropped
+  Cudgel V after the Concierge; every R press gave "Can't use that right now".
+  Cause: `KirbyRules.CanEquip` was false for every kind while copied, so
+  `IsUsefulFor` declined the shield, and `EquipShield` refused a new shield while
+  copied. The "guard pose" is the dropped Cudgel's sprite overlapping Kirby.
+- Shields can now be taken in either form; the newly equipped shield becomes the
+  retained shield (`EquipShield` in the equip hook), and `FollowEquippedShields`
+  keeps the retained ID in step with the host inventory every frame. Swords and
+  bows while copied, and skills in any form, are still declined. Guard/parry code
+  is unchanged.
+- Core rule test: 178 assertions pass. `scripts/check.py` passes and the Release
+  runtime builds with zero warnings.
+- Live (separate data root `repros/shield-swap-20261006`): `20261006-004147`
+  (Sword) and `20261006-004316` (base) each swapped a Warrior's Shield for a Cudgel
+  through the host replace dialog; the old shield dropped, the Cudgel became the
+  retained shield, held guard gave original guard 512 and the host block, and a
+  20-damage hit resolved `Partial` 5 with Kirby at 76/76. Real saves unchanged.
+- Not run: native bridge tests (no native change), the owner's exact order (take
+  in base form, then swap after copying), a parry-timed counter with the new shield,
+  save/resume after a copied swap.
 ## 2026-10-06 — enemies in water (#27)
 
 - Owner recording 2026-10-05 23:45: a Zombie standing in a shallow pool could not

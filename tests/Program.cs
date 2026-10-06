@@ -13,20 +13,24 @@ Check(rules.IsBaseForm, "Start in base form");
 Check(rules.CanEquip(HostWeaponKind.Sword) && rules.CanEquip(HostWeaponKind.Bow) &&
       rules.CanEquip(HostWeaponKind.Shield), "Base equipment whitelist");
 Check(!rules.CanEquip(HostWeaponKind.Other), "Reject unsupported host equipment");
-Check(rules.EquipShield("shield-42"), "Record base-form shield");
+rules.EquipShield("shield-42");
+Check(rules.RetainedShieldId == "shield-42", "Record base-form shield");
 Check(rules.ResolveAttack(HostWeaponKind.Sword) == AttackRoute.HostWeapon, "Base sword");
 Check(rules.ResolveAttack(HostWeaponKind.Bow) == AttackRoute.HostWeapon, "Base bow");
 Check(rules.Absorb(100) == "fire", "Confirmed enemy gives ability");
 Check(rules.IsBaseForm, "A mouthful does not transform before the original swallow");
 rules.SetSourceAbility("fire");
-Check(!rules.CanEquip(HostWeaponKind.Shield) && !rules.CanEquip(HostWeaponKind.Sword), "No new equipment while copied");
+Check(!rules.CanEquip(HostWeaponKind.Sword) && !rules.CanEquip(HostWeaponKind.Bow) &&
+      !rules.CanEquip(HostWeaponKind.Other), "No new weapons while copied");
+Check(rules.CanEquip(HostWeaponKind.Shield), "A shield can still be taken while copied");
 Check(!rules.CanUse(HostWeaponKind.Sword), "No host sword after copy");
 Check(!rules.CanUse(HostWeaponKind.Bow), "No host bow after copy");
 Check(rules.ResolveAttack(HostWeaponKind.Sword) == AttackRoute.Ability, "Sword button becomes ability");
 Check(rules.ResolveAttack(HostWeaponKind.Bow) == AttackRoute.Ability, "Bow button becomes ability");
 Check(rules.ResolveAttack(HostWeaponKind.Shield, "shield-42") == AttackRoute.Parry, "Retained shield parries");
 Check(rules.ResolveAttack(HostWeaponKind.Shield, "shield-43") == AttackRoute.None, "Different shield rejected");
-Check(!rules.EquipShield("shield-43") && rules.RetainedShieldId == "shield-42", "Copy cannot replace retained shield");
+rules.FollowEquippedShields(["shield-42"]);
+Check(rules.RetainedShieldId == "shield-42", "Equipped retained shield is kept");
 Check(rules.Absorb(101) is null, "Cannot inhale while copied");
 rules.DropAbility();
 Check(rules.IsBaseForm && rules.CanUse(HostWeaponKind.Bow), "Drop restores base weapon actions");
@@ -57,6 +61,26 @@ for (int selected = 0; selected < 3; selected++)
 var bad = new KirbyRules(["fire"], _ => 1);
 try { bad.Absorb(1); throw new Exception("Invalid RNG accepted"); }
 catch (InvalidOperationException) { Check(bad.IsBaseForm, "Failed selection leaves state unchanged"); }
+var swap = new KirbyRules(["sword"], _ => 0);
+swap.FollowEquippedShields(["wooden"]);
+Check(swap.RetainedShieldId == "wooden", "Base form follows the equipped shield");
+swap.SetSourceAbility("sword");
+swap.EquipShield("cudgel");
+swap.FollowEquippedShields(["cudgel"]);
+Check(swap.RetainedShieldId == "cudgel" && swap.ResolveAttack(HostWeaponKind.Shield, "cudgel") == AttackRoute.Parry &&
+      swap.ResolveAttack(HostWeaponKind.Shield, "wooden") == AttackRoute.None, "Copied Take swap: the new shield parries");
+Check(swap.AbilityId == "sword" && swap.ResolveAttack(HostWeaponKind.Sword) == AttackRoute.Ability, "A shield swap keeps the copy");
+swap.EquipShield("second");
+swap.FollowEquippedShields(["cudgel", "second"]);
+Check(swap.RetainedShieldId == "second", "The most recently taken of two equipped shields is retained");
+swap.FollowEquippedShields(["cudgel"]);
+Check(swap.RetainedShieldId == "cudgel", "A retained shield that left falls back to an equipped shield");
+swap.FollowEquippedShields([]);
+Check(swap.RetainedShieldId is null && swap.ResolveAttack(HostWeaponKind.Shield, "cudgel") == AttackRoute.None,
+    "No equipped shield, no retained shield");
+swap.DropAbility();
+Check(swap.CanUse(HostWeaponKind.Shield, "anything"), "Base form uses any equipped shield");
+
 var mouthful = new KirbyRules(["fire", "ice"], _ => 0);
 Check(mouthful.Absorb(1) == "fire" && mouthful.Absorb(2) == "fire", "Two enemies can enter the same mouthful");
 Check(mouthful.Absorb(1) is null && mouthful.IsBaseForm, "Repeated capture neither rerolls nor transforms");

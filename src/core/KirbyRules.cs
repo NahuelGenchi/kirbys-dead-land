@@ -38,18 +38,34 @@ public sealed class KirbyRules
     public double DamageMultiplier => AbilityEmpowered ? EmpoweredDamageMultiplier : 1;
     public string? RetainedShieldId { get; private set; }
 
-    public bool CanEquip(HostWeaponKind kind) => IsBaseForm &&
-        kind is HostWeaponKind.Sword or HostWeaponKind.Bow or HostWeaponKind.Shield;
+    /// <summary>
+    /// A shield can be taken in any form, as in Dead Cells: Take swaps it for
+    /// the equipped one. Swords and bows need base form.
+    /// </summary>
+    public bool CanEquip(HostWeaponKind kind) => kind == HostWeaponKind.Shield ||
+        IsBaseForm && kind is HostWeaponKind.Sword or HostWeaponKind.Bow;
 
-    /// <summary>Record the stable ID of the actual equipped shield, never its display name.</summary>
-    public bool EquipShield(string? id)
+    /// <summary>
+    /// Record the stable ID of the shield the host actually equipped, never its
+    /// display name. In copied form a newly taken shield replaces the retained one.
+    /// </summary>
+    public void EquipShield(string? id)
     {
         if (id is not null && string.IsNullOrWhiteSpace(id))
             throw new ArgumentException("Use null for no shield.", nameof(id));
-        if (!IsBaseForm)
-            return StringComparer.Ordinal.Equals(RetainedShieldId, id);
         RetainedShieldId = id;
-        return true;
+    }
+
+    /// <summary>
+    /// Follow the host's equipped shields: keep the retained shield while it is
+    /// still equipped, otherwise retain the first equipped shield, or none.
+    /// </summary>
+    public void FollowEquippedShields(IEnumerable<string> equippedIds)
+    {
+        ArgumentNullException.ThrowIfNull(equippedIds);
+        string[] ids = equippedIds.ToArray();
+        if (RetainedShieldId is null || !ids.Contains(RetainedShieldId, StringComparer.Ordinal))
+            EquipShield(ids.FirstOrDefault());
     }
 
     public bool CanUse(HostWeaponKind kind, string? itemId = null)
