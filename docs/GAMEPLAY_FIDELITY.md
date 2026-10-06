@@ -413,6 +413,24 @@ Live run `20261005-214713` took the T_Courtyard door: 148 of 149 cinematic polls
 were in the original Walk action (`0x060B`), facing right, with no Fall. Captured
 frames show changing walk poses up the steps until the fade. Exits where the
 host drops the hero, and walks to the left, have not been checked live.
+### Ability descriptions
+
+Issue #45. Intentional addition, mod-written text: these descriptions do not come
+from the ROM. The original game's ability explanations name DS buttons, which do
+not match Dead Cells bindings, so the owner chose text written for the mod's
+controls. `AbilityDescriptions` in `src/core/` holds one short summary per copy
+ability, followed by the shared line "Skill 1 or this button: attack. Skill 2:
+discard."
+
+The summaries name only well-established moves of the original game, such as
+Fire's dash fireball or Stone's drop, and give no damage numbers. Not every listed
+move has been checked live in the mod.
+
+They appear on the pause screen's ability card (#41). Cards describe their item
+through `InventItem.getGameplayDesc`; for the colorless stand-in, `KirbyHud`
+returns the current ability's text, and the host lays it out, wraps it and
+scrolls it. Nothing else describes the stand-in.
+
 ### HUD ability slot
 
 Issue #18. In copied form every weapon button whose slot does not hold a shield

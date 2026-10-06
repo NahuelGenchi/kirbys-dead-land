@@ -52,6 +52,13 @@ internal static class KirbyHud
 
     public static void Install()
     {
+        // Item cards describe their item through getGameplayDesc. A card drawn
+        // from the colorless stand-in (the pause equipment card) describes the
+        // current copy ability instead of the stand-in sword.
+        dc.tool.Hook_InventItem.getGameplayDesc += (orig, item, level) =>
+            standIn is not null && item.HashlinkPointer == standIn.HashlinkPointer && iconAbility is { } ability
+                ? AbilityDescriptions.Describe(ability).AsHaxeString()
+                : orig(item, level);
         Hook_Skill.useItem += UseItem;
         Hook_Skill.onResize += (orig, skill) =>
         {

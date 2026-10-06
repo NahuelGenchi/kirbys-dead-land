@@ -942,6 +942,22 @@ the all-ability rendering tests as full gameplay acceptance.
 - Not resolved: raising the shield while holding the opposite direction. The
   original guard keeps Kirby's facing while the host turns its shield.
 
+## 2026-10-06 — Ability descriptions (#45)
+
+- The owner asked whether the pause card says what each ability does; it did not.
+  The owner chose mod-written text over ROM text, because ROM text names DS
+  buttons.
+- `src/core/AbilityDescriptions.cs`: a short summary for each of the 24 abilities,
+  naming only well-established original moves in the mod's controls, plus a
+  shared "Skill 1 or this button: attack. Skill 2: discard." line. Tests cover all
+  24 IDs, length and host-markup characters.
+- `KirbyHud` hooks `InventItem.getGameplayDesc` for the colorless stand-in, so
+  the host's own card layout shows the text.
+- `python3 scripts/check.py` passes (226 core assertions; Release build 0
+  warnings/errors).
+- Live checks used a local-only merge with #41's branch: `125345` Fire, `125617`
+  Yo-Yo, `125747` Stone and `125923` Fire (final text). Real saves were unchanged.
+  Not every listed move has been checked live.
 ## 2026-10-06 — Pause equipment card (#41)
 
 - The owner's recording showed the pause screen listing "Rusty Sword I" while

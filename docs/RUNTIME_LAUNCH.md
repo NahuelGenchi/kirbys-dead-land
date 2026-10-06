@@ -245,6 +245,26 @@ The earlier `022250` take used native bridge SHA-256 `b799d1482911f62f975a1484bf
 
 The final `025145` take uses native bridge `f94997d82877bcdce29ed8d8cb3741545f08044ad813fa61f59f9406c6314b2c`, with source-stage door decorations removed. A real Zombie supplied random Fire (ability 11), and retained shield 919 successfully countered while evolved. The 65-second process completed without fatal errors and preserved real saves. The selected video is `~/.local/share/kirby-dead-cells/showcase/kirby-dead-cells-clean-20s.mp4`: 20 seconds, 1024×768, 264 actual captured frames encoded at 15 fps, with original 48 kHz stereo effects. The universal-modder probe passed and `contact-clean-20s.png` was inspected. Absorption, evolution, parry, walking, jumping, flight, and original Fire attacks are visible.
 
+### Ability descriptions (2026-10-06)
+
+Issue #45. The pause card itself comes from #41 (PR #43, not yet on `main` at the
+time). These runs therefore used a local-only test branch: this branch merged with
+`fix/41-pause-ability-card`, never pushed. Same root, `repros/colorless-20261005`,
+with `KIRBY_LAB_CAPTURE_ALL=1 ... --start-game --input-plan ability --probe-hud
+--probe-pause` for 75 seconds. Every run ended by the expected timeout without
+fatal log lines and left the real saves unchanged.
+
+- `125345` Fire, `125617` Yo-Yo and `125747` Stone (the longest summary): the card
+  showed the ability name, "Copy ability", the summary and the controls line,
+  then the host's Colorless line. The host wrapped the text inside the card. Yo-Yo
+  was named "Yo-Yo".
+- `125923` Fire, after the controls line was shortened to fit one line (runtime
+  DLL `716140dae4c43f628687419a28c33417a13122b1b8b8cf1b66a3e1efb4d5fb4e`): the
+  captured card shows the summary on two lines and the controls on one.
+- `125501` Cook: the probe's attack presses used up single-use Cook before the
+  pause opened, so the card was the normal "Rusty Sword I". This is expected and
+  is not evidence for Cook's text.
+
 ## Recording-driven regressions
 
 The user's later recording exposed equipment-rendering and health-bar problems that the earlier bounded tests missed. The separate copied-profile run `033400` verifies the repaired health update path: after a real R-key pickup of the generated Old Wooden Shield, host health, source health, and both HUD states remain 57/76, the healing trail is 57, and recoverable health is zero. Twenty-four stat recalculations preserve the wound. A normal-outfit round trip produces 75/100 and restores exactly 57/76 with the source machine paused while inactive.
