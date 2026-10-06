@@ -270,8 +270,9 @@ attack.
 Lethality stays in agreement. The paired source enemy receives the smallest HP
 whose truncated, scaled damage reaches the host's remaining life (rounded up from
 life ÷ combined multiplier and checked with the host's arithmetic). Original death
-reactions such as the Ice block therefore still occur in the tick of the host
-kill. Source HP stays clamped to the native range (32,760); a single-tick source
+reactions therefore still occur in the tick of the host kill. (Ice now leaves no
+original block; see [Ice freezes with the host status](#ice-freezes-with-the-host-status-intentional-deviation).)
+Source HP stays clamped to the native range (32,760); a single-tick source
 kill at that cap kills the host enemy.
 
 Unchanged: base-form host weapons, incoming damage, retained-shield parries, boss
@@ -361,6 +362,54 @@ therefore points that one table entry at the original return-zero stub
 `0x020CF36C` (`mov r0,#0; bx lr`) in emulated RAM, after validating both the stub
 and the entry. Kirby's swimming, the exit-water handler and other enemies' water
 reactions are unchanged. Water itself still works on Kirby as before.
+### Ice freezes with the host status (intentional deviation)
+
+Issue #42. In the original game an enemy reduced to zero HP by Ice becomes a
+kickable ice block; the runtime used to detach that source object so the block
+stayed in Dead Cells beside the host death. The owner asked for Dead Cells' own
+freeze status instead. Host routines were read from `hlboot.dat` (SHA-256
+`59350cad…07ce7e`) with crashlink:
+
+- `tool.weap.Freeze.onExecute` (Frost Blast) applies affect 23 for the weapon's
+  `props.duration` × `getDiminishingFactor(3, 1, 8)`. The MDK's v35 `data.cdb`
+  gives that duration as 3 s.
+- `Entity.getDiminishingFactor` counts uses per key; the count resets 5 s after
+  the last use.
+- `en.Mob.onAffectChange`: when affect 23 ends the host pops "Slowed" and applies
+  its thaw slow (133) and stun (8).
+- `MobAttackTarget.preHitResultUpdate`: a hit on a frozen mob removes affect 23
+  (the thaw above) unless the attack has tag 13 or its damage type is
+  `ExtraDamage`, `Poison`, `Bleed` or `Frost`; small hits that are not `Fire`
+  also leave it. The type is compared with the game's global enum value by
+  identity, so a newly allocated `Frost` value does not count.
+
+While the source step runs with Ice (ability 10), `KirbyEnemies.Complete`:
+
+- deals each copy hit as host `Frost` damage. `KirbyDamage.Frost` finds the
+  game's own singleton among the module globals (type `DamageType`, constructor
+  `Frost`). A continuing breath therefore damages a frozen enemy without
+  shattering the freeze, like the host's ice weapons; other attacks still
+  shatter it as usual.
+- freezes a host enemy that survives a hit the host resolved (not blocked or
+  parried) and is not already frozen: affect 23 for 3 s × the host diminishing
+  factor, as Frost Blast does. Host resistances apply inside `setAffectS`.
+  Unlike Frost Blast, it neither resets the factor after 18 s nor pops
+  "Resists" at factor 0.
+- retires the source object at once (`proxy_set(active=false)`) when the host
+  enemy dies, instead of detaching it, so the original ice block never appears.
+  The host death, loot and death effects are unchanged.
+
+Ice damage, its timing and the lethal hit still come from the original breath.
+Other abilities keep their original death remnants. Limit: the choice is made from
+Kirby's ability in that source step, so a non-breath kill while Kirby holds Ice
+(for example an Ice slide) also has no original remnant.
+
+Evidence: `nds_tests.py` case `proxy_ice_release` kills a 16-HP proxy with the
+original breath (11 + 5), retires it in the lethal frame and finds no object
+running the frozen-block routine `0x021583EC` in the 94 frames after. The same
+scan on the old detach path finds the block in all 94. Live runs are in
+[RUNTIME_LAUNCH.md](RUNTIME_LAUNCH.md#ice-host-freeze-2026-10-06).
+
 ### Vines (#25)
 
 `VineLadder.buildLadder` (run when the Vine rune grows a vine, and again on load
