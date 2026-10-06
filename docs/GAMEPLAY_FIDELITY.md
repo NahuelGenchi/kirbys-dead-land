@@ -14,19 +14,26 @@ in [NDS_BRIDGE.md](NDS_BRIDGE.md). The original bootstrap experiment remains in
 
 | System | Original code and host adapter |
 |---|---|
-| Clock | 33,513,982 / 560,190 source ticks per second, independently of host rendering |
-| Movement | The ROM updates fixed-point position, velocity and action state; the host follows its physical foot |
-| Terrain | Nearby host solids, one-way floors, slopes, ladders and water become source collision cells; all linked source objects and cached terrain probes move together when the window rebases |
-| Input | Existing host bindings become original digital buttons; ordinary source directional combinations still apply |
-| Graphics | Live original OAM, OBJ VRAM and palettes supply body, abilities, helper and effects; allowed host equipment has a separate overlay |
+| Clock | 33,513,982 / 560,190 source ticks per second. A display within 3% of that rate presents one original frame per host frame, like an emulator synchronized to vblank; other rates accumulate real time |
+| Movement | The ROM updates fixed-point position, velocity and action state; the host follows its physical foot. With `MatchHostSpeed` (default) Kirby moves at the Beheaded's measured speeds: each original frame's own motion is carried on through free space (run and air control 236.5 px/s, float across at the same speed, fall 403 px/s, ladders 97.5 px/s both ways, floating up and down at the run's tempo), the original horizontal velocity is cleared when the direction is released or reversed, and the jump keeps its 50 px but peaks after 0.25 s, as the Beheaded's does. Added motion stops short of walls and ceilings, leaves the original a full fall step above floors, follows slopes at the original's whole-pixel surface, and never applies to hits, swimming or ability moves. The original walk and dash cycles play faster with the run (up to 1.67 times, one frame a pose), so his feet cover about the ground they did natively. `false` keeps the original DS speeds (the stomp keeps the dive's) |
+| Terrain | Nearby host solids, one-way floors, slopes, ladders and water become source collision cells; all linked source objects and cached terrain probes move together when the window rebases by whole cells, while effects attached to a parent (Fire's head flame, Plasma's spark, attack effects) keep their offsets from it. Host movement of Kirby (speed match, stomp) moves only him and his terrain probes, so thrown bombs, cutters, effects and the helper keep their original paths |
+| Input | Existing host bindings become original digital buttons; ordinary source directional combinations still apply. A held direction dashes through the original double tap (`AlwaysDash`); a light analog tilt walks. A key bound to both Up and jump (W and the Up arrow by default) climbs at a ladder or chain, as in the host, instead of jumping first |
+| Roll | Kirby's original slide is his roll and covers the Beheaded's roll: 131 px at up to 339 px/s. Host roll-zone tunnels (collision 65) open while he slides and stay open until he leaves one entered by sliding; walking cannot enter. The slide's fast part counts as a roll for the host's door and breakable-tile checks |
+| Dive attack | The player's host dive binding in the air or on a ladder or chain (original jump, fall, float or climb) starts the host `DiveAttack` under its own rules. The original controller keeps its falling or exhaling animation and physics (3.5 px/frame cap) and drops straight down; the host adds 11.5 px/frame of descent through free space, 15 px a frame in all like the Beheaded's dive (about 900 px/s), and leaves the original a full fall step to make the floor contact; the host skill resolves the landing (shockwave, stun, damage, breakable floors with the Ram rune). Only what stops the original fall counts as floor: solids, slopes and one-way platforms from above, never ladders or chains. Enemy touch damage is off while stomping and for 30 frames after landing |
+| Camera | `CameraZoom` (default 1, the host camera) can zoom the host viewport; 2 shows about 200 host pixels of height, close to the DS screen's 192. Host cinematics and host zoom changes keep their framing |
+| Palette flashes | The original hurt and guard flashes of Kirby's first two palette banks are shown at `FlashStrength` (0.35) of their colour change, with original timing; lasting palette changes are adopted after four frames |
+| Graphics | Live original OAM, OBJ VRAM and palettes supply body, abilities, helper and effects; allowed host equipment has a separate overlay. OAM shows the previous source frame, so it is centred on that frame's Kirby position. The original draws only its 256-pixel screen: its camera moves with the window, and a placement frames Kirby at once, so he and the effects around him stay on that screen |
 | Background effects | Original captured palette changes supply Crash/Paint/Mike timing and colors; host scenery receives the corresponding blend |
 | Sound | Original stereo sound effects continue; the source music player is muted so Dead Cells music remains |
 | Enemy collision | Live host enemies have paired source collision objects with their host dimensions; original routines resolve damage cadence, suction, grabs, throws and Cook |
 | Boss collision | Original resistance bits prevent inhale, Suplex capture and Cook; damage still uses original collision/debounce, while the host retains boss AI and phases |
-| Incoming damage | Host shield/parry resolves first; remaining damage enters the next original collision tick, preserving original guard, recoil and invulnerability |
-| Outgoing damage | Source HP deltas become exact host damage; the host's normal hero damage multiplier does not alter copy attacks |
+| Host triggers | Pressure plates (trap plates and pulley points too) and hidden triggers test Kirby's physical foot on the ground, as for the Beheaded; enemy attacks still test the projected original hurtbox |
+| Incoming damage | Host shield/parry resolves first; remaining damage, converted to the same fraction of Kirby's 76 HP as of the host's current maximum, enters the next original collision tick, preserving original guard, recoil and invulnerability |
+| Touching enemies | As in Dead Cells, touching an enemy hurts neither Kirby nor the enemy: the original body-contact damage is excluded for every paired enemy, while Kirby's inhale, slide and copy attacks still hit, and the host's own touch attacks (spiked or electric enemies) still reach him as incoming damage. `OriginalTouchDamage: true` restores the original rule (7 of 76 HP to Kirby, and weak enemies destroyed by the bump) |
+| Outgoing damage | Paired original enemies hold the host life in original units: host life ÷ (`CopyDamageScale` 3.5 × the host's per-tier life scale). Original HP deltas are multiplied back, so both games agree on the lethal hit; the host hero damage multiplier does not alter copy attacks |
 | Player health | Original full health is 76. Host and source health are synchronized, including host healing and original food |
 | Saves | A versioned, ROM-checked native machine snapshot and physical shield/enemy bindings travel with the private host save slot |
+| Arrival and death | Kirby appears in the host arrival flash rather than standing in its corpse sequence. On death the original lethal recoil and spin-away play over the host death sequence |
 
 The source machine remains alive across host level transitions. Original helper,
 projectile and copy states belong to that machine. Room changes retire paired
@@ -51,7 +58,10 @@ keeps the original source behavior.
 
 Base form permits host swords, bows and shields. Copied form maps attack buttons
 to the original ability and keeps only the exact previously equipped shield for
-host parries. Shield identity uses the physical item's permanent ID. Source copy
+host parries. Other pickups are declined through `InventItem.isUsefulFor`, the
+check the host makes before every item drop, altar, shop purchase and timed-door
+reward. The host then shows its own "Can't use that right now" message, leaves
+the item in place and charges nothing. Shield identity uses the physical item's permanent ID. Source copy
 loss, discarded-star recovery, helper creation and limited-use ability expiration
 update the same equipment policy.
 

@@ -49,6 +49,12 @@ internal static unsafe class KirbyHurtbox
         dc.Hook_Entity.spriteUpdate += (orig, entity) => Physical(entity, () => orig(entity));
         dc.Hook_Entity.serialize += (orig, entity, serializer) =>
             Physical(entity, () => orig(entity, serializer));
+        // Pressure plates (including trap plates and pulley points) and hidden
+        // triggers test whether the hero stands on the ground at their tile.
+        // The projected hurtbox sits about 9 pixels above Kirby's foot, so they
+        // must see the physical body, as they see the Beheaded's.
+        dc.en.inter.Hook_PressurePlate.fixedUpdate += (orig, plate) => PhysicalHero(() => orig(plate));
+        dc.en.inter.Hook_HiddenTrigger.fixedUpdate += (orig, trigger) => PhysicalHero(() => orig(trigger));
     }
 
     private static bool IsActive(Hero hero) => !hero.destroyed && hero.life > 0 &&
@@ -89,9 +95,15 @@ internal static unsafe class KirbyHurtbox
 
     private static void Physical(dc.Entity entity, Action original)
     {
+        if (active?.Hero.HashlinkPointer != entity.HashlinkPointer) { original(); return; }
+        PhysicalHero(original);
+    }
+
+    /// <summary>Run host code with Kirby's physical foot and body instead of the projected hurtbox.</summary>
+    private static void PhysicalHero(Action original)
+    {
         var value = active;
-        if (value is not { IsProjected: true } || value.Hero.HashlinkPointer != entity.HashlinkPointer)
-        { original(); return; }
+        if (value is not { IsProjected: true }) { original(); return; }
         value.Restore();
         try { original(); }
         finally { if (IsActive(value.Hero)) value.Apply(); }

@@ -4,7 +4,7 @@ use chrono::{TimeZone, Utc};
 use melon_rs::{input::ButtonMask, melon::nds::Nds};
 use sha2::{Digest, Sha256};
 use std::{
-    collections::VecDeque,
+    collections::{HashMap, VecDeque},
     ffi::{c_char, CStr},
     fs, ptr,
     sync::{
@@ -47,6 +47,8 @@ struct Bridge {
     nds: Nds,
     proxies: [Proxy; PROXY_COUNT],
     audio: VecDeque<i16>,
+    /// Every actor's anchor points as the last source frame began.
+    anchors: HashMap<u32, [(i32, i32); 2]>,
 }
 fn u16at(r: &[u8], p: usize) -> u16 {
     u16::from_le_bytes(r[p..p + 2].try_into().unwrap())
@@ -140,6 +142,7 @@ pub unsafe extern "C" fn kssu_open(
             nds,
             proxies: metadata.unwrap_or([Proxy::default(); PROXY_COUNT]),
             audio: VecDeque::new(),
+            anchors: HashMap::new(),
         })) as *mut std::ffi::c_void)
     });
     run.ok().flatten().unwrap_or(ptr::null_mut())
@@ -168,6 +171,7 @@ pub unsafe extern "C" fn kssu_step(handle: *mut std::ffi::c_void, mask: u16, fra
         native_trace_once(2, "step: applying proxy shapes");
         apply_proxy_shapes(b);
         native_trace_once(3, "step: executing source frame");
+        b.anchors = actor_anchors(b.nds.main_ram_mut());
         b.nds.run_frame();
         native_trace_once(4, "step: source frame returned; reading PCM");
         for pair in b.nds.read_audio_output() {
@@ -368,7 +372,7 @@ pub unsafe extern "C" fn kssu_read_gpu(
 fn put32(r: &mut [u8], p: usize, v: u32) {
     r[p..p + 4].copy_from_slice(&v.to_le_bytes());
 }
-fn descendants(r: &[u8], player: u32) -> Vec<(usize, bool)> {
+fn actor_nodes(r: &[u8]) -> Vec<usize> {
     let mut nodes = Vec::new();
     for slot in 0..7 {
         let mut a = u32at(r, 0x49dec + slot * 4);
@@ -384,6 +388,51 @@ fn descendants(r: &[u8], player: u32) -> Vec<(usize, bool)> {
             a = u32at(r, p);
         }
     }
+    nodes
+}
+/// The points an attached actor can be drawn from: the actor's drawn
+/// position (+0x78/+0x7C) and its sprite anchor (the point 0x020A8F90 returns).
+fn anchor_points(r: &[u8], p: usize) -> [(i32, i32); 2] {
+    let drawn = (u32at(r, p + 0x78) as i32, u32at(r, p + 0x7c) as i32);
+    let sprite = off(u32at(r, p + 0x40).wrapping_add(0x748), 8)
+        .map_or(drawn, |s| (u32at(r, s) as i32, u32at(r, s + 4) as i32));
+    [drawn, sprite]
+}
+fn actor_anchors(r: &[u8]) -> HashMap<u32, [(i32, i32); 2]> {
+    actor_nodes(r)
+        .into_iter()
+        .map(|p| (BASE + p as u32, anchor_points(r, p)))
+        .collect()
+}
+/// Whether an actor's +0x80/+0x84 is an offset from its parent rather than a
+/// position. The original's attach helpers (0x0200F208 and its kin, 0x020C838C,
+/// 0x020CD368) draw such an actor at a parent point plus that offset (plus its
+/// whole pixels, mirrored with facing, for sprite bones), reading the point
+/// before or after the parent moved that frame. Fire's and Plasma's head
+/// emitters and many attack effects are attached this way.
+fn parent_relative(r: &[u8], p: usize, before: &HashMap<u32, [(i32, i32); 2]>) -> bool {
+    let (x, y) = (u32at(r, p + 0x78) as i32, u32at(r, p + 0x7c) as i32);
+    let (ox, oy) = (u32at(r, p + 0x80) as i32, u32at(r, p + 0x84) as i32);
+    let parent = u32at(r, p + 4);
+    let Some(q) = off(parent, 0x8c) else {
+        return false;
+    };
+    if (x, y) == (ox, oy) {
+        return false;
+    }
+    let (bx, by) = (ox & !0xffff, oy & !0xffff);
+    let earlier = before.get(&parent).into_iter().flatten().copied();
+    anchor_points(r, q)
+        .into_iter()
+        .chain(earlier)
+        .any(|(ax, ay)| {
+            (x, y) == (ax.wrapping_add(ox), ay.wrapping_add(oy))
+                || ((x == ax.wrapping_add(bx) || x == ax.wrapping_sub(bx))
+                    && y == ay.wrapping_add(by))
+        })
+}
+fn descendants(r: &[u8], player: u32) -> Vec<(usize, bool)> {
+    let nodes = actor_nodes(r);
     let mut own = std::collections::HashSet::from([player]);
     for &p in &nodes {
         if r[p + 0x16] == 56 {
@@ -407,8 +456,9 @@ fn descendants(r: &[u8], player: u32) -> Vec<(usize, bool)> {
         .collect()
 }
 /// Replace the seeded 100x9 source map. Cells are original block IDs (0 empty,
-/// 3 solid). The target position rebases the source's 16.16 coordinates only;
-/// velocities, controller state, action timers and original physics are retained.
+/// 3 solid). The target position rebases the source's 16.16 coordinates only
+/// (actors attached to a parent keep their offsets); velocities, controller
+/// state, action timers and original physics are retained.
 #[no_mangle]
 pub unsafe extern "C" fn kssu_world(
     handle: *mut std::ffi::c_void,
@@ -440,21 +490,49 @@ pub unsafe extern "C" fn kssu_world(
     }
     let dx = target_x.wrapping_sub(u32at(r, p + 0x80) as i32);
     let dy = target_y.wrapping_sub(u32at(r, p + 0x84) as i32);
-    for (node, owned) in descendants(r, player) {
+    let nodes = descendants(r, player);
+    let relative: Vec<bool> = nodes
+        .iter()
+        .map(|&(node, _)| parent_relative(r, node, &b.anchors))
+        .collect();
+    for ((node, owned), relative) in nodes.into_iter().zip(relative) {
         let proxy_slot = proxy_slot_for(r, node);
         let proxy = proxy_slot.is_some_and(|slot| b.proxies[slot].flags != 0);
         if (proxy && u32at(r, node + 0x30) == 0x0215acf8) || u32at(r, node + 0x2c) == 0x0214dc70 {
             continue;
         }
         if owned || proxy || proxy_slot.is_none() {
-            let x = (u32at(r, node + 0x80) as i32).wrapping_add(dx);
-            let y = (u32at(r, node + 0x84) as i32).wrapping_add(dy);
-            put32(r, node + 0x80, x as u32);
-            put32(r, node + 0x84, y as u32);
+            // Drawn positions move with the window, so an attached actor that
+            // reads its parent's before the parent runs again stays on it;
+            // offsets from a parent stay as they are.
+            let drawn = u32at(r, node + 0x78) == u32at(r, node + 0x80)
+                && u32at(r, node + 0x7c) == u32at(r, node + 0x84);
+            let mut fields = Vec::with_capacity(2);
+            if relative || drawn {
+                fields.push(0x78);
+            }
+            if !relative {
+                fields.push(0x80);
+            }
+            for at in fields {
+                let x = (u32at(r, node + at) as i32).wrapping_add(dx);
+                let y = (u32at(r, node + at + 4) as i32).wrapping_add(dy);
+                put32(r, node + at, x as u32);
+                put32(r, node + at + 4, y as u32);
+            }
         } else {
             retire_proxy(r, node);
         }
     }
+    // The source camera scrolls from its own position (i16 x at 0x0209F3A8)
+    // toward Kirby, at most 16 px a frame, and the original draws only what is
+    // on its 256-pixel screen. Move it with the window; after a placement that
+    // leaves Kirby away from the centre (he stays within about 24 px of x 128),
+    // frame him at once instead of drawing him off screen while it catches up.
+    let kirby_x = target_x.wrapping_add(0x8000) >> 16;
+    let camera = (u16at(r, 0x9f3a8) as i16 as i32).wrapping_add(dx.wrapping_add(0x8000) >> 16);
+    let camera = if (96..=160).contains(&(kirby_x - camera)) { camera } else { kirby_x - 128 };
+    r[0x9f3a8..0x9f3aa].copy_from_slice(&(camera as i16).to_le_bytes());
     // Terrain probes cache absolute sample positions across frames (ten 28-byte records).
     for i in 0..10 {
         let q = 0xbb0b4 + i * 28;
@@ -490,6 +568,48 @@ pub unsafe extern "C" fn kssu_world(
     // The host owns room exits; retain all actor/ability particle systems.
     for slot in 0..16 {
         r[0x9fbec + slot * 8..0x9fbee + slot * 8].fill(0);
+    }
+    0
+}
+/// Move only the player by a 16.16 delta inside the current window, as if the
+/// original controller had moved him: his cached terrain probes and the two
+/// linked position records that `kssu_world` also moves go with him, and the
+/// source camera follows him by itself. Thrown objects, effects, the helper and
+/// enemies stay where they are; objects attached to Kirby are placed again by
+/// the original next frame. `kssu_world` still moves everything together when
+/// the window itself moves.
+#[no_mangle]
+pub unsafe extern "C" fn kssu_move_player(handle: *mut std::ffi::c_void, dx: i32, dy: i32) -> i32 {
+    if handle.is_null() {
+        return -1;
+    }
+    let b = &mut *(handle as *mut Bridge);
+    let r = b.nds.main_ram_mut();
+    let player = u32at(r, 0x49df0);
+    let Some(p) = off(player, 0x8c) else {
+        return -2;
+    };
+    let old_x = u32at(r, p + 0x80) as i32;
+    let old_y = u32at(r, p + 0x84) as i32;
+    let new_x = old_x.wrapping_add(dx);
+    let new_y = old_y.wrapping_add(dy);
+    put32(r, p + 0x80, new_x as u32);
+    put32(r, p + 0x84, new_y as u32);
+    // The probes hold whole-pixel sample positions around Kirby.
+    let px = (new_x >> 16).wrapping_sub(old_x >> 16) as i16;
+    let py = (new_y >> 16).wrapping_sub(old_y >> 16) as i16;
+    for i in 0..10 {
+        let q = 0xbb0b4 + i * 28;
+        let x = (u16at(r, q) as i16).wrapping_add(px);
+        let y = (u16at(r, q + 2) as i16).wrapping_add(py);
+        r[q..q + 2].copy_from_slice(&x.to_le_bytes());
+        r[q + 2..q + 4].copy_from_slice(&y.to_le_bytes());
+    }
+    for q in [0xbb6b0, 0xbb6f8] {
+        let x = (u32at(r, q) as i32).wrapping_add(dx);
+        let y = (u32at(r, q + 4) as i32).wrapping_add(dy);
+        put32(r, q, x as u32);
+        put32(r, q + 4, y as u32);
     }
     0
 }
@@ -793,6 +913,7 @@ pub unsafe extern "C" fn kssu_load_state(
         native_trace("load: source snapshot restored");
         b.proxies = metadata.unwrap_or([Proxy::default(); PROXY_COUNT]);
         b.audio.clear();
+        b.anchors.clear();
         0
     } else {
         -5

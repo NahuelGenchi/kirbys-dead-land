@@ -229,8 +229,12 @@ def main() -> None:
     if not args.play:
         from PIL import Image
         for ppm in run.glob('frame-*.ppm'):
-            with Image.open(ppm) as img:
-                img.save(ppm.with_suffix('.png'))
+            try:
+                with Image.open(ppm) as img:
+                    img.save(ppm.with_suffix('.png'))
+            except OSError:
+                # The bounded run can end while the last capture is being written.
+                print(f'Skipped incomplete capture {ppm.name}')
             ppm.unlink()
     report = {'run': str(run), 'exit_code': process.returncode,
               'save_isolation_installed': (lab / 'save-isolation.ready').is_file(),

@@ -35,7 +35,11 @@ public sealed class KirbyEnemies
         nds.SetProxy(i, 0, 0, 1, false);
         mobs[i] = null; controlled[i] = false; abilities[i] = 0; assignedHp[i] = 0; detached[i] = false;
     }
-    public void Prepare(KirbySession session, NdsRuntime nds, int ox, int oy)
+    /// <param name="scale">Host life per original damage point for a target.</param>
+    /// <param name="bodyContact">The original touch damage between Kirby and enemies: off by default
+    /// (Dead Cells has none) and while Kirby stomps, as the host dive lands on enemies; his own
+    /// attacks, inhale and slide still hit them.</param>
+    public void Prepare(KirbySession session, NdsRuntime nds, int ox, int oy, Func<Entity, double> scale, bool bodyContact = true)
     {
         var hero = session.Hero;
         if (restoring is not null)
@@ -101,15 +105,17 @@ public sealed class KirbyEnemies
             if (mobs[i] is not { } mob) continue;
             int x = checked((int)Math.Round(((mob.cx + mob.xr) * 24 - ox) * 65536));
             int y = checked((int)Math.Round(((mob.cy + mob.yr) * 24 - 17 - oy) * 65536));
-            assignedHp[i] = Math.Clamp(mob.life, 1, MaxSourceHp);
+            // Original HP is the host life in original damage units, so both
+            // games agree on which hit is lethal (Ice freezes, death reactions).
+            assignedHp[i] = Math.Clamp((int)Math.Ceiling(mob.life / scale(mob)), 1, MaxSourceHp);
             nds.SetProxy(i, x, y, assignedHp[i]);
             nds.SetProxyOptions(i, abilities[i], mob is not Mob || mob is dc.en.mob.Boss);
-            nds.SetProxyContact(i, mob is Mob);
+            nds.SetProxyContact(i, mob is Mob && bodyContact);
             nds.SetProxySize(i, (ushort)Math.Clamp(Math.Ceiling(mob.radius * 2), 1, 1024),
                 (ushort)Math.Clamp(Math.Ceiling(mob.hei), 1, 1024));
         }
     }
-    public string? Complete(KirbySession session, NdsRuntime nds, int ox, int oy)
+    public string? Complete(KirbySession session, NdsRuntime nds, int ox, int oy, Func<Entity, double> scale)
     {
         string? copied = null;
         for (uint i = 1; i <= Capacity; i++)
@@ -136,10 +142,13 @@ public sealed class KirbyEnemies
                 continue;
             }
             // Native HP follows the host's actual remaining life. Lethal Ice
-            // hits must enter the original freeze reaction in the same tick.
+            // hits must enter the original freeze reaction in the same tick:
+            // an original lethal hit removes the remaining host life, and a
+            // surviving original enemy leaves the host enemy alive.
             int damage = assignedHp[i] - proxy.Hp;
             if (damage > 0 && !mob.destroyed && mob.life > 0)
-                KirbyDamage.Hit(session.Hero, mob, damage);
+                KirbyDamage.Hit(session.Hero, mob, proxy.Hp <= 0 ? mob.life
+                    : Math.Clamp((int)Math.Round(damage * scale(mob)), 1, Math.Max(1, mob.life - 1)));
             if (mob.destroyed || mob.life <= 0)
             {
                 if (!proxy.Gone && mob is Mob and not dc.en.mob.Boss)

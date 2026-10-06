@@ -62,4 +62,235 @@ Check(mouthful.Absorb(1) == "fire" && mouthful.Absorb(2) == "fire", "Two enemies
 Check(mouthful.Absorb(1) is null && mouthful.IsBaseForm, "Repeated capture neither rerolls nor transforms");
 mouthful.SetSourceAbility("ice");
 Check(mouthful.Absorb(3) is null, "Original transformation closes the inhale window");
+
+int Run(FramePacer pacer, double hz, int frames, List<int>? record = null)
+{
+    int total = 0;
+    for (int i = 0; i < frames; i++) { int n = pacer.Steps(1 / hz); record?.Add(n); total += n; }
+    return total;
+}
+var vsync = new FramePacer();
+var perFrame = new List<int>();
+Run(vsync, 59.96, 600, perFrame);
+Check(vsync.Locked && perFrame.All(n => n == 1), "A 59.96 Hz display presents one original frame per host frame");
+Check(new FramePacer().Steps(1 / 61.0) == 1 && new FramePacer().Steps(1 / 58.5) == 1, "Nearby refresh rates lock");
+Check(vsync.Steps(2 / 59.96) == 2 && vsync.Steps(1 / 59.96) == 1 && vsync.Locked, "A host hitch catches up, then the lock resumes");
+var fast = new FramePacer();
+var fastSteps = new List<int>();
+int fastTotal = Run(fast, 144, 1440, fastSteps);
+Check(!fast.Locked && Math.Abs(fastTotal - FramePacer.DsRefreshRate * 10) <= 1 && fastSteps.All(n => n is 0 or 1),
+    "A 144 Hz display keeps original real-time speed");
+var slow = new FramePacer();
+Check(Run(slow, 30, 300) is >= 597 and <= 600, "A 30 Hz host runs two original frames per host frame");
+var paused = new FramePacer();
+Check(paused.Steps(double.NaN) == 0 && paused.Steps(5) <= 15, "Invalid and long host deltas are bounded");
+
+ushort[] Feed(DashAssist assist, params (ushort Mask, bool Enabled, int Vx, int Vy)[] frames) =>
+    frames.Select(f => assist.Filter(f.Mask, f.Enabled, f.Vx, f.Vy)).ToArray();
+var dash = new DashAssist();
+var started = Feed(dash, (16, true, 0, 0), (16, true, 50, 0), (16, true, 100, 0), (16, true, 150, 0));
+Check(started.SequenceEqual(new ushort[] { 16, 0, 16, 16 }), "A new press becomes the original press-release-press double tap");
+var landing = Feed(dash, (17, true, 352, -900), (16, true, 368, -400), (16, true, 368, 300), (16, true, 352, 0), (16, true, 352, 0), (16, true, 352, 0), (16, true, 400, 0));
+Check(landing.SequenceEqual(new ushort[] { 17, 16, 16, 16, 16, 0, 16 }), "Landing while walking re-taps once after two still frames");
+var dashLanding = new DashAssist();
+Feed(dashLanding, (16, true, 0, 0), (16, true, 0, 0), (16, true, 528, 0));
+var kept = Feed(dashLanding, (16, true, 528, -600), (16, true, 528, 200), (16, true, 528, 0), (16, true, 528, 0), (16, true, 528, 0));
+Check(kept.All(m => m == 16), "A dash jump lands dashing without an extra release");
+var apex = new DashAssist();
+Feed(apex, (16, true, 0, 0), (16, true, 0, 0));
+var air = Feed(apex, (16, true, 368, -300), (16, true, 368, 0), (16, true, 368, 200), (16, true, 368, 400));
+Check(air.All(m => m == 16), "A single zero-velocity apex frame is not a landing");
+var exact = new DashAssist();
+Check(Feed(exact, (144, true, 0, 0), (144, true, 0, 0)).All(m => m == 144) &&
+      Feed(exact, (528, true, 0, 0), (528, true, 0, 0)).All(m => m == 528), "Down and guard combinations keep exact input");
+var walk = new DashAssist();
+Check(Feed(walk, (16, false, 0, 0), (16, false, 50, 0), (16, false, 100, 0)).All(m => m == 16), "A light analog tilt walks");
+var turn = new DashAssist();
+var turned = Feed(turn, (16, true, 0, 0), (16, true, 0, 0), (16, true, 528, 0), (32, true, 528, 0), (32, true, 300, 0), (32, true, -100, 0));
+Check(turned.SequenceEqual(new ushort[] { 16, 0, 16, 32, 0, 32 }), "Turning around double-taps the new direction");
+
+byte[] Palette(params ushort[] banks)
+{
+    var bytes = new byte[512];
+    for (int bank = 0; bank < banks.Length; bank++)
+        for (int i = 0; i < 16; i++)
+            System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(bank * 32 + i * 2), (ushort)(banks[bank] + i));
+    return bytes;
+}
+ushort Entry(byte[] bytes, int bank, int i) => System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(bank * 32 + i * 2));
+var soft = new PaletteFlashSoftener(2, 0.35);
+ushort normal = 0x7B5F, flash = 0x3DEF;
+for (int i = 0; i < 10; i++) soft.Apply(Palette(normal, normal));
+var shown = new List<ushort>();
+for (int frame = 0; frame < 60; frame++)
+{
+    bool on = frame % 6 < 3;
+    var bytes = Palette(on ? flash : normal, normal);
+    soft.Apply(bytes);
+    shown.Add(Entry(bytes, 0, 1));
+}
+ushort tinted = PaletteFlashSoftener.Blend((ushort)(normal + 1), (ushort)(flash + 1), 0.35);
+Check(shown.All(v => v == normal + 1 || v == tinted) && shown.Contains(tinted) && !shown.Contains((ushort)(flash + 1)),
+    "A 3-on/3-off flash is shown as a tint and never reaches the flash palette");
+var lasting = new List<ushort>();
+for (int frame = 0; frame < 8; frame++) { var bytes = Palette(flash, normal); soft.Apply(bytes); lasting.Add(Entry(bytes, 0, 1)); }
+Check(lasting.Take(3).All(v => v == tinted) && lasting.Skip(3).All(v => v == flash + 1), "A lasting palette change is adopted after four frames");
+var guard = new List<ushort>();
+for (int frame = 0; frame < 40; frame++) { bool on = frame % 4 < 2; var bytes = Palette(on ? normal : flash, normal); soft.Apply(bytes); guard.Add(Entry(bytes, 0, 1)); }
+Check(guard.All(v => v == flash + 1 || v == PaletteFlashSoftener.Blend((ushort)(flash + 1), (ushort)(normal + 1), 0.35)), "A 2-on/2-off alternation against the new stable palette is tinted");
+var untouched = Palette(normal, flash, 0x1234); var copy = (byte[])untouched.Clone();
+new PaletteFlashSoftener(2, 1).Apply(untouched);
+Check(untouched.SequenceEqual(copy), "Strength 1 leaves the palette unchanged");
+var off = new PaletteFlashSoftener(1, 0);
+off.Apply(Palette(normal)); var hidden = Palette(flash); off.Apply(hidden);
+Check(Entry(hidden, 0, 5) == normal + 5, "Strength 0 shows the stable palette");
+Check(PaletteFlashSoftener.Blend(0, 0x7FFF, 0.5) == (16 | 16 << 5 | 16 << 10), "Blend works per RGB555 channel");
+
+var gate = new RollZoneGate();
+Check(!gate.Update(sliding: false, inside: false), "Roll zones are solid while walking outside them");
+Check(!gate.Update(sliding: false, inside: true), "Walking into a roll zone does not open it");
+Check(gate.Update(sliding: true, inside: false), "A slide opens roll zones before reaching them");
+Check(gate.Update(sliding: true, inside: true), "Sliding into a roll zone keeps it open");
+Check(gate.Update(sliding: false, inside: true), "A slide that ends inside a roll zone leaves it open");
+Check(!gate.Update(sliding: false, inside: false), "Leaving the roll zone closes it again");
+Check(!gate.Update(sliding: false, inside: true), "Re-entering without a slide stays closed");
+gate.Update(true, true); gate.Reset();
+Check(!gate.Open && !gate.Update(false, true), "Reset forgets an entered roll zone");
+
+Check(KirbyActions.CanStomp(KirbyActions.Jump) && KirbyActions.CanStomp(KirbyActions.Fall) && KirbyActions.CanStomp(KirbyActions.Float),
+    "Stomps start from rising, falling and floating");
+Check(!KirbyActions.CanStomp(KirbyActions.Standing) && !KirbyActions.CanStomp(KirbyActions.Slide) && !KirbyActions.CanStomp(KirbyActions.Ability),
+    "No stomp on the ground, while sliding or during an exhale or inhale");
+Check(KirbyActions.CanSlide(KirbyActions.Walk) && !KirbyActions.CanSlide(KirbyActions.Fall), "Slides start on the ground only");
+var stompRun = new StompController();
+Check(!stompRun.TryStart(KirbyActions.Standing, 480), "A grounded Kirby cannot stomp");
+Check(stompRun.TryStart(KirbyActions.Fall, 400) && stompRun.Active, "A falling Kirby stomps");
+Check(!stompRun.TryStart(KirbyActions.Fall, 400), "A stomp cannot restart while active");
+Check(stompRun.Mask(1 | 128) == 0, "Original buttons are released during a falling stomp");
+Check(stompRun.Descent(100) == StompController.ExtraDescent, "Full extra descent in open air");
+Check(stompRun.Descent(8) == 3.5 && stompRun.Descent(4) == 0, "Descent leaves the original a full fall step to make the floor contact");
+Check(Math.Abs(3.5 + StompController.ExtraDescent - 15) < 1e-9, "The stomp falls 15 px a frame, the Beheaded's dive");
+Check(stompRun.Advance(landed: false, interrupted: false) == StompController.Outcome.None && stompRun.Active, "Still diving");
+Check(Math.Abs(stompRun.Height(472) - 3) < 1e-9, "Fall height is reported in host cells");
+Check(stompRun.Advance(landed: true, interrupted: false) == StompController.Outcome.Landed && !stompRun.Active, "Landing ends the stomp");
+Check(stompRun.Descent(100) == 0 && stompRun.Mask(1) == 1, "An idle stomp leaves descent and buttons alone");
+var floatStomp = new StompController();
+Check(floatStomp.TryStart(KirbyActions.Float, 300), "A floating Kirby stomps");
+Check(floatStomp.Mask(1) == StompController.ButtonB && floatStomp.Mask(1) == 0, "A floating Kirby exhales once, then falls");
+Check(floatStomp.Advance(false, interrupted: true) == StompController.Outcome.Cancelled && !floatStomp.Active, "A hit cancels the stomp");
+var chainStomp = new StompController();
+Check(KirbyActions.CanStomp(KirbyActions.Climb) && chainStomp.TryStart(KirbyActions.Climb, 300), "Kirby stomps from a ladder or chain");
+Check(chainStomp.Mask(128 | 1) == StompController.ButtonA && chainStomp.Mask(128 | 1) == 0, "The original A kicks him off once, then buttons are released");
+var fallStomp = new StompController();
+fallStomp.TryStart(KirbyActions.Fall, 300);
+Check(fallStomp.Mask(1) == 0, "A falling Kirby needs no releasing press");
+var stuck = new StompController();
+stuck.TryStart(KirbyActions.Jump, 0);
+var outcome = StompController.Outcome.None;
+for (int frame = 0; frame <= StompController.MaxFrames && outcome == StompController.Outcome.None; frame++) outcome = stuck.Advance(false, false);
+Check(outcome == StompController.Outcome.Cancelled && stuck.Frames == 0, "A stomp that never lands is cancelled");
+
+{
+// Movement matched to the Beheaded. Terrain: floor at row 30 (y 720), walls and
+// slopes placed per test; Kirby's original motion per frame is given as input.
+ushort MFlat(int cx, int cy) => cy >= 30 ? SpeedMatch.Solid : SpeedMatch.Free;
+const double RunPx = SpeedMatch.RunSpeed;
+bool MNear(double a, double b, double e = 1e-6) => Math.Abs(a - b) < e;
+var mDash = SpeedMatch.Move(KirbyActions.Dash, 1, 528, 300, 720, 302.0625, 720, MFlat);
+Check(MNear(mDash.X, 300 + RunPx) && mDash.Feet == 720, "A dash runs at the Beheaded's 236.5 px/s");
+var mWalk = SpeedMatch.Move(KirbyActions.Walk, 1, 352, 300, 720, 301.375, 720, MFlat);
+Check(MNear(mWalk.X - 300, 1.375 * SpeedMatch.GroundScale), "A light tilt walks at the same share of that speed");
+Check(SpeedMatch.Move(KirbyActions.Walk, 0, 512, 300, 720, 302, 720, MFlat).X == 302 &&
+      SpeedMatch.Move(KirbyActions.Skid, -1, 496, 300, 720, 301.9, 720, MFlat).X == 301.9, "Skids and unasked motion keep their original speed");
+var mAir = SpeedMatch.Move(KirbyActions.Jump, 1, 528, 300, 700, 302.0625, 698, MFlat);
+Check(MNear(mAir.X, 300 + RunPx) && mAir.Feet == 698, "A running jump keeps the run speed; the rise is the original's");
+var mDrift = SpeedMatch.Move(KirbyActions.Fall, 1, 368, 300, 600, 301.4375, 603.5, MFlat);
+Check(MNear(mDrift.X, 300 + RunPx) && MNear(mDrift.Feet, 600 + 3.5 * SpeedMatch.FallScale), "Air control at run speed; falls at the Beheaded's 403 px/s");
+var mGlide = SpeedMatch.Move(KirbyActions.Float, -1, -272, 300, 600, 298.9375, 601.125, MFlat);
+Check(MNear(mGlide.X, 300 - RunPx) && MNear(mGlide.Feet, 600 + 1.125 * SpeedMatch.FlightScale), "Floating crosses at run speed and sinks at the same tempo");
+var mSlideFast = SpeedMatch.Move(KirbyActions.Slide, 0, 704, 300, 720, 302.75, 720, MFlat);
+var mSlideSlow = SpeedMatch.Move(KirbyActions.Slide, 0, 384, 300, 720, 301.5, 720, MFlat);
+Check(MNear(mSlideFast.X - 300, 2.75 * 2.05) && MNear(mSlideSlow.X - 300, 1.5 * 1.5), "Slides move like the Beheaded's roll");
+Check(MNear(16 * 2.75 * SpeedMatch.SlideFastScale + 27 * SpeedMatch.SlideSlowScale, 130.7, 0.1), "A whole slide covers the roll's 131 px");
+ushort MLadder(int cx, int cy) => cy >= 30 ? SpeedMatch.Solid : cx == 12 ? SpeedMatch.Ladder : SpeedMatch.Free;
+var mUp = SpeedMatch.Move(KirbyActions.Climb, 0, 0, 300, 600, 300, 600 - 592 / 256.0, MLadder);
+var mDown = SpeedMatch.Move(KirbyActions.Climb, 0, 0, 300, 600, 300, 600 + 704 / 256.0, MLadder);
+Check(MNear((600 - mUp.Feet) * 60, 97.5) && MNear((mDown.Feet - 600) * 60, 97.5), "Ladders climb at the Beheaded's 97.5 px/s both ways");
+Check(SpeedMatch.Move(0x0B1A, 1, 512, 300, 700, 302, 690, MFlat) == (302, 690), "Other actions (hits, abilities, swimming) keep their original motion");
+// Contacts stay with the original collision.
+ushort MWall(int cx, int cy) => cy >= 30 || cx == 18 ? SpeedMatch.Solid : SpeedMatch.Free;
+var mWall = SpeedMatch.Move(KirbyActions.Dash, 1, 528, 420, 720, 422.0625, 720, MWall);
+Check(MNear(mWall.X, 432 - SpeedMatch.HalfWidth - SpeedMatch.Margin), "Added running stops a pixel short of a wall");
+Check(SpeedMatch.Move(KirbyActions.Dash, 1, 528, 421.4, 720, 423.5, 720, MWall).X == 423.5, "Touching a wall adds nothing");
+var mLanding = SpeedMatch.Move(KirbyActions.Fall, 0, 0, 300, 710, 300, 713.5, MFlat);
+Check(MNear(mLanding.Feet, 720 - SpeedMatch.LandingMargin), "Added falling leaves the original a full fall step to land");
+ushort MCeiling(int cx, int cy) => cy >= 30 || cy == 25 ? SpeedMatch.Solid : SpeedMatch.Free;
+var mHead = SpeedMatch.Move(KirbyActions.Float, 0, 0, 300, 646, 300, 644, MCeiling);
+Check(MNear(mHead.Feet, 624 + SpeedMatch.Height + SpeedMatch.Margin), "Added rising stops a pixel below a ceiling");
+ushort MPlatform(int cx, int cy) => cy >= 30 ? SpeedMatch.Solid : cy == 28 ? SpeedMatch.OneWay : SpeedMatch.Free;
+Check(SpeedMatch.Move(KirbyActions.Float, 0, 0, 300, 690, 300, 688, MPlatform).Feet < 688 &&
+      MNear(SpeedMatch.Move(KirbyActions.Fall, 0, 0, 300, 664, 300, 667.5, MPlatform).Feet, 672 - SpeedMatch.LandingMargin),
+    "One-way platforms let Kirby up through them and catch him from above");
+Check(SpeedMatch.Move(KirbyActions.Fall, 0, 0, 300, 600, 300, 603.5, MLadder).Feet > 603.5, "Ladders never stop a fall");
+ushort MPool(int cx, int cy) => cy >= 30 ? SpeedMatch.Solid : cy >= 27 ? SpeedMatch.Water : SpeedMatch.Free;
+Check(MNear(SpeedMatch.Move(KirbyActions.Fall, 0, 0, 300, 640, 300, 643.5, MPool).Feet, 648 - SpeedMatch.LandingMargin), "Kirby enters water at the original speed");
+// Slopes: the original follows them from Kirby's centre at whole pixel columns.
+ushort MRamp(int cx, int cy) => cy >= 30 || (cx >= 17 && cy >= 29) ? SpeedMatch.Solid : (cx, cy) == (16, 29) ? SpeedMatch.SlopeUpRight : (cx, cy) == (17, 28) ? SpeedMatch.SlopeUpRight : SpeedMatch.Free;
+Check(SpeedMatch.Surface(MRamp, 389.625, 714, 3) == 714 && SpeedMatch.Surface(MRamp, 402, 701, 3) == 701 &&
+      SpeedMatch.Surface(MRamp, 414.375, 689, 3) == 689, "Slope surface matches the original's samples");
+var mClimb = SpeedMatch.Move(KirbyActions.Dash, 1, 528, 398, 706, 400.0625, 704, MRamp);
+Check(MNear(mClimb.X, 398 + RunPx) && mClimb.Feet == SpeedMatch.Surface(MRamp, mClimb.X, 704, 3), "Running up a slope stays on its surface");
+var mDescent = SpeedMatch.Move(KirbyActions.Dash, -1, -528, 412, 691, 409.9375, 693, MRamp);
+Check(MNear(mDescent.X, 412 - RunPx) && mDescent.Feet == SpeedMatch.Surface(MRamp, mDescent.X, 693, 3), "Running down a slope stays on its surface");
+// Velocities set before an original frame.
+Check(SpeedMatch.Brakes(KirbyActions.Dash, 0, 528) && SpeedMatch.Brakes(KirbyActions.Walk, -1, 400) && SpeedMatch.Brakes(KirbyActions.Fall, 0, 368),
+    "Releasing or reversing the direction stops Kirby, as it stops the Beheaded");
+Check(!SpeedMatch.Brakes(KirbyActions.Dash, 1, 528) && !SpeedMatch.Brakes(KirbyActions.Slide, 0, 704) && !SpeedMatch.Brakes(0x0B1A, 0, 300),
+    "Held directions, slides and recoils keep their velocity");
+Check(!SpeedMatch.Brakes(KirbyActions.Ability, 0, 2048) && SpeedMatch.Move(KirbyActions.Ability, 1, 2048, 300, 700, 308, 698, MFlat) == (308, 698),
+    "Ability moves (Wheel, Jet, Yo-Yo, Suplex dashes) keep their original velocity and motion");
+{
+    var actions = new SpeedMatch.ActionFilter();
+    actions.Next(KirbyActions.Float);
+    bool exhale = actions.Next(KirbyActions.Ability) == KirbyActions.Float && actions.Next(KirbyActions.Ability) == KirbyActions.Float;
+    bool after = actions.Next(KirbyActions.Standing) == KirbyActions.Standing && actions.Next(KirbyActions.Ability) == KirbyActions.Ability;
+    Check(exhale && after, "The exhale ending a float moves like floating; an attack from the ground keeps the ability action");
+}
+Check(SpeedMatch.RiseVelocity(KirbyActions.Jump, -2682) == -2682 && SpeedMatch.RiseVelocity(KirbyActions.Jump, -744) == SpeedMatch.JumpRiseVelocity &&
+      SpeedMatch.RiseVelocity(KirbyActions.Jump, -940) == -940 + SpeedMatch.JumpGravity && SpeedMatch.RiseVelocity(KirbyActions.Jump, 100) == 100 &&
+      SpeedMatch.RiseVelocity(KirbyActions.Float, -546) == -546, "The jump keeps its take-off, then rises and peaks at the Beheaded's tempo");
+{
+    // Original rise after take-off: 26.8 px over four frames, then this.
+    int vy = SpeedMatch.JumpBurstEnd, frames = 4; double rise = 10.477 + 7.953 + 5.430 + 2.906;
+    while (true)
+    {
+        vy = SpeedMatch.RiseVelocity(KirbyActions.Jump, vy) + 44;
+        if (vy >= 0) break;
+        rise += -vy / 256.0; frames++;
+    }
+    Check(Math.Abs(rise - 49.9) < 0.5 && frames == 15, "A jump keeps Kirby's 50 px and peaks after 0.25 s");
+}
+{
+    // The original walk cycle: eight poses of 2 and 3 frames, each counted down
+    // to zero; the average cycle over ten cycles, in frames.
+    double Cycle(double rate)
+    {
+        var pacer = new AnimationPacer();
+        int[] durations = [2, 3, 2, 3, 2, 3, 2, 3];
+        int pose = 0, frames = 0, poses = 0; byte count = (byte)(durations[0] - 1);
+        while (poses < 80)
+        {
+            count = pacer.Next(rate, count);
+            frames++;
+            if (count == 0) { pose = (pose + 1) % 8; count = (byte)(durations[pose] - 1); poses++; }
+            else count--;
+        }
+        return frames / 10.0;
+    }
+    Check(Cycle(1) == 20 && Math.Abs(Cycle(SpeedMatch.GroundScale) - 12) < 0.5 && Cycle(1.25) == 16 && Cycle(3) == 12,
+        "The walk cycle plays faster in proportion to the matched speed, down to one frame a pose");
+    var pacer = new AnimationPacer();
+    Check(Enumerable.Range(0, 10).All(_ => pacer.Next(3, 0) == 0), "A pose about to change is never counted below zero");
+}
+}
 Console.WriteLine($"PASS: {assertions} user-rule assertions. No claim of NDS physics or in-game verification.");

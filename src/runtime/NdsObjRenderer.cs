@@ -7,9 +7,15 @@ public static class NdsObjRenderer
 {
     public const int Canvas = 512;
     private const int Center = Canvas / 2;
+    /// <summary>Pixels drawn from palette bank 0 (Kirby's body) by the last call.</summary>
+    [ThreadStatic] public static int LastBodyPixels;
+    /// <summary>Canvas bounds of those pixels relative to the canvas centre (empty when none were drawn).</summary>
+    [ThreadStatic] public static (int Left, int Top, int Right, int Bottom) LastBodyBounds;
     public static (int Rendered, int Unsupported) Render(uint display, byte[] oam, byte[] vram,
         byte[] palette, byte[] rgba, int sourceX, int sourceY, int lastPaletteBank = 7)
     {
+        int bodyPixels = 0;
+        int bodyLeft = int.MaxValue, bodyTop = int.MaxValue, bodyRight = int.MinValue, bodyBottom = int.MinValue;
         if (oam.Length != 1024 || palette.Length != 512 || vram.Length != 256 * 1024 || rgba.Length != Canvas * Canvas * 4)
             throw new ArgumentException("Unexpected DS graphics buffer dimensions.");
         Array.Clear(rgba);
@@ -73,6 +79,12 @@ public static class NdsObjRenderer
                 int cx = Center + x + dx - sourceX, cy = Center + y + dy - sourceY;
                 if ((uint)cx >= Canvas || (uint)cy >= Canvas) continue;
                 ushort color = Word(palette, paletteBase + colorIndex * 2);
+                if (paletteBase == 0)
+                {
+                    bodyPixels++;
+                    bodyLeft = Math.Min(bodyLeft, cx); bodyRight = Math.Max(bodyRight, cx);
+                    bodyTop = Math.Min(bodyTop, cy); bodyBottom = Math.Max(bodyBottom, cy);
+                }
                 int target = (cy * Canvas + cx) * 4;
                 rgba[target] = Expand5(color & 31);
                 rgba[target + 1] = Expand5((color >> 5) & 31);
@@ -81,6 +93,9 @@ public static class NdsObjRenderer
             }
             rendered++;
         }
+        LastBodyPixels = bodyPixels;
+        LastBodyBounds = bodyPixels == 0 ? default
+            : (bodyLeft - Center, bodyTop - Center, bodyRight - Center, bodyBottom - Center);
         return (rendered, unsupported);
     }
     private static ushort Word(byte[] data, int offset) => BinaryPrimitives.ReadUInt16LittleEndian(data.AsSpan(offset, 2));
