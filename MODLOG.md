@@ -970,6 +970,26 @@ the all-ability rendering tests as full gameplay acceptance.
   from behind through. Saves unchanged.
 - Not resolved: raising the shield while holding the opposite direction. The
   original guard keeps Kirby's facing while the host turns its shield.
+## 2026-10-06 — carrying ability moves keep their lead over the run (#40)
+
+- Owner recordings 12:19 (Wing) and 12:30 (Wheel): Condor Head and Wheel's roll
+  moved slower than Kirby's matched run. Every ability move runs under action
+  142C, which the speed match left at its original speed, while the run is 1.91
+  times the original dash.
+- `SpeedMatch.ActionFilter` marks an ability move that starts from a dash, or
+  becomes faster than the original dash (528), as carrying Kirby until the
+  action ends; its motion in its own direction is scaled like the run. Floor
+  frames follow the surface, hops stay in the air, walls stop it a pixel short.
+- Survey of all 24 abilities (standing, charged, Down+B, mid-air, dash) on the
+  original controller: every dash attack keeps its original duration and its
+  original peak-to-dash ratio (Wing 1.94, Cutter 2.73, Suplex 3.33); Wheel,
+  Jet's bursts and Suplex's grab lunge scale from any start; nothing else
+  changes. `tests/speed` passes 32 checks; `scripts/check.py` passes (225 unit
+  assertions, runtime build).
+- Live, separate data root `repros/dash-attack-20261006`: Wing `124027` dash
+  3.94 then Condor Head 7.64 px a frame; Wheel `124135` dash 3.94 then roll
+  6.69 px a frame, stopping outside a wall. No fatal logs. Not run live: other
+  abilities, slopes, ledges, Wheel turning. Details in `docs/GAMEPLAY_FIDELITY.md`.
 
 ## 2026-10-06 — Ability descriptions (#45)
 

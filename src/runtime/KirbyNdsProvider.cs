@@ -626,12 +626,12 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         NdsState state = nds.State;
         lastVx = state.VxRaw; lastVy = state.VyRaw;
         ushort after = nds.Action;
-        ushort motion = motionActions.Next(after);
+        ushort motion = motionActions.Next(after, state.VxRaw);
         double x = state.X + originX * 24, feet = state.Y + originY * 24 + 14.5;
         if (matched)
         {
             terrainMap = map; terrainRollThrough = rollThrough;
-            (x, feet) = SpeedMatch.Move(motion, direction, state.VxRaw, hostX, centerY + 14.5, x, feet, terrain ??= MatchTerrain);
+            (x, feet) = SpeedMatch.Move(motion, motionActions.Direction(direction), state.VxRaw, hostX, centerY + 14.5, x, feet, terrain ??= MatchTerrain);
         }
         hero.setPosPixel(x, feet + lift);
         // The host represents a foot exactly on a floor as yr=1 in the air

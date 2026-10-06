@@ -15,7 +15,7 @@ in [NDS_BRIDGE.md](NDS_BRIDGE.md). The original bootstrap experiment remains in
 | System | Original code and host adapter |
 |---|---|
 | Clock | 33,513,982 / 560,190 source ticks per second. A display within 3% of that rate presents one original frame per host frame, like an emulator synchronized to vblank; other rates accumulate real time |
-| Movement | The ROM updates fixed-point position, velocity and action state; the host follows its physical foot. With `MatchHostSpeed` (default) Kirby moves at the Beheaded's measured speeds: each original frame's own motion is carried on through free space (run and air control 236.5 px/s, float across at the same speed, fall 403 px/s, ladders 97.5 px/s both ways, floating up and down at the run's tempo), the original horizontal velocity is cleared when the direction is released or reversed, and the jump keeps its 50 px but peaks after 0.25 s, as the Beheaded's does. Added motion stops short of walls and ceilings, leaves the original a full fall step above floors, follows slopes at the original's whole-pixel surface, and never applies to hits, swimming or ability moves. The original walk and dash cycles play faster with the run (up to 1.67 times, one frame a pose), so his feet cover about the ground they did natively. `false` keeps the original DS speeds (the stomp keeps the dive's) |
+| Movement | The ROM updates fixed-point position, velocity and action state; the host follows its physical foot. With `MatchHostSpeed` (default) Kirby moves at the Beheaded's measured speeds: each original frame's own motion is carried on through free space (run and air control 236.5 px/s, float across at the same speed, fall 403 px/s, ladders 97.5 px/s both ways, floating up and down at the run's tempo), the original horizontal velocity is cleared when the direction is released or reversed, and the jump keeps its 50 px but peaks after 0.25 s, as the Beheaded's does. Added motion stops short of walls and ceilings, leaves the original a full fall step above floors, follows slopes at the original's whole-pixel surface, and never applies to hits or swimming. Ability moves keep their original motion unless they carry Kirby: a dash attack, or any move faster than the original dash, moves at the run's scale (see [Carrying ability moves](#carrying-ability-moves-40)). The original walk and dash cycles play faster with the run (up to 1.67 times, one frame a pose), so his feet cover about the ground they did natively. `false` keeps the original DS speeds (the stomp keeps the dive's) |
 | Terrain | Nearby host solids, one-way floors, slopes, ladders and water become source collision cells; all linked source objects and cached terrain probes move together when the window rebases by whole cells, while effects attached to a parent (Fire's head flame, Plasma's spark, attack effects) keep their offsets from it. Host movement of Kirby (speed match, stomp) moves only him and his terrain probes, so thrown bombs, cutters, effects and the helper keep their original paths. Over a moving host elevator the window is lifted to its surface and original objects ride with him (see [Host elevators](#host-elevators-deviation)) |
 | Input | Existing host bindings become original digital buttons; ordinary source directional combinations still apply. A held direction dashes through the original double tap (`AlwaysDash`); a light analog tilt walks. A key bound to both Up and jump (W and the Up arrow by default) climbs at a ladder or chain, as in the host, instead of jumping first |
 | Terrain | Nearby host solids, one-way floors, slopes, ladders and water become source collision cells. Vines grown with the Vine rune (`en.inter.VineLadder`) have no collision bits, only level spots (0, where the Beheaded climbs, and 18); their cells become source ladders, and the solid blocks a vine passes through or ends under become one-way ladder tops in that column. A ladder under a solid block stops the original below it, so this deviation lets Kirby climb onto the ledge, as the Beheaded's `exitLadderTop` does; all linked source objects and cached terrain probes move together when the window rebases by whole cells, while effects attached to a parent (Fire's head flame, Plasma's spark, attack effects) keep their offsets from it. Host movement of Kirby (speed match, stomp) moves only him and his terrain probes, so thrown bombs, cutters, effects and the helper keep their original paths |
@@ -437,6 +437,69 @@ grown through the host's own `VineLadder.activate`:
 
 Not run: hanging vines (`goingUp` false), a stomp from a vine, and a vine in a
 saved run after loading.
+### Carrying ability moves (#40)
+
+Every copy-ability attack runs under the original action `142C`, which the speed
+match had left at the original speed. The run is 1.91 times the original dash
+(3.94 px a frame), so a dash attack or Wheel's roll, which the original makes
+faster than the dash, ended up at or below running speed. Owner recordings
+2026-10-06 12:19 (Wing's Condor Head) and 12:30 (Wheel).
+
+`SpeedMatch.ActionFilter` now marks an ability move as carrying Kirby when it
+starts straight from a dash, or once its horizontal velocity exceeds the
+original dash's (528, 2.0625 px a frame). It stays marked until the ability
+action ends. Its motion in the carried direction is scaled by the run's factor
+(`GroundScale`), so it keeps the original's lead over the dash whatever is held.
+The carried direction is the dash's, then the move's own once it is fast, so
+Wheel keeps its speed after turning. Motion the other way keeps the original
+speed. On the floor, the added motion follows the surface. When the original
+lifts Kirby (Suplex's stumble, Wheel's wall bounce), it is added in the air.
+Either way it stops a pixel short of walls, as the run does. The float exhale
+and moves slower than the dash keep their original motion. This replaces the
+earlier rule that every ability move keeps its original motion
+([Jet fix](RECORDING_REVIEW_2026-10-05_1013.md)); braking still never applies to
+them.
+
+A headless survey of all 24 abilities (original controller, `tests/speed`
+harness) compared standing, charged (70 frames), Down+B, mid-air and dash
+attacks with and without the speed match. Only these change:
+
+| Move | Original peak | Matched peak | Frames |
+| :--- | ---: | ---: | :--- |
+| Dash attacks: Cutter, Beam, Fighter, Suplex, Yo-Yo, Wheel, Bomb, Ice, Fire, Plasma, Ninja, Stone, Wing, Jet, Copy, Sword, Hammer, Parasol | 1.9–6.9 px | 1.91 times that | Same as the original for all 24 |
+| Wing's Condor Head | 4.0 px | 7.64 px | 51 |
+| Suplex's dash grab | 6.9 px | 13.1 px | 57 |
+| Wheel's roll, from any start | 3.5 px | 6.69 px | Same |
+| Jet's bursts and charged dash; Suplex's standing, Down+B and mid-air grab lunge | 4.0–6.9 px | 1.91 times that | Same |
+
+Each dash attack's peak is the same multiple of the matched run as the
+original's is of the original dash (for example Wing 1.94, Cutter 2.73, Suplex
+3.33), and its distance is 1.9 times the original's. Mirror, Paint, Mike, Crash,
+Cook and Sleep do not move in their dash attacks. Fighter attacks when B is
+released, still straight from the dash. All other standing, charged, Down+B and
+mid-air attacks keep their original motion.
+
+`tests/speed` checks Wing, Suplex, Cutter, Fighter and Sword dash attacks
+against the original, a Suplex dash attack into a wall, and Wheel's roll, Jet's
+charged dash and Suplex's grab from a standstill (321, 216 and 124 px originally;
+the last was labelled Yo-Yo before, but ability 6 is Suplex).
+
+Live, in the separate data root `repros/dash-attack-20261006` (runtime
+SHA-256 `62c31847e3cfae10716d7f24f23e4a211c283274603b116c89404523573a5abe`, core
+`e9e87b28f7441230e6f59259e037bf360384339b0fac28a8eafc9598f66f21c0`, shared bridge
+`654c2023ff6a0a17775253ce4ede68a3089f19f668abc6a55b5f1b6ef5441597`), with the
+ability probe replaying original buttons (`KIRBY_LAB_ABILITY_PLAN`):
+
+- `20261006-124027`, Wing: a dash left at 3.94 px a frame, then Condor Head at
+  7.64 px a frame, slowing at its end as the original's does. The rightward
+  pass only walked (2.63 px a frame), so its attack was the ordinary Wing attack.
+- `20261006-124135`, Wheel: a dash left at 3.94 px a frame, then the roll at
+  6.69 px a frame until it met a wall. The original's wall bounce then
+  lifted Kirby, and he stayed outside the wall. A standing start rolled one
+  frame at 6.69 px into a wall right beside him.
+
+Both runs ended at their time limit without fatal log lines. Not run live:
+other abilities, slopes and ledges during a carrying move, Wheel turning.
 ### Cinematic walks (intentional deviation)
 
 Issue #17. Before this change, the source machine stopped during every host
