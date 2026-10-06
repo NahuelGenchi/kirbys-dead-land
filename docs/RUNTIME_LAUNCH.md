@@ -344,7 +344,35 @@ python3 scripts/launch_runtime.py --data-root ~/.local/share/kirby-dead-cells/re
 | `001925` | host cell position copied from the elevator | 69 moving frames standing, feet exactly on the surface, no host landings; 2640 → 2376 px |
 | `002051`, `002312` | final | Up: jump at 5.4 s, caught again by the rising elevator, carried to the top and standing there. Down: Kirby jumped; the faster elevator dropped away and he landed on it at the bottom with the original long-fall bounce. 76/76 health throughout. Two height-0 host landings: the elevator's departure tick and the genuine landing on the rising elevator |
 
-The runtime's raise onto a rising elevator (`elevator-raise` diagnostic) never fired; the host's own carry moved Kirby in every run. Each run reached its time limit without a fatal log, and the real save inventories were unchanged. The tutorial tip in the captured frames comes from the fresh lab save.
+In those runs the runtime never had to raise Kirby, so the host's carry did the work; every run with a descent included a jump before it reached full speed. The owner's 2026-10-06 01:15 recording showed Kirby falling behind a descending elevator ([#33](https://github.com/NahuelGenchi/kirbys-dead-land/issues/33)):
+
+| Run | Build | Result |
+| :--- | :--- | :--- |
+| `20261006-011803` | #28 as merged, no inputs | Standing until the descent reached about 10 px a tick; at f4686 the surface dropped 9.8 px without carrying him, and he fell behind it in `070E` to the bottom, where he bounced |
+| `012037` | runtime carry of a standing Kirby, no inputs | Up 60 and down 56 moving frames, all standing, feet exactly on the surface at up to 12.4 px a frame; stopped at both ends at 76/76. The runtime carried him 74 times (`elevator-carry` diagnostic) |
+| `012131` | same, jumps at 5.35 s and 8.45 s | Both jumps left the platform; the rising elevator caught him again; after the descending jump he landed on it at the bottom |
+
+The owner's 2026-10-06 12:26 recording, made with that fix, showed a different fault at the bottom stop: Kirby sank into the platform for a frame, then rebounded and landed with the original's fast-landing stars. Two lab additions reproduce it. `KIRBY_LAB_FRAME_SLEEP_MS=min,max` stalls each host frame by a random time, emulating a desktop below 60 fps. `KIRBY_LAB_ELEVATOR_CX` picks the elevator at a cell column (`KIRBY_LAB_ELEVATOR_TRAVEL` sets the spawned elevator's travel). The runs below used `repros/elevator-real-20261006`, which has its own copy of the owner's private save (the main profile was not touched), resumed with `--resume-game`. The resume generated a level whose real `SimpleElevator` (column 389, four cells wide, 64 cells of travel) stops in a notch of level floor. `elevator-step` diagnostics log each step's placement and the terrain column under Kirby.
+
+```sh
+KIRBY_LAB_FRAME_SLEEP_MS=10,40 \
+KIRBY_LAB_MOVES_SETUP="elevator@2,elevator-use@3.5,elevator-use@13,elevator-use@23,elevator-use@33" \
+python3 scripts/launch_runtime.py --data-root ~/.local/share/kirby-dead-cells/repros/elevator-real-20261006 \
+  --seconds 45 --resume-game --capture-fps 10
+```
+
+| Run | Build | Result |
+| :--- | :--- | :--- |
+| `20261006-124646`, `124727` | descent carry (#33 as first proposed) | At the bottom arrival the elevator overshot its stop 4.9 px into the solid floor row (`cy` 106, `yr` 0.205). The lifted window put Kirby's body inside that row; the original pushed him 12 px up, and the elevator came back 24 px below him. He fell (`070E`) and landed (`0507`) |
+| `125056`–`130031` (13 runs) | floor top while the surface is sunk into level floor | Every frame standing; Kirby never off the surface at rest. Our steps landed during an overshoot in 4 runs (15 steps), all handled by the new rule |
+| `130203`–`130452` (4 runs, final build) | same | 3 arrivals each, 12 sunk steps over 3 runs, all frames standing, 76/76 health |
+| `130556` (spawned elevator, final build, jumps) | same | Jumps still leave the platform both ways; he lands again and stands at both stops |
+
+Spawned test elevators never stopped inside level floor, which is why the earlier runs missed this.
+
+The owner's 2026-10-06 19:50 recording (with the fixes above) showed Kirby riding correctly but drawn above the platform on the way up and sunk into it on the way down. The trace now also records the elevator sprite's `y`, the host hero sprite's `y` and Kirby's bitmap `y`. Run `195232` measured the elevator sprite drawn up to 13 px behind its physical surface while Kirby's bitmap followed his physical position (up to 11.1 px apart from the platform as drawn). With the draw offset, runs `195451`, `195557`, `195651` and `195746` keep Kirby's drawn feet 0.5 px from the drawn platform on every moving frame (his usual whole-pixel anchor). The exception is the tick an elevator dips into its floor stop, when Kirby stays on the floor's top 3 px above it. All frames were standing at 76/76. Spawned-elevator run `195850` (jumps) still leaves and lands on the platform both ways, and the offset is at most 2.3 px in the air. The host's height-0 landing calls rise to 30–50 a ride when the frame rate is stalled; they play nothing.
+
+Each run reached its time limit without a fatal log, and the real save inventories were unchanged. The tutorial tip in the captured frames comes from the fresh lab save.
 ## Shield swap
 
 Issue #31. `LabItemProbe` (`KIRBY_LAB_ITEM`) can drop `shield`: the first

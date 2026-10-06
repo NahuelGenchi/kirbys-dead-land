@@ -970,6 +970,38 @@ the all-ability rendering tests as full gameplay acceptance.
   from behind through. Saves unchanged.
 - Not resolved: raising the shield while holding the opposite direction. The
   original guard keeps Kirby's facing while the host turns its shield.
+
+## 2026-10-06 — Kirby stays on descending elevators (#33)
+
+- Owner recording 2026-10-06 01:15: after #28, Kirby left descending elevators
+  once they sped up and fell behind them. Lab run `20261006-011803` (no inputs)
+  reproduced it: at about 10 px a tick the host carry missed him for one tick,
+  and the original's 3.5 px a frame fall never caught up.
+- `ElevatorRide.Over` now carries Kirby itself, up or down, when his feet were
+  within the host's 2 px of the surface on the previous original frame and the
+  original is not moving him upward (`lastVy < 0` is a jump or float).
+- Live `012037`: full descents and climbs at up to 12.4 px a frame, all frames
+  standing, feet exactly on the surface; the runtime carried him 74 times.
+  Live `012131`: jumps still leave a moving elevator in both directions.
+- Core rule tests: 225 assertions; `scripts/check.py` passes; Release build has
+  zero warnings. Not run: `tools/nds_tests.py` (no native change), other
+  elevator types and generated elevator levels.
+- Owner recording 2026-10-06 12:26 (play build with this branch): Kirby sank into
+  the platform at the bottom stop, then rebounded and landed with stars. A copy
+  of the owner's save in `repros/elevator-real-20261006`, with the host frame
+  rate stalled to 25–100 fps (`KIRBY_LAB_FRAME_SLEEP_MS`), reproduced it on a real
+  64-cell elevator (`124646`, `124727`). Its stop sits in level floor; a full-speed
+  overshoot took the surface 4.9 px into that solid row, the lifted window put
+  Kirby inside it, and the original pushed him out a cell above the elevator.
+  `ElevatorRide.Effective` now gives the floor's top while the surface is sunk
+  into solid floor under Kirby; 17 later runs covered 27 such steps with Kirby
+  standing throughout. 229 core assertions.
+- Owner recording 2026-10-06 19:50: rides worked, but Kirby was drawn above the
+  platform going up and sunk into it going down. The host draws the platform
+  up to a tick behind its physical surface (13 px measured, run `195232`).
+  Kirby standing on an elevator, with his equipment, is now drawn with the same
+  lag (`SetDrawOffset`, set from an `Elevator.postUpdate` hook); drawn feet stay
+  0.5 px from the drawn platform in four jittered real-level runs.
 ## 2026-10-06 — Kirby climbs at the original speed (#48)
 
 - Owner recording (19:53, Sword Kirby on a Vine-rune vine): climbing is too

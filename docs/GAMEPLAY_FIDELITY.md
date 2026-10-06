@@ -316,16 +316,38 @@ While Kirby is inside an elevator's carry width, from its surface up to three
 cells above it (`ElevatorRide`):
 
 - The original's terrain window is lifted by the surface's offset from the
-  solid row, so the ROM floor is the elevator surface. The host's own carry
-  moves Kirby with it; in the live runs the runtime never had to raise him.
+  solid row, so the ROM floor is the elevator surface.
+- Kirby whose feet were within the host's 2 px of the surface on the previous
+  original frame, and whom the original is not moving upward, moves with it,
+  up or down, by the host's own carry rule. The host's carry alone missed him
+  on fast descents: from about 10 px a tick the surface dropped away, and the
+  original's fall (at most 3.5 px a frame) never caught it until the bottom
+  ([#33](https://github.com/NahuelGenchi/kirbys-dead-land/issues/33), owner
+  recording 2026-10-06 01:15, lab run `20261006-011803`).
 - A rising elevator that passed his feet since the last original frame lifts
   him onto its surface, as the host rescues the Beheaded.
+- A fast elevator overshoots its stop by up to a tick of travel and is put back
+  on the next tick. Where the stop is set into level floor, that overshoot takes
+  its surface into the solid floor cell. Kirby then stands on the floor's top
+  (no lift, no carry into it). Following the elevator put his body inside the
+  floor; the original pushed him out, the elevator came back a cell below him,
+  and he dropped onto it with a squash, or at desktop frame rates with the
+  original fast-landing rebound and stars (owner recording 2026-10-06 12:26,
+  lab runs `20261006-124646` and `124727`).
 - While the elevator moves, the source window is placed with Kirby, so **original
   objects (thrown bombs, cutters, effects, the helper) ride along with him**.
   This is the intentional deviation. Moving them alone and then Kirby back by
   himself, as the speed match does, left the parts attached to him a step off,
   and the original dropped a standing Kirby for a frame every few frames of the
   ride (live runs `20261006-000609` to `001130`, see [RUNTIME_LAUNCH.md](RUNTIME_LAUNCH.md#host-elevators)).
+- The host draws a moving elevator's platform behind its physical surface, by
+  up to a tick of travel (13 px measured on a 64-cell elevator). Kirby standing
+  on it is drawn with the same lag (`KirbySpriteRenderer.SetDrawOffset`, set from
+  an `Elevator.postUpdate` hook), as are his sword and shield. Off the
+  platform, the offset eases back within a few frames. Drawn at his physical
+  position instead, he floated above the platform on the way up and sank into
+  it on the way down (owner recording 2026-10-06 19:50). His physics position is
+  unchanged.
 - His host cell position is copied from the elevator exactly, as its own carry
   does. A pixel round trip could leave him a rounding error below the cell's
   ground height, and the host then called its landing handler every few
@@ -336,12 +358,17 @@ cells above it (`ElevatorRide`):
 
 Live checks (separate data root `repros/elevator-20261006`, a real
 `SimpleElevator` built and initialized as `Level.spawnEntitiesFromMarkers` does):
-Kirby rides up and down standing (`0406`) with his feet on the surface, can jump
-on a rising elevator and land on it again, and stops at both ends. Not run live:
-`PurpleElevator` and `MultiFloorElevator` levels, walking off a moving elevator
-onto a landing, and elevators placed by real level generation. One host landing
-of height 0 (no sound, smoke or shake below 0.3 cells) remains on the first tick
-of a departure. Floating platforms (`en.inter.FloatingPlatform`) are a separate
+Kirby rides up and down standing (`0406`) with his feet on the surface, including
+full-speed descents of 12.4 px a frame, can jump on a rising elevator and land on
+it again, and stops at both ends. A jump on a fast descending elevator leaves it
+behind; he lands on it once it stops. Real generated elevators (a copy of the
+owner's save, resumed in a separate data root) were also ridden 64 cells down and
+up at a frame rate stalled to 25–100 fps, including overshoots into the floor at
+the bottom stop. Not run live: `PurpleElevator` and `MultiFloorElevator` levels
+and walking off a moving elevator onto a landing. The host calls its landing
+handler with height 0 (no sound, smoke or shake below 0.3 cells) on a departure
+and, at low frame rates, a few dozen times a ride when it carries Kirby between
+two original frames. Floating platforms (`en.inter.FloatingPlatform`) are a separate
 host mechanism and are not covered.
 ### Enemies in water (intentional deviation)
 
