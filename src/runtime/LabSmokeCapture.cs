@@ -80,6 +80,10 @@ internal static class LabSmokeCapture
             LabWeaponAimProbe.Install(run);
         if (Environment.GetEnvironmentVariable("KIRBY_LAB_INPUT_PLAN") == "repro")
             LabReproProbe.Install(run);
+        if (Environment.GetEnvironmentVariable("KIRBY_LAB_MOVES_SCAN") == "1" || Environment.GetEnvironmentVariable("KIRBY_LAB_MOVES_SETUP") is not null)
+            LabMovesProbe.Install(run);
+        if (Environment.GetEnvironmentVariable("KIRBY_LAB_ITEM") is not null)
+            LabItemProbe.Install(run);
         dc.Hook_Main.update += (orig, main) =>
         {
             orig(main);
@@ -91,6 +95,8 @@ internal static class LabSmokeCapture
             LabBossCrowdProbe.Poll();
             LabWeaponAimProbe.Poll();
             LabReproProbe.Poll();
+            LabMovesProbe.Poll();
+            LabItemProbe.Poll();
             var source = KirbyMod.Instance?.NativeProvider?.Machine;
             if (source is not null && source.State.Frame != lastSource)
             {
@@ -171,9 +177,11 @@ internal static class LabSmokeCapture
                 main.launchGame(new dc.LaunchMode.LoadSave(), null, null);
             }
             var captureHero = ModCore.Modules.Game.Instance.HeroInstance;
+            DumpNearHero(captureHero);
             bool gameplay = source is not null && captureHero is { destroyed: false, life: > 0, awake: true } &&
                 captureHero._level is not null && !captureHero._level.game.hasCinematic();
-            int interval = captureFps > 0 && gameplay ? 1000 / captureFps : LabVisualProbe.ActiveEffect ? 100 : 2000;
+            bool captureAll = Environment.GetEnvironmentVariable("KIRBY_LAB_CAPTURE_ALL") == "1" && source is not null;
+            int interval = captureFps > 0 && (gameplay || captureAll) ? 1000 / captureFps : LabVisualProbe.ActiveEffect ? 100 : 2000;
             if (clock.ElapsedMilliseconds - lastCapture < interval) return;
             lastCapture = clock.ElapsedMilliseconds;
             LocalFile.WriteAllText(Path.Combine(run, "frames.json"), JsonSerializer.Serialize(new
@@ -190,6 +198,9 @@ internal static class LabSmokeCapture
                 {
                     file = $"frame-{frames:000000}.png", elapsedMs = lastCapture,
                     gameplay, sourceFrame = source?.State.Frame,
+                    animation = captureHero?.spr?.groupName?.ToString(), animationFrame = captureHero?.spr?.frame,
+                    cinematic = captureHero?._level?.game?.hasCinematic(), awake = captureHero?.awake,
+                    heroVisible = captureHero?.visible, spriteVisible = captureHero?.spr?.visible, life = captureHero?.life,
                 }) + "\n");
             if (source is not null && clock.ElapsedMilliseconds - lastSourceDump >= 2000)
             {
@@ -239,6 +250,63 @@ internal static class LabSmokeCapture
             frame = state.Frame, width = right - left, height = bottom - top,
             inside, above, beside, restored, passed = inside && !above && !beside && restored,
         }) + "\n");
+    }
+
+    private static readonly HashSet<string> dumpedPhases = [];
+    private static void DumpNearHero(dc.en.Hero? hero)
+    {
+        string? spec = Environment.GetEnvironmentVariable("KIRBY_LAB_DUMP_PHASES");
+        if (spec is null || hero?.spr is not { } spr || hero._level?.scroller is not { } scroller) return;
+        string phase = spr.groupName?.ToString() + ":" + spr.frame;
+        string key = spec.Split(',').FirstOrDefault(p => p == phase) ?? "";
+        // "@<ms>" dumps once when the lab clock passes that time.
+        foreach (var at in spec.Split(',').Where(p => p.StartsWith('@')))
+            if (long.TryParse(at[1..], out long ms) && clock.ElapsedMilliseconds >= ms && !dumpedPhases.Contains(at)) { key = at; break; }
+        if (key.Length == 0 || !dumpedPhases.Add(key)) return;
+        var lines = new List<string>();
+        double hx = spr.absX, hy = spr.absY;
+        void Walk(dc.h2d.Object node, int depth, string path)
+        {
+            string type = node.GetType().FullName ?? "?";
+            string extra = node is dc.libs.heaps.slib.HSprite hs ? $" group={hs.groupName} frame={hs.frame}" : "";
+            if (node is dc.h2d.SpriteBatch batch)
+            {
+                int count = 0, near = 0; var groups = new HashSet<string>();
+                for (var e = batch.first; e is not null && count < 5000; e = e.next)
+                {
+                    count++;
+                    double ex = node.absX + e.x * node.matA, ey = node.absY + e.y * node.matD;
+                    if (Math.Abs(ex - hx) < 200 && Math.Abs(ey - hy) < 200 && e.visible)
+                    {
+                        near++;
+                        if (e is dc.libs.heaps.slib.HSpriteBE be) groups.Add(be.groupName?.ToString() ?? "?");
+                        if (near <= 6) groups.Add($"[{e.GetType().Name} rel=({ex - hx:0},{ey - hy:0}) tile={e.t?.width:0}x{e.t?.height:0} tex={e.t?.innerTex?.name} rgba=({e.r:0.00},{e.g:0.00},{e.b:0.00},{e.a:0.00}) scale=({e.scaleX:0.0},{e.scaleY:0.0})]");
+                    }
+                }
+                extra += $" elements={count} nearHero={near} groups={string.Join('|', groups.Take(8))}";
+            }
+            bool close = Math.Abs(node.absX - hx) < 200 && Math.Abs(node.absY - hy) < 200;
+            if (close || node.children.length > 0 || extra.Contains("nearHero=") && !extra.Contains("nearHero=0"))
+                lines.Add($"{new string(' ', depth * 2)}{path} {type} name={node.name} vis={node.visible} a={node.alpha:0.00} blend={node.blendMode?.GetType().Name} abs=({node.absX - hx:0},{node.absY - hy:0}) kids={node.children.length}{extra}");
+            if (depth > 7) return;
+            for (int i = 0; i < node.children.length; i++)
+                if (node.children.getDyn(i) is dc.h2d.Object child) Walk(child, depth + 1, path + "/" + i);
+        }
+        if (scroller is dc.light.LightedLayers lit)
+            lines.Add($"LIGHTING ambient=({lit.ambientLight?.x:0.000},{lit.ambientLight?.y:0.000},{lit.ambientLight?.z:0.000},{lit.ambientLight?.w:0.000}) dir=({lit.dirLightVec?.x:0.000},{lit.dirLightVec?.y:0.000},{lit.dirLightVec?.z:0.000},{lit.dirLightVec?.w:0.000}) shadow=({lit.shadowColor?.x:0.00},{lit.shadowColor?.y:0.00},{lit.shadowColor?.z:0.00}) fog=({lit.fogColor?.x:0.00},{lit.fogColor?.y:0.00},{lit.fogColor?.z:0.00}) fogFactor={lit.fogFactor:0.000} desat={lit.desatAmount:0.000} lightFactor={lit.lightFactor:0.000} enableLights={lit.enableLights} deferredMask={lit.deferredMask} decalAlpha={lit.decalAlpha:0.00}");
+        if (scroller is dc.h2d.Layers lay)
+        {
+            var ends = Enumerable.Range(0, Math.Min(lay.layerCount, lay.layersIndexes.length)).Select(i => (int)lay.layersIndexes.getDyn(i)).ToArray();
+            int Layer(int index) { int l = 0; while (l < ends.Length && index >= ends[l]) l++; return l; }
+            int heroIndex = spr.parent?.HashlinkPointer == scroller.HashlinkPointer ? scroller.getChildIndex(spr) : -1;
+            var bitmaps = new List<string>();
+            for (int i = 0; i < scroller.children.length; i++)
+                if (scroller.children.getDyn(i) is dc.h2d.Bitmap bm && Math.Abs(bm.absX - hx) < 200 && Math.Abs(bm.absY - hy) < 200)
+                    bitmaps.Add($"{i}(layer {Layer(i)})");
+            lines.Add($"LAYERS ends=[{string.Join(',', ends)}] hero={heroIndex}(layer {Layer(heroIndex)}) bitmaps={string.Join(' ', bitmaps)}");
+        }
+        Walk(scroller, 0, "scroller");
+        LocalFile.WriteAllLines(Path.Combine(run!, $"tree-{key.Replace(':', '-').Replace("@", "at")}.txt"), lines);
     }
 
     private static object? DescribeObject(dc.h2d.Object? node, int depth)
