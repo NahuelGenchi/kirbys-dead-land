@@ -26,6 +26,10 @@ internal static class LabAbilityProbe
     private static bool savedAttackState;
     private static int[]? scrolls;
     private static bool scrollsGiven;
+    private static readonly bool hudFixture = Environment.GetEnvironmentVariable("KIRBY_LAB_TEST_HUD") == "1";
+    private static bool hudEquipped;
+    private static uint? hudSettle;
+    private static string? lastHud;
     private static int[]? tiers;
     private static readonly List<object> copyHits = [];
     // KIRBY_LAB_ABILITY_PLAN: original buttons by frame after the ability is ready,
@@ -108,6 +112,19 @@ internal static class LabAbilityProbe
     {
         var machine = KirbyMod.Instance?.NativeProvider?.Machine;
         if (machine is null) return 0;
+        if (hudFixture && !hudEquipped)
+        {
+            // A new run starts with the starting sword in the first (Left-Click)
+            // slot. Like the combat probe, let the run settle, then add a real
+            // shield through the normal inventory before copying.
+            hudSettle ??= machine.State.Frame;
+            if (machine.State.Frame - hudSettle.Value < 180) return 0;
+            hudEquipped = true;
+            session.Hero.inventory.add(new InventItem(new InventItemKind.Weapon("StartShield".AsHaxeString())));
+            if (session.Hero.weaponsManager is dc.tool.hero.weap.BeheadedWeaponsManager manager)
+                manager.onEquippedItemsUpdated(HaxeProxy.Runtime.Ref<bool>.In(false));
+            return 0;
+        }
         if (!setupDone && byte.TryParse(Environment.GetEnvironmentVariable("KIRBY_LAB_TEST_ABILITY"), out byte requested) &&
             requested is >= 2 and <= 25)
         {
@@ -156,6 +173,8 @@ internal static class LabAbilityProbe
             initialLife = target.life;
         }
         if (elapsed is >= 135 and < 225) return 2;
+        // The HUD fixture later discards the copy (original Select) to check the slot returns to its weapon.
+        if (hudFixture && elapsed is >= 900 and < 904) return 4;
         if (elapsed == 226 && machine.State.Ability == 8) return 2;
         if (elapsed >= 350 && attacker is null)
         {
@@ -188,12 +207,56 @@ internal static class LabAbilityProbe
         }) + "\n");
     }
 
+    /// <summary>Record each HUD weapon slot whenever its drawn state changes.</summary>
+    private static void RecordHud(KirbySession session, uint frame)
+    {
+        if (session.Hero._level?.game?.hud is not { } hud) return;
+        var weapons = hud.skillWeapons;
+        var slots = Enumerable.Range(0, weapons.length).Select(slot =>
+        {
+            var skill = (dc.ui.hud.Skill)weapons.getDyn(slot);
+            var equipped = session.Hero.inventory.getEquippedWeaponOn(slot);
+            return new
+            {
+                slot,
+                equipped = equipped?.getItemKind()?.ToString(),
+                slotItem = skill.ii?.getItemKind()?.ToString(),
+                sameItem = skill.ii?.HashlinkPointer == equipped?.HashlinkPointer,
+                icon = skill.icon?.tile?.innerTex?.name?.ToString(),
+                frame = skill.iconFg.visible ? skill.iconFg.groupName?.ToString() : null,
+                background = skill.iconBg.groupName?.ToString(),
+                skill.disableAmmo,
+                iconWidth = skill.icon?.tile?.width,
+                iconScale = skill.icon?.scaleX,
+                pixelScale = skill.get_pixelScale(),
+            };
+        }).ToArray();
+        var shown = KirbyHud.Shown;
+        string state = JsonSerializer.Serialize(new { ability = session.Rules.AbilityId, overlay = shown.Active, shownAbility = shown.Ability, shown.IconHash, slots });
+        if (state == lastHud) return;
+        lastHud = state;
+        System.IO.File.AppendAllText(Path.Combine(run!, "hud.jsonl"), JsonSerializer.Serialize(new
+        {
+            frame, ability = session.Rules.AbilityId, overlay = shown.Active, shownAbility = shown.Ability,
+            tiers = new[] { shown.Tiers.Item1, shown.Tiers.Item2, shown.Tiers.Item3 },
+            iconHash = shown.IconHash.ToString("x16"), iconSize = dc.ui.hud.Skill.Class.ICON_SIZE,
+            iconBackgroundSize = dc.ui.hud.Skill.Class.ICONBG_SIZE, slots,
+        }) + "\n");
+        if (shown.Active)
+        {
+            // Private evidence: the decoded original icon, for visual review.
+            byte[] icon = KirbyHud.IconPixels.ToArray();
+            System.IO.File.WriteAllBytes(Path.Combine(run!, $"hud-icon-{shown.IconHash:x16}.rgba"), icon);
+        }
+    }
+
     public static void Poll()
     {
         var session = KirbyMod.Instance?.ActiveSession;
         var machine = KirbyMod.Instance?.NativeProvider?.Machine;
         if (run is null || session is null || machine is null || machine.State.Frame == lastFrame) return;
         lastFrame = machine.State.Frame;
+        if (hudFixture) RecordHud(session, machine.State.Frame);
         if (plan is not null)
         {
             if (start is uint begun && KirbyMod.Instance?.NativeProvider?.SourceWindow is { } window) LogActors(session, machine, lastFrame - begun, window);

@@ -33,6 +33,7 @@ Relevant environment variables are used only by the lab helper:
 - `KIRBY_LAB_INPUT_PLAN`: `movement`, `combat`, `ability`, `visual`, `breakable`, `boss`, `crowd`, `aim`, `repro`, or `hazard`, for a reproducible offscreen test. `repro` tests normal keyboard/controller bindings and keeps the normal tutorials.
 - `KIRBY_LAB_TEST_ABILITY`: optional source ability ID for the ability probe, exposed as `--probe-ability 2..25`. The probe prepares it through original inhale, supplied swallowed content, and Down before measuring combat. The separate `combat` probe uses a real enemy's random copy result.
 - `KIRBY_LAB_TEST_SCROLLS`: optional `B,T,S` scroll counts for the ability probe, exposed as `--probe-scrolls`. Before measuring, the probe adds that many real `BrutalityUp`, `TacticUp` and `SurvivalUp` items (`InventItem.fromItem`) through the normal inventory and calls the host's `Hero.computeTiers`. `ability-damage.json` then records the tiers, the host and core colorless multipliers, and each copy hit's source HP drop and host damage.
+- `KIRBY_LAB_TEST_HUD=1`: with the ability probe, exposed as `--probe-hud`. After the new run settles, it adds a real `StartShield` beside the starting sword through the normal inventory. It later discards the copy with the original Select button, and writes `hud.jsonl` whenever a HUD weapon slot changes: real item, slot item, icon texture, frame group, icon size and scale, and ammo flag. Each distinct decoded icon is saved as private `hud-icon-<hash>.rgba`.
 - `KIRBY_LAB_COMBAT_ELITE=1`: with the `combat` plan, makes the swallowed Zombie an Elite (Elite skills disabled) and records in `combat.json` whether the copy was empowered and the damage that the second Zombie takes from each hit. Set it in the environment of `launch_runtime.py`.
 - `KIRBY_LAB_PLAY=1`: keep outfit selection but disable all smoke capture and automatic input.
 
@@ -154,6 +155,37 @@ timeout without fatal log lines, and left the real saves unchanged.
 
 Not covered live: copy forms other than Wheel and Ice, bosses, breakables and
 targets above the native HP cap at nonzero scroll counts.
+
+### HUD ability slot (2026-10-05)
+
+Issue #18. Same separate root, `repros/colorless-20261005`. Bridge rebuilt from
+this branch's `src/nds/lib.rs`: `a72004d5d2b14e1abee6fadd929457c259c97c49e6b3ea0be4aa99d557d24915`. Runtime DLL:
+`41afcb92b89c9b5bad5a853b7d86e562eaeef1803222492916c3ef9c839b99d3`. Each run was a fresh
+`--start-game --input-plan ability --probe-ability 18 --probe-hud` for 90 seconds,
+ended by the expected timeout without fatal log lines, and left the real saves
+unchanged.
+
+- `215606` (`--probe-scrolls 4,0,2`): Sword was copied at source frame 4412. At
+  4482 the Left-Click slot (`StartSword`) switched to the decoded original Sword
+  icon (green emblem, hash `bbb65ecd…`). It got the host `skillSlotColorless`
+  frame, icon width 32 at scale 1 (host item icons: 24 at `pixelScale` 1.5), and
+  ammo pips disabled. The slot item stayed `StartSword`. The shield slot was not
+  overlaid. Captured frames show the gray colorless corners on the Brutality-red
+  background of the highest stat.
+- `215830` (no scrolls): the same icon and frame at 4482, again on a red background
+  (tie → Brutality). The fixture's Select discard returned Kirby to base form at
+  5313. The slot then showed the host `StartSword` icon (`cardIcons.png`, scale
+  1.5), without the colorless frame, with the ammo flag restored.
+
+Earlier attempts while building the fixture are not evidence:
+- `214716`: lab recorder crash.
+- `214753`, `214838`, `215019`: the shield fixture tried to stock a third weapon.
+- `215110`: before the steady-icon and shield-slot fixes. It showed the original
+  white copy flash and the red hurt icon flickering in the slot, the shield slot
+  overlaid, and the base-form icon not restored.
+
+The lab-added shield never reached its HUD slot (`slotItem` null) in any run. This
+fixture limitation means the shield slot's own drawing was not observed.
 
 ## Private showcase capture
 

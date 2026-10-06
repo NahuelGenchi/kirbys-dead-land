@@ -205,6 +205,36 @@ Those runs predate the original-unit scale from #3, so they show the colorless
 factor, not today's absolute numbers.
 Other copy forms, bosses and breakables have not been run live with scrolls.
 
+### HUD ability slot
+
+Issue #18. In copied form every weapon button whose slot does not hold a shield
+fires the ability (`KirbyInput`). Those HUD slots now show the ability instead of
+the equipment Kirby cannot use while copied; shield slots keep the real shield.
+
+- **Icon:** the original game's own bottom-screen ability icon. It is a 32×32,
+  4bpp sub-engine OBJ at screen (4, 4); `AbilityIcon` in `src/core/` finds and
+  decodes it from live sub OAM, sub OBJ VRAM and OBJ palette RAM. After each copy
+  the icon is accepted once it is unchanged for 30 source frames, then held until
+  the ability changes. The original copy flash and hurt variants are therefore
+  not mirrored. It is drawn near the host item icon size (`Skill.ICON_SIZE`, 24)
+  in whole screen pixels, so it is not resampled.
+- **Frame and colors:** the host draws the slot itself. `KirbyHud` passes the
+  host's `Skill.useItem` a `StartSword` stand-in with the `Colorless` affix, so the
+  slot gets the host's `skillSlotColorless` gray frame and the colors it computes
+  for colorless gear. It then puts the real item back as the slot's item, so
+  inventory, equip and cooldown logic are unchanged, and hides ammo pips. Like
+  colorless gear in Dead Cells, the background takes the color of the highest
+  scroll stat. With a tie the host picks Brutality, so a run with no scrolls shows
+  the gray frame on a red background.
+- **Refresh:** the HUD is redrawn when the ability, its icon or the scroll tiers
+  change. Base form, discard, ability loss and deactivation redraw the real
+  equipment.
+
+Limits: the stand-in's own data (Brutality starting sword) is only drawn, never
+equipped. A host weapon that changes its own HUD icon (Shovel, via
+`HUD.updateIcon`) could briefly replace the ability icon until the next refresh;
+this was not exercised. Live checks used a 1024×768 HUD (`pixelScale` 1.5).
+
 ## Evidence and current limits
 
 Source regression checks cover rebasing, solid ceilings, one-way floors, slopes,

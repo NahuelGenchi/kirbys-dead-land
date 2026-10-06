@@ -753,3 +753,24 @@ the all-ability rendering tests as full gameplay acceptance.
   Grenader grenades and one mid-jump Archer arrow captured at full health; both
   spits hit the shooter for 52; the swallow gave no copy. Saves unchanged.
 
+
+## 2026-10-05 — HUD ability slot (#18)
+
+- While copied, the HUD weapon slots that fire the ability (non-shield, as in
+  `KirbyInput`) show the original bottom-screen ability icon in a host colorless
+  slot. Base form and discard restore the real equipment icon.
+- Icon: found in the live sub engine as a 32×32 4bpp OBJ at (4, 4) (Wheel state:
+  OAM 20, tile 52, palette 8). `src/core/AbilityIcon.cs` decodes it.
+  `KirbyHud` accepts it after 30 unchanged source frames, which skips the original
+  copy flash and hurt icon seen in live run `215110`. It is drawn in whole screen
+  pixels near the host's `Skill.ICON_SIZE`.
+- Frame and colors: host `Skill.useItem` with a cached `StartSword` + `Colorless`
+  stand-in (decompiled `setBgColors`, `useItem`, `onResize`), then the real item is
+  restored as the slot item. Colorless backgrounds follow the highest scroll stat;
+  ties show Brutality red.
+- Source: decoder tests (OBJ lookup, 2D/8bpp rejection, flips, palette,
+  transparency). `python3 scripts/check.py`: 20 Python, 6 oracle-parser and 177
+  core assertions; Release build 0 warnings/errors.
+- Live checks: `215606` (scrolls 4/0/2) and `215830` (no scrolls, discard). Both
+  confirmed the colorless Sword slot and an untouched shield slot. `215830` also
+  confirmed the restored weapon slot. Real saves were unchanged.
