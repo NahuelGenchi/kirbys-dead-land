@@ -970,6 +970,27 @@ the all-ability rendering tests as full gameplay acceptance.
   from behind through. Saves unchanged.
 - Not resolved: raising the shield while holding the opposite direction. The
   original guard keeps Kirby's facing while the host turns its shield.
+## 2026-10-06 — Kirby climbs at the original speed (#48)
+
+- Owner recording (19:53, Sword Kirby on a Vine-rune vine): climbing is too
+  slow. Its camera scroll put Kirby at about 95 px/s up and down: `SpeedMatch`
+  scaled the original climb (139 px/s up, 165 px/s down) down to the Beheaded's
+  97.5 px/s average, the only motion it slowed. The Beheaded climbs in
+  front-loaded 26 px pulses (13 px in the first host step), so his average
+  feels quicker than a steady 97.5 px/s.
+- `SpeedMatch` now leaves the climb (`0x916`) at the original's own motion. The
+  hand-over-hand cycle matches the movement again. Recorded as a deviation from
+  the host speeds in `docs/GAMEPLAY_FIDELITY.md`.
+- Source: `python3 scripts/check.py` passes (221 core assertions, Release build
+  0 warnings/errors); `tests/speed` passes all 26 checks, including the climb
+  at 139 px/s up and 165 px/s down, and Fire's and Plasma's head effects staying
+  on a climbing Kirby.
+- Live (separate data root `repros/climb-20261006`, `vine` setup, W then Down
+  twice): run `20261006-200031` climbed at 138.8 px/s up and 165.0 px/s down per
+  original frame, stood on the ledge at the vine's top and climbed back down.
+  Run `195931` hit its 30 s limit during boot, 2 s into play (139 px/s up).
+  Saves unchanged, no fatal log. Not run: ordinary ladders and chains at the new
+  speed, hanging vines.
 ## 2026-10-06 — carrying ability moves keep their lead over the run (#40)
 
 - Owner recordings 12:19 (Wing) and 12:30 (Wheel): Condor Head and Wheel's roll

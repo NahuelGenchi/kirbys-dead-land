@@ -4,7 +4,8 @@ namespace Kirby.Core;
 /// Matches Kirby's movement to the Beheaded's, as measured in the host. The
 /// original controller still runs every frame with its own states, animation
 /// and collision; Kirby then moves on through free space along the motion it
-/// made, so he runs, rolls, falls, flies and climbs at the Beheaded's speeds.
+/// made, so he runs, rolls, falls and flies at the Beheaded's speeds. He
+/// climbs at the original's own speed, faster than the Beheaded's ladders.
 /// Added motion stops a pixel short of walls, floors and ceilings, so every
 /// contact is still made by the original collision.
 /// </summary>
@@ -28,7 +29,6 @@ public static class SpeedMatch
     public const double FallScale = 403.0 / 60 / (896 / 256.0);
     /// <summary>Floating rises and sinks at the Beheaded's tempo, as it moves across.</summary>
     public const double FlightScale = GroundScale;
-    public const double ClimbUpScale = 97.5 / 60 / (592 / 256.0), ClimbDownScale = 97.5 / 60 / (704 / 256.0);
     /// <summary>Vertical velocity of the original's last take-off frame; the burst before it is kept.</summary>
     public const int JumpBurstEnd = -744;
     /// <summary>
@@ -54,7 +54,7 @@ public static class SpeedMatch
     public const ushort Free = 0, Solid = 3, Water = 130, OneWay = 131, SlopeUpRight = 132, SlopeUpLeft = 133, Ladder = 134;
     public delegate ushort Terrain(int cx, int cy);
 
-    public enum Motion { None, Ground, Air, Float, Slide, Climb, Carry }
+    public enum Motion { None, Ground, Air, Float, Slide, Carry }
 
     /// <summary>
     /// An ability move that carries Kirby: a dash attack, or any move faster
@@ -107,7 +107,6 @@ public static class SpeedMatch
         KirbyActions.Jump or KirbyActions.Fall => Motion.Air,
         KirbyActions.Float => Motion.Float,
         KirbyActions.Slide => Motion.Slide,
-        KirbyActions.Climb => Motion.Climb,
         Carry => Motion.Carry,
         _ => Motion.None,
     };
@@ -146,7 +145,6 @@ public static class SpeedMatch
     {
         Motion.Air when dy > 0 => dy * FallScale,
         Motion.Float => dy * FlightScale,
-        Motion.Climb => dy * (dy < 0 ? ClimbUpScale : ClimbDownScale),
         _ => dy,
     };
 

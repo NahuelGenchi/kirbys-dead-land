@@ -455,7 +455,7 @@ Check(MNear(16 * 2.75 * SpeedMatch.SlideFastScale + 27 * SpeedMatch.SlideSlowSca
 ushort MLadder(int cx, int cy) => cy >= 30 ? SpeedMatch.Solid : cx == 12 ? SpeedMatch.Ladder : SpeedMatch.Free;
 var mUp = SpeedMatch.Move(KirbyActions.Climb, 0, 0, 300, 600, 300, 600 - 592 / 256.0, MLadder);
 var mDown = SpeedMatch.Move(KirbyActions.Climb, 0, 0, 300, 600, 300, 600 + 704 / 256.0, MLadder);
-Check(MNear((600 - mUp.Feet) * 60, 97.5) && MNear((mDown.Feet - 600) * 60, 97.5), "Ladders climb at the Beheaded's 97.5 px/s both ways");
+Check(mUp == (300, 600 - 592 / 256.0) && mDown == (300, 600 + 704 / 256.0), "Ladders keep the original climb, faster than the Beheaded's");
 Check(SpeedMatch.Move(0x0B1A, 1, 512, 300, 700, 302, 690, MFlat) == (302, 690), "Other actions (hits, abilities, swimming) keep their original motion");
 // Contacts stay with the original collision.
 ushort MWall(int cx, int cy) => cy >= 30 || cx == 18 ? SpeedMatch.Solid : SpeedMatch.Free;

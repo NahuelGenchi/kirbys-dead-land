@@ -92,8 +92,9 @@ breakable floors once the Ram rune is unlocked.
 
 Kirby moves at the Beheaded's speeds, measured in the game: he runs and steers
 in the air at 236.5 px/s, slides as far and as fast as the Beheaded rolls,
-falls at 403 px/s, stomps at the dive's 900 px/s, climbs at 97.5 px/s and
-floats across at running speed. He climbs ladders, chains and vines grown with
+falls at 403 px/s, stomps at the dive's 900 px/s and floats across at running
+speed. He climbs at his own original speed (139 px/s up, 165 px/s down), faster
+than the Beheaded's 97.5 px/s. He climbs ladders, chains and vines grown with
 the Vine rune, and climbs from a vine onto the ledge it leads to. He stops when the direction is released and
 turns at once, and his jump keeps its height but peaks as fast as the
 Beheaded's. Dash attacks, Wheel's roll and other copy-ability moves faster
