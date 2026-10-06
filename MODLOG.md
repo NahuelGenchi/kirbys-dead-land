@@ -754,6 +754,36 @@ the all-ability rendering tests as full gameplay acceptance.
   spits hit the shooter for 52; the swallow gave no copy. Saves unchanged.
 
 
+## 2026-10-06 — Ice uses the host freeze status (#42)
+
+- Owner report: an Ice kill turned the Dead Cells enemy into the original ice
+  block instead of using Dead Cells' freeze. The runtime detached the source
+  object on the host death, so its original frozen block stayed.
+- Host routines read from `hlboot.dat` (`59350cad…07ce7e`) with crashlink:
+  `tool.weap.Freeze.onExecute` (affect 23, `props.duration` 3 s from the MDK
+  `data.cdb`, `getDiminishingFactor(3, 1, 8)`), `Entity.getDiminishingFactor`,
+  `en.Mob.onAffectChange` (thaw: "Slowed", slow 133, stun 8) and
+  `MobAttackTarget.preHitResultUpdate` (a hit shatters a freeze unless it is
+  `Frost`, `Poison`, `Bleed`, `ExtraDamage`, tag 13 or small and not `Fire`; the
+  type is compared by identity with the game's global value).
+- `src/core/IceFreeze.cs` and `KirbyEnemies.Complete`: while the source step has
+  Ice, copy hits are host `Frost` damage (`KirbyDamage.Frost` finds the game's
+  singleton among the module globals), a surviving unfrozen enemy gets affect 23
+  for 3 s × the host diminishing factor, and a host death retires the source
+  object at once instead of detaching it.
+- First live version froze only; the affect log (`125326`) showed every later
+  breath hit shattering and refreezing the enemy with a "Slowed" each time. The
+  Frost-typed hits fixed that (`125935`: one freeze, six hits, one natural thaw
+  after 179 source frames; `130140`: frozen kill with no original block). The
+  final build only freezes after a host-resolved hit and repeats both results
+  (`130608`, `130738`).
+- Native: new `proxy_ice_release` case; `tools/nds_tests.py` passes 74 cases.
+  `scripts/check.py` passes (228 assertions) and the Release runtime builds with
+  zero warnings. The shared bridge was built from this branch's unchanged
+  `lib.rs`.
+- Not run: bosses/Elites and freeze resistance, repeated freezes (diminishing
+  factor), Ice on breakables and hazards, Ice kills other than the breath.
+
 ## 2026-10-06 — Kirby rides host elevators (#28)
 
 - Owner recording 2026-10-05 23:51: the elevator left without Kirby, who then

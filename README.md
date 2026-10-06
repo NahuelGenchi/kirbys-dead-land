@@ -199,8 +199,10 @@ while playing Kirby; healing, equipment and interaction tutorials remain availab
 - Taking a real exit door, Kirby walks into the doorway in the original Walk
   action until the host fade, instead of gliding in one standing frame. See
   [exit-door walk](docs/RUNTIME_LAUNCH.md#exit-door-walk-2026-10-05).
-- Live Ice damage kills the host enemy once and leaves the original frozen block.
-  Source tests also verify kicking the block into another enemy.
+- Ice uses Dead Cells' own freeze status: Kirby's breath freezes the host enemy
+  for 3 s (with host diminishing returns), his later Ice hits damage it without
+  shattering the freeze, and the host thaw follows. An Ice kill leaves no original
+  ice block. See [Ice freeze](docs/GAMEPLAY_FIDELITY.md#ice-freezes-with-the-host-status-intentional-deviation).
 - Original sound effects play at 48 kHz stereo. Only the source BGM player is
   muted, retaining Dead Cells music. Jump/landing audio and the SDL queue passed
   tests, including coexistence with the host's SDL3 and successful queuing to the

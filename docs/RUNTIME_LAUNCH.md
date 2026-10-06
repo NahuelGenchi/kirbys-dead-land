@@ -311,6 +311,28 @@ python3 scripts/launch_runtime.py --data-root ~/.local/share/kirby-dead-cells/re
 | `20261006-002601` | `4967f6f4ac84` | 12-cell pool | 0 | Consumed 37 frames in, mouthful | No copy observed; Kirby kept the inhale pose after consumption (not investigated) |
 
 Every run kept the real saves unchanged and logged no fatal errors. Natural enemies near the pool hurt Kirby in some runs; the probe does not control them. Sword or other attacks on an enemy in water, and a walkway-over-pool site with the fixed bridge, were checked only in the native suite (`proxy_water_sword`, `proxy_water_below`), not live.
+
+## Ice host freeze (2026-10-06)
+
+Issue #42; behavior in [GAMEPLAY_FIDELITY.md](GAMEPLAY_FIDELITY.md#ice-freezes-with-the-host-status-intentional-deviation).
+The ability probe with `--probe-ability 10` now keeps the Zombie's full life. `KIRBY_LAB_TEST_TARGET_LIFE` sets a life that outlasts the breath. `ability-target-trace.jsonl` adds `hostFrozen`, `hostFreezeSeconds` and `sourceIceBlocks` (original objects running the frozen-block routine `0x021583EC`). `ability-target-affects.jsonl` logs every host status change and pop text on the target. All runs used the separate data root `repros/ice-freeze-20261006` with the shared bridge `654c2023ff6a…`, built from this branch's unchanged `lib.rs` (source `586a15a349c9…`).
+
+```sh
+KIRBY_LAB_TEST_TARGET_LIFE=2000 python3 scripts/launch_runtime.py --data-root <root> --seconds 80 \
+  --start-game --outfit KirbySuperStarUltra --input-plan ability --probe-ability 10 --capture-fps 10
+```
+
+| Run | Build | Target | Result |
+| :--- | :--- | :--- | :--- |
+| `20261006-124355` | First version: freeze only | Zombie, 130 life | Freeze 3.0 s on the first hit (frame 4383); killed on the fourth (4401). No original ice block in 2,606 traced frames. |
+| `20261006-124601`, `124804` | Same | 2,000 life | The freeze seemed continuous, but captures showed a "Slowed" pop on every hit. |
+| `20261006-125326` | Same, with the affect log | 2,000 life | Each later breath hit shattered the freeze (thaw slow 133, stun 8, "Slowed") and the next tick refroze it. This led to Frost-typed hits. |
+| `20261006-125935` | Frost hits (`5fc9c63bbf46…`) | 2,000 life | Freeze on at 4385. The next six hits (1962 → 1782) left it on; no "Slowed". It ended at 4564 (179 source frames) with one host thaw: "Slowed", slow 133 until 4634, stun 8 until 4601. Captures show the host ice encasement and freeze icon, with frost-coloured damage numbers. No original ice block. |
+| `20261006-130140` | Frost hits | Zombie, 120 life | Freeze on the first hit (4382); hits 38, 31, 31, 21 without a thaw; killed at 4400. The proxy was retired in the same tick (flags 80, then unbound). Captures show the normal host death and no ice block. No original ice block in 2,684 traced frames. |
+| `20261006-130608` | Final: freeze only after a host-resolved hit (`f11d17a85139…`) | 2,000 life | Same as `125935`: freeze on at 4382, seven hits (2000 → 1782) with no thaw, one natural thaw at 4562 (stun until 4598, slow until 4633). No original ice block in 2,763 traced frames. |
+| `20261006-130738` | Final | Zombie, 131 life | Freeze on the first hit (4382), hits 38, 31, 31, 31 with no thaw, killed at 4400. No original ice block in 2,845 traced frames. |
+
+Each run ended by the expected timeout, logged no fatal errors and left the real saves unchanged. The probe's incoming 10-damage hit took Kirby from 76 to 68 in these runs. Other branches' recent ability runs recorded 68–75 for the same hit, so this change did not cause the difference. Not run live: freeze resistance on bosses and Elites, the diminishing factor across repeated freezes, Ice against breakables and hazards, and an Ice kill other than the breath.
 ## Star projectiles
 
 `--input-plan stars` (`LabStarProbe`, issue #20) runs five phases with real Zombies:
