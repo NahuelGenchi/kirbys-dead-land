@@ -9,7 +9,7 @@ namespace Kirby.Core;
 public static class AbilityDescriptions
 {
     /// <summary>Controls shared by every ability, as routed by KirbyInput.</summary>
-    public const string Controls = "Skill 1 or this button: attack. Skill 2: discard the ability.";
+    public const string Controls = "Skill 1 or this button: attack. Skill 2: discard.";
 
     public static IReadOnlyDictionary<string, string> Summaries { get; } = new Dictionary<string, string>(StringComparer.Ordinal)
     {
