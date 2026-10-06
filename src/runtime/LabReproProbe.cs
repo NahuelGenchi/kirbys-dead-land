@@ -167,12 +167,16 @@ internal static unsafe class LabReproProbe
             elapsed >= hitAt && hero.life > 0)
         {
             hitDone = true;
-            var attacker = dc.en.mob.Zombie.Class.create(hero._level, hero.cx + 2, hero.cy, 1, 1);
+            // KIRBY_LAB_REPRO_HIT_SIDE=-1 places the attacker on Kirby's left.
+            int side = Environment.GetEnvironmentVariable("KIRBY_LAB_REPRO_HIT_SIDE") == "-1" ? -1 : 1;
+            var attacker = dc.en.mob.Zombie.Class.create(hero._level, hero.cx + 2 * side, hero.cy, 1, 1);
             attacker.lockAiS(10);
-            int before = hero.life;
-            dc.tool.atk.AttackUtils.Class.hit(dc.tool.atk.AttackUtils.Class.createFromMob(attacker, 20, null), hero);
+            int before = hero.life, dir = hero.dir;
+            var attack = dc.tool.atk.AttackUtils.Class.createFromMob(attacker, 20, null);
+            dc.tool.atk.AttackUtils.Class.hit(attack, hero);
             File.AppendAllText(Path.Combine(run, "repro-events.jsonl"), JsonSerializer.Serialize(new
-            { elapsed, name = "host-attack-20", before, hero.life, hero.maxLife, sourceHealth = nds.Health, frame = nds.State.Frame }) + "\n");
+            { elapsed, name = "host-attack-20", side, dir, hit = attack.hitResult?.GetType().Name, before, hero.life, hero.maxLife,
+              sourceHealth = nds.Health, frame = nds.State.Frame }) + "\n");
         }
         if (nds is not null && !lethalDone && double.TryParse(Environment.GetEnvironmentVariable("KIRBY_LAB_REPRO_LETHAL_AT"), out double lethalAt) &&
             elapsed >= lethalAt && hero.life > 0)

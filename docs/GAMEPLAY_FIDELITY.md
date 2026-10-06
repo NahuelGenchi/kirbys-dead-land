@@ -29,6 +29,7 @@ in [NDS_BRIDGE.md](NDS_BRIDGE.md). The original bootstrap experiment remains in
 | Enemy projectiles | Live hostile host arrows/grenades have paired copyless source objects; original suction, mouthful, spit star and swallow decide their fate |
 | Boss collision | Original resistance bits prevent inhale, Suplex capture and Cook; damage still uses original collision/debounce, while the host retains boss AI and phases |
 | Host triggers | Pressure plates (trap plates and pulley points too) and hidden triggers test Kirby's physical foot on the ground, as for the Beheaded; enemy attacks still test the projected original hurtbox |
+| Facing | The host hero's direction follows the original facing (bit 31 of player+0x6C) every source frame, so host shields block, and base-form host weapons aim, the way Kirby faces |
 | Incoming damage | Host shield/parry resolves first; remaining damage, converted to the same fraction of Kirby's 76 HP as of the host's current maximum, enters the next original collision tick, preserving original guard, recoil and invulnerability |
 | Touching enemies | As in Dead Cells, touching an enemy hurts neither Kirby nor the enemy: the original body-contact damage is excluded for every paired enemy, while Kirby's inhale, slide and copy attacks still hit, and the host's own touch attacks (spiked or electric enemies) still reach him as incoming damage. `OriginalTouchDamage: true` restores the original rule (7 of 76 HP to Kirby, and weak enemies destroyed by the bump) |
 | Outgoing damage | Paired original enemies hold the host life in original units: host life ÷ (`CopyDamageScale` 3.5 × the host's per-tier life scale). Original HP deltas are multiplied back, so both games agree on the lethal hit; the result is then scaled like Dead Cells colorless gear (see below), and the deliberate Elite Sword bonus below multiplies it again; no other host hero multiplier alters copy attacks |
@@ -251,6 +252,16 @@ Earlier runs `204940` and `205147` repeated the single drop and pickup. In run
 `204739` the drop appeared but the fixture held R without a key-press edge, so
 no pickup occurred; that fixture was corrected. Bosses, Elites, several cooked
 enemies at once and save/resume with an uneaten drop were not exercised live.
+Before #19 the host direction came from player+0x15, which never changes with
+facing, so the host shield always faced right. Live run `20261005-215320` faced
+Kirby left and raised the shield as a real host Zombie hit from the left: the
+host parried it (`onShieldCounterSuccessful`, hit `Block`, no damage). Run
+`215401` repeated this with the attacker on the right; the hit was `Normal` and
+went on to the original collision. Raising the shield while holding the opposite
+direction is not resolved: the original guard keeps Kirby's facing, the host
+turns its shield toward the held direction within its own update, and the
+provider resets the host direction to Kirby's facing every source frame. The
+direction a hit is checked against in that case was not measured.
 Ice damage and its surviving frozen block, background-effect placement, and an
 actual biome transition have passed live checks. The final native suite passes
 61 cases; source audio and host SDL coexistence tests also pass. Confirmed source
