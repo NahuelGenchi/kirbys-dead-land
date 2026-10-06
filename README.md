@@ -25,10 +25,12 @@ preserved; generated assets and native dependencies remain in the private data r
   This is a deliberate deviation; see `docs/GAMEPLAY_FIDELITY.md`.
 - Base Kirby can use Dead Cells swords, bows and shields.
 - Copied Kirby uses the original ability's attacks and retains the exact shield
-  it carried for parrying. Equipping replacement weapons while copied is blocked.
-- Items Kirby cannot use (other weapons and skills, or any weapon while copied)
-  get Dead Cells' own "Can't use that right now" message and stay on the ground;
-  a long press still recycles them.
+  it carried for parrying. Taking a dropped shield swaps it in as in Dead Cells,
+  in either form, and the new shield becomes the one that parries. Equipping
+  swords and bows while copied is blocked.
+- Items Kirby cannot use (other weapons and skills, or a sword or bow while
+  copied) get Dead Cells' own "Can't use that right now" message and stay on the
+  ground; a long press still recycles them.
 - Original inhale, mouthful, Down-to-swallow, spit, flight, guard, slide and copy
   discard are executed by the ROM. All 24 original copy forms load through the
   original transformation code, rather than replacing them with host weapons.

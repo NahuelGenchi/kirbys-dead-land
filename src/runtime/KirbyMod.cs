@@ -142,8 +142,7 @@ public sealed class KirbyMod(ModInfo info) : ModBase(info), IOnHeroUpdate,
             CaptureShield(session);
             provider.OnActivated(session);
         }
-        if (session.Rules.IsBaseForm)
-            CaptureShield(session);
+        CaptureShield(session);
         return session;
     }
 
@@ -159,19 +158,18 @@ public sealed class KirbyMod(ModInfo info) : ModBase(info), IOnHeroUpdate,
     // have the same database kind. Display text and item kind are insufficient.
     private static string StableItemId(InventItem item) => item.permanentId.ToString(CultureInfo.InvariantCulture);
 
+    // In both forms the retained shield follows what the host has equipped, so
+    // a shield taken while copied (Take swaps it in) becomes the one that parries.
     private static void CaptureShield(KirbySession state)
     {
-        string? shieldId = null;
+        List<string> shields = [];
         for (int slot = 0; slot < state.Hero.inventory.nbWeapons; slot++)
         {
             InventItem? item = state.Hero.inventory.getEquippedWeaponOn(slot);
             if (item is not null && item.hasTag("Shield".AsHaxeString()))
-            {
-                shieldId = StableItemId(item);
-                break;
-            }
+                shields.Add(StableItemId(item));
         }
-        state.Rules.EquipShield(shieldId);
+        state.Rules.FollowEquippedShields(shields);
     }
 
     private HostWeaponKind Classify(InventItem item)
@@ -204,7 +202,8 @@ public sealed class KirbyMod(ModInfo info) : ModBase(info), IOnHeroUpdate,
     /// The host asks this before every pickup, purchase and altar or timed-door
     /// reward. When it is false the host shows its own "not useful right now"
     /// message and leaves the item where it is; a long press still recycles a
-    /// dropped item. Kirby declines the equipment his rules do not allow here.
+    /// dropped item. Kirby declines the equipment his rules do not allow here;
+    /// a shield is allowed in any form.
     /// </summary>
     private bool IsUsefulFor(Hook_InventItem.orig_isUsefulFor orig, InventItem item, Hero hero)
     {
@@ -225,7 +224,10 @@ public sealed class KirbyMod(ModInfo info) : ModBase(info), IOnHeroUpdate,
         // slotless and the host HUD threw "unexpected posId" on the pickup.
         // Kirby declines unusable items earlier, in IsUsefulFor.
         bool equipped = orig(inventory, item);
-        if (equipped && state.Rules.IsBaseForm && item.kind is InventItemKind.Weapon)
+        // The newly taken shield is retained, even when another shield stays equipped.
+        if (equipped && item.kind is InventItemKind.Weapon && item.hasTag("Shield".AsHaxeString()))
+            state.Rules.EquipShield(StableItemId(item));
+        if (equipped && item.kind is InventItemKind.Weapon)
             CaptureShield(state);
         return equipped;
     }
