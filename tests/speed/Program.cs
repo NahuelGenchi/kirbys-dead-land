@@ -73,8 +73,8 @@ double Speed(List<Row> r, int a, int b) => (r[b].X - r[a].X) / (b - a) * 60;
     for (int y = 15; y < 30; y++) sim.Tiles[(12, y)] = 134;
     var up = sim.Run(R(64, 90));
     var down = sim.Run(R(128, 60));
-    Check(Math.Abs(up[20].Feet - up[80].Feet - 97.5) < 3 && Math.Abs((down[40].Feet - down[10].Feet) * 2 - 97.5) < 3,
-        "Climbs ladders at the Beheaded's 97.5 px/s both ways");
+    Check(Math.Abs(up[20].Feet - up[80].Feet - 138.75) < 3 && Math.Abs((down[40].Feet - down[10].Feet) * 2 - 165) < 3,
+        "Climbs ladders at the original's 139 px/s up and 165 px/s down");
 }
 foreach (ushort t in new ushort[] { SpeedMatch.SlopeUpRight, SpeedMatch.SlopeUpLeft })
 {
