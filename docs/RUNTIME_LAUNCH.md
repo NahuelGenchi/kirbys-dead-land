@@ -33,6 +33,7 @@ Relevant environment variables are used only by the lab helper:
 - `KIRBY_LAB_INPUT_PLAN`: `movement`, `combat`, `ability`, `visual`, `breakable`, `boss`, `crowd`, `aim`, `repro`, or `hazard`, for a reproducible offscreen test. `repro` tests normal keyboard/controller bindings and keeps the normal tutorials.
 - `KIRBY_LAB_TEST_ABILITY`: optional source ability ID for the ability probe, exposed as `--probe-ability 2..25`. The probe prepares it through original inhale, supplied swallowed content, and Down before measuring combat. The separate `combat` probe uses a real enemy's random copy result.
 - `KIRBY_LAB_TEST_SCROLLS`: optional `B,T,S` scroll counts for the ability probe, exposed as `--probe-scrolls`. Before measuring, the probe adds that many real `BrutalityUp`, `TacticUp` and `SurvivalUp` items (`InventItem.fromItem`) through the normal inventory and calls the host's `Hero.computeTiers`. `ability-damage.json` then records the tiers, the host and core colorless multipliers, and each copy hit's source HP drop and host damage.
+- `KIRBY_LAB_TEST_HUD=1`: with the ability probe, exposed as `--probe-hud`. After the new run settles, it adds a real `StartShield` beside the starting sword through the normal inventory. It later discards the copy with the original Select button, and writes `hud.jsonl` whenever a HUD weapon slot changes: real item, slot item, icon texture, frame group, icon size and scale, and ammo flag. Each distinct decoded icon is saved as private `hud-icon-<hash>.rgba`.
 - `KIRBY_LAB_COMBAT_ELITE=1`: with the `combat` plan, makes the swallowed Zombie an Elite (Elite skills disabled) and records in `combat.json` whether the copy was empowered and the damage that the second Zombie takes from each hit. Set it in the environment of `launch_runtime.py`.
 - `KIRBY_LAB_PLAY=1`: keep outfit selection but disable all smoke capture and automatic input.
 
@@ -42,7 +43,7 @@ For a user-session reproduction, copy the private profile into a separate data r
 
 The optional `KIRBY_LAB_REPRO_HEALTH=1` fixture changes only the copied test character's health, position, and outfit: it sets 57/76 health, repeats real stat updates, places the character near an existing generated item, and checks an outfit round trip. The timeline must use the normal pickup binding to acquire that item. `KIRBY_LAB_REPRO_PICKUP=StartBow` selects the existing bow instead of the shield. `KIRBY_LAB_REPRO_ENCOUNTER=1` later places the test character near an existing natural Zombie without changing its AI. `KIRBY_LAB_REPRO_MOB_COMPARISON=1` briefly uses the normal outfit near that enemy. `KIRBY_LAB_HIDE_BITMAP=1`, with optional `KIRBY_LAB_HIDE_BITMAP_FROM`/`UNTIL` times, skips only Kirby's original bitmap draw for a visual comparison. These are diagnostic fixtures, not normal play options.
 
-The second recording investigation added further opt-in diagnostics. `KIRBY_LAB_CAPTURE_ALL=1` keeps `--capture-fps` capturing during host cinematics and death, and adds the hero animation, cinematic and visibility state to `captures.jsonl`. `KIRBY_LAB_REPRO_HIT_AT` and `KIRBY_LAB_REPRO_LETHAL_AT` deliver a real host Zombie attack (20 damage, or 10 damage at 3 HP) through the normal attack path at that repro time. `KIRBY_LAB_DUMP_PHASES`, for example `rebirth:20,headPopLoop:5`, writes the scroller render tree near the hero when its animation reaches that frame. In `repro` runs, `repro-events.jsonl` also records host attacks entering the source and source health changes, and `repro-trace.jsonl` records the source palette flash entry and Kirby's palette bank.
+The second recording investigation added further opt-in diagnostics. `KIRBY_LAB_CAPTURE_ALL=1` keeps `--capture-fps` capturing during host cinematics and death, and adds the hero animation, cinematic and visibility state to `captures.jsonl`. `KIRBY_LAB_REPRO_HIT_AT` and `KIRBY_LAB_REPRO_LETHAL_AT` deliver a real host Zombie attack (20 damage, or 10 damage at 3 HP) through the normal attack path at that repro time; `KIRBY_LAB_REPRO_HIT_SIDE=-1` places the 20-damage attacker on Kirby's left instead of his right. `KIRBY_LAB_DUMP_PHASES`, for example `rebirth:20,headPopLoop:5`, writes the scroller render tree near the hero when its animation reaches that frame. In `repro` runs, `repro-events.jsonl` also records host attacks entering the source and source health changes, and `repro-trace.jsonl` records the source palette flash entry and Kirby's palette bank.
 
 The third recording investigation added more opt-in diagnostics. `repro` runs also record `host-motion.jsonl` (host position, animation and viewport zoom on every host frame), and drive the normal outfit too, without a source machine, so movement can be compared. `KIRBY_LAB_VISIBILITY=1` writes `visibility.jsonl` with the hero's visibility, sprite alpha, hero light and the body bitmap's alpha on every host frame. `KIRBY_LAB_MOB_SCALING=1` writes `mob-scaling.json` with every mob's life, elite flag, `trueLifeTier` and the host tier scale. `KIRBY_LAB_ZOOM_SCHEDULE`, for example `1:1.5u,10:2u`, sets the host viewport zoom once at each repro time (`u` also updates its size). `KIRBY_LAB_TOGGLES`, for example `30:nolight,34:none,38:nohead,46:blendnone`, switches the hero light, host head parts or the body bitmap's blend for A/B captures. `KIRBY_LAB_DUMP_PHASES` also accepts `@<lab ms>`. The render tree dump includes the scene lighting parameters and layer membership. The ability probe is run with `--probe-ability` source IDs: 18 Sword, 19 Hammer, 20 Parasol.
 
@@ -155,6 +156,37 @@ timeout without fatal log lines, and left the real saves unchanged.
 Not covered live: copy forms other than Wheel and Ice, bosses, breakables and
 targets above the native HP cap at nonzero scroll counts.
 
+### HUD ability slot (2026-10-05)
+
+Issue #18. Same separate root, `repros/colorless-20261005`. Bridge rebuilt from
+this branch's `src/nds/lib.rs`: `a72004d5d2b14e1abee6fadd929457c259c97c49e6b3ea0be4aa99d557d24915`. Runtime DLL:
+`41afcb92b89c9b5bad5a853b7d86e562eaeef1803222492916c3ef9c839b99d3`. Each run was a fresh
+`--start-game --input-plan ability --probe-ability 18 --probe-hud` for 90 seconds,
+ended by the expected timeout without fatal log lines, and left the real saves
+unchanged.
+
+- `215606` (`--probe-scrolls 4,0,2`): Sword was copied at source frame 4412. At
+  4482 the Left-Click slot (`StartSword`) switched to the decoded original Sword
+  icon (green emblem, hash `bbb65ecd…`). It got the host `skillSlotColorless`
+  frame, icon width 32 at scale 1 (host item icons: 24 at `pixelScale` 1.5), and
+  ammo pips disabled. The slot item stayed `StartSword`. The shield slot was not
+  overlaid. Captured frames show the gray colorless corners on the Brutality-red
+  background of the highest stat.
+- `215830` (no scrolls): the same icon and frame at 4482, again on a red background
+  (tie → Brutality). The fixture's Select discard returned Kirby to base form at
+  5313. The slot then showed the host `StartSword` icon (`cardIcons.png`, scale
+  1.5), without the colorless frame, with the ammo flag restored.
+
+Earlier attempts while building the fixture are not evidence:
+- `214716`: lab recorder crash.
+- `214753`, `214838`, `215019`: the shield fixture tried to stock a third weapon.
+- `215110`: before the steady-icon and shield-slot fixes. It showed the original
+  white copy flash and the red hurt icon flickering in the slot, the shield slot
+  overlaid, and the base-form icon not restored.
+
+The lab-added shield never reached its HUD slot (`slotItem` null) in any run. This
+fixture limitation means the shield slot's own drawing was not observed.
+
 ## Private showcase capture
 
 `--capture-fps 15` records actual gameplay framebuffer frames and the original PCM submitted by the mod. It leaves desktop audio untouched. The capture manifest records wall-clock timestamps; machine/RAM diagnostic snapshots remain limited to every two seconds. The optional combat take adds walking, jumping, floating, and attacks after absorption/parry. Normal play never enables these helpers.
@@ -227,3 +259,17 @@ ability, shield and 57/76 health. The later lethal phase recorded a death, and
 each run ended at its time limit without fatal log lines and with real saves
 unchanged. Run `213535` is not evidence: it lacked `--outfit`, so Kirby was not
 active.
+## Facing and left parry (#19)
+
+The owner's 2026-10-05 recording showed the host shield and its parry arc on Kirby's right while he faced left. All three runs below used a separate data root, `repros/left-parry-20261005`, with `KIRBY_LAB_REPRO_HEALTH=1` to pick up the generated Old Wooden Shield, and a private `KIRBY_LAB_REPRO_PLAN` timeline (walk left or right for 0.4 s, then hold the shield binding for 1 s).
+
+Before the fix, run `20261005-214458` traced `FacingRaw` (player+`0x15`) at 0 and `hero.dir` at 1 after walking in either direction, and every host block animation faced right. Over the same run, bit 31 of player+`0x6C` was set on all 44 frames with leftward velocity and clear on all 20 with rightward velocity.
+
+With the fix (runtime SHA-256 `15b0b560908f0627bb0131a3464690f047ed055704ba7f1eab70ca91159dc4dc`, bridge `278518576c2174c65c9041a3577bdb7fbe1361aef45ed13416618ff7a80652a0`), run `20261005-215025` showed `hero.dir` -1 and the host shield sprite mirrored (`scaleX` -1) in both left-facing blocks, and +1 in the right-facing ones. `KIRBY_LAB_REPRO_HIT_SIDE=-1` places the `KIRBY_LAB_REPRO_HIT_AT` attacker on Kirby's left. With Kirby facing left and the hit 0.1 s into the block:
+
+| Run | Attacker | Host result |
+| :--- | :--- | :--- |
+| `20261005-215320` | Left | `onShieldStartParry` and `onShieldCounterSuccessful`; hit `Block`; health stayed 57/76 |
+| `20261005-215401` | Right | Hit `Normal`; the attack entered the next original collision tick |
+
+All three runs reached their time limit without fatal errors, and the real saves were unchanged. Holding the opposite direction while raising the shield was traced but not resolved (see [GAMEPLAY_FIDELITY.md](GAMEPLAY_FIDELITY.md)).

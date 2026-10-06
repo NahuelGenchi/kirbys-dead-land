@@ -152,6 +152,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
     }
     public void OnDeactivated(KirbySession session)
     {
+        KirbyHud.Clear(session);
         CancelStomp();
         SlideStrike = false;
         // The host destroys a dead hero immediately and stages its corpse. The
@@ -353,6 +354,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
             Step(session, input);
         long stepped = System.Diagnostics.Stopwatch.GetTimestamp();
         RenderSource();
+        KirbyHud.Update(session, nds);
         PumpAudio();
         RecordPacing(steps, stepped - started, System.Diagnostics.Stopwatch.GetTimestamp() - stepped);
     }
@@ -629,7 +631,8 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         // cell above it. setPosPixel chooses yr=0 inside the solid cell; that
         // invokes its stuck-in-wall rescue and would fight the source controller.
         if (hero.yr == 0) { hero.cy--; hero.yr = 1; }
-        hero.dir = (state.FacingRaw & 1) != 0 ? -1 : 1;
+        // Host shields block from the front and host weapons aim by this facing.
+        hero.dir = state.FacesLeft ? -1 : 1;
         hero.bodyHei = 29.0 / 24; hero.hei = 29;
         if (stomp.Active) FinishStompFrame(hero, map, after, healthAfter < healthBefore);
         SlideStrike = after == KirbyActions.Slide && Math.Abs(state.VxRaw) >= SlideStrikeSpeed;
