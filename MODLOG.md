@@ -754,6 +754,19 @@ the all-ability rendering tests as full gameplay acceptance.
   spits hit the shooter for 52; the swallow gave no copy. Saves unchanged.
 
 
+## 2026-10-06 — copy attacks break gold deposits (#35)
+
+- Owner report: with Wing copied, the host "Break" gold deposit never broke;
+  base-form weapons broke it.
+- Cause: `KirbyEnemies.Eligible` left out `PileOfGold` and `GoldNugget`, so no
+  source proxy existed for original attacks to hit. Both are now eligible.
+  Disassembly of `hlboot.dat` (constructors, `onDamage`, `canBeActivated`)
+  confirmed host life, targetable and gold drops in `onDamage`.
+- `LabBreakableProbe` gained `KIRBY_LAB_BREAKABLE_TARGET=gold`, which spawns a
+  real `PileOfGold` beside Kirby. Live (`repros/gold-20261006`): `013937` Sword
+  broke it in four hits with four gold drops; control `014052` without the
+  change: no damage. `GoldNugget` not run live.
+
 ## 2026-10-06 — Kirby rides host elevators (#28)
 
 - Owner recording 2026-10-05 23:51: the elevator left without Kirby, who then
@@ -951,3 +964,20 @@ the all-ability rendering tests as full gameplay acceptance.
   - `124012`: Fire card in the colorless frame; shield and collar cards unchanged.
   - `124145`: base form keeps "Rusty Sword I / 138 DPS".
   - Real saves were unchanged.
+## 2026-10-06 — HUD slot stat color (#36)
+
+- The owner reported a red colorless ability slot while Survival was highest.
+- Cause: the host's `Skill.useItem` same-item-kind path (Skill.hx:540–545) calls
+  `setBgColors` before it assigns the new item, and `setBgColors` takes the tier
+  from the slot's current item. The `StartSword` stand-in matched the real starting
+  sword, so the colors came from that Brutality sword. The #18 runs could not show
+  this.
+- Fix: `KirbyHud` clears the slot item before passing the stand-in, so the host
+  takes its full path (item assigned first).
+- The HUD fixture now records the background shader colors.
+- `python3 scripts/check.py` passes (221 core assertions; Release build 0
+  warnings/errors).
+- Live checks:
+  - `013806` (tiers 1/1/5): Survival green `17ce75` + gray `b2c0dd`.
+  - `013956` (tiers 1/5/1): Tactics purple `a051ff` + gray.
+  - In both, discard restored the sword's red. Real saves were unchanged.

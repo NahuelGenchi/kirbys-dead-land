@@ -219,6 +219,12 @@ internal static class KirbyHud
             orig(skill, item);
             return;
         }
+        // useItem's same-item-kind path colors the slot from its previous item
+        // before switching to the new one (Skill.hx:540-545). With the starting
+        // sword in the slot that gave the sword's Brutality red. Without a slot
+        // item, the host assigns the colorless stand-in first and picks the
+        // highest scroll stat (Skill.hx:521-522, 390-391).
+        skill.ii = null;
         orig(skill, colorless);
         // Inventory, equip and cooldown logic still see the real equipment.
         skill.ii = item;

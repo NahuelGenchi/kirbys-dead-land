@@ -214,6 +214,26 @@ Earlier attempts while building this:
   colorless card.
 - `123814`: `ui.Text.set_text` escaped raw HTML, so the name showed literal tags.
   Fixed by editing the host's own markup (`rawText`).
+Correction (#36): the red background in `215606` and `215830` was not the highest
+stat. Both runs had the starting sword in the slot, the same kind as the
+`StartSword` stand-in. Through the host's same-item-kind path, the colors then came
+from the real Brutality sword. The owner saw the same red with Survival highest.
+
+### HUD slot stat color (2026-10-06)
+
+Issue #36. Same root. Bridge rebuilt from current `main`'s `src/nds/lib.rs`:
+`3b9f9055b3a69290947e5a147afa363382de0c7156b4c7a53459cd0f1f4c57b1`. Runtime DLL: `86f969f092cc464cf225affea2d2e0d06b4906413aab9b918fc42d8df1bae779`. Each run used
+`--start-game --input-plan ability --probe-ability 18 --probe-hud` for 90 seconds,
+with the starting sword in the Left-Click slot. Each ended by the expected timeout
+without fatal log lines and left the real saves unchanged. `hud.jsonl` now records
+the slot's two background shader colors.
+
+- `013806` (`--probe-scrolls 0,0,4`, tiers 1/1/5): the copied Sword slot had
+  colors `17ce75` (Survival green) and `b2c0dd` (colorless gray), and the captured
+  frame shows the green background. The starting sword's `ec2424` red returned
+  after the discard.
+- `013956` (`--probe-scrolls 0,4,0`, tiers 1/5/1): `a051ff` (Tactics purple) and
+  `b2c0dd`; `ec2424` again after the discard.
 
 ## Private showcase capture
 
@@ -257,6 +277,29 @@ Run `20261005-205827` (runtime SHA-256 `3b2d1291428646fc59a38301f0e9e94204193f6b
 | Archer, jump-inhale, spit | `dc.en.Bullet` | Caught in the air; one star hit on the Archer for 52 (56 → 4) |
 
 All four hostile projectiles seen were paired; no hero-owned projectile was paired, but Kirby fired no bow in this run, so that exclusion was not exercised live. The process reached its time limit without fatal errors, and the real save inventories were unchanged.
+
+## Gold deposits
+
+`KIRBY_LAB_BREAKABLE_TARGET=gold` makes the `breakable` plan spawn a real
+`PileOfGold` at Kirby (constructor, then `init`), copy Sword, and tap attack until
+it breaks. `breakable-hits.jsonl` records each host `onDamage`; `breakable.json`
+counts `PileOfGold.dropLoot` calls. Separate data root `repros/gold-20261006`
+(the owner's play session held the main lab); the bridge was unchanged.
+
+```sh
+KIRBY_LAB_BREAKABLE_TARGET=gold python3 scripts/launch_runtime.py \
+  --data-root ~/.local/share/kirby-dead-cells/repros/gold-20261006 \
+  --seconds 60 --start-game --outfit KirbySuperStarUltra --input-plan breakable
+```
+
+| Run | Build | Result |
+| :--- | :--- | :--- |
+| `20261006-013823` | #35, attack held 130 frames | Two hits, life 4 → 2, two gold drops |
+| `013937` | #35, repeated attack | Four hits of 1 life each, life 4 → 0, pile destroyed, four gold drops |
+| `014052` | control: #35 pairing change reverted | No hits, life 4, no gold |
+
+Each run reached its time limit without fatal errors, and real saves were unchanged.
+`GoldNugget` and copy forms other than Sword were not run.
 
 ## Host elevators
 
