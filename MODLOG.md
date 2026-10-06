@@ -687,3 +687,31 @@ the all-ability rendering tests as full gameplay acceptance.
   built from `main`'s `lib.rs`): an Elite Zombie gave empowered Sword, and a
   second Zombie took 36/36/32. Empowerment loss, resume and biome transitions
   were not run live.
+
+## 2026-10-05 — colorless copy damage (#10)
+
+- Copy attacks now scale like Dead Cells colorless gear, replacing the unmerged
+  per-Boss-Cell curve from #7 / PR #8. The host formula came from `hlboot.dat`
+  (`59350cad…07ce7e`) with the bundled crashlink disassembler:
+  `getRelevantTierFor` (Colorless = highest of the three tiers),
+  `computeTiers` (tier = 1 + scrolls) and `computeFinalDmg` →
+  `scaleHeroValueToTier` (× 1.15^(tier − 1), truncated). The decompiled output
+  stays in the session scratchpad, outside the repository.
+- `src/core/ColorlessDamage.cs` holds the tier choice, an independent formula copy
+  and the source-HP/host-damage pairing. A tier-2 / life-69 test exposed that
+  `ceil(life ÷ multiplier)` can give one spare source HP in floating point. Source
+  HP is now the smallest value whose truncated scaled damage is lethal.
+- `KirbyEnemies` reads the host tiers each source tick and calls the host's
+  `Const.scaleHeroValueToTier(1, tier)`. Base-form weapons, incoming damage,
+  parries, boss resistance and source cadence are untouched.
+- `LabAbilityProbe` and `launch_runtime.py --probe-scrolls B,T,S` add real scroll
+  items through the inventory and call `Hero.computeTiers`.
+- Source checks: 20 Python tests, 6 oracle-parser tests, 48 core assertions; Release
+  build with 0 warnings/errors.
+- Live checks, in the separate `repros/colorless-20261005` data root:
+  - `204919` Wheel at tier 5: 23/14 became 40/24, and the host and core
+    multipliers were identical.
+  - `205107` Ice: a lethal hit of 10 became 17, and the frozen object persisted
+    195 frames.
+  - `205246` with no scrolls: damage unchanged.
+  - Real saves were unchanged in all three runs.

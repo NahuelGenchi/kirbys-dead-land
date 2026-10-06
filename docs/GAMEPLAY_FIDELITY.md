@@ -30,7 +30,7 @@ in [NDS_BRIDGE.md](NDS_BRIDGE.md). The original bootstrap experiment remains in
 | Host triggers | Pressure plates (trap plates and pulley points too) and hidden triggers test Kirby's physical foot on the ground, as for the Beheaded; enemy attacks still test the projected original hurtbox |
 | Incoming damage | Host shield/parry resolves first; remaining damage, converted to the same fraction of Kirby's 76 HP as of the host's current maximum, enters the next original collision tick, preserving original guard, recoil and invulnerability |
 | Touching enemies | As in Dead Cells, touching an enemy hurts neither Kirby nor the enemy: the original body-contact damage is excluded for every paired enemy, while Kirby's inhale, slide and copy attacks still hit, and the host's own touch attacks (spiked or electric enemies) still reach him as incoming damage. `OriginalTouchDamage: true` restores the original rule (7 of 76 HP to Kirby, and weak enemies destroyed by the bump) |
-| Outgoing damage | Paired original enemies hold the host life in original units: host life ÷ (`CopyDamageScale` 3.5 × the host's per-tier life scale). Original HP deltas are multiplied back, so both games agree on the lethal hit; the host hero damage multiplier does not alter copy attacks. The only exception is the deliberate Elite Sword bonus below |
+| Outgoing damage | Paired original enemies hold the host life in original units: host life ÷ (`CopyDamageScale` 3.5 × the host's per-tier life scale). Original HP deltas are multiplied back, so both games agree on the lethal hit; the result is then scaled like Dead Cells colorless gear (see below), and the deliberate Elite Sword bonus below multiplies it again; no other host hero multiplier alters copy attacks |
 | Player health | Original full health is 76. Host and source health are synchronized, including host healing and original food |
 | Saves | A versioned, ROM-checked native machine snapshot and physical shield/enemy bindings travel with the private host save slot |
 | Arrival and death | Kirby appears in the host arrival flash rather than standing in its corpse sequence. On death the original lethal recoil and spin-away play over the host death sequence |
@@ -97,6 +97,59 @@ All 24 standard source copy forms are included: Cutter, Mirror, Beam, Fighter,
 Suplex, Yo-Yo, Wheel, Bomb, Ice, Fire, Plasma, Ninja, Stone, Wing, Jet, Copy,
 Sword, Hammer, Parasol, Paint, Mike, Crash, Cook and Sleep. Special states reached
 through those forms, such as riding the Wheel helper, execute in the ROM too.
+
+### Colorless copy damage
+
+Intentional deviation from exact original damage, requested in issue #10. Copy
+attacks count as Dead Cells colorless (gray) gear. They scale with the player's
+highest scroll stat, using the host's own formula. Decompiled from `hlboot.dat`
+SHA-256 `59350cad475a2375b9e39d7cd13fdb6e4ed9a027fd827ae5140f913c1c07ce7e`:
+
+- `Hero.computeTiers` sets each tier to 1 + that stat's scroll count.
+- `Entity.getRelevantTierFor` gives an item with the `Colorless` affix
+  `max(brutalityTier, tacticTier, survivalTier)`.
+- `AttackUtils.computeFinalDmg` applies `Const.scaleHeroValueToTier(damage, tier)`,
+  which is `damage × 1.15^(tier − 1)`, then truncates with `Std.int`.
+
+| Highest scroll stat (scrolls) | 0 | 1 | 2 | 4 | 8 |
+|---|---|---|---|---|---|
+| Multiplier | ×1 | ×1.15 | ×1.3225 | ×1.749 | ×3.059 |
+| Wheel hit of 23 | 23 | 26 | 30 | 40 | 70 |
+
+Each source tick, `KirbyEnemies.Prepare` reads the three host tiers and calls the
+host's `Const.scaleHeroValueToTier(1, tier)` for the multiplier.
+`ColorlessDamage` in `src/core/` holds the arithmetic and an independent copy of
+the formula for tests. The colorless multiplier stacks with the original-unit
+scale (Outgoing damage row) and the Elite Sword bonus: each source HP drop becomes
+`Std.int(drop × unit scale × Elite bonus × colorless multiplier)` host damage.
+The table shows the colorless factor alone. One source tick's drop is scaled as one value, as the host scales one
+attack.
+
+Lethality stays in agreement. The paired source enemy receives the smallest HP
+whose truncated, scaled damage reaches the host's remaining life (rounded up from
+life ÷ combined multiplier and checked with the host's arithmetic). Original death
+reactions such as the Ice block therefore still occur in the tick of the host
+kill. Source HP stays clamped to the native range (32,760); a single-tick source
+kill at that cap kills the host enemy.
+
+Unchanged: base-form host weapons, incoming damage, retained-shield parries, boss
+capture resistance, source attack cadence and repeat-hit debounce. Only the scroll
+multiplier is applied. Host weapon quality, affixes, mutations/perks, critical hits
+and other hero bonuses still do not alter copy attacks.
+
+This replaces the per-Boss-Cell curve proposed in #7 / PR #8, which was not merged.
+At 0 scrolls the colorless factor is ×1, leaving the unit-scale and Elite behavior
+unchanged except that host damage is truncated rather than rounded (at most 1 HP).
+
+Evidence: core tests compare every hit with host truncation for tiers 1–40 and
+host lives 1–400, including the floating-point case that division alone gets
+wrong. Live runs `204919` (Wheel), `205107` (Ice) and `205246` (no scrolls) are
+recorded in [RUNTIME_LAUNCH.md](RUNTIME_LAUNCH.md#colorless-copy-damage-2026-10-05).
+With 4/0/2 scrolls, the host returned the same multiplier as the core copy.
+Wheel 23/14 became 40/24, and lethal Ice still left the original frozen object.
+Those runs predate the original-unit scale from #3, so they show the colorless
+factor, not today's absolute numbers.
+Other copy forms, bosses and breakables have not been run live with scrolls.
 
 ## Evidence and current limits
 

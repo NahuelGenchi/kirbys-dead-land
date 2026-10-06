@@ -32,6 +32,10 @@ preserved; generated assets and native dependencies remain in the private data r
 - Original inhale, mouthful, Down-to-swallow, spit, flight, guard, slide and copy
   discard are executed by the ROM. All 24 original copy forms load through the
   original transformation code, rather than replacing them with host weapons.
+- Copy attacks count as colorless gear: original damage × 1.15^(tier − 1),
+  where tier is 1 + your highest scroll count (Brutality, Tactics or Survival).
+  With no scrolls, damage is exactly the original. See
+  [colorless copy damage](docs/GAMEPLAY_FIDELITY.md#colorless-copy-damage).
 
 ## Play
 

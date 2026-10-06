@@ -79,6 +79,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
     private nint sourceLevel;
     private readonly Dictionary<(int, int), bool> water = [];
     public NdsRuntime? Machine => nds;
+    internal KirbyEnemies Enemies => enemies;
     /// <summary>
     /// Kirby is in the fast part of his slide. Dead Cells lets a rolling hero
     /// smash breakable tiles and burst doors; Kirby's slide is his roll.

@@ -21,6 +21,18 @@ public sealed class KirbyEnemies
     // Sampled when source HP is assigned so the matching delta scales identically.
     private double damageMultiplier = 1;
     private EnemyBinding[]? restoring;
+    /// <summary>Highest scroll tier sampled for the current source tick.</summary>
+    internal int ColorlessTier { get; private set; } = 1;
+    /// <summary>The host's colorless damage multiplier for <see cref="ColorlessTier"/>.</summary>
+    internal double ColorlessMultiplier { get; private set; } = 1;
+    /// <summary>Lab-only observer of (target, source HP drop, host damage) for each copy hit.</summary>
+    internal static Action<Entity, int, int>? TestObserver;
+    /// <summary>
+    /// Host life per source damage point: the original-unit scale, times the Elite
+    /// empowerment, times the colorless scroll multiplier, all sampled in Prepare.
+    /// </summary>
+    private double HostMultiplier(Func<Entity, double> scale, Entity mob) =>
+        scale(mob) * damageMultiplier * ColorlessMultiplier;
     internal EnemyBinding[] Capture() => Enumerable.Range(1, Capacity)
         .Where(i => detached[i] || mobs[i] is { destroyed: false }).Select(i => detached[i]
             ? new EnemyBinding { Slot = i, Detached = true }
@@ -71,6 +83,10 @@ public sealed class KirbyEnemies
             }
             restoring = null;
         }
+        // Copy attacks scale like colorless gear: the highest scroll tier,
+        // passed through the host's own Const.scaleHeroValueToTier.
+        ColorlessTier = ColorlessDamage.Tier(hero.brutalityTier, hero.tacticTier, hero.survivalTier);
+        ColorlessMultiplier = dc.Const.Class.scaleHeroValueToTier(1.0, ColorlessTier);
         damageMultiplier = session.Rules.DamageMultiplier;
         double hx = (hero.cx + hero.xr) * 24, hy = (hero.cy + hero.yr) * 24;
         for (uint i = 1; i <= Capacity; i++)
@@ -115,8 +131,9 @@ public sealed class KirbyEnemies
             int y = checked((int)Math.Round(((mob.cy + mob.yr) * 24 - 17 - oy) * 65536));
             // Original HP is the host life in original damage units, so both
             // games agree on which hit is lethal (Ice freezes, death reactions).
-            // An empowered ability's multiplier applies on top of the unit scale.
-            assignedHp[i] = Math.Clamp((int)Math.Ceiling(mob.life / (scale(mob) * damageMultiplier)), 1, MaxSourceHp);
+            // The Elite empowerment and the colorless scroll multiplier apply on
+            // top of the unit scale.
+            assignedHp[i] = ColorlessDamage.SourceHp(mob.life, HostMultiplier(scale, mob), MaxSourceHp);
             nds.SetProxy(i, x, y, assignedHp[i]);
             nds.SetProxyOptions(i, abilities[i], mob is not Mob || mob is dc.en.mob.Boss);
             nds.SetProxyContact(i, mob is Mob && bodyContact);
@@ -156,8 +173,11 @@ public sealed class KirbyEnemies
             // surviving original enemy leaves the host enemy alive.
             int damage = assignedHp[i] - proxy.Hp;
             if (damage > 0 && !mob.destroyed && mob.life > 0)
-                KirbyDamage.Hit(session.Hero, mob, proxy.Hp <= 0 ? mob.life
-                    : Math.Clamp((int)Math.Round(damage * scale(mob) * damageMultiplier), 1, Math.Max(1, mob.life - 1)));
+            {
+                int hostDamage = Math.Max(1, ColorlessDamage.HostDamage(damage, assignedHp[i], mob.life, HostMultiplier(scale, mob)));
+                TestObserver?.Invoke(mob, damage, hostDamage);
+                KirbyDamage.Hit(session.Hero, mob, hostDamage);
+            }
             if (mob.destroyed || mob.life <= 0)
             {
                 if (!proxy.Gone && mob is Mob and not dc.en.mob.Boss)
