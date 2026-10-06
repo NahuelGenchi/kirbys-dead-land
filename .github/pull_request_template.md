@@ -2,6 +2,7 @@
 
 Closes #<issue-number>
 Milestone: <same milestone as the primary issue; also set the GitHub sidebar>
+Branch: <type>/<issue>-<slug>, new from the latest main and used only for this issue
 
 <!-- Use one standalone Closes #N line per completed same-repository issue. Use Refs #N for unfinished related work. -->
 

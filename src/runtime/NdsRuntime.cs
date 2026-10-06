@@ -10,8 +10,30 @@ public sealed unsafe class NdsRuntime : IDisposable
     private readonly int thread = Environment.CurrentManagedThreadId;
     private nint handle;
     private static nint library;
+    private static delegate* unmanaged[Cdecl]<nint, int, int, int> movePlayer;
     private bool firstStep = true, firstWorld = true;
+    // Kirby's original screen position after the latest source frame, taken
+    // before the next World call rebases his coordinates.
+    private (int X, int Y) steppedOrigin;
     public byte[] SourceBgPalette { get; } = new byte[512];
+    /// <summary>
+    /// Kirby's original screen position for the OBJ attributes currently in
+    /// OAM. The game builds OAM during a frame and the hardware shows it from
+    /// the next one, so after a source frame OAM describes the previous
+    /// frame's positions. Pairing it with the newest state shifted Kirby by
+    /// a whole terrain cell whenever the host window rebased under him.
+    /// </summary>
+    public (int X, int Y) DisplayedOrigin { get; private set; }
+    /// <summary>The original controller's action code (see <see cref="Kirby.Core.KirbyActions"/>).</summary>
+    public ushort Action
+    {
+        get
+        {
+            Span<byte> value = stackalloc byte[2];
+            Read(0x020BAF80, value);
+            return System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(value);
+        }
+    }
     public NdsRuntime(string nativeLibrary, string rom, string state)
     {
         using var stream = System.IO.File.OpenRead(rom);
@@ -26,6 +48,8 @@ public sealed unsafe class NdsRuntime : IDisposable
         }
         if (Native.ProxyCapacity() != 31)
             throw new InvalidOperationException("The native bridge does not match this runtime. Rebuild and stage both components together.");
+        if (movePlayer == null && NativeLibrary.TryGetExport(library, "kssu_move_player", out nint move))
+            movePlayer = (delegate* unmanaged[Cdecl]<nint, int, int, int>)move;
         LabActivationTrace.Mark("Native Open begin");
         handle = Native.Open(Path.GetFullPath(rom), Path.GetFullPath(state));
         LabActivationTrace.Mark("Native Open returned");
@@ -33,7 +57,11 @@ public sealed unsafe class NdsRuntime : IDisposable
         fixed (byte* pointer = SourceBgPalette)
             Result(Native.ReadGpu(handle, 0x05000000, pointer, (nuint)SourceBgPalette.Length));
         LabActivationTrace.Mark("Source BG palette read");
+        ResetOrigin();
     }
+    private static (int X, int Y) ScreenOrigin(in NdsState state) =>
+        ((int)Math.Floor(state.X) - state.CameraX, (int)Math.Floor(state.Y) - state.CameraY);
+    private void ResetOrigin() => DisplayedOrigin = steppedOrigin = ScreenOrigin(State);
     public nint Handle { get { Check(); return handle; } }
     private void Check()
     {
@@ -49,7 +77,13 @@ public sealed unsafe class NdsRuntime : IDisposable
     {
         Check();
         if (firstStep) LabActivationTrace.Mark("First native Step begin");
-        Result(Native.Step(handle, buttons, frames));
+        // One frame at a time, so the OAM origin is known after every frame.
+        for (uint i = 0; i < frames; i++)
+        {
+            Result(Native.Step(handle, buttons, 1));
+            DisplayedOrigin = steppedOrigin;
+            steppedOrigin = ScreenOrigin(State);
+        }
         if (firstStep) { LabActivationTrace.Mark("First native Step complete"); firstStep = false; }
     }
     public NdsState State { get { Check(); Result(Native.State(handle, out NdsState state)); return state; } }
@@ -90,13 +124,29 @@ public sealed unsafe class NdsRuntime : IDisposable
     public NdsProxy Proxy(uint slot)
     { Check(); Result(Native.Proxy(handle, slot, out var proxy)); return proxy; }
     public void SaveState(string path) { Check(); Result(Native.SaveState(handle, Path.GetFullPath(path))); }
-    public void LoadState(string path) { Check(); Result(Native.LoadState(handle, Path.GetFullPath(path))); }
+    public void LoadState(string path) { Check(); Result(Native.LoadState(handle, Path.GetFullPath(path))); ResetOrigin(); }
     public void World(ReadOnlySpan<ushort> cells, int xRaw, int yRaw)
     {
         Check();
         if (firstWorld) LabActivationTrace.Mark("First native World begin");
         fixed (ushort* ptr = cells) Result(Native.World(handle, ptr, (nuint)cells.Length, xRaw, yRaw));
         if (firstWorld) { LabActivationTrace.Mark("First native World complete"); firstWorld = false; }
+    }
+    /// <summary>
+    /// The bridge can move Kirby alone. An older bridge only has <see cref="World"/>,
+    /// which moves every original object with him.
+    /// </summary>
+    public static bool CanMovePlayer => movePlayer != null;
+    /// <summary>
+    /// Move only Kirby by a 16.16 delta in the current window, with his cached
+    /// terrain probes; thrown objects, effects, the helper and enemies stay where
+    /// the original left them, and the source camera follows him by itself.
+    /// </summary>
+    public void MovePlayer(int dxRaw, int dyRaw)
+    {
+        Check();
+        if (movePlayer == null) throw new NotSupportedException("The native bridge cannot move Kirby alone. Rebuild and stage it with this runtime.");
+        Result(movePlayer(handle, dxRaw, dyRaw));
     }
     public void Dispose()
     {
