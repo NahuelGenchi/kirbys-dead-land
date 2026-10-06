@@ -173,6 +173,9 @@ while playing Kirby; healing, equipment and interaction tutorials remain availab
   fly above the original inhale box on flat ground) entered the original
   mouthful without hurting Kirby. Each spat star hit its shooter for 52 damage;
   a swallowed grenade gave no copy. See [enemy projectiles](docs/RUNTIME_LAUNCH.md#enemy-projectiles).
+- Taking a real exit door, Kirby walks into the doorway in the original Walk
+  action until the host fade, instead of gliding in one standing frame. See
+  [exit-door walk](docs/RUNTIME_LAUNCH.md#exit-door-walk-2026-10-05).
 - Live Ice damage kills the host enemy once and leaves the original frozen block.
   Source tests also verify kicking the block into another enemy.
 - Original sound effects play at 48 kHz stereo. Only the source BGM player is

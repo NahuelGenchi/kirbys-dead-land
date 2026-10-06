@@ -44,6 +44,10 @@ helper. A new run reloads the original seed; changing away from Kirby restores
 the host character body and proportionate health. Returning imports its current
 health fraction. Ordinary host progression, menus, death and level cinematics
 remain host systems.
+When a host cinematic walks the hero, such as leaving through an exit door, the
+original controller keeps running with the same direction held, so Kirby walks
+with the original animation and facing. The host keeps the position and the fade.
+See [Cinematic walks](#cinematic-walks-intentional-deviation).
 Host tutorial prompts that require the replaced jump, dodge or Homunculus actions
 are suppressed only for Kirby. Existing matching prompts are canceled without
 marking them complete; healing, equipment and interaction prompts still use the
@@ -206,6 +210,31 @@ Those runs predate the original-unit scale from #3, so they show the colorless
 factor, not today's absolute numbers.
 Other copy forms, bosses and breakables have not been run live with scrolls.
 
+### Cinematic walks (intentional deviation)
+
+Issue #17. Before this change, the source machine stopped during every host
+cinematic. When the exit-door cinematic walked the hero into the doorway, Kirby
+moved and faded in his last standing frame. Now, while a cinematic moves the hero
+sideways, `CinematicWalk` (`src/core/`) turns that motion into a held DS Left or
+Right, and `StepCinematicWalk` advances the original controller with it. Host
+fixed updates skip some rendered frames, so the direction stays held for 0.2 s
+without movement. A move of more than one cell in one frame is a placement, not
+a walk.
+
+The door cinematic plays the Beheaded's `walk`, then `stairs`: it lifts the hero
+up steps inside the doorway, where the host map has no floor. With real terrain
+the ROM switched to its Fall action (`0x070E`) there. During a cinematic walk the
+original therefore gets a flat solid floor at the cell boundary where the walk
+began, with nothing above it. The drawing follows the host body as usual, so Kirby
+still climbs the steps on screen. Enemies, incoming damage, health sync and
+abilities stay paused until normal play resumes. Original effect audio plays.
+Without horizontal movement, for example during the arrival cinematic, the source
+stays frozen as before.
+
+Live run `20261005-214713` took the T_Courtyard door: 148 of 149 cinematic polls
+were in the original Walk action (`0x060B`), facing right, with no Fall. Captured
+frames show changing walk poses up the steps until the fade. Exits where the
+host drops the hero, and walks to the left, have not been checked live.
 ### HUD ability slot
 
 Issue #18. In copied form every weapon button whose slot does not hold a shield

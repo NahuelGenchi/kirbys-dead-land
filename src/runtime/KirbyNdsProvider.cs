@@ -27,6 +27,10 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
     private readonly StompController stomp = new();
     private readonly SpeedMatch.ActionFilter motionActions = new();
     private readonly AnimationPacer walkCycle = new();
+    private readonly CinematicWalk cinematicWalk = new();
+    // The host cell row whose top is the floor of a cinematic walk, and its row in the exported window.
+    private int? cinematicFloor;
+    private const int CinematicFloorRow = 5;
     private dc.tool.mainSkills.DiveAttack? activeDive;
     // One-way platforms and ladder tops the host dive passes through, down to this row.
     private int stompIgnoreRow = int.MinValue;
@@ -332,11 +336,17 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         if (sourceDead) ReviveSource(session);
         if (paused || !h.awake || h._level.game.hasCinematic())
         {
-            pacer.Reset(); audio?.Pause();
             // A pause keeps a stomp in the air; a cinematic or a control lock ends it.
             if (!paused) CancelStomp();
-            RenderSource(); return;
+            int walk = paused ? 0 : cinematicWalk.Update((h.cx + h.xr) * 24, delta);
+            if (walk == 0) { pacer.Reset(); audio?.Pause(); RenderSource(); return; }
+            int walkSteps = pacer.Steps(delta);
+            for (int i = 0; i < walkSteps; i++) StepCinematicWalk(h, walk);
+            RenderSource();
+            PumpAudio();
+            return;
         }
+        cinematicWalk.Reset(); cinematicFloor = null;
         input = KirbyInput.Read(session);
         int steps = pacer.Steps(delta);
         long started = System.Diagnostics.Stopwatch.GetTimestamp();
@@ -449,9 +459,8 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         renderer.Render(nds);
         if (firstRender) { LabActivationTrace.Mark("First source Render complete"); firstRender = false; }
     }
-    private void Step(KirbySession session, ushort mask)
+    private void EnterLevel(Hero hero)
     {
-        Hero hero = session.Hero;
         nint level = hero._level.HashlinkPointer;
         if (sourceLevel != 0 && sourceLevel != level)
         {
@@ -462,6 +471,38 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
             rollZones.Reset();
         }
         sourceLevel = level;
+    }
+    /// <summary>
+    /// One original frame while a host cinematic walks the hero, for example
+    /// through a level's exit door. The original controller holds the same
+    /// direction, so Kirby walks with his own animation and facing instead of
+    /// gliding in his last pose. The host keeps the position; enemies, damage
+    /// and abilities resume with normal play.
+    /// </summary>
+    private void StepCinematicWalk(Hero hero, int direction)
+    {
+        EnterLevel(hero);
+        double hostX = (hero.cx + hero.xr) * 24;
+        // An exit door lifts the hero up the steps inside its doorway, where
+        // the host has no floor; the original would fall there. It walks on a
+        // flat floor at the height the walk began. Kirby is drawn on the host
+        // body, so he still climbs with it.
+        int floor = cinematicFloor ??= (int)Math.Round(hero.cy + hero.yr);
+        double centerY = floor * 24 - 14.5;
+        int originX = (int)Math.Floor(hostX / 24) - 16;
+        int originY = floor - CinematicFloorRow;
+        cells.AsSpan(0, CinematicFloorRow * 100).Clear();
+        cells.AsSpan(CinematicFloorRow * 100).Fill(3);
+        PlaceSource(originX, originY, checked((int)Math.Round((hostX - originX * 24) * 65536)),
+            checked((int)Math.Round((centerY - originY * 24) * 65536)));
+        PaceWalkCycle(nds!.Action, config.MatchHostSpeed);
+        NdsAudio.PrepareSource(nds);
+        nds.Step(direction > 0 ? (ushort)16 : (ushort)32);
+    }
+    private void Step(KirbySession session, ushort mask)
+    {
+        Hero hero = session.Hero;
+        EnterLevel(hero);
         if (hero.maxLife != sourceMaxLife && hero.maxLife > 0)
         {
             double scale = sourceMaxLife / (double)hero.maxLife;
