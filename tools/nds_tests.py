@@ -179,6 +179,19 @@ def run_case(name):
             high=b.step(64,30);still=b.step(0,30);low=b.step(128,30)
             assert high['y_raw']==still['y_raw'] and high['y_raw']<100*65536 and low['y_raw']==int(153.5*65536)
             return {'up_y':high['y_raw']/65536,'released_y':still['y_raw']/65536,'down_y':low['y_raw']/65536,'source_pose':high['graphic']&65535}
+        if name=='ladder_top':
+            # A vine ends under a solid block; exported as a one-way ladder top,
+            # the original climbs into that cell instead of stopping below it.
+            tops={}
+            for top in (3,131):
+                if top==131:b.close();b=Bridge()
+                cells=[134 if col==1 and 2<=row<7 else top if col==1 and row==1 else 3 if row>=7 else 0 for row in range(9) for col in range(100)]
+                b.world(cells,36*65536,int(153.5*65536));b.step(0,60)
+                for i in range(150):
+                    s=b.state();b.world(cells,s['x_raw'],s['y_raw']);s=b.step(64)
+                tops[top]=s['y_raw']/65536
+            assert tops[3]==52.5 and tops[131]==20.0, tops
+            return {'solid_top_y':tops[3],'one_way_top_y':tops[131]}
         if name in ('proxy_suplex','proxy_cook','proxy_suplex_touch_off'):
             ability=24 if name=='proxy_cook' else 6;transform(b,ability)
             floor=[3 if y>=7 else 0 for y in range(9) for x in range(100)];q=Proxy();damage=[];captured=0;gone=None
@@ -430,7 +443,7 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--case');parser.add_argument('--skip-abilities',action='store_true');args=parser.parse_args()
     if args.case:
         print('RESULT '+json.dumps({'case':args.case,'result':run_case(args.case)}),flush=True);return
-    cases=['scene_doors','room_food','proxy_birth_contact','proxy_birth_inhale','proxy_contact','proxy_contact_sword','proxy_touch_off','proxy_swallow_touch_off','proxy_suplex_touch_off','proxy_ice_detach','proxy_lethal','motion','ladder','one_way','solid_ceiling','water','proxy_swallow','hazard_spit','hazard_swallow','proxy_sword','proxy_reuse','proxy_save','proxy_mix','boss_inhale','boss_suplex','boss_cook','boss_sword','proxy_capacity','copy_drop_reabsorb','wheelie_ride','proxy_suplex','proxy_cook','audio','hurt','hurt_lethal','hurt_cold','guard','health_invulnerable','health_sync','proxy_size']
+    cases=['scene_doors','room_food','proxy_birth_contact','proxy_birth_inhale','proxy_contact','proxy_contact_sword','proxy_touch_off','proxy_swallow_touch_off','proxy_suplex_touch_off','proxy_ice_detach','proxy_lethal','motion','ladder','ladder_top','one_way','solid_ceiling','water','proxy_swallow','hazard_spit','hazard_swallow','proxy_sword','proxy_reuse','proxy_save','proxy_mix','boss_inhale','boss_suplex','boss_cook','boss_sword','proxy_capacity','copy_drop_reabsorb','wheelie_ride','proxy_suplex','proxy_cook','audio','hurt','hurt_lethal','hurt_cold','guard','health_invulnerable','health_sync','proxy_size']
     if not args.skip_abilities:cases += [f'ability-{i}' for i in range(2,26)]
     results=[]
     for name in cases:

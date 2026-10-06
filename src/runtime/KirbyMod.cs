@@ -41,6 +41,7 @@ public sealed class KirbyMod(ModInfo info) : ModBase(info), IOnHeroUpdate,
         KirbyNdsProvider.Log = message => Logger.Information(message);
         KirbyEnemyHooks.Install();
         KirbyDamage.Install();
+        KirbyVines.Install();
         if (config.EnableOriginalRuntime)
         {
             KirbyTutorials.Install(config.OutfitId);

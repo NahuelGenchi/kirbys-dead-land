@@ -753,3 +753,23 @@ the all-ability rendering tests as full gameplay acceptance.
   Grenader grenades and one mid-jump Archer arrow captured at full health; both
   spits hit the shooter for 52; the swallow gave no copy. Saves unchanged.
 
+
+## 2026-10-05 — climbing Dead Cells vines (#25)
+
+- Owner recording 22:43: Kirby hopped and floated beside a grown vine but never
+  grabbed it. Host bytecode (crashlink): `VineLadder.buildLadder` only calls
+  `LevelMap.addSpot` (spots 0 and 18 per cell, 1 and 18 above the top block);
+  `Hero.preUpdate` climbs on spot 0, which `initSpots` derives from collision
+  bit 16 for ordinary ladders. The terrain export read collision bits only.
+- `KirbyVines` hooks `buildLadder`, records the vine's column and re-reads its
+  spots on each query. Vine cells become source ladders (134); solid cells the
+  vine passes through or ends under become one-way ladder tops (131). `AtLadder`
+  includes vine cells, so W climbs instead of jumping.
+- New bridge case `ladder_top`: a solid top stops the original climb at y 52.5,
+  a one-way top lets it reach y 20. New lab scenario `vine@t` grows the level's
+  first natural vine through `VineLadder.activate` and stands Kirby at its seed.
+- Live (separate data root `repros/vine-20261005`): `232657` climbs at ~99 px/s
+  and stands on the ledge; `232901` climbs, hangs, descends, reaches the ledge
+  and climbs back down from it; `233002` ordinary ladder unchanged. Saves
+  unchanged in all three. Not run: hanging vines, stomp from a vine, a grown
+  vine after loading a save.
