@@ -36,6 +36,16 @@ public static class ElevatorRide
     public static double Surface(int elevatorCy, double elevatorYr) => (elevatorCy + elevatorYr) * Cell;
 
     /// <summary>
+    /// The surface Kirby stands on. A fast elevator overshoots its stop by up to
+    /// a tick of travel and is put back on the next tick; a stop set into level
+    /// floor briefly takes its surface into that solid cell. Kirby then stands
+    /// on the floor's top, as the Beheaded does: following the elevator would put
+    /// his body inside the floor, and the original would push him out and drop him.
+    /// </summary>
+    public static double Effective(int elevatorCy, double elevatorYr, bool sunk) =>
+        sunk ? elevatorCy * Cell : Surface(elevatorCy, elevatorYr);
+
+    /// <summary>
     /// How Kirby rides this elevator, or null when he is not over it. Across,
     /// this matches the host carry: Kirby's cell column within half the
     /// elevator's width of its centre column. Up, it reaches a jump or float
@@ -51,16 +61,20 @@ public static class ElevatorRide
     /// <param name="widthCells">Elevator width in cells (cWid).</param>
     /// <param name="elevatorCy">Elevator cell row (cy); its solid row is the next one.</param>
     /// <param name="elevatorYr">Elevator position within that row (yr); 1 at rest.</param>
-    /// <param name="rise">Host pixels the surface rose since the previous original frame (negative when it fell).</param>
+    /// <param name="rise">Host pixels the surface rose since the previous original frame (negative when it fell),
+    /// measured on <see cref="Effective"/> surfaces.</param>
     /// <param name="rising">The original moved Kirby upward on its previous frame (a jump or float).</param>
+    /// <param name="sunk">The cell the surface is in is solid level floor under Kirby (see <see cref="Effective"/>).</param>
     public static Ride? Over(int kirbyCx, double feetY, int elevatorCx, int widthCells, int elevatorCy, double elevatorYr,
-        double rise, bool rising)
+        double rise, bool rising, bool sunk = false)
     {
         double half = widthCells * 0.5;
         if (kirbyCx < elevatorCx - half || kirbyCx >= elevatorCx + half) return null;
-        double surface = Surface(elevatorCy, elevatorYr), below = feetY - surface;
-        double lift = Math.Clamp((elevatorYr - 1) * Cell, -Cell, 0);
-        if (!rising && Math.Abs(feetY - (surface + rise)) <= Snap) return new Ride(lift, below, rise != 0);
+        double actual = Surface(elevatorCy, elevatorYr), surface = Effective(elevatorCy, elevatorYr, sunk), below = feetY - surface;
+        double lift = sunk ? 0 : Math.Clamp((elevatorYr - 1) * Cell, -Cell, 0);
+        // Sunk into a floor, the host's own carry may have taken Kirby down to the elevator itself.
+        bool standing = Math.Abs(feetY - (surface + rise)) <= Snap || (sunk && feetY >= surface - Snap && feetY <= actual + Snap);
+        if (!rising && standing) return new Ride(lift, below, rise != 0);
         if (below < -Reach || below > Tolerance + Math.Max(0, rise)) return null;
         return new Ride(lift, Math.Max(0, below), rise != 0);
     }

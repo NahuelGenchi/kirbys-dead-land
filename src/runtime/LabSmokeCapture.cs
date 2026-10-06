@@ -92,9 +92,15 @@ internal static class LabSmokeCapture
             LabMovesProbe.Install(run);
         if (Environment.GetEnvironmentVariable("KIRBY_LAB_ITEM") is not null)
             LabItemProbe.Install(run);
+        // KIRBY_LAB_FRAME_SLEEP_MS=min,max stalls each host frame by a random
+        // time, to emulate a desktop that renders below the original's 60 Hz.
+        var frameSleep = Environment.GetEnvironmentVariable("KIRBY_LAB_FRAME_SLEEP_MS")?.Split(',');
+        var sleepRandom = new Random(1);
         dc.Hook_Main.update += (orig, main) =>
         {
             orig(main);
+            if (frameSleep is [var low, var high] && int.TryParse(low, out int min) && int.TryParse(high, out int max))
+                Thread.Sleep(sleepRandom.Next(min, max + 1));
             frames++;
             LabCombatProbe.Poll();
             LabAbilityProbe.Poll();

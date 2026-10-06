@@ -522,7 +522,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         double centerY = (hero.cy + hero.yr) * 24 - 14.5;
         // Over a moving host elevator the original works in a window lifted to
         // its surface (ElevatorRide); centerY and the terrain tests below are in that frame.
-        var riding = RideElevator(hero, centerY + 14.5);
+        var riding = RideElevator(hero, hostX, centerY + 14.5);
         var ride = riding?.Ride ?? default;
         lift = ride.Lift;
         centerY -= ride.Raise + lift;
@@ -554,8 +554,18 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         int originX = (int)Math.Floor(hostX / 24) - 16;
         int originY = (int)Math.Floor(centerY / 24) - 4;
         ExportTerrain(hero, originX, originY, rollThrough);
+        int? beforeY = riding is not null && Diagnostic is not null ? nds!.State.YRaw : null;
         PlaceSource(originX, originY, checked((int)Math.Round((hostX - originX * 24) * 65536)),
             checked((int)Math.Round((centerY - originY * 24) * 65536)), carried: ride.Carrying);
+        if (riding is not null && Diagnostic is not null)
+        {
+            // Lab trace of each step on an elevator: placement and the terrain column under Kirby.
+            int column = (int)Math.Floor(hostX / 24) - originX;
+            Diagnostic("elevator-step", new { ride.Lift, ride.Raise, ride.Carrying, originY, centerY, beforeY, placedY = nds.State.YRaw,
+                target = (int)Math.Round((centerY - originY * 24) * 65536), action = nds.Action,
+                tiles = Enumerable.Range(0, 9).Select(row => cells[row * 100 + column]).ToArray(),
+                elevator = new { riding.Value.Tracked.Elevator.cy, riding.Value.Tracked.Elevator.yr, riding.Value.Tracked.Sunk } });
+        }
         if (stompShield > 0 && !stomp.Active) stompShield--;
         enemies.Prepare(session, nds, originX * 24, originY * 24 + lift, SourceDamageScale,
             bodyContact: config.OriginalTouchDamage && !stomp.Active && stompShield == 0);
@@ -593,6 +603,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         }
         PaceWalkCycle(action, matched);
         nds.Step(mask);
+        if (riding is not null) Diagnostic?.Invoke("elevator-stepped", new { action = nds.Action, y = nds.State.YRaw, vy = nds.State.VyRaw });
         int healthAfter = nds.Health;
         // The bridge normalizes the original signed lethal HP sentinel to zero.
         // Stop normal stepping here: only the original death animation runs on,
@@ -641,7 +652,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         // On an elevator, take its cell position exactly, as its own carry does.
         // A pixel conversion can land a rounding error below the ground height
         // the elevator sets for its cell, and the host then lands the hero again.
-        if (riding?.Elevator is { } carrier && Math.Abs(feet + lift - ElevatorRide.Surface(carrier.cy, carrier.yr)) < 1e-6)
+        if (riding?.Tracked is { Sunk: false, Elevator: var carrier } && Math.Abs(feet + lift - ElevatorRide.Surface(carrier.cy, carrier.yr)) < 1e-6)
         { hero.cy = carrier.cy; hero.yr = carrier.yr; }
         // Host shields block from the front and host weapons aim by this facing.
         hero.dir = state.FacesLeft ? -1 : 1;
@@ -722,6 +733,8 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
     {
         public readonly dc.en.inter.Elevator Elevator = elevator;
         public double Surface = ElevatorRide.Surface(elevator.cy, elevator.yr);
+        /// <summary>The cell the surface is in is solid level floor under Kirby: an overshoot into its stop.</summary>
+        public bool Sunk;
     }
     private readonly List<TrackedElevator> elevators = [];
     private nint elevatorLevel;
@@ -731,7 +744,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
     /// Elevator.fixedUpdate), or null. Elevators are listed again on a new level
     /// and once a second, rather than scanning every entity on every frame.
     /// </summary>
-    private (ElevatorRide.Ride Ride, dc.en.inter.Elevator Elevator)? RideElevator(Hero hero, double feetY)
+    private (ElevatorRide.Ride Ride, TrackedElevator Tracked)? RideElevator(Hero hero, double hostX, double feetY)
     {
         var level = hero._level;
         if (elevatorLevel != level.HashlinkPointer) { elevatorLevel = level.HashlinkPointer; elevators.Clear(); elevatorScan = 0; }
@@ -745,17 +758,33 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
                     elevators.Add(new TrackedElevator(elevator));
         }
         elevators.RemoveAll(t => t.Elevator.destroyed);
-        (ElevatorRide.Ride, dc.en.inter.Elevator)? found = null;
+        (ElevatorRide.Ride, TrackedElevator)? found = null;
         foreach (var tracked in elevators)
         {
             var elevator = tracked.Elevator;
-            double surface = ElevatorRide.Surface(elevator.cy, elevator.yr);
+            bool sunk = SolidUnder(hero._level.map, hostX, elevator.cy);
+            double surface = ElevatorRide.Effective(elevator.cy, elevator.yr, sunk);
             if (found is null && ElevatorRide.Over(hero.cx, feetY, elevator.cx, elevator.cWid, elevator.cy, elevator.yr,
-                    tracked.Surface - surface, rising: lastVy < 0) is { } ride)
-                found = (ride, elevator);
+                    tracked.Surface - surface, rising: lastVy < 0, sunk) is { } ride)
+            {
+                found = (ride, tracked);
+                tracked.Sunk = sunk;
+            }
+            else if (found is null && Diagnostic is not null && Math.Abs(hero.cx - elevator.cx) <= elevator.cWid / 2 &&
+                     Math.Abs(feetY - surface) < 48 && tracked.Surface != surface)
+                Diagnostic("elevator-miss", new { feetY, surface, previous = tracked.Surface, lastVy, elevator.cy, elevator.yr });
             tracked.Surface = surface;
         }
         return found;
+    }
+    /// <summary>A solid or one-way host cell in this row under Kirby's body.</summary>
+    private static bool SolidUnder(dc.level.LevelMap map, double hostX, int cy)
+    {
+        if (cy < 0 || cy >= map.hei) return false;
+        int* grid = (int*)map.collisions.bytes;
+        for (int cx = (int)Math.Floor((hostX - BodyHalfWidth) / 24); cx <= (int)Math.Floor((hostX + BodyHalfWidth) / 24); cx++)
+            if (cx >= 0 && cx < map.wid && (grid[cy * map.wid + cx] & (1 | 2 | 8)) != 0) return true;
+        return false;
     }
     // Host movement the original did not make itself (speed match, stomp): at most
     // a few pixels a frame. Larger differences are host teleports.

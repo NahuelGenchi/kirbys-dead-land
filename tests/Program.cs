@@ -384,6 +384,16 @@ Check(ElevatorRide.Over(10, 247, 10, 4, 10, 262.0 / 24 - 10, -10, false) is { Ra
     "Feet more than 2 px above the previous surface are not carried down");
 Check(ElevatorRide.Over(10, 252, 10, 4, 10, 240.0 / 24 - 10, 12, false) is { } carriedUp && Math.Abs(carriedUp.Raise - 12) < 1e-9,
     "Kirby standing on a rising elevator is carried up with it");
+// A stop set into level floor: the elevator overshot its rest (row 106 top, 2544) by 4.92 px into the solid row 106.
+double overshot = 2544 + 4.92;
+Check(ElevatorRide.Effective(106, 4.92 / 24, sunk: true) == 2544 && ElevatorRide.Effective(106, 4.92 / 24, sunk: false) == overshot,
+    "An elevator sunk into a floor offers the floor's top");
+Check(ElevatorRide.Over(10, 2544, 10, 4, 106, 4.92 / 24, 0, false, sunk: true) is { Lift: 0, Raise: 0 },
+    "Kirby stays on the floor's top while the elevator overshoots into it");
+Check(ElevatorRide.Over(10, overshot, 10, 4, 106, 4.92 / 24, 0, false, sunk: true) is { Lift: 0 } intoFloor && Math.Abs(intoFloor.Raise - 4.92) < 1e-9,
+    "Kirby the host carried into the floor is put back on its top");
+Check(ElevatorRide.Over(10, overshot, 10, 4, 106, 4.92 / 24, 0, false) is { } followed && Math.Abs(followed.Lift - (4.92 - 24)) < 1e-9,
+    "Without a floor under the overshoot, Kirby follows the elevator");
 
 var doorWalk = new CinematicWalk();
 Check(doorWalk.Update(100, 1 / 60.0) == 0, "A cinematic starts with Kirby standing");

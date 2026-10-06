@@ -944,3 +944,13 @@ the all-ability rendering tests as full gameplay acceptance.
 - Core rule tests: 225 assertions; `scripts/check.py` passes; Release build has
   zero warnings. Not run: `tools/nds_tests.py` (no native change), other
   elevator types and generated elevator levels.
+- Owner recording 2026-10-06 12:26 (play build with this branch): Kirby sank into
+  the platform at the bottom stop, then rebounded and landed with stars. A copy
+  of the owner's save in `repros/elevator-real-20261006`, with the host frame
+  rate stalled to 25–100 fps (`KIRBY_LAB_FRAME_SLEEP_MS`), reproduced it on a real
+  64-cell elevator (`124646`, `124727`). Its stop sits in level floor; a full-speed
+  overshoot took the surface 4.9 px into that solid row, the lifted window put
+  Kirby inside it, and the original pushed him out a cell above the elevator.
+  `ElevatorRide.Effective` now gives the floor's top while the surface is sunk
+  into solid floor under Kirby; 17 later runs covered 27 such steps with Kirby
+  standing throughout. 229 core assertions.
