@@ -3,32 +3,43 @@ using dc.en.inter;
 
 namespace Kirby.Runtime;
 
-/// <summary>Opt-in attack against a genuine generated level door.</summary>
+/// <summary>
+/// Opt-in copy attack against a genuine generated level door, or with
+/// KIRBY_LAB_BREAKABLE_TARGET=gold a real host PileOfGold spawned beside Kirby.
+/// </summary>
 internal static class LabBreakableProbe
 {
+    private static readonly bool Gold = Environment.GetEnvironmentVariable("KIRBY_LAB_BREAKABLE_TARGET") == "gold";
     private static string? run;
     private static uint? setupStart, start;
     private static bool fed;
-    private static Door? target;
-    private static int initialLife, damage;
+    private static dc.Entity? target;
+    private static int initialLife, damage, goldDrops;
     private static uint lastFrame;
 
     public static void Install(string output)
     {
         run = output;
         dc.tool.Hook_Tutorial.tryToStart += (_, _, _) => false;
-        Hook_Door.onDamage += (orig, door, attack) =>
+        Hook_Door.onDamage += (orig, door, attack) => { orig(door, attack); Damaged(door, attack); };
+        Hook_PileOfGold.onDamage += (orig, pile, attack) => { orig(pile, attack); Damaged(pile, attack); };
+        Hook_PileOfGold.dropLoot += (orig, pile, x, y, power) =>
         {
-            orig(door, attack);
-            if (target?.HashlinkPointer != door.HashlinkPointer) return;
-            damage += Math.Max(0, attack.inflictedDmg);
-            System.IO.File.AppendAllText(Path.Combine(run!, "breakable-hits.jsonl"), JsonSerializer.Serialize(new
-            {
-                frame = KirbyMod.Instance?.NativeProvider?.Machine?.State.Frame,
-                attack.finalDmg, attack.inflictedDmg, door.life, door.broken,
-            }) + "\n");
+            if (target?.HashlinkPointer == pile.HashlinkPointer) goldDrops++;
+            orig(pile, x, y, power);
         };
         KirbyInput.TestOverride = Input;
+    }
+
+    private static void Damaged(dc.Entity entity, dc.tool.atk.AttackData attack)
+    {
+        if (target?.HashlinkPointer != entity.HashlinkPointer) return;
+        damage += Math.Max(0, attack.inflictedDmg);
+        System.IO.File.AppendAllText(Path.Combine(run!, "breakable-hits.jsonl"), JsonSerializer.Serialize(new
+        {
+            frame = KirbyMod.Instance?.NativeProvider?.Machine?.State.Frame,
+            attack.finalDmg, attack.inflictedDmg, entity.life, broken = (entity as Door)?.broken,
+        }) + "\n");
     }
 
     private static ushort? Input(KirbySession session)
@@ -46,11 +57,17 @@ internal static class LabBreakableProbe
         if (start is null)
         {
             var hero = session.Hero;
-            var doors = Enumerable.Range(0, hero._level.entities.length)
+            if (Gold)
+            {
+                // Constructed and initialized as level markers spawn it.
+                var pile = new PileOfGold(hero._level, hero.cx, hero.cy);
+                pile.init();
+                target = pile;
+            }
+            else target = Enumerable.Range(0, hero._level.entities.length)
                 .Select(i => hero._level.entities.getDyn(i)).OfType<Door>()
                 .Where(d => !d.destroyed && d.life > 0 && d._breakable && !d.locked && !d.broken)
-                .OrderBy(d => Math.Abs(d.cx - hero.cx) + Math.Abs(d.cy - hero.cy));
-            target = doors.FirstOrDefault();
+                .OrderBy(d => Math.Abs(d.cx - hero.cx) + Math.Abs(d.cy - hero.cy)).FirstOrDefault();
             if (target is null) return 0;
             initialLife = target.life;
             hero.setPosPixel((target.cx + target.xr) * 24 - 28, (target.cy + target.yr) * 24);
@@ -62,6 +79,8 @@ internal static class LabBreakableProbe
         // animation releases control. Let it finish before pressing attack.
         if (elapsed is >= 100 and < 115) return 16;
         if (elapsed is >= 120 and < 250) return 2;
+        // The pile takes one life per hit: keep tapping attack until it breaks.
+        if (Gold && elapsed is >= 250 and < 1000) return (ushort)((elapsed / 8) % 2 == 0 ? 2 : 0);
         return 0;
     }
 
@@ -92,8 +111,8 @@ internal static class LabBreakableProbe
             frame = lastFrame, sourceAbility = machine.State.Ability,
             target = target?.GetType().FullName, targetUid = target?.__uid,
             initialLife, life = target?.life, destroyed = target?.destroyed,
-            broken = target?.broken, damage,
-            passed = target is not null && damage > 0 && (target.broken || target.life <= 0 || target.destroyed),
+            broken = (target as Door)?.broken, damage, goldDrops,
+            passed = target is not null && damage > 0 && ((target as Door)?.broken == true || target.life <= 0 || target.destroyed),
         }, new JsonSerializerOptions { WriteIndented = true }));
     }
 }
