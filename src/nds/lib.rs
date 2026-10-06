@@ -160,7 +160,9 @@ pub unsafe extern "C" fn kssu_step(handle: *mut std::ffi::c_void, mask: u16, fra
     }
     native_trace_once(0, "step: entered");
     let b = &mut *(handle as *mut Bridge);
-    if !mute_proxy_footsteps(b.nds.main_ram_mut()) {
+    if !mute_proxy_footsteps(b.nds.main_ram_mut())
+        || !keep_proxies_alive_in_water(b.nds.main_ram_mut())
+    {
         return -6;
     }
     b.nds.set_key_mask(ButtonMask::from_bits_retain(mask));
@@ -1581,5 +1583,35 @@ fn mute_proxy_footsteps(r: &mut [u8]) -> bool {
     for address in CALLS {
         put32(r, (address - BASE) as usize, NOP);
     }
+    true
+}
+
+// An original Waddle Dee that enters water is defeated: when the in-water byte
+// (d+0x50)+7 becomes1, the source calls the enter-water handler at (d+0x54)+8,
+// and Waddle Dee's reaction table at0x0219C7C8 holds the default handler
+// 0x02159440, which calls the defeat entry0x02158FC0. During hit recoil the
+// shared recoil table's handler0x02156540 calls the saved table's handler, or
+// that same defeat when it is empty, so the entry must hold a real handler.
+// Proxies follow host enemies, which do not die in water: the dying proxy
+// reported source control, pinned its host enemy, ignored inhale and attacks,
+// and was rebound in the same water after its destruction; the parked damage
+// carrier died the same way when Kirby swam. Point only this validated entry at
+// the original return-zero stub0x020CF36C (`mov r0,#0; bx lr`), so the water
+// event is not handled. Kirby's swimming, the exit-water handler and every
+// other enemy's water reaction are untouched. The user's ROM file is never changed.
+fn keep_proxies_alive_in_water(r: &mut [u8]) -> bool {
+    const ENTER_WATER: u32 = 0x0219c7c8 + 8;
+    const DEFEAT: u32 = 0x02159440;
+    const IGNORE: u32 = 0x020cf36c;
+    let stub = (IGNORE - BASE) as usize;
+    if u32at(r, stub) != 0xe3a00000 || u32at(r, stub + 4) != 0xe12fff1e {
+        return false;
+    }
+    let p = (ENTER_WATER - BASE) as usize;
+    let handler = u32at(r, p);
+    if handler != DEFEAT && handler != IGNORE {
+        return false;
+    }
+    put32(r, p, IGNORE);
     true
 }
