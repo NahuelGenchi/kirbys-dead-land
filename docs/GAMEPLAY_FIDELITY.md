@@ -16,7 +16,7 @@ in [NDS_BRIDGE.md](NDS_BRIDGE.md). The original bootstrap experiment remains in
 |---|---|
 | Clock | 33,513,982 / 560,190 source ticks per second. A display within 3% of that rate presents one original frame per host frame, like an emulator synchronized to vblank; other rates accumulate real time |
 | Movement | The ROM updates fixed-point position, velocity and action state; the host follows its physical foot. With `MatchHostSpeed` (default) Kirby moves at the Beheaded's measured speeds: each original frame's own motion is carried on through free space (run and air control 236.5 px/s, float across at the same speed, fall 403 px/s, ladders 97.5 px/s both ways, floating up and down at the run's tempo), the original horizontal velocity is cleared when the direction is released or reversed, and the jump keeps its 50 px but peaks after 0.25 s, as the Beheaded's does. Added motion stops short of walls and ceilings, leaves the original a full fall step above floors, follows slopes at the original's whole-pixel surface, and never applies to hits, swimming or ability moves. The original walk and dash cycles play faster with the run (up to 1.67 times, one frame a pose), so his feet cover about the ground they did natively. `false` keeps the original DS speeds (the stomp keeps the dive's) |
-| Terrain | Nearby host solids, one-way floors, slopes, ladders and water become source collision cells; all linked source objects and cached terrain probes move together when the window rebases by whole cells, while effects attached to a parent (Fire's head flame, Plasma's spark, attack effects) keep their offsets from it. Host movement of Kirby (speed match, stomp) moves only him and his terrain probes, so thrown bombs, cutters, effects and the helper keep their original paths |
+| Terrain | Nearby host solids, one-way floors, slopes, ladders and water become source collision cells; all linked source objects and cached terrain probes move together when the window rebases by whole cells, while effects attached to a parent (Fire's head flame, Plasma's spark, attack effects) keep their offsets from it. Host movement of Kirby (speed match, stomp) moves only him and his terrain probes, so thrown bombs, cutters, effects and the helper keep their original paths. Over a moving host elevator the window is lifted to its surface and original objects ride with him (see [Host elevators](#host-elevators-deviation)) |
 | Input | Existing host bindings become original digital buttons; ordinary source directional combinations still apply. A held direction dashes through the original double tap (`AlwaysDash`); a light analog tilt walks. A key bound to both Up and jump (W and the Up arrow by default) climbs at a ladder or chain, as in the host, instead of jumping first |
 | Roll | Kirby's original slide is his roll and covers the Beheaded's roll: 131 px at up to 339 px/s. Host roll-zone tunnels (collision 65) open while he slides and stay open until he leaves one entered by sliding; walking cannot enter. The slide's fast part counts as a roll for the host's door and breakable-tile checks |
 | Dive attack | The player's host dive binding in the air or on a ladder or chain (original jump, fall, float or climb) starts the host `DiveAttack` under its own rules. The original controller keeps its falling or exhaling animation and physics (3.5 px/frame cap) and drops straight down; the host adds 11.5 px/frame of descent through free space, 15 px a frame in all like the Beheaded's dive (about 900 px/s), and leaves the original a full fall step to make the floor contact; the host skill resolves the landing (shockwave, stun, damage, breakable floors with the Ram rune). Only what stops the original fall counts as floor: solids, slopes and one-way platforms from above, never ladders or chains. Enemy touch damage is off while stomping and for 30 frames after landing |
@@ -204,6 +204,55 @@ Wheel 23/14 became 40/24, and lethal Ice still left the original frozen object.
 Those runs predate the original-unit scale from #3, so they show the colorless
 factor, not today's absolute numbers.
 Other copy forms, bosses and breakables have not been run live with scrolls.
+
+### Host elevators (deviation)
+
+Dead Cells elevators (`en.inter.Elevator` and its `SimpleElevator`,
+`PurpleElevator` and `MultiFloorElevator` subclasses all run
+`Elevator.fixedUpdate`) are entities, not terrain. Each host tick an elevator
+collects every hero, mob or item whose foot is within 2 px of its own foot and
+inside its width. It then moves, marks only the one cell row under its foot as
+solid (clearing the previous row), writes its `yr` as the ground height of the
+cell it is in, and gives the collected entities its own `cy`/`yr`. While it
+moves, its surface lies `(yr − 1) × 24` px above that solid row.
+
+The original sees only whole cells. Before this fix, the first carry left Kirby
+2–3 px above the ROM floor, the original dropped him back onto the cell row,
+and he was out of the elevator's 2 px reach from then on. When its solid row
+moved up a cell, the row under him was cleared and he fell (owner recording,
+2026-10-05 23:51; [#28](https://github.com/NahuelGenchi/kirbys-dead-land/issues/28)).
+
+While Kirby is inside an elevator's carry width, from its surface up to three
+cells above it (`ElevatorRide`):
+
+- The original's terrain window is lifted by the surface's offset from the
+  solid row, so the ROM floor is the elevator surface. The host's own carry
+  moves Kirby with it; in the live runs the runtime never had to raise him.
+- A rising elevator that passed his feet since the last original frame lifts
+  him onto its surface, as the host rescues the Beheaded.
+- While the elevator moves, the source window is placed with Kirby, so **original
+  objects (thrown bombs, cutters, effects, the helper) ride along with him**.
+  This is the intentional deviation. Moving them alone and then Kirby back by
+  himself, as the speed match does, left the parts attached to him a step off,
+  and the original dropped a standing Kirby for a frame every few frames of the
+  ride (live runs `20261006-000609` to `001130`, see [RUNTIME_LAUNCH.md](RUNTIME_LAUNCH.md#host-elevators)).
+- His host cell position is copied from the elevator exactly, as its own carry
+  does. A pixel round trip could leave him a rounding error below the cell's
+  ground height, and the host then called its landing handler every few
+  ticks.
+- Enemies are placed in the same lifted window, so their positions relative to
+  Kirby are unchanged. Other floors and ceilings are offset by up to one cell
+  only while Kirby is over a moving elevator. At rest, the lift is zero.
+
+Live checks (separate data root `repros/elevator-20261006`, a real
+`SimpleElevator` built and initialized as `Level.spawnEntitiesFromMarkers` does):
+Kirby rides up and down standing (`0406`) with his feet on the surface, can jump
+on a rising elevator and land on it again, and stops at both ends. Not run live:
+`PurpleElevator` and `MultiFloorElevator` levels, walking off a moving elevator
+onto a landing, and elevators placed by real level generation. One host landing
+of height 0 (no sound, smoke or shake below 0.3 cells) remains on the first tick
+of a departure. Floating platforms (`en.inter.FloatingPlatform`) are a separate
+host mechanism and are not covered.
 
 ## Evidence and current limits
 

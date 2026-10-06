@@ -13,6 +13,9 @@ namespace Kirby.Runtime;
 /// KIRBY_LAB_MOVES_SCAN=1 maps roll zones and breakables; KIRBY_LAB_MOVES_SETUP
 /// = scenario@seconds teleports Kirby next to one (rollzone, air, breakable,
 /// door, tile), optionally with a Zombie below (KIRBY_LAB_MOVES_TARGET=1 still, 2 active).
+/// "elevator-spawn" builds a real host elevator where a level has none,
+/// "elevator" stands Kirby on the first one and "elevator-use" activates it as
+/// the interact key does; the trace then records its surface.
 /// KIRBY_LAB_RUNE=1 grants the floor-breaking rune for the run. Inputs come
 /// from the normal-binding repro plan; this probe only places and records.
 /// </summary>
@@ -27,6 +30,7 @@ internal static unsafe class LabMovesProbe
     private static readonly HashSet<string> placedSetups = [];
     private static uint lastFrame;
     private static Mob? target;
+    private static Elevator? ride;
     private static int phaseCount;
     private static readonly JsonSerializerOptions Options = new()
     { NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.AllowNamedFloatingPointLiterals };
@@ -34,6 +38,7 @@ internal static unsafe class LabMovesProbe
     public static void Install(string output)
     {
         run = output;
+        KirbyNdsProvider.Diagnostic ??= Event;
         if (Environment.GetEnvironmentVariable("KIRBY_LAB_RUNE") == "1")
             dc.tool.Hook_ItemMetaManager.hasPermanentItem += (orig, meta, kind) =>
                 kind?.ToString() == "BreakableGroundKey" || orig(meta, kind);
@@ -129,6 +134,11 @@ internal static unsafe class LabMovesProbe
             current = new[] { (int)Math.Floor(state.X) - state.CameraX, (int)Math.Floor(state.Y) - state.CameraY },
             body = renderer is null ? null : new[] { renderer.BodyBounds.Left, renderer.BodyBounds.Top, renderer.BodyBounds.Right, renderer.BodyBounds.Bottom },
             bodyPixels = renderer?.BodyPixels, targetLife = target?.life, hero.life,
+            elevator = ride is not { destroyed: false } ? null : new
+            {
+                surface = (ride.cy + ride.yr) * 24, ride.cy, ride.yr, ride.cx, ride.cWid,
+                moving = ride.isMoving(), snapping = ride.isSnapping(hero),
+            },
         }, Options) + "\n");
     }
 
@@ -187,6 +197,7 @@ internal static unsafe class LabMovesProbe
             breakableTiles = Entities<BreakableTile>(hero).Select(e => new { e.cx, e.cy, e.destroyed }),
             doors = Entities<Door>(hero).Select(e => new { e.cx, e.cy, e.broken, e._breakable, e.locked }),
             plates = Entities<PressurePlate>(hero).Select(e => new { e.cx, e.cy, e.xr, e.yr, type = e.GetType().FullName }),
+            elevators = Entities<Elevator>(hero).Select(e => new { e.cx, e.cy, e.xr, e.yr, e.cWid, e.yTop, e.yBottom, e.ty, type = e.GetType().FullName }),
             options = new { bind = dc.Main.Class.ME.options.diveAttackBind },
         }, new JsonSerializerOptions { WriteIndented = true }));
     }
@@ -321,6 +332,48 @@ internal static unsafe class LabMovesProbe
                     Teleport(hero, (plate.cx + plate.xr) * 24, (plate.cy + 1) * 24);
                     detail = new { plate.cx, plate.cy, plate.xr, plate.yr, type = plate.GetType().FullName };
                 }
+                break;
+            }
+            case "elevator-spawn":
+            {
+                // A level without one gets a real SimpleElevator, constructed and
+                // initialized as Level.spawnEntitiesFromMarkers does, in the
+                // tallest open shaft three cells wide above solid floor.
+                int bestX = -1, bestGround = -1, bestHeight = 0;
+                for (int x = 1; x < map.wid - 4; x++)
+                    for (int y = 1; y < map.hei - 1; y++)
+                    {
+                        if ((Cell(map, x, y) & 3) == 0 || (Cell(map, x + 1, y) & 3) == 0 || (Cell(map, x + 2, y) & 3) == 0) continue;
+                        int height = 0;
+                        while (y - height - 1 > 0 && Open(map, x, y - height - 1, y - height - 1) && Open(map, x + 1, y - height - 1, y - height - 1) &&
+                               Open(map, x + 2, y - height - 1, y - height - 1)) height++;
+                        if (height > bestHeight) { bestHeight = height; bestX = x; bestGround = y; }
+                    }
+                if (bestHeight >= 8)
+                {
+                    int travel = Math.Min(bestHeight - 3, 12);
+                    var spawned = new dc.en.inter.elevator.SimpleElevator(hero._level, bestX, bestGround - travel, 3, travel, false);
+                    spawned.init();
+                    detail = new { x = bestX, ground = bestGround, height = bestHeight, travel, spawned.cx, spawned.cy, spawned.yr,
+                        spawned.cWid, spawned.yTop, spawned.yBottom, spawned.ty };
+                }
+                break;
+            }
+            case "elevator":
+            {
+                if (Entities<Elevator>(hero).FirstOrDefault(e => !e.destroyed) is { } elevator)
+                {
+                    ride = elevator;
+                    Teleport(hero, (elevator.cx + elevator.xr) * 24, (elevator.cy + elevator.yr) * 24);
+                    detail = new { elevator.cx, elevator.cy, elevator.yr, elevator.cWid, elevator.yTop, elevator.yBottom, type = elevator.GetType().FullName };
+                }
+                break;
+            }
+            case "elevator-use":
+            {
+                bool ready = ride is { destroyed: false } && ride.canBeActivated(hero);
+                if (ready) ride!.onActivate(hero, false);
+                detail = new { ready, moving = ride?.isMoving(), snapping = ride?.isSnapping(hero) };
                 break;
             }
             case "door":

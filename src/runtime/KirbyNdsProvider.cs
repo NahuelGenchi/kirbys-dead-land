@@ -477,6 +477,13 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         var map = hero._level.map;
         double hostX = (hero.cx + hero.xr) * 24;
         double centerY = (hero.cy + hero.yr) * 24 - 14.5;
+        // Over a moving host elevator the original works in a window lifted to
+        // its surface (ElevatorRide); centerY and the terrain tests below are in that frame.
+        var riding = RideElevator(hero, centerY + 14.5);
+        var ride = riding?.Ride ?? default;
+        lift = ride.Lift;
+        centerY -= ride.Raise + lift;
+        if (ride.Raise > 0) Diagnostic?.Invoke("elevator-raise", new { ride.Raise, ride.Lift, action = nds!.Action });
         ushort action = nds!.Action;
         // At a ladder or chain the host climbs with a key bound to both Up and
         // jump; the original would jump on A first and grab the ladder after.
@@ -505,9 +512,9 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         int originY = (int)Math.Floor(centerY / 24) - 4;
         ExportTerrain(hero, originX, originY, rollThrough);
         PlaceSource(originX, originY, checked((int)Math.Round((hostX - originX * 24) * 65536)),
-            checked((int)Math.Round((centerY - originY * 24) * 65536)));
+            checked((int)Math.Round((centerY - originY * 24) * 65536)), carried: ride.Carrying);
         if (stompShield > 0 && !stomp.Active) stompShield--;
-        enemies.Prepare(session, nds, originX * 24, originY * 24, SourceDamageScale,
+        enemies.Prepare(session, nds, originX * 24, originY * 24 + lift, SourceDamageScale,
             bodyContact: config.OriginalTouchDamage && !stomp.Active && stompShield == 0);
         int healthBefore = nds.Health;
         dc.Entity? damageSource = null;
@@ -572,7 +579,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
                 finally { applyingNativeDamage = false; KirbyHostVisuals.SuppressHitBlink = false; }
             }
         }
-        if (enemies.Complete(session, nds, originX * 24, originY * 24, SourceDamageScale) is not null) pendingCopy = true;
+        if (enemies.Complete(session, nds, originX * 24, originY * 24 + lift, SourceDamageScale) is not null) pendingCopy = true;
         NdsState state = nds.State;
         lastVx = state.VxRaw; lastVy = state.VyRaw;
         ushort after = nds.Action;
@@ -583,11 +590,16 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
             terrainMap = map; terrainRollThrough = rollThrough;
             (x, feet) = SpeedMatch.Move(motion, direction, state.VxRaw, hostX, centerY + 14.5, x, feet, terrain ??= MatchTerrain);
         }
-        hero.setPosPixel(x, feet);
+        hero.setPosPixel(x, feet + lift);
         // The host represents a foot exactly on a floor as yr=1 in the air
         // cell above it. setPosPixel chooses yr=0 inside the solid cell; that
         // invokes its stuck-in-wall rescue and would fight the source controller.
         if (hero.yr == 0) { hero.cy--; hero.yr = 1; }
+        // On an elevator, take its cell position exactly, as its own carry does.
+        // A pixel conversion can land a rounding error below the ground height
+        // the elevator sets for its cell, and the host then lands the hero again.
+        if (riding?.Elevator is { } carrier && Math.Abs(feet + lift - ElevatorRide.Surface(carrier.cy, carrier.yr)) < 1e-6)
+        { hero.cy = carrier.cy; hero.yr = carrier.yr; }
         hero.dir = (state.FacingRaw & 1) != 0 ? -1 : 1;
         hero.bodyHei = 29.0 / 24; hero.hei = 29;
         if (stomp.Active) FinishStompFrame(hero, map, after, healthAfter < healthBefore);
@@ -652,6 +664,48 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
     private (int X, int Y)? window;
     /// <summary>Window origin (cells) of the original's current coordinates (lab diagnostics).</summary>
     internal (int X, int Y)? SourceWindow => window;
+    // Host pixels the current step's window is lifted by (ElevatorRide): host y = original-frame y + lift.
+    private double lift;
+    // Host elevators on this level, with each one's surface at the previous original frame.
+    private sealed class TrackedElevator(dc.en.inter.Elevator elevator)
+    {
+        public readonly dc.en.inter.Elevator Elevator = elevator;
+        public double Surface = ElevatorRide.Surface(elevator.cy, elevator.yr);
+    }
+    private readonly List<TrackedElevator> elevators = [];
+    private nint elevatorLevel;
+    private int elevatorScan;
+    /// <summary>
+    /// How Kirby rides a host elevator (all elevator types share
+    /// Elevator.fixedUpdate), or null. Elevators are listed again on a new level
+    /// and once a second, rather than scanning every entity on every frame.
+    /// </summary>
+    private (ElevatorRide.Ride Ride, dc.en.inter.Elevator Elevator)? RideElevator(Hero hero, double feetY)
+    {
+        var level = hero._level;
+        if (elevatorLevel != level.HashlinkPointer) { elevatorLevel = level.HashlinkPointer; elevators.Clear(); elevatorScan = 0; }
+        if (--elevatorScan < 0)
+        {
+            elevatorScan = 60;
+            var entities = level.entities;
+            for (int i = 0; i < entities.length; i++)
+                if (entities.getDyn(i) is dc.en.inter.Elevator elevator && !elevator.destroyed &&
+                    !elevators.Exists(t => t.Elevator.HashlinkPointer == elevator.HashlinkPointer))
+                    elevators.Add(new TrackedElevator(elevator));
+        }
+        elevators.RemoveAll(t => t.Elevator.destroyed);
+        (ElevatorRide.Ride, dc.en.inter.Elevator)? found = null;
+        foreach (var tracked in elevators)
+        {
+            var elevator = tracked.Elevator;
+            double surface = ElevatorRide.Surface(elevator.cy, elevator.yr);
+            if (found is null && ElevatorRide.Over(hero.cx, feetY, elevator.cx, elevator.cWid, elevator.cy, elevator.yr,
+                    tracked.Surface - surface) is { } ride)
+                found = (ride, elevator);
+            tracked.Surface = surface;
+        }
+        return found;
+    }
     // Host movement the original did not make itself (speed match, stomp): at most
     // a few pixels a frame. Larger differences are host teleports.
     private const int MaxPlayerMove = 64 << 16;
@@ -660,10 +714,14 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
     /// that moves by whole cells takes every original object along, as before;
     /// the remaining difference is host movement of Kirby alone, so bombs, other
     /// thrown objects, effects and the helper stay where the original put them.
+    /// Kirby carried by an elevator is the exception: the window moves with
+    /// him and takes every original object along. Moving the objects and then
+    /// Kirby back by himself leaves the parts attached to him a step off, and
+    /// the original drops a standing Kirby for a frame.
     /// </summary>
-    private void PlaceSource(int originX, int originY, int targetX, int targetY)
+    private void PlaceSource(int originX, int originY, int targetX, int targetY, bool carried)
     {
-        if (window is { } previous && NdsRuntime.CanMovePlayer)
+        if (window is { } previous && NdsRuntime.CanMovePlayer && !carried)
         {
             NdsState current = nds!.State;
             long frameX = current.XRaw + (long)(previous.X - originX) * 24 * 65536;
@@ -807,7 +865,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
     }
     private void FinishStompFrame(Hero hero, dc.level.LevelMap map, ushort action, bool hurt)
     {
-        double hostX = (hero.cx + hero.xr) * 24, feetY = (hero.cy + hero.yr) * 24;
+        double hostX = (hero.cx + hero.xr) * 24, feetY = (hero.cy + hero.yr) * 24 - lift;
         bool landed = KirbyActions.OnGround(action) || FreeBelow(map, hostX, feetY, waterStops: false) <= 0.5;
         bool submerged = TileAt(map, Grid(map), (int)Math.Floor(hostX / 24), (int)Math.Floor((feetY - BodyHeight / 2) / 24), rollZones.Open) == 130;
         bool lost = activeDive is not { } dive || dive.hero is not { destroyed: false } || !dive.isActive();

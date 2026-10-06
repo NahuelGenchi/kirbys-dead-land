@@ -60,7 +60,7 @@ public sealed class KirbyEnemies
     /// <param name="bodyContact">The original touch damage between Kirby and enemies: off by default
     /// (Dead Cells has none) and while Kirby stomps, as the host dive lands on enemies; his own
     /// attacks, inhale and slide still hit them.</param>
-    public void Prepare(KirbySession session, NdsRuntime nds, int ox, int oy, Func<Entity, double> scale, bool bodyContact = true)
+    public void Prepare(KirbySession session, NdsRuntime nds, int ox, double oy, Func<Entity, double> scale, bool bodyContact = true)
     {
         var hero = session.Hero;
         if (restoring is not null)
@@ -150,7 +150,7 @@ public sealed class KirbyEnemies
                 (ushort)Math.Clamp(Math.Ceiling(mob.hei), 1, 1024));
         }
     }
-    public string? Complete(KirbySession session, NdsRuntime nds, int ox, int oy, Func<Entity, double> scale)
+    public string? Complete(KirbySession session, NdsRuntime nds, int ox, double oy, Func<Entity, double> scale)
     {
         string? copied = null;
         for (uint i = 1; i <= Capacity; i++)
@@ -222,7 +222,7 @@ public sealed class KirbyEnemies
         }
         return copied;
     }
-    private void CompleteHazard(NdsRuntime nds, uint i, Entity projectile, NdsProxy proxy, int ox, int oy)
+    private void CompleteHazard(NdsRuntime nds, uint i, Entity projectile, NdsProxy proxy, int ox, double oy)
     {
         var action = MouthfulHazards.Resolve(proxy.Swallowed, proxy.Gone && (proxy.Flags & 128) != 0, proxy.Gone,
             assignedHp[i] - proxy.Hp, proxy.Controlled);

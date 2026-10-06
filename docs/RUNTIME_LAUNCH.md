@@ -197,3 +197,28 @@ Run `20261005-205827` (runtime SHA-256 `3b2d1291428646fc59a38301f0e9e94204193f6b
 | Archer, jump-inhale, spit | `dc.en.Bullet` | Caught in the air; one star hit on the Archer for 52 (56 → 4) |
 
 All four hostile projectiles seen were paired; no hero-owned projectile was paired, but Kirby fired no bow in this run, so that exclusion was not exercised live. The process reached its time limit without fatal errors, and the real save inventories were unchanged.
+
+## Host elevators
+
+`LabMovesProbe` has three elevator scenarios for `KIRBY_LAB_MOVES_SETUP`: `elevator-spawn` builds a real `SimpleElevator` in the tallest open three-cell shaft and initializes it as `Level.spawnEntitiesFromMarkers` does (the first Prisoners' Quarters level has none), `elevator` stands Kirby on the first elevator, and `elevator-use` activates it through `canBeActivated`/`onActivate`. `moves-trace.jsonl` then records the elevator surface beside Kirby's feet on every source frame. The runs used a separate data root, `repros/elevator-20261006`, and a bridge rebuilt from this branch (`libkssu_bridge.so` SHA-256 `b2545e79b5fcbfd9670e252e369255be571122d169d05166ee2ef942fd40f8a8`).
+
+```sh
+python3 scripts/stage_runtime.py --data-root ~/.local/share/kirby-dead-cells/repros/elevator-20261006 \
+  --original-runtime --outfit-pack "$HOME/.local/share/kirby-dead-cells/outfit-build/res.pak"
+KIRBY_LAB_REPRO_PLAN=<private plan: Space at 5.35 s and 8.45 s> \
+KIRBY_LAB_MOVES_SETUP="elevator-spawn@2.5,elevator@3.5,elevator-use@5,elevator-use@8" \
+python3 scripts/launch_runtime.py --data-root ~/.local/share/kirby-dead-cells/repros/elevator-20261006 \
+  --seconds 45 --start-game --outfit KirbySuperStarUltra --input-plan repro --capture-fps 10
+```
+
+| Run | Build | Result |
+| :--- | :--- | :--- |
+| `20261006-000400` | lifted window, scan only | No elevator in the first level; nothing placed |
+| `000609` | lifted window, objects moved apart from Kirby | Kirby rode 1104 → 840 px within 0.34 px of the surface, but alternated fall (`070E`) and landing (`0507`) during the ride; 22 host landings of height 0 |
+| `000906`, `001130` | whole-pixel window shift | Still 9 fall frames; per-step diagnostics showed a standing Kirby dropped right after a `kssu_world` shift undone by `kssu_move_player` |
+| `001330` | window placed with Kirby while carried | 68 moving frames all standing (`0406`), feet on the surface (2×10⁻¹³ px); 22 host landings remained |
+| `001557` | Beheaded (`PrisonerDefault`) | Same ride: no host landings |
+| `001925` | host cell position copied from the elevator | 69 moving frames standing, feet exactly on the surface, no host landings; 2640 → 2376 px |
+| `002051`, `002312` | final | Up: jump at 5.4 s, caught again by the rising elevator, carried to the top and standing there. Down: Kirby jumped; the faster elevator dropped away and he landed on it at the bottom with the original long-fall bounce. 76/76 health throughout. Two height-0 host landings: the elevator's departure tick and the genuine landing on the rising elevator |
+
+The runtime's raise onto a rising elevator (`elevator-raise` diagnostic) never fired; the host's own carry moved Kirby in every run. Each run reached its time limit without a fatal log, and the real save inventories were unchanged. The tutorial tip in the captured frames comes from the fresh lab save.

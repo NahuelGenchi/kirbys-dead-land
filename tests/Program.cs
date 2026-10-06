@@ -295,7 +295,25 @@ Check(!gate.Update(sliding: false, inside: true), "Re-entering without a slide s
 gate.Update(true, true); gate.Reset();
 Check(!gate.Open && !gate.Update(false, true), "Reset forgets an entered roll zone");
 
-Check(KirbyActions.CanStomp(KirbyActions.Jump) && KirbyActions.CanStomp(KirbyActions.Fall) && KirbyActions.CanStomp(KirbyActions.Float),
+// Elevator at centre column 10, four cells wide, cell row 10; its solid row is 11 (top 264).
+Check(ElevatorRide.Over(10, 264, 10, 4, 10, 1, 0) is { Lift: 0, Raise: 0, Carrying: false }, "An elevator at rest needs no lift and carries nothing");
+Check(ElevatorRide.Over(10, 264, 10, 4, 10, 1, 0.5) is { Lift: 0, Carrying: true }, "An elevator that arrived this frame still carried Kirby");
+Check(default(ElevatorRide.Ride) is { Carrying: false }, "Away from elevators nothing carries Kirby");
+var riding = ElevatorRide.Over(10, 261.6, 10, 4, 10, 0.9, 2.4);
+Check(riding is { } r1 && Math.Abs(r1.Lift + 2.4) < 1e-9 && r1.Raise == 0 && Math.Abs(261.6 - r1.Lift - 264) < 1e-9,
+    "Kirby carried to a moving surface stands on the lifted solid row");
+Check(ElevatorRide.Over(10, 264, 10, 4, 10, 0.9, 2.4) is { } r2 && Math.Abs(r2.Raise - 2.4) < 1e-9,
+    "Kirby left on the solid row is raised back onto the surface");
+Check(ElevatorRide.Over(10, 256, 10, 4, 9, 0.5, 30) is { Raise: 28, Lift: -12, Carrying: true },
+    "A rising elevator that passed Kirby's feet since the last frame catches him");
+Check(ElevatorRide.Over(10, 256, 10, 4, 9, 0.5, 0) is null && ElevatorRide.Over(10, 256, 10, 4, 9, 0.5, -30) is null, "A surface that did not rise past Kirby does not catch him");
+Check(ElevatorRide.Over(10, 200, 10, 4, 10, 0.5, 0) is { Raise: 0, Lift: -12 }, "A jump above a moving elevator keeps its floor lifted");
+Check(ElevatorRide.Over(10, 252 - ElevatorRide.Reach - 1, 10, 4, 10, 0.5, 0) is null, "High above an elevator the window is not lifted");
+Check(ElevatorRide.Over(8, 252, 10, 4, 10, 0.5, 0) is not null && ElevatorRide.Over(12, 252, 10, 4, 10, 0.5, 0) is null &&
+      ElevatorRide.Over(7, 252, 10, 4, 10, 0.5, 0) is null, "Across, Kirby rides where the host carries an entity");
+Check(ElevatorRide.Over(10, 241, 10, 4, 10, 0, 0) is { Lift: -24 }, "A surface at the top of its cell is a whole cell above the solid row");
+
+Check(KirbyActions.CanStomp(KirbyActions.Jump) &&KirbyActions.CanStomp(KirbyActions.Fall) && KirbyActions.CanStomp(KirbyActions.Float),
     "Stomps start from rising, falling and floating");
 Check(!KirbyActions.CanStomp(KirbyActions.Standing) && !KirbyActions.CanStomp(KirbyActions.Slide) && !KirbyActions.CanStomp(KirbyActions.Ability),
     "No stomp on the ground, while sliding or during an exhale or inhale");

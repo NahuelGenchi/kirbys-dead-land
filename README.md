@@ -153,6 +153,11 @@ while playing Kirby; healing, equipment and interaction tutorials remain availab
 - Original Crash, Paint and Mike effects were verified in the running host game,
   with the HUD outside the background tint.
 - Original ladder, Suplex, Cook, helper and Wheel helper riding have source tests.
+- Kirby rides a real host `SimpleElevator` up and down in isolated live runs,
+  standing on its surface, and can jump on a rising one and land on it again.
+  Original objects ride with him while it moves (an intentional deviation; see
+  [Host elevators](docs/GAMEPLAY_FIDELITY.md#host-elevators-deviation)). Other
+  elevator types and generated elevator levels were not run live.
 - In live run `20261005-205320`, original Cook consumed a real Zombie and the host
   dropped exactly one `SmallMeat` food item from that enemy's loot. Kirby walked
   onto it and a real R press ran the host pickup, healing host and source health
