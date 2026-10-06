@@ -13,6 +13,7 @@ public sealed class KirbyRules
     private readonly string[] abilityIds;
     private readonly Func<int, int> chooseIndex;
     private readonly HashSet<long> consumedEnemies = [];
+    private readonly HashSet<long> cookedEnemies = [];
 
     public KirbyRules(IEnumerable<string> abilityIds, Func<int, int>? chooseIndex = null)
     {
@@ -25,8 +26,16 @@ public sealed class KirbyRules
         this.chooseIndex = chooseIndex ?? Random.Shared.Next;
     }
 
+    /// <summary>Copy damage multiplier while an Elite-granted ability is held.</summary>
+    public const double EmpoweredDamageMultiplier = 2;
+
     public string? AbilityId { get; private set; }
     public bool IsBaseForm => AbilityId is null;
+    /// <summary>The current copy came from swallowing an Elite and has not been lost since.</summary>
+    public bool AbilityEmpowered { get; private set; }
+    /// <summary>An Elite is in Kirby's mouth; its ability empowers Kirby only if the swallow yields it.</summary>
+    public string? PendingEmpowerment { get; private set; }
+    public double DamageMultiplier => AbilityEmpowered ? EmpoweredDamageMultiplier : 1;
     public string? RetainedShieldId { get; private set; }
 
     public bool CanEquip(HostWeaponKind kind) => IsBaseForm &&
@@ -82,44 +91,85 @@ public sealed class KirbyRules
         return abilityIds[index];
     }
 
-    /// <summary>Record an actual capture whose source enemy already carried this ability.</summary>
-    public string? ConfirmAbsorption(long enemyId, string abilityId)
+    /// <summary>
+    /// Record an actual capture whose source enemy already carried this ability.
+    /// An Elite capture marks its ability as a pending empowerment.
+    /// </summary>
+    public string? ConfirmAbsorption(long enemyId, string abilityId, bool elite = false)
     {
         if (!abilityIds.Contains(abilityId, StringComparer.Ordinal))
             throw new ArgumentException("Absorbed ability is not in the original catalog.", nameof(abilityId));
         if (!IsBaseForm || !consumedEnemies.Add(enemyId)) return null;
+        if (elite) PendingEmpowerment = abilityId;
         return abilityId;
     }
 
-    public void DropAbility() => AbilityId = null;
+    /// <summary>Losing the copy in any way (hit, discard, helper, spit) ends the empowerment.</summary>
+    public void DropAbility()
+    {
+        AbilityId = null;
+        AbilityEmpowered = false;
+        PendingEmpowerment = null;
+    }
 
-    /// <summary>Mirror a source transformation, including re-catching a discarded copy star.</summary>
+    /// <summary>
+    /// Decide whether an enemy actually consumed by the original Cook drops one
+    /// host food item. Bosses and Elites never do, and repeated notifications
+    /// for one entity cannot drop a second item. Cook damage is unaffected.
+    /// </summary>
+    public bool ClaimCookFood(long enemyId, bool boss, bool elite) =>
+        !boss && !elite && cookedEnemies.Add(enemyId);
+
+    /// <summary>
+    /// Mirror a source transformation, including re-catching a discarded copy star.
+    /// Only the swallow of a pending Elite empowers, and only if the original
+    /// transform produced that Elite's ability; a re-caught star is never empowered.
+    /// </summary>
     public void SetSourceAbility(string? abilityId)
     {
         if (abilityId is not null && !abilityIds.Contains(abilityId, StringComparer.Ordinal))
             throw new ArgumentException("Source copy ability is not in the original catalog.", nameof(abilityId));
+        AbilityEmpowered = abilityId is not null && (PendingEmpowerment is not null
+            ? StringComparer.Ordinal.Equals(PendingEmpowerment, abilityId)
+            : AbilityEmpowered && StringComparer.Ordinal.Equals(AbilityId, abilityId));
+        PendingEmpowerment = null;
         AbilityId = abilityId;
     }
 
     /// <summary>Restore this mod's slot state after validating its ability catalog.</summary>
-    public void Restore(string? abilityId, string? retainedShieldId)
+    public void Restore(string? abilityId, string? retainedShieldId, bool empowered = false, string? pendingEmpowerment = null)
     {
         if (abilityId is not null && !abilityIds.Contains(abilityId, StringComparer.Ordinal))
             throw new ArgumentException("Saved copy ability is not in the original catalog.", nameof(abilityId));
         if (retainedShieldId is not null && string.IsNullOrWhiteSpace(retainedShieldId))
             throw new ArgumentException("Saved shield must identify a physical item.", nameof(retainedShieldId));
+        if (empowered && abilityId is null)
+            throw new ArgumentException("Only a copy ability can be empowered.", nameof(empowered));
+        if (pendingEmpowerment is not null && (abilityId is not null ||
+            !abilityIds.Contains(pendingEmpowerment, StringComparer.Ordinal)))
+            throw new ArgumentException("A pending empowerment needs base form and a catalog ability.", nameof(pendingEmpowerment));
         AbilityId = abilityId;
         RetainedShieldId = retainedShieldId;
+        AbilityEmpowered = empowered;
+        PendingEmpowerment = pendingEmpowerment;
         consumedEnemies.Clear();
+        cookedEnemies.Clear();
     }
 
     /// <summary>Entity IDs can be reused in a different level; equipment and copy state survive.</summary>
-    public void ResetForLevel() => consumedEnemies.Clear();
+    public void ResetForLevel()
+    {
+        consumedEnemies.Clear();
+        cookedEnemies.Clear();
+    }
 
     public void Reset()
     {
         AbilityId = null;
+        AbilityEmpowered = false;
+        PendingEmpowerment = null;
         RetainedShieldId = null;
         consumedEnemies.Clear();
+        cookedEnemies.Clear();
     }
 }

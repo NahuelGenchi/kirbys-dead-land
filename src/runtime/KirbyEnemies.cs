@@ -2,6 +2,7 @@ using Entity = dc.Entity;
 using dc.en;
 using dc.en.inter;
 using dc.tool.atk;
+using HaxeProxy.Runtime;
 using Kirby.Core;
 
 namespace Kirby.Runtime;
@@ -19,7 +20,23 @@ public sealed class KirbyEnemies
     private readonly bool[] detached = new bool[Capacity + 1];
     private readonly bool[] controlled = new bool[Capacity + 1];
     private readonly byte[] abilities = new byte[Capacity + 1];
+    /// <summary>Swallowing an Elite always yields original Sword.</summary>
+    private static readonly byte EliteAbility = checked((byte)(Array.IndexOf(KirbyNdsProvider.Abilities, "Sword") + 2));
+    // Sampled when source HP is assigned so the matching delta scales identically.
+    private double damageMultiplier = 1;
     private EnemyBinding[]? restoring;
+    /// <summary>Highest scroll tier sampled for the current source tick.</summary>
+    internal int ColorlessTier { get; private set; } = 1;
+    /// <summary>The host's colorless damage multiplier for <see cref="ColorlessTier"/>.</summary>
+    internal double ColorlessMultiplier { get; private set; } = 1;
+    /// <summary>Lab-only observer of (target, source HP drop, host damage) for each copy hit.</summary>
+    internal static Action<Entity, int, int>? TestObserver;
+    /// <summary>
+    /// Host life per source damage point: the original-unit scale, times the Elite
+    /// empowerment, times the colorless scroll multiplier, all sampled in Prepare.
+    /// </summary>
+    private double HostMultiplier(Func<Entity, double> scale, Entity mob) =>
+        scale(mob) * damageMultiplier * ColorlessMultiplier;
     internal EnemyBinding[] Capture() => Enumerable.Range(1, Capacity)
         .Where(i => detached[i] || mobs[i] is { destroyed: false }).Select(i => detached[i]
             ? new EnemyBinding { Slot = i, Detached = true }
@@ -39,7 +56,11 @@ public sealed class KirbyEnemies
         nds.SetProxy(i, 0, 0, 1, false);
         mobs[i] = null; controlled[i] = false; abilities[i] = 0; assignedHp[i] = 0; detached[i] = false;
     }
-    public void Prepare(KirbySession session, NdsRuntime nds, int ox, int oy)
+    /// <param name="scale">Host life per original damage point for a target.</param>
+    /// <param name="bodyContact">The original touch damage between Kirby and enemies: off by default
+    /// (Dead Cells has none) and while Kirby stomps, as the host dive lands on enemies; his own
+    /// attacks, inhale and slide still hit them.</param>
+    public void Prepare(KirbySession session, NdsRuntime nds, int ox, int oy, Func<Entity, double> scale, bool bodyContact = true)
     {
         var hero = session.Hero;
         if (restoring is not null)
@@ -67,6 +88,11 @@ public sealed class KirbyEnemies
             }
             restoring = null;
         }
+        // Copy attacks scale like colorless gear: the highest scroll tier,
+        // passed through the host's own Const.scaleHeroValueToTier.
+        ColorlessTier = ColorlessDamage.Tier(hero.brutalityTier, hero.tacticTier, hero.survivalTier);
+        ColorlessMultiplier = dc.Const.Class.scaleHeroValueToTier(1.0, ColorlessTier);
+        damageMultiplier = session.Rules.DamageMultiplier;
         double hx = (hero.cx + hero.xr) * 24, hy = (hero.cy + hero.yr) * 24;
         for (uint i = 1; i <= Capacity; i++)
         {
@@ -105,21 +131,26 @@ public sealed class KirbyEnemies
         for (uint i = 1; i <= Capacity; i++)
         {
             if (mobs[i] is not { } mob) continue;
+            // Checked every tick: a host mob can also become an Elite after binding.
+            if (mob is Mob { elite: true }) abilities[i] = EliteAbility;
             int x = checked((int)Math.Round(((mob.cx + mob.xr) * 24 - ox) * 65536));
             int y = checked((int)Math.Round(((mob.cy + mob.yr) * 24 - 17 - oy) * 65536));
             // A projectile's source object has one HP: any original attack that
-            // strikes it is lethal and removes the host projectile.
-            assignedHp[i] = IsHazard(mob) ? 1 : Math.Clamp(mob.life, 1, MaxSourceHp);
+            // strikes it is lethal and removes the host projectile. Enemies hold
+            // the host life in original damage units, so both games agree on
+            // which hit is lethal (Ice freezes, death reactions); the Elite
+            // empowerment and the colorless scroll multiplier apply on top.
+            assignedHp[i] = IsHazard(mob) ? 1 : ColorlessDamage.SourceHp(mob.life, HostMultiplier(scale, mob), MaxSourceHp);
             nds.SetProxy(i, x, y, assignedHp[i]);
             // Projectiles stay inhalable; their zero copy byte leaves the original
             // copyless mouthful, which spits a star and swallows into nothing.
             nds.SetProxyOptions(i, abilities[i], mob is not Mob && !IsHazard(mob) || mob is dc.en.mob.Boss);
-            nds.SetProxyContact(i, mob is Mob);
+            nds.SetProxyContact(i, mob is Mob && bodyContact);
             nds.SetProxySize(i, (ushort)Math.Clamp(Math.Ceiling(mob.radius * 2), 1, 1024),
                 (ushort)Math.Clamp(Math.Ceiling(mob.hei), 1, 1024));
         }
     }
-    public string? Complete(KirbySession session, NdsRuntime nds, int ox, int oy)
+    public string? Complete(KirbySession session, NdsRuntime nds, int ox, int oy, Func<Entity, double> scale)
     {
         string? copied = null;
         for (uint i = 1; i <= Capacity; i++)
@@ -132,7 +163,11 @@ public sealed class KirbyEnemies
             // destruction before ordinary inhale so it cannot award a copy.
             if (proxy.Gone && (proxy.Flags & 128) != 0)
             {
-                if (!mob.destroyed && mob.life > 0) mob.kill();
+                if (!mob.destroyed && mob.life > 0)
+                {
+                    if (mob is Mob cooked) AddCookFood(session, cooked);
+                    mob.kill();
+                }
                 Release(nds, i); continue;
             }
             if (proxy.Swallowed && mob is Mob absorbed)
@@ -147,10 +182,16 @@ public sealed class KirbyEnemies
                 continue;
             }
             // Native HP follows the host's actual remaining life. Lethal Ice
-            // hits must enter the original freeze reaction in the same tick.
+            // hits must enter the original freeze reaction in the same tick:
+            // an original lethal hit removes the remaining host life, and a
+            // surviving original enemy leaves the host enemy alive.
             int damage = assignedHp[i] - proxy.Hp;
             if (damage > 0 && !mob.destroyed && mob.life > 0)
-                KirbyDamage.Hit(session.Hero, mob, damage);
+            {
+                int hostDamage = Math.Max(1, ColorlessDamage.HostDamage(damage, assignedHp[i], mob.life, HostMultiplier(scale, mob)));
+                TestObserver?.Invoke(mob, damage, hostDamage);
+                KirbyDamage.Hit(session.Hero, mob, hostDamage);
+            }
             if (mob.destroyed || mob.life <= 0)
             {
                 if (!proxy.Gone && mob is Mob and not dc.en.mob.Boss)
@@ -210,6 +251,16 @@ public sealed class KirbyEnemies
     }
     private static bool IsHazard(Entity entity) => entity is Bullet or Grenade;
     private static bool Live(Entity entity) => !entity.destroyed && (entity.life > 0 || IsHazard(entity));
+    /// <summary>
+    /// Cook's requested host reward: one host food item joins the cooked
+    /// enemy's own loot, so the host death path drops it at that enemy.
+    /// </summary>
+    private static void AddCookFood(KirbySession session, Mob mob)
+    {
+        if (!session.Rules.ClaimCookFood(mob.__uid, mob is dc.en.mob.Boss, mob.elite)) return;
+        var food = dc.tool.InventItem.Class.fromItem(dc.level.LootGen.Class.getSmallHealingKind(), 1);
+        mob.addToLoot(new dc.LootType.InvItem(food), Ref<bool>.In(false));
+    }
     private static bool Eligible(Entity entity) => entity is Mob or Door or BreakableProp or ExplosiveBarrel || entity.isBreakableByHero();
     private static (double X, double Y) Distance(Entity entity, double heroX, double heroY) =>
         (Math.Max(0, Math.Abs((entity.cx + entity.xr) * 24 - heroX) - entity.radius),

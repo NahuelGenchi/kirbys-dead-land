@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><AllowUnsafeBlocks>true</AllowUnsafeBlocks></PropertyGroup>
+  <ItemGroup><Compile Include="../../src/runtime/LabActivationTrace.cs" Link="LabActivationTrace.cs" /><Compile Include="../../src/runtime/NdsRuntime.cs" Link="NdsRuntime.cs" /></ItemGroup>
+  <ItemGroup><ProjectReference Include="../../src/core/Kirby.Core.csproj" /></ItemGroup>
+</Project>

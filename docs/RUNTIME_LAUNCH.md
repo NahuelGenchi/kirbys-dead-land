@@ -32,6 +32,8 @@ Relevant environment variables are used only by the lab helper:
 - `KIRBY_LAB_OUTFIT`: outfit ID assigned before starting that private run.
 - `KIRBY_LAB_INPUT_PLAN`: `movement`, `combat`, `ability`, `visual`, `breakable`, `boss`, `crowd`, `aim`, `repro`, or `hazard`, for a reproducible offscreen test. `repro` tests normal keyboard/controller bindings and keeps the normal tutorials.
 - `KIRBY_LAB_TEST_ABILITY`: optional source ability ID for the ability probe, exposed as `--probe-ability 2..25`. The probe prepares it through original inhale, supplied swallowed content, and Down before measuring combat. The separate `combat` probe uses a real enemy's random copy result.
+- `KIRBY_LAB_TEST_SCROLLS`: optional `B,T,S` scroll counts for the ability probe, exposed as `--probe-scrolls`. Before measuring, the probe adds that many real `BrutalityUp`, `TacticUp` and `SurvivalUp` items (`InventItem.fromItem`) through the normal inventory and calls the host's `Hero.computeTiers`. `ability-damage.json` then records the tiers, the host and core colorless multipliers, and each copy hit's source HP drop and host damage.
+- `KIRBY_LAB_COMBAT_ELITE=1`: with the `combat` plan, makes the swallowed Zombie an Elite (Elite skills disabled) and records in `combat.json` whether the copy was empowered and the damage that the second Zombie takes from each hit. Set it in the environment of `launch_runtime.py`.
 - `KIRBY_LAB_PLAY=1`: keep outfit selection but disable all smoke capture and automatic input.
 
 Without these variables the lab helpers do not run. Do not use their successful test as evidence that an ordinary Steam launch uses isolated saves.
@@ -39,6 +41,10 @@ Without these variables the lab helpers do not run. Do not use their successful 
 For a user-session reproduction, copy the private profile into a separate data root and pass that root explicitly to both staging and launching. The October 4 recording investigation uses `repros/user-recording-20261004`; the user's main private profile is preserved. `repro` injects keyboard events or raw controller-button query results through the existing host bindings. It does not replace the original engine's input mask or force inventory contents. `KIRBY_LAB_REPRO_PLAN` names a private JSON timeline with `at`, `until`, and optional `actions`, `keys`, or `padKeys` arrays.
 
 The optional `KIRBY_LAB_REPRO_HEALTH=1` fixture changes only the copied test character's health, position, and outfit: it sets 57/76 health, repeats real stat updates, places the character near an existing generated item, and checks an outfit round trip. The timeline must use the normal pickup binding to acquire that item. `KIRBY_LAB_REPRO_PICKUP=StartBow` selects the existing bow instead of the shield. `KIRBY_LAB_REPRO_ENCOUNTER=1` later places the test character near an existing natural Zombie without changing its AI. `KIRBY_LAB_REPRO_MOB_COMPARISON=1` briefly uses the normal outfit near that enemy. `KIRBY_LAB_HIDE_BITMAP=1`, with optional `KIRBY_LAB_HIDE_BITMAP_FROM`/`UNTIL` times, skips only Kirby's original bitmap draw for a visual comparison. These are diagnostic fixtures, not normal play options.
+
+The second recording investigation added further opt-in diagnostics. `KIRBY_LAB_CAPTURE_ALL=1` keeps `--capture-fps` capturing during host cinematics and death, and adds the hero animation, cinematic and visibility state to `captures.jsonl`. `KIRBY_LAB_REPRO_HIT_AT` and `KIRBY_LAB_REPRO_LETHAL_AT` deliver a real host Zombie attack (20 damage, or 10 damage at 3 HP) through the normal attack path at that repro time. `KIRBY_LAB_DUMP_PHASES`, for example `rebirth:20,headPopLoop:5`, writes the scroller render tree near the hero when its animation reaches that frame. In `repro` runs, `repro-events.jsonl` also records host attacks entering the source and source health changes, and `repro-trace.jsonl` records the source palette flash entry and Kirby's palette bank.
+
+The third recording investigation added more opt-in diagnostics. `repro` runs also record `host-motion.jsonl` (host position, animation and viewport zoom on every host frame), and drive the normal outfit too, without a source machine, so movement can be compared. `KIRBY_LAB_VISIBILITY=1` writes `visibility.jsonl` with the hero's visibility, sprite alpha, hero light and the body bitmap's alpha on every host frame. `KIRBY_LAB_MOB_SCALING=1` writes `mob-scaling.json` with every mob's life, elite flag, `trueLifeTier` and the host tier scale. `KIRBY_LAB_ZOOM_SCHEDULE`, for example `1:1.5u,10:2u`, sets the host viewport zoom once at each repro time (`u` also updates its size). `KIRBY_LAB_TOGGLES`, for example `30:nolight,34:none,38:nohead,46:blendnone`, switches the hero light, host head parts or the body bitmap's blend for A/B captures. `KIRBY_LAB_DUMP_PHASES` also accepts `@<lab ms>`. The render tree dump includes the scene lighting parameters and layer membership. The ability probe is run with `--probe-ability` source IDs: 18 Sword, 19 Hammer, 20 Parasol.
 
 ## Linux dependency repair
 
@@ -63,6 +69,8 @@ The `001810` test used the actual new `KirbySuperStarUltra` outfit and source en
 The `003840` combat test consumed a real Zombie and randomly selected Sleep (original ability 25). The same host shield, permanent ID 254, remained allowed. The original Sleep later expired to base form. Shield use was accepted, but this run did not observe a successful parry and is not evidence of a completed parry check.
 
 The subsequent `004556` test passed the complete absorption/parry path: Zombie UID 596717 was consumed, random Sword was selected, the source engine activated ability 18, and shield ID 264 remained equipped. A normal shield key press while Sword was active produced `onShieldStartParry`; an actual host enemy attack then produced `onShieldCounterSuccessful`. The final `combat.json` records all these events as true. The test also drives the original Sword attack input, but its parry result should not be mistaken for a measurement of all Sword damage or combo behavior. The framebuffer visibly shows Sword Kirby. This 60-second run completed without fatal errors and real saves were unchanged.
+
+The `20261005-204132` Elite Sword test ran `KIRBY_LAB_COMBAT_ELITE=1 python3 scripts/launch_runtime.py --data-root <copy> --seconds 60 --start-game --outfit KirbySuperStarUltra --input-plan combat` in a separate data root (`repros/elite-sword-20261005`). That root had its own lab copy and a native bridge built from this branch's `src/nds/lib.rs`, so the main private lab and the owner's play build stayed untouched. Elite Zombie UID 602774 was consumed, the source engine activated Sword (ability 18), and `empoweredAfterSwallow` and `empowered` were both true with multiplier 2. The second Zombie took original Sword hits of 36, 36 and 32, which are the original 18/18/16 doubled. Shield ID 910 remained allowed and the parry/counter path also passed. The 60-second run completed without fatal errors and real saves were unchanged; an earlier run of the same scenario before the final refactor gave identical results. It did not exercise losing the empowerment, save/resume or a biome transition.
 
 The earlier `003840` run saved through `Main.writeSave` at original frame 5666. A separate `004025` process launched with `--resume-game` and its first source trace resumed at frame 5666, with exact source coordinates `(404.2734375, 105.5)`. The next frame was 5667. Both runs completed without fatal errors and left the real save inventories unchanged. Use `--save-after 1500` and then `--resume-game` to repeat this host-plus-source persistence check.
 
@@ -101,6 +109,51 @@ The `022453` boss fixture used the actual Bridge arena and naturally created Beh
 The final physical-input test `025047` passed using native bridge `f94997d82877bcdce29ed8d8cb3741545f08044ad813fa61f59f9406c6314b2c`. It verified all nine physical action mappings, both-axis inversion, and a real Pure Nail upward strike (`PureNailUp`, cycle 2). Jump and skill bindings stayed masked during host weapon aiming, and all five observed outer movement scopes restored their bindings. The production input path then moved Kirby 94.6875 px and produced a 49.890625 px jump. This profile binds W to both Up and Jump; the test recorded the exact combined original mask 65, or 129 with inversion enabled. The timestamp check now matches the host's absolute `sys_time` suspension deadline. The run finished without fatal errors or changes to real saves.
 
 The final `025627` test started from an empty private save directory with no automated input plan. The normal new-game path activated Kirby, kept the hero awake at full 76 health, and advanced the original engine normally. The incompatible host jump/dodge/helper tutorials did not appear; the ordinary `attackM` prompt remained available. The 45-second launch completed without fatal errors or changes to real saves. Both the preceding fixture profile and this fresh-profile smoke save were preserved by directory rename under `lab/checkpoints`; the final `lab/save` directory is empty for the user's New Game. `lab/final-stage.json` records the exact runtime/native/outfit hashes and preserved checkpoint path.
+
+`--start-game --input-plan cook` (`LabCookProbe`) checks Cook food drops. It
+hurts Kirby in base form with a 40-damage host hit, prepares original Cook through
+inhale, supplied content and Down, spawns one factory Zombie, and holds original
+B. It records new healing `ItemDrop`s, walks Kirby onto the food with original
+directions, and presses the real interact binding (`isDown` plus a `isPressed`
+edge). `cook-food.json` and `cook-events.txt` record the kill, the cooked mob's
+food loot, each new food item, the host `pickItem` call and every health change.
+A passing run has `victimFoodLoot` and `newFoodCount` equal to 1, a `pickedItem`,
+and matching host/source health rising after the pickup.
+
+Run `20261005-205320` passed: one `SmallMeat` dropped from the cooked Zombie and
+host pickup healed host and source 48 → 59. The original Cook food separately
+healed 36 → 48 before the pickup. The 75-second run finished without fatal errors
+and real saves were unchanged.
+### Colorless copy damage (2026-10-05)
+
+Issue #10. These runs used a separate data root, `repros/colorless-20261005`, so
+the owner's play lab and save were untouched. Its native bridge was built from this
+branch's `src/nds/lib.rs` (`main`'s source) with a private Cargo target:
+`968d11cb285115707b5250ecb3c42bd1810fa19610c3d041eef59c6bfe3e3948`. Runtime DLL:
+`7f84ee6d6d7e601ece731c2c3e456caba27a99ffcf4e3961377455cdf8bf7fa2`. Each run was a
+fresh `--start-game --input-plan ability` for 80 seconds, ended by the expected
+timeout without fatal log lines, and left the real saves unchanged.
+
+- `204919`: `--probe-ability 8 --probe-scrolls 4,0,2`. Host tiers became 5/1/3,
+  so the colorless tier was 5. The host's `Const.scaleHeroValueToTier(1, 5)`
+  returned 1.7490062499999994, identical to the core copy. Original Wheel drops
+  23, 14, 23 and 14 became host `finalDmg` 40, 24, 40 and 24, which matches the
+  host's own colorless result for each base. The 127-life Zombie went
+  127 → 87 → 63 → 23 → −1; the last hit was lethal on both sides. The incoming
+  10-damage check kept host/source health at 76 → 66.
+- `205107`: `--probe-ability 10 --probe-scrolls 4,0,2`. The 16-life Ice fixture
+  received source HP 10 (the smallest that is lethal after scaling). One original
+  breath dropped it to 0 and dealt host damage 17 in the same tick, killing the
+  Zombie. The original frozen object stayed alive for 195 source frames after the
+  host death (the pre-change `020932` run recorded 197).
+- `205246`: `--probe-ability 8` with no scrolls. Tiers 1/1/1, multiplier 1. Kirby's
+  hits of 23, 14, 23, 23 and 2 were applied unchanged. The Wheel hit spacing (8, 6
+  and 8 source frames) matches `204919`. The incoming hit knocked Kirby back to
+  base form, the surviving Zombie's AI lock expired and Kirby later died
+  (`endKind: Death`). That fixture outcome does not involve the damage change.
+
+Not covered live: copy forms other than Wheel and Ice, bosses, breakables and
+targets above the native HP cap at nonzero scroll counts.
 
 ## Private showcase capture
 

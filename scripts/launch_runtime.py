@@ -49,8 +49,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--data-root', type=Path, default=DEFAULT_ROOT)
     parser.add_argument('--play', action='store_true', help='Open the game for normal play, with isolated saves and no time limit.')
-    parser.add_argument('--input-plan', choices=['movement', 'combat', 'ability', 'visual', 'breakable', 'boss', 'crowd', 'aim', 'repro', 'hazard'], help='Run an isolated input test (repro tests normal keyboard/controller bindings).')
+    parser.add_argument('--input-plan', choices=['movement', 'combat', 'ability', 'cook', 'visual', 'breakable', 'boss', 'crowd', 'aim', 'repro', 'hazard'], help='Run an isolated input test (repro tests normal keyboard/controller bindings).')
     parser.add_argument('--probe-ability', type=int, choices=range(2, 26), metavar='2..25', help='Prepare this original ability through inhale/feed/swallow before the ability probe.')
+    parser.add_argument('--probe-scrolls', metavar='B,T,S', help='Give the ability probe this many Brutality, Tactics and Survival scrolls before measuring damage.')
     parser.add_argument('--capture-fps', type=int, choices=range(1, 31), metavar='1..30', help='Capture real gameplay frames at this rate for a private showcase recording.')
     parser.add_argument('--gdb', action='store_true', help=argparse.SUPPRESS)
     parser.add_argument('--start-game', action='store_true', help='Start a fresh run in the isolated lab save.')
@@ -68,6 +69,12 @@ def main() -> None:
         parser.error('--start-game and --resume-game are mutually exclusive')
     if args.probe_ability is not None and args.input_plan != 'ability':
         parser.error('--probe-ability requires --input-plan ability')
+    if args.probe_scrolls is not None:
+        if args.input_plan != 'ability':
+            parser.error('--probe-scrolls requires --input-plan ability')
+        counts = args.probe_scrolls.split(',')
+        if len(counts) != 3 or not all(c.isdigit() and int(c) <= 30 for c in counts):
+            parser.error('--probe-scrolls needs three counts in 0..30, such as 4,0,2')
     if args.save_after is not None and args.save_after < 1:
         parser.error('--save-after must be positive')
     if args.play and not (os.environ.get('DISPLAY') or os.environ.get('WAYLAND_DISPLAY')):
@@ -131,7 +138,8 @@ def main() -> None:
             if key.startswith('KIRBY_LAB_'):
                 env.pop(key)
     for key in ['KIRBY_LAB_PLAY', 'KIRBY_LAB_INPUT_PLAN', 'KIRBY_LAB_START_GAME', 'KIRBY_LAB_OUTFIT',
-                'KIRBY_LAB_RESUME_GAME', 'KIRBY_LAB_SAVE_AFTER', 'KIRBY_LAB_TEST_ABILITY', 'KIRBY_LAB_CAPTURE_FPS']:
+                'KIRBY_LAB_RESUME_GAME', 'KIRBY_LAB_SAVE_AFTER', 'KIRBY_LAB_TEST_ABILITY', 'KIRBY_LAB_TEST_SCROLLS',
+                'KIRBY_LAB_CAPTURE_FPS']:
         env.pop(key, None)
     env.update({
         'DCCM_OverridePath_CORE_ROOT': str(lab / 'coremod'),
@@ -170,6 +178,8 @@ def main() -> None:
         env['KIRBY_LAB_INPUT_PLAN'] = args.input_plan
     if args.probe_ability is not None:
         env['KIRBY_LAB_TEST_ABILITY'] = str(args.probe_ability)
+    if args.probe_scrolls is not None:
+        env['KIRBY_LAB_TEST_SCROLLS'] = args.probe_scrolls
     if args.capture_fps:
         env['KIRBY_LAB_CAPTURE_FPS'] = str(args.capture_fps)
     if args.start_game:
@@ -229,8 +239,12 @@ def main() -> None:
     if not args.play:
         from PIL import Image
         for ppm in run.glob('frame-*.ppm'):
-            with Image.open(ppm) as img:
-                img.save(ppm.with_suffix('.png'))
+            try:
+                with Image.open(ppm) as img:
+                    img.save(ppm.with_suffix('.png'))
+            except OSError:
+                # The bounded run can end while the last capture is being written.
+                print(f'Skipped incomplete capture {ppm.name}')
             ppm.unlink()
     report = {'run': str(run), 'exit_code': process.returncode,
               'save_isolation_installed': (lab / 'save-isolation.ready').is_file(),
