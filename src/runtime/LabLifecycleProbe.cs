@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Kirby.Core;
 using ModCore.Utilities;
 
 namespace Kirby.Runtime;
@@ -14,6 +15,11 @@ internal static class LabLifecycleProbe
     private static nint firstLevel;
     private static bool installed;
     private static int expectedHealth;
+    private static uint doorFrame;
+    private static double doorX, doorEndX;
+    private static int doorWalkFrames, doorCinematicTicks;
+    private static readonly HashSet<string> doorActions = [];
+    private static readonly HashSet<int> doorFacings = [];
 
     internal static void Install()
     {
@@ -75,12 +81,16 @@ internal static class LabLifecycleProbe
             hero.updateMaxLife();
             Record("host-maxlife-recomputed", new { hero.life, hero.maxLife, expectedHealth });
             dc.en.inter.Exit? exit = null;
+            // Optional: the destination of the exit to take, for example a door rather than a drop.
+            string? wantedExit = Environment.GetEnvironmentVariable("KIRBY_LAB_EXIT");
             var exits = new List<object>();
             for (int i = 0; i < hero._level.entities.length; i++)
                 if (hero._level.entities.getDyn(i) is dc.en.inter.Exit candidate)
                 {
-                    exits.Add(new { destination = candidate.destLevel?.ToString(), candidate.locked });
-                    if (!candidate.locked && !string.IsNullOrEmpty(candidate.destLevel?.ToString())) exit ??= candidate;
+                    string? destination = candidate.destLevel?.ToString();
+                    exits.Add(new { destination, candidate.locked });
+                    if (candidate.locked || string.IsNullOrEmpty(destination)) continue;
+                    if (exit is null || (destination == wantedExit && exit.destLevel?.ToString() != wantedExit)) exit = candidate;
                 }
             Record("level-exits", exits);
             if (exit is null)
@@ -88,18 +98,37 @@ internal static class LabLifecycleProbe
                 Record("transition-unavailable", new { reason = "No unlocked exit in this generated level." });
                 phase = 9; return;
             }
-            hero.setPosPixel((exit.cx + exit.xr) * 24, (exit.cy + exit.yr) * 24);
+            // Stand a cell and a half beside the door, as a player would, so
+            // the host walks the hero into it during the exit cinematic.
+            hero.setPosPixel((exit.cx + exit.xr - 1.5) * 24, (exit.cy + exit.yr) * 24);
             if (hero.yr == 0) { hero.cy--; hero.yr = 1; }
-            Record("transition-start", new { destination = exit.destLevel?.ToString(), sourceFrame = machine.State.Frame });
+            doorFrame = machine.State.Frame; doorX = (hero.cx + hero.xr) * 24;
+            doorActions.Clear(); doorFacings.Clear(); doorWalkFrames = doorCinematicTicks = 0;
+            Record("transition-start", new { destination = exit.destLevel?.ToString(), sourceFrame = machine.State.Frame, hostX = doorX,
+                doorX = (exit.cx + exit.xr) * 24 });
             exit.onActivate(hero, false);
             phase = 3; ticks = 0;
+        }
+        else if (phase == 3 && hero._level.HashlinkPointer == firstLevel && hero._level.game.hasCinematic())
+        {
+            // The exit cinematic: the original controller should walk Kirby
+            // with the host instead of holding his last pose.
+            doorCinematicTicks++;
+            ushort action = machine.Action;
+            doorActions.Add($"{action:X4}");
+            doorFacings.Add(machine.State.FacingRaw & 1);
+            if (action == KirbyActions.Walk) doorWalkFrames++;
+            doorEndX = (hero.cx + hero.xr) * 24;
         }
         else if (phase == 3 && hero._level.HashlinkPointer != firstLevel && hero.awake &&
             !hero._level.game.hasCinematic() && mod!.ActiveSession is not null)
         {
+            Record("door-cinematic", new { cinematicTicks = doorCinematicTicks, walkTicks = doorWalkFrames,
+                actions = doorActions.ToArray(), facingLeft = doorFacings.ToArray(), hostStartX = doorX, hostEndX = doorEndX });
             Record("transition-complete", new { sameAbility = sourceAbility == machine.State.Ability,
                 sameShield = shield == mod.ActiveSession.Rules.RetainedShieldId,
-                hero.hei, hero.radius, hero.life, hero.maxLife, sourceFrame = machine.State.Frame });
+                hero.hei, hero.radius, hero.life, hero.maxLife, sourceFrame = machine.State.Frame,
+                sourceFramesInDoor = machine.State.Frame - doorFrame });
             phase = 4; ticks = 0;
         }
         else if (phase == 4 && ticks > 180)

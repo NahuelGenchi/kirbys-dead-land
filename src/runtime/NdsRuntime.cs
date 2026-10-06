@@ -96,6 +96,12 @@ public sealed unsafe class NdsRuntime : IDisposable
         Check(); if (destination.IsEmpty) return;
         fixed (byte* ptr = destination) Result(Native.Read(handle, address, ptr, (nuint)destination.Length));
     }
+    /// <summary>Read GPU registers, palette RAM, VRAM or OAM through the bridge's checked GPU range.</summary>
+    public void ReadGpu(uint address, Span<byte> destination)
+    {
+        Check(); if (destination.IsEmpty) return;
+        fixed (byte* ptr = destination) Result(Native.ReadGpu(handle, address, ptr, (nuint)destination.Length));
+    }
     public void Write(uint address, ReadOnlySpan<byte> source)
     {
         Check(); if (source.IsEmpty) return;
@@ -208,6 +214,11 @@ public unsafe struct NdsState
     public fixed uint StateWords[16];
     public readonly double X => XRaw / 65536.0;
     public readonly double Y => YRaw / 65536.0;
+    /// <summary>
+    /// The original facing: bit 31 of the player word at +0x6C. FacingRaw
+    /// (+0x15) does not change with facing; its 0x10 bit hides the actor.
+    /// </summary>
+    public readonly bool FacesLeft => (StateWords[11] & 0x8000_0000u) != 0;
 }
 
 [StructLayout(LayoutKind.Sequential)]

@@ -35,6 +35,12 @@ preserved; generated assets and native dependencies remain in the private data r
 - Hostile Dead Cells projectiles (arrows, grenades) can be inhaled. The ROM
   holds them as an ordinary copyless mouthful: spit fires the original star at
   enemies, and swallowing gives nothing. Kirby's own arrows are never inhaled.
+- Spat stars and discarded ability stars are projectiles in Dead Cells. The ROM
+  still moves them through the level: spit stars burst on walls, the discarded
+  star bounces. A star staggers each enemy it hits with the host dive's stun and
+  knockback. A discarded star, harmless in the ROM, hits for the single
+  spit star's original 52 damage. This is a deliberate deviation; see
+  [star projectiles](docs/GAMEPLAY_FIDELITY.md#star-projectiles).
 - Each ordinary enemy consumed by the original Cook also drops one Dead Cells
   healing food item through the game's own loot drop. Cook's original damage is
   unchanged; Bosses and Elites drop no food.
@@ -42,6 +48,9 @@ preserved; generated assets and native dependencies remain in the private data r
   1.15^(tier − 1), where tier is 1 + your highest scroll count (Brutality,
   Tactics or Survival). With no scrolls this factor is ×1. See
   [colorless copy damage](docs/GAMEPLAY_FIDELITY.md#colorless-copy-damage).
+- While copied, each non-shield weapon slot in the HUD (normally Left-Click)
+  shows the current ability's original icon in a colorless slot. See the
+  [HUD ability slot](docs/GAMEPLAY_FIDELITY.md#hud-ability-slot).
 
 ## Play
 
@@ -174,6 +183,15 @@ while playing Kirby; healing, equipment and interaction tutorials remain availab
   fly above the original inhale box on flat ground) entered the original
   mouthful without hurting Kirby. Each spat star hit its shooter for 52 damage;
   a swallowed grenade gave no copy. See [enemy projectiles](docs/RUNTIME_LAUNCH.md#enemy-projectiles).
+- Live spit stars hit a paired Zombie (through its source object) and an
+  unpaired one (through the host). A discarded star hit a Zombie behind Kirby.
+  Each hit stunned the Zombie for about a second and pushed it away. Beside a
+  real level wall, a spit star burst on the wall face and a discarded star
+  bounced off it. Stars more than about 128 px from Kirby keep flying and hitting
+  but are not drawn. See [star projectiles](docs/RUNTIME_LAUNCH.md#star-projectiles).
+- Taking a real exit door, Kirby walks into the doorway in the original Walk
+  action until the host fade, instead of gliding in one standing frame. See
+  [exit-door walk](docs/RUNTIME_LAUNCH.md#exit-door-walk-2026-10-05).
 - Live Ice damage kills the host enemy once and leaves the original frozen block.
   Source tests also verify kicking the block into another enemy.
 - Original sound effects play at 48 kHz stereo. Only the source BGM player is
