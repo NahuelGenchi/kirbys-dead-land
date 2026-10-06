@@ -295,6 +295,17 @@ Check(!gate.Update(sliding: false, inside: true), "Re-entering without a slide s
 gate.Update(true, true); gate.Reset();
 Check(!gate.Open && !gate.Update(false, true), "Reset forgets an entered roll zone");
 
+var doorWalk = new CinematicWalk();
+Check(doorWalk.Update(100, 1 / 60.0) == 0, "A cinematic starts with Kirby standing");
+Check(doorWalk.Update(101.5, 1 / 60.0) == 1, "The host walking the hero right holds right");
+Check(doorWalk.Update(101.5, 1 / 60.0) == 1, "A rendered frame between host updates keeps walking");
+for (int frame = 0; frame < 12; frame++) doorWalk.Update(101.5, 1 / 60.0);
+Check(doorWalk.Direction == 0, "Kirby stops once the host stops moving him");
+Check(doorWalk.Update(99, 1 / 60.0) == -1, "The host walking the hero left holds left");
+Check(doorWalk.Update(400, 1 / 60.0) == 0, "A host placement is not a walk");
+doorWalk.Update(401, 1 / 60.0); doorWalk.Reset();
+Check(doorWalk.Direction == 0 && doorWalk.Update(500, 1 / 60.0) == 0, "Reset forgets the previous position");
+
 Check(KirbyActions.CanStomp(KirbyActions.Jump) && KirbyActions.CanStomp(KirbyActions.Fall) && KirbyActions.CanStomp(KirbyActions.Float),
     "Stomps start from rising, falling and floating");
 Check(!KirbyActions.CanStomp(KirbyActions.Standing) && !KirbyActions.CanStomp(KirbyActions.Slide) && !KirbyActions.CanStomp(KirbyActions.Ability),

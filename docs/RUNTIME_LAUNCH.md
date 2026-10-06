@@ -197,3 +197,33 @@ Run `20261005-205827` (runtime SHA-256 `3b2d1291428646fc59a38301f0e9e94204193f6b
 | Archer, jump-inhale, spit | `dc.en.Bullet` | Caught in the air; one star hit on the Archer for 52 (56 → 4) |
 
 All four hostile projectiles seen were paired; no hero-owned projectile was paired, but Kirby fired no bow in this run, so that exclusion was not exercised live. The process reached its time limit without fatal errors, and the real save inventories were unchanged.
+
+## Exit-door walk (2026-10-05)
+
+Issue #17. The lifecycle probe (`KIRBY_LAB_LIFECYCLE=1`) now places Kirby 1.5
+cells left of the chosen exit before it activates it, so the host walks him in.
+It records `door-cinematic`: the cinematic polls, the original actions and
+facing seen, and the host X range. `KIRBY_LAB_EXIT=<destination>` picks that exit
+when the level has it. These runs used a separate data root,
+`repros/door-walk-20261005`, so the owner's play lab and saves were untouched.
+
+```bash
+KIRBY_LAB_LIFECYCLE=1 KIRBY_LAB_EXIT=T_Courtyard KIRBY_LAB_CAPTURE_ALL=1 \
+  python3 scripts/launch_runtime.py --data-root ~/.local/share/kirby-dead-cells/repros/door-walk-20261005 \
+  --start-game --outfit KirbySuperStarUltra --seconds 120 --capture-fps 15
+```
+
+| Run | Version | Door cinematic |
+| :--- | :--- | :--- |
+| `213828` | Host terrain | T_SewerShort exit: Standing, Walk 28 of 193 polls, then Fall (`0x070E`) |
+| `214244` | Host terrain | T_Courtyard door: Walk 21 of 154 polls, then Fall. Frames show Kirby falling up the doorway steps |
+| `214713` | Flat floor | T_Courtyard door: Walk 148 of 149 polls, facing right, no Fall. Frames show walk poses up the steps until the fade |
+
+Run `214713` used runtime SHA-256
+`09e64805a55a23c25328bf89ce3159fe793a3f1d821a1b62b0035ad28077c972` and bridge
+`278518576c2174c65c9041a3577bdb7fbe1361aef45ed13416618ff7a80652a0` (unchanged
+native source). In all three runs the transition then completed with the same
+ability, shield and 57/76 health. The later lethal phase recorded a death, and
+each run ended at its time limit without fatal log lines and with real saves
+unchanged. Run `213535` is not evidence: it lacked `--outfit`, so Kirby was not
+active.
