@@ -2,6 +2,7 @@ using Entity = dc.Entity;
 using dc.en;
 using dc.en.inter;
 using dc.tool.atk;
+using Kirby.Core;
 
 namespace Kirby.Runtime;
 
@@ -15,6 +16,10 @@ public sealed class KirbyEnemies
     private readonly bool[] detached = new bool[Capacity + 1];
     private readonly bool[] controlled = new bool[Capacity + 1];
     private readonly byte[] abilities = new byte[Capacity + 1];
+    /// <summary>Swallowing an Elite always yields original Sword.</summary>
+    private static readonly byte EliteAbility = checked((byte)(Array.IndexOf(KirbyNdsProvider.Abilities, "Sword") + 2));
+    // Sampled when source HP is assigned so the matching delta scales identically.
+    private double damageMultiplier = 1;
     private EnemyBinding[]? restoring;
     internal EnemyBinding[] Capture() => Enumerable.Range(1, Capacity)
         .Where(i => detached[i] || mobs[i] is { destroyed: false }).Select(i => detached[i]
@@ -66,6 +71,7 @@ public sealed class KirbyEnemies
             }
             restoring = null;
         }
+        damageMultiplier = session.Rules.DamageMultiplier;
         double hx = (hero.cx + hero.xr) * 24, hy = (hero.cy + hero.yr) * 24;
         for (uint i = 1; i <= Capacity; i++)
         {
@@ -103,11 +109,14 @@ public sealed class KirbyEnemies
         for (uint i = 1; i <= Capacity; i++)
         {
             if (mobs[i] is not { } mob) continue;
+            // Checked every tick: a host mob can also become an Elite after binding.
+            if (mob is Mob { elite: true }) abilities[i] = EliteAbility;
             int x = checked((int)Math.Round(((mob.cx + mob.xr) * 24 - ox) * 65536));
             int y = checked((int)Math.Round(((mob.cy + mob.yr) * 24 - 17 - oy) * 65536));
             // Original HP is the host life in original damage units, so both
             // games agree on which hit is lethal (Ice freezes, death reactions).
-            assignedHp[i] = Math.Clamp((int)Math.Ceiling(mob.life / scale(mob)), 1, MaxSourceHp);
+            // An empowered ability's multiplier applies on top of the unit scale.
+            assignedHp[i] = Math.Clamp((int)Math.Ceiling(mob.life / (scale(mob) * damageMultiplier)), 1, MaxSourceHp);
             nds.SetProxy(i, x, y, assignedHp[i]);
             nds.SetProxyOptions(i, abilities[i], mob is not Mob || mob is dc.en.mob.Boss);
             nds.SetProxyContact(i, mob is Mob && bodyContact);
@@ -148,7 +157,7 @@ public sealed class KirbyEnemies
             int damage = assignedHp[i] - proxy.Hp;
             if (damage > 0 && !mob.destroyed && mob.life > 0)
                 KirbyDamage.Hit(session.Hero, mob, proxy.Hp <= 0 ? mob.life
-                    : Math.Clamp((int)Math.Round(damage * scale(mob)), 1, Math.Max(1, mob.life - 1)));
+                    : Math.Clamp((int)Math.Round(damage * scale(mob) * damageMultiplier), 1, Math.Max(1, mob.life - 1)));
             if (mob.destroyed || mob.life <= 0)
             {
                 if (!proxy.Gone && mob is Mob and not dc.en.mob.Boss)

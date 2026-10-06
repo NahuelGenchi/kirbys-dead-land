@@ -30,7 +30,7 @@ in [NDS_BRIDGE.md](NDS_BRIDGE.md). The original bootstrap experiment remains in
 | Host triggers | Pressure plates (trap plates and pulley points too) and hidden triggers test Kirby's physical foot on the ground, as for the Beheaded; enemy attacks still test the projected original hurtbox |
 | Incoming damage | Host shield/parry resolves first; remaining damage, converted to the same fraction of Kirby's 76 HP as of the host's current maximum, enters the next original collision tick, preserving original guard, recoil and invulnerability |
 | Touching enemies | As in Dead Cells, touching an enemy hurts neither Kirby nor the enemy: the original body-contact damage is excluded for every paired enemy, while Kirby's inhale, slide and copy attacks still hit, and the host's own touch attacks (spiked or electric enemies) still reach him as incoming damage. `OriginalTouchDamage: true` restores the original rule (7 of 76 HP to Kirby, and weak enemies destroyed by the bump) |
-| Outgoing damage | Paired original enemies hold the host life in original units: host life ÷ (`CopyDamageScale` 3.5 × the host's per-tier life scale). Original HP deltas are multiplied back, so both games agree on the lethal hit; the host hero damage multiplier does not alter copy attacks |
+| Outgoing damage | Paired original enemies hold the host life in original units: host life ÷ (`CopyDamageScale` 3.5 × the host's per-tier life scale). Original HP deltas are multiplied back, so both games agree on the lethal hit; the host hero damage multiplier does not alter copy attacks. The only exception is the deliberate Elite Sword bonus below |
 | Player health | Original full health is 76. Host and source health are synchronized, including host healing and original food |
 | Saves | A versioned, ROM-checked native machine snapshot and physical shield/enemy bindings travel with the private host save slot |
 | Arrival and death | Kirby appears in the host arrival flash rather than standing in its corpse sequence. On death the original lethal recoil and spin-away play over the host death sequence |
@@ -65,6 +65,34 @@ the item in place and charges nothing. Shield identity uses the physical item's 
 loss, discarded-star recovery, helper creation and limited-use ability expiration
 update the same equipment policy.
 
+### Elite Sword (intentional deviation)
+
+Elite host mobs do not roll a random ability: their source collision metadata
+always carries original Sword (ability 18). The ROM still performs the inhale,
+swallow and transformation. Swallowing an Elite marks a pending empowerment.
+Kirby becomes empowered only when the original transform produces that Elite's
+Sword; a mouthful that the original Mix machinery turns into another ability is
+not empowered.
+
+While empowered, copy damage to host targets is doubled
+(`KirbyRules.EmpoweredDamageMultiplier`). This is a deliberate design choice, not
+original behavior. The multiplier applies on top of the original-unit scale in
+the Outgoing damage row: the paired source enemy holds host life ÷ (unit scale ×
+multiplier), and each source HP drop is multiplied back by the same product
+(`KirbyEnemies`). A hit that the source enemy survives never kills the host
+enemy, so original death reactions stay in the same tick as the host kill.
+`CopyDamageScale` in the core keeps the tested pairing rule for a single
+multiplier.
+
+The bonus ends whenever the copy is lost: a hit that knocks it off, a discard
+(a re-caught star is an ordinary Sword), creating a helper, spitting the Elite
+out before swallowing, or a new run. It survives saves and biome transitions.
+Ordinary enemies keep the uniform random roll, and a Sword copied from them is
+not doubled. Bosses are unchanged because they resist inhale. Known limit: source
+damage is attributed per paired enemy, not per attacker. If an earlier helper is
+still alive when Kirby later becomes empowered, that helper's hits are doubled
+too. No visual cue shows the empowered state yet.
+
 All 24 standard source copy forms are included: Cutter, Mirror, Beam, Fighter,
 Suplex, Yo-Yo, Wheel, Bomb, Ice, Fire, Plasma, Ninja, Stone, Wing, Jet, Copy,
 Sword, Hammer, Parasol, Paint, Mike, Crash, Cook and Sleep. Special states reached
@@ -98,6 +126,12 @@ and took 32 original Sword damage. A controlled crowd of 31 live host Zombies
 had 31 simultaneous source bindings; 21 targets each took exactly 18 damage.
 The boss fixture blocked incoming hits and the crowd fixture locked enemy AI;
 these verify the adapter paths, not full boss fights or simultaneous crowd attacks.
+Live run `20261005-204132` swallowed a real Elite Zombie, which gave original
+Sword (ability 18) with the empowered flag set; a second real Zombie then took
+original Sword hits of 36, 36 and 32 (the original 18/18/16, doubled). That run
+predates the original-unit scale from #3, so it shows the doubling, not today's
+absolute numbers. It also did not exercise empowered-state loss, save/resume or biome transitions live;
+the source rule tests cover those paths.
 See [HOST_BOUNDARY_TESTS.md](HOST_BOUNDARY_TESTS.md) for exact evidence.
 Ice damage and its surviving frozen block, background-effect placement, and an
 actual biome transition have passed live checks. The final native suite passes

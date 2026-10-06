@@ -63,6 +63,71 @@ Check(mouthful.Absorb(1) is null && mouthful.IsBaseForm, "Repeated capture neith
 mouthful.SetSourceAbility("ice");
 Check(mouthful.Absorb(3) is null, "Original transformation closes the inhale window");
 
+var elite = new KirbyRules(["fire", "sword"], _ => 0);
+Check(elite.ConfirmAbsorption(1, "sword", elite: true) == "sword" && elite.PendingEmpowerment == "sword" &&
+      !elite.AbilityEmpowered && elite.DamageMultiplier == 1, "Elite in mouth is pending, not yet empowered");
+elite.SetSourceAbility("sword");
+Check(elite.AbilityEmpowered && elite.PendingEmpowerment is null &&
+      elite.DamageMultiplier == KirbyRules.EmpoweredDamageMultiplier, "Elite swallow empowers its Sword");
+elite.SetSourceAbility("sword");
+Check(elite.AbilityEmpowered, "Repeated source report keeps the empowerment");
+elite.DropAbility();
+Check(!elite.AbilityEmpowered && elite.DamageMultiplier == 1, "Losing the copy ends the empowerment");
+elite.SetSourceAbility("sword");
+Check(!elite.AbilityEmpowered, "A re-caught discarded star is an ordinary Sword");
+elite.DropAbility();
+Check(elite.ConfirmAbsorption(2, "sword", elite: true) == "sword" && elite.ConfirmAbsorption(3, "fire") == "fire",
+    "Elite and ordinary enemy share a mouthful");
+elite.SetSourceAbility("fire");
+Check(!elite.AbilityEmpowered && elite.PendingEmpowerment is null, "Mouthful that yields another ability is not empowered");
+elite.DropAbility();
+elite.ConfirmAbsorption(4, "sword", elite: true);
+elite.DropAbility();
+Check(elite.PendingEmpowerment is null, "Spitting the Elite out cancels the pending empowerment");
+elite.SetSourceAbility("sword");
+Check(!elite.AbilityEmpowered, "No stale pending empowerment after a spit");
+elite.DropAbility();
+Check(elite.ConfirmAbsorption(5, "fire") == "fire" && elite.PendingEmpowerment is null, "Ordinary enemy never empowers");
+elite.SetSourceAbility("fire");
+Check(!elite.AbilityEmpowered, "Ordinary copy has normal damage");
+elite.Restore("sword", "shield-1", empowered: true);
+Check(elite.AbilityEmpowered && elite.AbilityId == "sword", "Save restores an empowered copy");
+try { elite.Restore(null, null, empowered: true); throw new Exception("Empowered base form accepted"); }
+catch (ArgumentException) { Check(elite.AbilityEmpowered && elite.AbilityId == "sword", "Invalid empowerment save leaves state intact"); }
+try { elite.Restore("fire", null, pendingEmpowerment: "sword"); throw new Exception("Pending empowerment while copied accepted"); }
+catch (ArgumentException) { Check(elite.AbilityId == "sword", "Pending empowerment requires base form"); }
+elite.Restore(null, null, pendingEmpowerment: "sword");
+elite.SetSourceAbility("sword");
+Check(elite.AbilityEmpowered, "Restored mouthful still empowers on swallow");
+elite.Reset();
+Check(!elite.AbilityEmpowered && elite.PendingEmpowerment is null, "New run resets the empowerment");
+elite.Restore("sword", null);
+Check(!elite.AbilityEmpowered, "Older saves without the flag restore an ordinary copy");
+
+Check(CopyDamageScale.SourceHp(500, 1, 32760) == 500 && CopyDamageScale.HostDamage(18, 500, 500, 1) == 18,
+    "Multiplier 1 keeps exact original damage");
+Check(CopyDamageScale.SourceHp(5, 2, 32760) == 3 && CopyDamageScale.HostDamage(18, 250, 500, 2) == 36,
+    "Doubled damage halves source health");
+Check(CopyDamageScale.SourceHp(100000, 2, 32760) == 32760, "Source health respects the native cap");
+Check(CopyDamageScale.HostDamage(0, 10, 20, 2) == 0, "No source damage, no host damage");
+foreach (double m in new[] { 1.0, 1.6, 2.0, 2.0 * 3.0 })
+for (int hostLife = 1; hostLife <= 400; hostLife++)
+{
+    int sourceHp = CopyDamageScale.SourceHp(hostLife, m, 32760);
+    for (int hit = 1; hit <= sourceHp + 2; hit++)
+    {
+        bool sourceDies = hit >= sourceHp;
+        bool hostDies = CopyDamageScale.HostDamage(hit, sourceHp, hostLife, m) >= hostLife;
+        if (sourceDies != hostDies) throw new Exception($"Lethality differs at x{m}, life {hostLife}, hit {hit}");
+    }
+}
+Check(true, "Source and host lethality agree for host lives 1-400 at x1, x1.6, x2 and x6");
+foreach (double invalid in new[] { 0.5, double.NaN, double.PositiveInfinity })
+{
+    try { CopyDamageScale.SourceHp(10, invalid, 32760); throw new Exception($"Invalid multiplier {invalid} accepted"); }
+    catch (ArgumentOutOfRangeException) { Check(true, "Invalid multiplier rejected"); }
+}
+
 int Run(FramePacer pacer, double hz, int frames, List<int>? record = null)
 {
     int total = 0;

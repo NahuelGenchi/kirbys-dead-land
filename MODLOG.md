@@ -668,3 +668,22 @@ the all-ability rendering tests as full gameplay acceptance.
 - Staged runtime SHA256 `32422c774353de9915b9f199bfc1d7ac5248f9c3ea42ced77170357c938bec02`
   (core and bridge unchanged), play config gains `"OriginalTouchDamage": false`.
   Previous files: `lab/checkpoints/before-touch-damage-20261005-201846`.
+
+## 2026-10-05 — Elite Sword (#9)
+
+- Swallowing an Elite now always gives original Sword (ability 18), which deals
+  double copy damage until the ability is lost. This replaces the "Ultra
+  abilities" idea: Ultra Sword and Flare Beam come from Kirby's Return to Dream
+  Land and are not in the KSSU ROM.
+- `KirbyRules` tracks a pending empowerment from an Elite capture. Kirby becomes
+  empowered only if the original transform yields that ability. Discard, hit
+  loss, helper creation, spit and new run all clear it, and saves keep it.
+- `CopyDamageScale` scales source HP and host damage together so source/host
+  lethality still agree. Its multiplier is a parameter, so it can combine with
+  the Boss Cell curve from #7.
+- Source tests: `python3 scripts/check.py` passed (20 Python tests, 6
+  oracle-parser tests, 58 rule assertions, Release build with 0 warnings).
+- Live: `20261005-204132` (separate data root with its own lab copy and a bridge
+  built from `main`'s `lib.rs`): an Elite Zombie gave empowered Sword, and a
+  second Zombie took 36/36/32. Empowerment loss, resume and biome transitions
+  were not run live.

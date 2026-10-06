@@ -20,6 +20,9 @@ preserved; generated assets and native dependencies remain in the private data r
 ## Requested rules
 
 - Absorbing a Dead Cells enemy selects a random original copy ability.
+- Absorbing an Elite always gives original Sword, which deals double damage
+  until the ability is lost (hit off, discarded, made into a helper, or a new run).
+  This is a deliberate deviation; see `docs/GAMEPLAY_FIDELITY.md`.
 - Base Kirby can use Dead Cells swords, bows and shields.
 - Copied Kirby uses the original ability's attacks and retains the exact shield
   it carried for parrying. Equipping replacement weapons while copied is blocked.
