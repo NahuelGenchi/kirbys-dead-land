@@ -120,6 +120,21 @@ recording is the dropped Cudgel's sprite overlapping a standing Kirby; no guard
 input was involved. Live `20261006-004147` (Sword copy) and `20261006-004316`
 (base form) each took a Warrior's Shield, then swapped it for a Cudgel through the
 host replace dialog; see `docs/RUNTIME_LAUNCH.md`. Guard and parry code is unchanged.
+### Gold deposits (#35)
+
+Copied attacks reach a host entity only through a source proxy that
+`KirbyEnemies` pairs with it. Before #35 the pairing accepted mobs, doors,
+breakable props, explosive barrels and `isBreakableByHero` tiles, so the host
+gold deposits (`en.inter.PileOfGold`, `en.inter.GoldNugget`) were never hit by a
+copy attack; base-form host weapons broke them. Both now pair like breakable
+props: not inhalable, no copy, no touch damage. Per `hlboot.dat` both call
+`Entity.initLife` and `set_targetable(true)` in their constructors and drop gold
+from their own `onDamage`/`onDie`, so the host still decides every gold drop.
+Live (`docs/RUNTIME_LAUNCH.md`, "Gold deposits"): Sword Kirby broke a real
+`PileOfGold` in four hits (life 4 → 0, four host gold drops); the same fixture
+without the change did no damage. `GoldNugget` was not run live. Other host hittables outside the pairing list (`PiggyBank`,
+`Gift`, `BreakableWall`, `HiddenBlock`, `Flower`, …) are unchanged and unchecked.
+
 ### Star projectiles
 
 Issue #20. Kirby's stars act as host projectiles. The ROM still spawns, moves and
@@ -435,11 +450,30 @@ the equipment Kirby cannot use while copied; shield slots keep the real shield.
   for colorless gear. It then puts the real item back as the slot's item, so
   inventory, equip and cooldown logic are unchanged, and hides ammo pips. Like
   colorless gear in Dead Cells, the background takes the color of the highest
-  scroll stat. With a tie the host picks Brutality, so a run with no scrolls shows
-  the gray frame on a red background.
+  scroll stat, paired with the colorless gray.
+  The slot's item is cleared before the stand-in is passed (#36). The host's
+  same-item-kind path in `useItem` colors the slot from its previous item before
+  switching. With the starting sword in the slot, that made every copy slot red.
+  Ties take the first tier the host lists; no tie has been run live since #36.
 - **Refresh:** the HUD is redrawn when the ability, its icon or the scroll tiers
   change. Base form, discard, ability loss and deactivation redraw the real
   equipment.
+- **Pause equipment screen (#41):** `ui.pause.DefaultPause` builds each weapon
+  card as a `ui.NewItemDesc` from the slot's item. While copied, the card of an
+  equipped non-shield weapon is built from the same colorless stand-in, then the
+  real item is put back. The host therefore draws the colorless card frame, its
+  own "Colorless (the highest level applies)" line, and the card's icon slot. The
+  existing `Skill.useItem` hook fills that slot with the original icon.
+  `KirbyHud` then renames the card's first two texts:
+  - The name becomes the ability (`YoYo` is shown as "Yo-Yo"). Only the name
+    inside the host markup changes, so the colorless name color stays.
+  - The main info line becomes "Copy ability". The stand-in sword's DPS does not
+    describe copy damage, which also includes the original-unit and Elite
+    scaling.
+
+  Shield cards, other equipment and base form are unchanged. Only cards whose
+  process is the pause screen are affected. An empty weapon slot, which also
+  fires the ability, keeps the host's empty card.
 
 Limits: the stand-in's own data (Brutality starting sword) is only drawn, never
 equipped. A host weapon that changes its own HUD icon (Shovel, via
