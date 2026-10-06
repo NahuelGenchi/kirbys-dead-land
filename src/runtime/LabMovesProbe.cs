@@ -12,7 +12,7 @@ namespace Kirby.Runtime;
 /// Lab-only checks for Kirby's roll and stomp mechanics in a generated level.
 /// KIRBY_LAB_MOVES_SCAN=1 maps roll zones and breakables; KIRBY_LAB_MOVES_SETUP
 /// = scenario@seconds teleports Kirby next to one (rollzone, air, breakable,
-/// door, tile), optionally with a Zombie below (KIRBY_LAB_MOVES_TARGET=1 still, 2 active).
+/// door, tile, ladder, vine), optionally with a Zombie below (KIRBY_LAB_MOVES_TARGET=1 still, 2 active).
 /// KIRBY_LAB_RUNE=1 grants the floor-breaking rune for the run. Inputs come
 /// from the normal-binding repro plan; this probe only places and records.
 /// </summary>
@@ -187,6 +187,7 @@ internal static unsafe class LabMovesProbe
             breakableTiles = Entities<BreakableTile>(hero).Select(e => new { e.cx, e.cy, e.destroyed }),
             doors = Entities<Door>(hero).Select(e => new { e.cx, e.cy, e.broken, e._breakable, e.locked }),
             plates = Entities<PressurePlate>(hero).Select(e => new { e.cx, e.cy, e.xr, e.yr, type = e.GetType().FullName }),
+            vines = Entities<VineLadder>(hero).Select(e => new { e.cx, e.cy, e.goingUp, e.used, e.ladderHei }),
             options = new { bind = dc.Main.Class.ME.options.diveAttackBind },
         }, new JsonSerializerOptions { WriteIndented = true }));
     }
@@ -312,6 +313,21 @@ internal static unsafe class LabMovesProbe
                         detail = new { x, bottom = y, height };
                         break;
                     }
+                break;
+            }
+            case "vine":
+            {
+                // Grow the level's first vine, rising ones first, as the Vine rune
+                // does, and stand at its seed.
+                if (Entities<VineLadder>(hero).Where(v => !v.destroyed).OrderByDescending(v => v.goingUp).FirstOrDefault() is { } vine)
+                {
+                    bool grown = vine.used;
+                    if (!grown) vine.activate();
+                    Teleport(hero, vine.cx * 24 + 12, (vine.cy + 1) * 24);
+                    int top = vine.goingUp ? vine.cy - vine.ladderHei - 2 : vine.cy - 2, bottom = vine.goingUp ? vine.cy + 1 : vine.cy + vine.ladderHei + 2;
+                    detail = new { vine.cx, vine.cy, vine.goingUp, vine.ladderHei, grown,
+                        column = Enumerable.Range(top, bottom - top + 1).Select(y => $"{y} {Glyph(Cell(map, vine.cx, y))} {KirbyVines.At(map, vine.cx, y)}").ToArray() };
+                }
                 break;
             }
             case "plate":

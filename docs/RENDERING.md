@@ -84,3 +84,16 @@ The inferred palette law was independently checked on actual extended-palette ba
 `NdsBackgroundEffects` uses these source coefficients and timing for a viewport-sized layer at the host's `DP_ROOM_MAIN_BACK`, behind actors and HUD. The host scenery uses continuous alpha blending rather than the DS palette's integer quantization, and foreground scenery retains the host's existing draw order. This is an adaptation of the verified original background transform to the host scene, not pixel-identical reproduction of the DS room. Other spatial background effects, hardware blending and unusual palette changes remain unsupported and are counted rather than replaced with a guessed effect.
 
 Live visual run `20261004-013424` passed for 65 seconds with no fatal errors and unchanged original save files. The opt-in `visual` lab plan obtains Crash, Paint and Mike via real inhale/feed/DOWN operations and captures active effects every 100 ms. Inspected host frames `011031`, `011454` and `011802` respectively show the white Crash background, Paint yellow tint and Mike warm tint, with the original OBJ effects visible and Kirby/HUD outside the background layer. The earlier transition run `20261004-013050` passed the actual exit to Prisoners' Courtyard after equipment atlas reacquisition was fixed; its later forced-death diagnostic null reference was a separate lab issue, subsequently guarded.
+
+## HUD ability icon
+
+The copied ability's HUD weapon slot uses the original bottom-screen ability icon
+rather than new art. In a saved Wheel state, the sub engine (DISPCNT_B `0x40111710`,
+1D OBJ mapping with a 64-byte boundary) drew it as sub OAM entry 20: 32×32, 4bpp,
+non-affine, at (4, 4), tile 52, palette 8. `AbilityIcon` locates that OBJ by size
+and position, reads its 512 tile bytes from `0x06600000 + tile × boundary` and its
+palette bank from `0x05000600`, and decodes colour 0 as transparent. The bridge's
+existing checked GPU read covers these ranges. 2D OBJ mapping, 8bpp and affine
+icons are rejected rather than guessed. See
+[GAMEPLAY_FIDELITY.md](GAMEPLAY_FIDELITY.md#hud-ability-slot) for how the host
+slot is drawn.

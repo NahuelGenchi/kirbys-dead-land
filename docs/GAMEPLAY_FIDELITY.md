@@ -16,8 +16,8 @@ in [NDS_BRIDGE.md](NDS_BRIDGE.md). The original bootstrap experiment remains in
 |---|---|
 | Clock | 33,513,982 / 560,190 source ticks per second. A display within 3% of that rate presents one original frame per host frame, like an emulator synchronized to vblank; other rates accumulate real time |
 | Movement | The ROM updates fixed-point position, velocity and action state; the host follows its physical foot. With `MatchHostSpeed` (default) Kirby moves at the Beheaded's measured speeds: each original frame's own motion is carried on through free space (run and air control 236.5 px/s, float across at the same speed, fall 403 px/s, ladders 97.5 px/s both ways, floating up and down at the run's tempo), the original horizontal velocity is cleared when the direction is released or reversed, and the jump keeps its 50 px but peaks after 0.25 s, as the Beheaded's does. Added motion stops short of walls and ceilings, leaves the original a full fall step above floors, follows slopes at the original's whole-pixel surface, and never applies to hits, swimming or ability moves. The original walk and dash cycles play faster with the run (up to 1.67 times, one frame a pose), so his feet cover about the ground they did natively. `false` keeps the original DS speeds (the stomp keeps the dive's) |
-| Terrain | Nearby host solids, one-way floors, slopes, ladders and water become source collision cells; all linked source objects and cached terrain probes move together when the window rebases by whole cells, while effects attached to a parent (Fire's head flame, Plasma's spark, attack effects) keep their offsets from it. Host movement of Kirby (speed match, stomp) moves only him and his terrain probes, so thrown bombs, cutters, effects and the helper keep their original paths |
-| Input | Existing host bindings become original digital buttons; ordinary source directional combinations still apply. A held direction dashes through the original double tap (`AlwaysDash`); a light analog tilt walks. A key bound to both Up and jump (W and the Up arrow by default) climbs at a ladder or chain, as in the host, instead of jumping first |
+| Terrain | Nearby host solids, one-way floors, slopes, ladders and water become source collision cells. Vines grown with the Vine rune (`en.inter.VineLadder`) have no collision bits, only level spots (0, where the Beheaded climbs, and 18); their cells become source ladders, and the solid blocks a vine passes through or ends under become one-way ladder tops in that column. A ladder under a solid block stops the original below it, so this deviation lets Kirby climb onto the ledge, as the Beheaded's `exitLadderTop` does; all linked source objects and cached terrain probes move together when the window rebases by whole cells, while effects attached to a parent (Fire's head flame, Plasma's spark, attack effects) keep their offsets from it. Host movement of Kirby (speed match, stomp) moves only him and his terrain probes, so thrown bombs, cutters, effects and the helper keep their original paths |
+| Input | Existing host bindings become original digital buttons; ordinary source directional combinations still apply. A held direction dashes through the original double tap (`AlwaysDash`); a light analog tilt walks. A key bound to both Up and jump (W and the Up arrow by default) climbs at a ladder, chain or vine, as in the host, instead of jumping first |
 | Roll | Kirby's original slide is his roll and covers the Beheaded's roll: 131 px at up to 339 px/s. Host roll-zone tunnels (collision 65) open while he slides and stay open until he leaves one entered by sliding; walking cannot enter. The slide's fast part counts as a roll for the host's door and breakable-tile checks |
 | Dive attack | The player's host dive binding in the air or on a ladder or chain (original jump, fall, float or climb) starts the host `DiveAttack` under its own rules. The original controller keeps its falling or exhaling animation and physics (3.5 px/frame cap) and drops straight down; the host adds 11.5 px/frame of descent through free space, 15 px a frame in all like the Beheaded's dive (about 900 px/s), and leaves the original a full fall step to make the floor contact; the host skill resolves the landing (shockwave, stun, damage, breakable floors with the Ram rune). Only what stops the original fall counts as floor: solids, slopes and one-way platforms from above, never ladders or chains. Enemy touch damage is off while stomping and for 30 frames after landing |
 | Camera | `CameraZoom` (default 1, the host camera) can zoom the host viewport; 2 shows about 200 host pixels of height, close to the DS screen's 192. Host cinematics and host zoom changes keep their framing |
@@ -27,8 +27,10 @@ in [NDS_BRIDGE.md](NDS_BRIDGE.md). The original bootstrap experiment remains in
 | Sound | Original stereo sound effects continue; the source music player is muted so Dead Cells music remains |
 | Enemy collision | Live host enemies have paired source collision objects with their host dimensions; original routines resolve damage cadence, suction, grabs, throws and Cook |
 | Enemy projectiles | Live hostile host arrows/grenades have paired copyless source objects; original suction, mouthful, spit star and swallow decide their fate |
+| Star projectiles | The ROM moves Kirby's spit, big spit and discarded ability stars through host terrain (spit stars burst on walls, the ability star bounces). Each star strikes host enemies once and staggers them with the host dive's stun and bump; paired enemies take spit-star damage through their source object, all others from the host (see below) |
 | Boss collision | Original resistance bits prevent inhale, Suplex capture and Cook; damage still uses original collision/debounce, while the host retains boss AI and phases |
 | Host triggers | Pressure plates (trap plates and pulley points too) and hidden triggers test Kirby's physical foot on the ground, as for the Beheaded; enemy attacks still test the projected original hurtbox |
+| Facing | The host hero's direction follows the original facing (bit 31 of player+0x6C) every source frame, so host shields block, and base-form host weapons aim, the way Kirby faces |
 | Incoming damage | Host shield/parry resolves first; remaining damage, converted to the same fraction of Kirby's 76 HP as of the host's current maximum, enters the next original collision tick, preserving original guard, recoil and invulnerability |
 | Touching enemies | As in Dead Cells, touching an enemy hurts neither Kirby nor the enemy: the original body-contact damage is excluded for every paired enemy, while Kirby's inhale, slide and copy attacks still hit, and the host's own touch attacks (spiked or electric enemies) still reach him as incoming damage. `OriginalTouchDamage: true` restores the original rule (7 of 76 HP to Kirby, and weak enemies destroyed by the bump) |
 | Outgoing damage | Paired original enemies hold the host life in original units: host life ÷ (`CopyDamageScale` 3.5 × the host's per-tier life scale). Original HP deltas are multiplied back, so both games agree on the lethal hit; the result is then scaled like Dead Cells colorless gear (see below), and the deliberate Elite Sword bonus below multiplies it again; no other host hero multiplier alters copy attacks |
@@ -43,6 +45,10 @@ helper. A new run reloads the original seed; changing away from Kirby restores
 the host character body and proportionate health. Returning imports its current
 health fraction. Ordinary host progression, menus, death and level cinematics
 remain host systems.
+When a host cinematic walks the hero, such as leaving through an exit door, the
+original controller keeps running with the same direction held, so Kirby walks
+with the original animation and facing. The host keeps the position and the fade.
+See [Cinematic walks](#cinematic-walks-intentional-deviation).
 Host tutorial prompts that require the replaced jump, dodge or Homunculus actions
 are suppressed only for Kirby. Existing matching prompts are canceled without
 marking them complete; healing, equipment and interaction prompts still use the
@@ -98,6 +104,58 @@ reward. The host then shows its own "Can't use that right now" message, leaves
 the item in place and charges nothing. Shield identity uses the physical item's permanent ID. Source copy
 loss, discarded-star recovery, helper creation and limited-use ability expiration
 update the same equipment policy.
+
+### Star projectiles
+
+Issue #20. Kirby's stars act as host projectiles. The ROM still spawns, moves and
+removes them. The host terrain window is their world, so the wall behavior is
+original. The three original objects, told apart by their update routine
+(`src/core/StarProjectiles.cs`), measured in the native bridge:
+
+| Original object | Routine | Damage word | Enemies | Walls |
+|---|---|---|---|---|
+| Spit star (one object in the mouth) | `0x020BD718` | 52 | Bursts on the first enemy, in the frame of the hit | Bursts when its center reaches the wall |
+| Big spit star (two or more) | `0x020BDD08` | 60 | Passes through, hitting each enemy it crosses | Bursts |
+| Discarded ability star (SELECT, or a hit that knocks the copy off) | `0x02166A54` | 0 | Passes through without damage | Bounces off walls and floors |
+
+The spit stars do not bounce in the ROM, so the adapter does not make them
+bounce. After every source frame `KirbyStars` reads each star's original hit
+records from the native hit list and strikes host enemies with them:
+
+- **Paired enemies, spit stars:** the original collision stays the authority.
+  The star's 52 or 60 source damage reaches the host through the existing
+  source-HP-delta path, and the single star bursts on the source object as in
+  the ROM. When that HP drop coincides with a spit star touching the enemy's
+  source body (or, for a lethal hit, whose body records are already gone, its
+  host-sized box), the host adds the stagger below.
+- **Enemies without a source object** (outside the pairing window, or beyond
+  the 31 slots): the host applies the star's own original damage word, converted
+  as a paired enemy's HP drop would be (unit scale, Elite and colorless
+  multipliers). The ROM star does not burst on them.
+- **Discarded ability star, every enemy (intentional deviation):** the original
+  star is a harmless collectible. By owner request it strikes each host enemy it
+  crosses once for 52 source damage, the single spit star's original value. It
+  keeps bouncing and can still be inhaled again to recover the ability.
+
+The host strikes each enemy at most once per star (`StarStrikes`). On a paired
+enemy the original collision decides how often a big star hits: `star_big`
+recorded five 60-damage hits on one boss-mode proxy. The stagger is applied once
+per star. Stagger follows the
+host's own dive landing (`tool.mainSkills.DiveAttack.onOwnerLand`, read from
+`hlboot.dat`). Before the hit come affect 16 for 0.7 s and a horizontal
+`bump` of 0.2–0.3 away from the star. After a successful hit comes Stun
+(affect 8) for the `DiveAttack` skill's `props.affect` of 1 s, times
+`getDiminishingFactor(9, 3, 6)`. Host resistances, such as bosses, apply
+inside those host calls. While the original recoil of a source hit holds a
+paired enemy, the source controls its position, so that enemy moves with the
+original recoil (5 px measured) instead of the host bump.
+
+Limits: the original culls objects outside its 256-pixel screen from OAM, so a
+star more than about 128 px from Kirby keeps flying and striking but is not
+drawn. The ability star's room edge is the edge of the 100×9 source terrain
+window, which starts 16 cells to Kirby's left. In the bridge it bounced off
+that left edge, not a host wall, so far from Kirby it can turn in open air. A star that hits an unpaired enemy does not burst on it. Only Zombies
+were struck live.
 
 ### Elite Sword (intentional deviation)
 
@@ -225,6 +283,87 @@ therefore points that one table entry at the original return-zero stub
 `0x020CF36C` (`mov r0,#0; bx lr`) in emulated RAM, after validating both the stub
 and the entry. Kirby's swimming, the exit-water handler and other enemies' water
 reactions are unchanged. Water itself still works on Kirby as before.
+### Vines (#25)
+
+`VineLadder.buildLadder` (run when the Vine rune grows a vine, and again on load
+for a grown one) writes no collision bits. It adds spot 0 and spot 18 to each
+cell from the seed to the first solid cell, and spots 1 and 18 above that block.
+A hanging vine marks spots 0 and 18 down through the ledge it hangs from. The
+Beheaded climbs wherever spot 0 is set (`Hero.preUpdate`); `LevelMap.initSpots`
+sets it from collision bit 16 for ordinary ladders, which is all the terrain
+export read. `KirbyVines` hooks `buildLadder` and records that column; each
+query reads the spots again. Vine cells are exported as source ladders, and the
+solid blocks a vine passes through or ends under as one-way ladder tops. The
+`ladder_top` bridge case shows why: under a solid block the original climb stops
+at y 52.5, below it; under a one-way top it reaches the top cell (y 20).
+
+Evidence, in the separate data root `repros/vine-20261005` with natural vines
+grown through the host's own `VineLadder.activate`:
+
+- `20261005-232657`: W climbs (`0x916`) at about 99 px/s, and Kirby stands on
+  the ledge at the vine's top (feet at the block's top, 1656). A jump there lands
+  on the ledge again. A natural Grenader on that ledge later killed him.
+- `20261005-232901`: climb, hang, climb down mid-vine, climb to the ledge, then
+  Down on the ledge climbs back down the vine.
+- `20261005-233002`: an ordinary ladder, same plan: climb, hang and descend as
+  before.
+
+Not run: hanging vines (`goingUp` false), a stomp from a vine, and a vine in a
+saved run after loading.
+### Cinematic walks (intentional deviation)
+
+Issue #17. Before this change, the source machine stopped during every host
+cinematic. When the exit-door cinematic walked the hero into the doorway, Kirby
+moved and faded in his last standing frame. Now, while a cinematic moves the hero
+sideways, `CinematicWalk` (`src/core/`) turns that motion into a held DS Left or
+Right, and `StepCinematicWalk` advances the original controller with it. Host
+fixed updates skip some rendered frames, so the direction stays held for 0.2 s
+without movement. A move of more than one cell in one frame is a placement, not
+a walk.
+
+The door cinematic plays the Beheaded's `walk`, then `stairs`: it lifts the hero
+up steps inside the doorway, where the host map has no floor. With real terrain
+the ROM switched to its Fall action (`0x070E`) there. During a cinematic walk the
+original therefore gets a flat solid floor at the cell boundary where the walk
+began, with nothing above it. The drawing follows the host body as usual, so Kirby
+still climbs the steps on screen. Enemies, incoming damage, health sync and
+abilities stay paused until normal play resumes. Original effect audio plays.
+Without horizontal movement, for example during the arrival cinematic, the source
+stays frozen as before.
+
+Live run `20261005-214713` took the T_Courtyard door: 148 of 149 cinematic polls
+were in the original Walk action (`0x060B`), facing right, with no Fall. Captured
+frames show changing walk poses up the steps until the fade. Exits where the
+host drops the hero, and walks to the left, have not been checked live.
+### HUD ability slot
+
+Issue #18. In copied form every weapon button whose slot does not hold a shield
+fires the ability (`KirbyInput`). Those HUD slots now show the ability instead of
+the equipment Kirby cannot use while copied; shield slots keep the real shield.
+
+- **Icon:** the original game's own bottom-screen ability icon. It is a 32×32,
+  4bpp sub-engine OBJ at screen (4, 4); `AbilityIcon` in `src/core/` finds and
+  decodes it from live sub OAM, sub OBJ VRAM and OBJ palette RAM. After each copy
+  the icon is accepted once it is unchanged for 30 source frames, then held until
+  the ability changes. The original copy flash and hurt variants are therefore
+  not mirrored. It is drawn near the host item icon size (`Skill.ICON_SIZE`, 24)
+  in whole screen pixels, so it is not resampled.
+- **Frame and colors:** the host draws the slot itself. `KirbyHud` passes the
+  host's `Skill.useItem` a `StartSword` stand-in with the `Colorless` affix, so the
+  slot gets the host's `skillSlotColorless` gray frame and the colors it computes
+  for colorless gear. It then puts the real item back as the slot's item, so
+  inventory, equip and cooldown logic are unchanged, and hides ammo pips. Like
+  colorless gear in Dead Cells, the background takes the color of the highest
+  scroll stat. With a tie the host picks Brutality, so a run with no scrolls shows
+  the gray frame on a red background.
+- **Refresh:** the HUD is redrawn when the ability, its icon or the scroll tiers
+  change. Base form, discard, ability loss and deactivation redraw the real
+  equipment.
+
+Limits: the stand-in's own data (Brutality starting sword) is only drawn, never
+equipped. A host weapon that changes its own HUD icon (Shovel, via
+`HUD.updateIcon`) could briefly replace the ability icon until the next refresh;
+this was not exercised. Live checks used a 1024×768 HUD (`pixelScale` 1.5).
 
 ## Evidence and current limits
 
@@ -272,9 +411,19 @@ Earlier runs `204940` and `205147` repeated the single drop and pickup. In run
 `204739` the drop appeared but the fixture held R without a key-press edge, so
 no pickup occurred; that fixture was corrected. Bosses, Elites, several cooked
 enemies at once and save/resume with an uneaten drop were not exercised live.
+Before #19 the host direction came from player+0x15, which never changes with
+facing, so the host shield always faced right. Live run `20261005-215320` faced
+Kirby left and raised the shield as a real host Zombie hit from the left: the
+host parried it (`onShieldCounterSuccessful`, hit `Block`, no damage). Run
+`215401` repeated this with the attacker on the right; the hit was `Normal` and
+went on to the original collision. Raising the shield while holding the opposite
+direction is not resolved: the original guard keeps Kirby's facing, the host
+turns its shield toward the held direction within its own update, and the
+provider resets the host direction to Kirby's facing every source frame. The
+direction a hit is checked against in that case was not measured.
 Ice damage and its surviving frozen block, background-effect placement, and an
 actual biome transition have passed live checks. The final native suite passes
-61 cases; source audio and host SDL coexistence tests also pass. Confirmed source
+68 cases; source audio and host SDL coexistence tests also pass. Confirmed source
 death ends the host run, and an actual new run resets Kirby's state. Cook's
 temporary invulnerability preserves health through its persistent health group.
 The host scenery blend has continuous RGB precision, whereas the original uses
@@ -288,6 +437,25 @@ grenade left Kirby in base form with no copy. Only `EnemyGrenade` and the
 Archer's plain `Bullet` were exercised live; other bullet subclasses (homing,
 piercing, boss bullet patterns), Kirby's own bow arrows near the inhale box,
 and saving during a projectile's suction were not.
+Live run `20261005-221418` (`--input-plan stars`, issue #20) checked the star
+projectiles with real Zombies given 5000 life, so that their stagger was
+visible. In five phases, with Kirby at 76/76 throughout:
+- A spit star hit a paired Zombie through its source object for 182 host
+  damage. It was stunned (affect 8) and given affect 16, and it moved 5 px with
+  the original recoil.
+- A spit star struck a Zombie kept without a source object for 182 through the
+  host path. It was stunned and pushed 25 px away.
+- A discarded Parasol star crossed a Zombie behind Kirby for 182. It was stunned
+  and pushed 27 px away, while the star bounced on the host floor every 64 frames.
+- Beside a real level wall, a spit star burst with its center on the wall face.
+- A discarded Sword star bounced off the wall face (its left edge at 983, the
+  wall at 984).
+
+Stun lasted about one second (59–61 source frames in that run, 85–88 in the
+earlier run `221013`). Big stars, bosses, Elites, other enemy types, several
+enemies struck by one star, and save/resume with a star in flight were not
+exercised live; the native `star_big` case covers the big star's original
+damage and piercing.
 Complete one-to-one behavior for every host enemy, hazard,
 item and boss has not been established. These boundaries must remain explicit;
 a successful native or renderer test alone is not proof of every host interaction.
