@@ -296,7 +296,9 @@ public sealed class KirbyEnemies
         var food = dc.tool.InventItem.Class.fromItem(dc.level.LootGen.Class.getSmallHealingKind(), 1);
         mob.addToLoot(new dc.LootType.InvItem(food), Ref<bool>.In(false));
     }
-    private static bool Eligible(Entity entity) => entity is Mob or Door or BreakableProp or ExplosiveBarrel || entity.isBreakableByHero();
+    // Gold deposits (PileOfGold, GoldNugget) have host life and drop gold in onDamage, like breakable props.
+    private static bool Eligible(Entity entity) =>
+        entity is Mob or Door or BreakableProp or ExplosiveBarrel or PileOfGold or GoldNugget || entity.isBreakableByHero();
     private static (double X, double Y) Distance(Entity entity, double heroX, double heroY) =>
         (Math.Max(0, Math.Abs((entity.cx + entity.xr) * 24 - heroX) - entity.radius),
          Math.Max(0, Math.Abs((entity.cy + entity.yr) * 24 - entity.hei / 2 - (heroY - 14.5)) - (entity.hei + 29) / 2));
