@@ -928,3 +928,19 @@ the all-ability rendering tests as full gameplay acceptance.
   from behind through. Saves unchanged.
 - Not resolved: raising the shield while holding the opposite direction. The
   original guard keeps Kirby's facing while the host turns its shield.
+
+## 2026-10-06 — Kirby stays on descending elevators (#33)
+
+- Owner recording 2026-10-06 01:15: after #28, Kirby left descending elevators
+  once they sped up and fell behind them. Lab run `20261006-011803` (no inputs)
+  reproduced it: at about 10 px a tick the host carry missed him for one tick,
+  and the original's 3.5 px a frame fall never caught up.
+- `ElevatorRide.Over` now carries Kirby itself, up or down, when his feet were
+  within the host's 2 px of the surface on the previous original frame and the
+  original is not moving him upward (`lastVy < 0` is a jump or float).
+- Live `012037`: full descents and climbs at up to 12.4 px a frame, all frames
+  standing, feet exactly on the surface; the runtime carried him 74 times.
+  Live `012131`: jumps still leave a moving elevator in both directions.
+- Core rule tests: 225 assertions; `scripts/check.py` passes; Release build has
+  zero warnings. Not run: `tools/nds_tests.py` (no native change), other
+  elevator types and generated elevator levels.

@@ -166,7 +166,8 @@ while playing Kirby; healing, equipment and interaction tutorials remain availab
   with the HUD outside the background tint.
 - Original ladder, Suplex, Cook, helper and Wheel helper riding have source tests.
 - Kirby rides a real host `SimpleElevator` up and down in isolated live runs,
-  standing on its surface, and can jump on a rising one and land on it again.
+  standing on its surface at full speed both ways, and can jump on a rising one
+  and land on it again.
   Original objects ride with him while it moves (an intentional deviation; see
   [Host elevators](docs/GAMEPLAY_FIDELITY.md#host-elevators-deviation)). Other
   elevator types and generated elevator levels were not run live.

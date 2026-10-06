@@ -254,7 +254,15 @@ python3 scripts/launch_runtime.py --data-root ~/.local/share/kirby-dead-cells/re
 | `001925` | host cell position copied from the elevator | 69 moving frames standing, feet exactly on the surface, no host landings; 2640 → 2376 px |
 | `002051`, `002312` | final | Up: jump at 5.4 s, caught again by the rising elevator, carried to the top and standing there. Down: Kirby jumped; the faster elevator dropped away and he landed on it at the bottom with the original long-fall bounce. 76/76 health throughout. Two height-0 host landings: the elevator's departure tick and the genuine landing on the rising elevator |
 
-The runtime's raise onto a rising elevator (`elevator-raise` diagnostic) never fired; the host's own carry moved Kirby in every run. Each run reached its time limit without a fatal log, and the real save inventories were unchanged. The tutorial tip in the captured frames comes from the fresh lab save.
+In those runs the runtime never had to raise Kirby, so the host's carry did the work; every run with a descent included a jump before it reached full speed. The owner's 2026-10-06 01:15 recording showed Kirby falling behind a descending elevator ([#33](https://github.com/NahuelGenchi/kirbys-dead-land/issues/33)):
+
+| Run | Build | Result |
+| :--- | :--- | :--- |
+| `20261006-011803` | #28 as merged, no inputs | Standing until the descent reached about 10 px a tick; at f4686 the surface dropped 9.8 px without carrying him, and he fell behind it in `070E` to the bottom, where he bounced |
+| `012037` | runtime carry of a standing Kirby, no inputs | Up 60 and down 56 moving frames, all standing, feet exactly on the surface at up to 12.4 px a frame; stopped at both ends at 76/76. The runtime carried him 74 times (`elevator-carry` diagnostic) |
+| `012131` | same, jumps at 5.35 s and 8.45 s | Both jumps left the platform; the rising elevator caught him again; after the descending jump he landed on it at the bottom |
+
+Each run reached its time limit without a fatal log, and the real save inventories were unchanged. The tutorial tip in the captured frames comes from the fresh lab save.
 ## Shield swap
 
 Issue #31. `LabItemProbe` (`KIRBY_LAB_ITEM`) can drop `shield`: the first

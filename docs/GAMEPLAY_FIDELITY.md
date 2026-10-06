@@ -299,8 +299,14 @@ While Kirby is inside an elevator's carry width, from its surface up to three
 cells above it (`ElevatorRide`):
 
 - The original's terrain window is lifted by the surface's offset from the
-  solid row, so the ROM floor is the elevator surface. The host's own carry
-  moves Kirby with it; in the live runs the runtime never had to raise him.
+  solid row, so the ROM floor is the elevator surface.
+- Kirby whose feet were within the host's 2 px of the surface on the previous
+  original frame, and whom the original is not moving upward, moves with it,
+  up or down, by the host's own carry rule. The host's carry alone missed him
+  on fast descents: from about 10 px a tick the surface dropped away, and the
+  original's fall (at most 3.5 px a frame) never caught it until the bottom
+  ([#33](https://github.com/NahuelGenchi/kirbys-dead-land/issues/33), owner
+  recording 2026-10-06 01:15, lab run `20261006-011803`).
 - A rising elevator that passed his feet since the last original frame lifts
   him onto its surface, as the host rescues the Beheaded.
 - While the elevator moves, the source window is placed with Kirby, so **original
@@ -319,8 +325,10 @@ cells above it (`ElevatorRide`):
 
 Live checks (separate data root `repros/elevator-20261006`, a real
 `SimpleElevator` built and initialized as `Level.spawnEntitiesFromMarkers` does):
-Kirby rides up and down standing (`0406`) with his feet on the surface, can jump
-on a rising elevator and land on it again, and stops at both ends. Not run live:
+Kirby rides up and down standing (`0406`) with his feet on the surface, including
+full-speed descents of 12.4 px a frame, can jump on a rising elevator and land on
+it again, and stops at both ends. A jump on a fast descending elevator leaves it
+behind; he lands on it once it stops. Not run live:
 `PurpleElevator` and `MultiFloorElevator` levels, walking off a moving elevator
 onto a landing, and elevators placed by real level generation. One host landing
 of height 0 (no sound, smoke or shake below 0.3 cells) remains on the first tick

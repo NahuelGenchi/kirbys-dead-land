@@ -526,7 +526,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         var ride = riding?.Ride ?? default;
         lift = ride.Lift;
         centerY -= ride.Raise + lift;
-        if (ride.Raise > 0) Diagnostic?.Invoke("elevator-raise", new { ride.Raise, ride.Lift, action = nds!.Action });
+        if (ride.Raise != 0) Diagnostic?.Invoke("elevator-carry", new { ride.Raise, ride.Lift, action = nds!.Action });
         ushort action = nds!.Action;
         // At a ladder or chain the host climbs with a key bound to both Up and
         // jump; the original would jump on A first and grab the ladder after.
@@ -751,7 +751,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
             var elevator = tracked.Elevator;
             double surface = ElevatorRide.Surface(elevator.cy, elevator.yr);
             if (found is null && ElevatorRide.Over(hero.cx, feetY, elevator.cx, elevator.cWid, elevator.cy, elevator.yr,
-                    tracked.Surface - surface) is { } ride)
+                    tracked.Surface - surface, rising: lastVy < 0) is { } ride)
                 found = (ride, elevator);
             tracked.Surface = surface;
         }
