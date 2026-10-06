@@ -753,3 +753,18 @@ the all-ability rendering tests as full gameplay acceptance.
   Grenader grenades and one mid-jump Archer arrow captured at full health; both
   spits hit the shooter for 52; the swallow gave no copy. Saves unchanged.
 
+
+## 2026-10-05 — shield parries in Kirby's facing direction (#19)
+
+- Owner recording: the host shield and parry arc stayed on Kirby's right while he
+  faced left. `hero.dir` came from player+0x15, which never changes with facing,
+  so the host always saw Kirby facing right.
+- `hero.dir` now follows bit 31 of player+0x6C (`NdsState.FacesLeft`). That bit
+  matched the walking direction on every moving frame of live trace `214458`.
+  The native bridge test now walks left and right and checks the bit.
+- Live (separate data root `repros/left-parry-20261005`): run `215025` mirrored
+  the host block for left-facing guards; run `215320` parried a real Zombie hit
+  from the left (counter callback, `Block`, no damage); run `215401` let a hit
+  from behind through. Saves unchanged.
+- Not resolved: raising the shield while holding the opposite direction. The
+  original guard keeps Kirby's facing while the host turns its shield.
