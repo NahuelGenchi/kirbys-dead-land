@@ -207,6 +207,9 @@ internal static class LabAbilityProbe
         }) + "\n");
     }
 
+    private static string Rgb(dc.h3d.Vector color) =>
+        $"{(int)Math.Round(color.x * 255):x2}{(int)Math.Round(color.y * 255):x2}{(int)Math.Round(color.z * 255):x2}";
+
     /// <summary>Record each HUD weapon slot whenever its drawn state changes.</summary>
     private static void RecordHud(KirbySession session, uint frame)
     {
@@ -229,6 +232,9 @@ internal static class LabAbilityProbe
                 iconWidth = skill.icon?.tile?.width,
                 iconScale = skill.icon?.scaleX,
                 pixelScale = skill.get_pixelScale(),
+                // The two colors the host's RGBReplace shader paints the slot background with.
+                background1 = Rgb(skill.iconBgShader.colorR__),
+                background2 = Rgb(skill.iconBgShader.colorG__),
             };
         }).ToArray();
         var shown = KirbyHud.Shown;

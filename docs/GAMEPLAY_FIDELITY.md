@@ -417,8 +417,11 @@ the equipment Kirby cannot use while copied; shield slots keep the real shield.
   for colorless gear. It then puts the real item back as the slot's item, so
   inventory, equip and cooldown logic are unchanged, and hides ammo pips. Like
   colorless gear in Dead Cells, the background takes the color of the highest
-  scroll stat. With a tie the host picks Brutality, so a run with no scrolls shows
-  the gray frame on a red background.
+  scroll stat, paired with the colorless gray.
+  The slot's item is cleared before the stand-in is passed (#36). The host's
+  same-item-kind path in `useItem` colors the slot from its previous item before
+  switching. With the starting sword in the slot, that made every copy slot red.
+  Ties take the first tier the host lists; no tie has been run live since #36.
 - **Refresh:** the HUD is redrawn when the ability, its icon or the scroll tiers
   change. Base form, discard, ability loss and deactivation redraw the real
   equipment.
