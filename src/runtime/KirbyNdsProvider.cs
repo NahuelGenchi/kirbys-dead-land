@@ -680,6 +680,13 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
             : (c & 8) != 0 ? (passed ? (ushort)0 : (ushort)131)
             : (c & 3) != 0 ? (ushort)3
             : (c & 16) != 0 ? (passed ? (ushort)0 : (ushort)134) : (ushort)0;
+        // A grown vine is a ladder, and the solid blocks it passes through or
+        // ends under are ladder tops, so Kirby climbs onto them as the Beheaded does.
+        if (tile is 0 or 3 && KirbyVines.At(map, cx, cy) is var vine and not KirbyVines.Cell.None)
+        {
+            ushort vineTile = tile == 3 ? (ushort)131 : vine == KirbyVines.Cell.Ladder ? (ushort)134 : (ushort)0;
+            if (vineTile != 0) tile = passed ? (ushort)0 : vineTile;
+        }
         if (tile == 0 && cx >= 0 && cy >= 0 && cx < map.wid && cy < map.hei)
         {
             if (!water.TryGetValue((cx, cy), out bool submerged))
@@ -794,13 +801,13 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
             }
         return double.PositiveInfinity;
     }
-    /// <summary>Kirby's body overlaps a host ladder or chain cell, where the original Up grabs it.</summary>
+    /// <summary>Kirby's body overlaps a host ladder, chain or vine cell, where the original Up grabs it.</summary>
     private static bool AtLadder(dc.level.LevelMap map, double hostX, double feetY)
     {
         int cx = (int)Math.Floor(hostX / 24), cy = (int)Math.Floor((feetY - BodyHeight / 2) / 24);
         if (cx < 0 || cy < 0 || cx >= map.wid || cy >= map.hei) return false;
         int c = ((int*)map.collisions.bytes)[cy * map.wid + cx];
-        return (c & 16) != 0 && (c & 3) == 0;
+        return (c & 3) == 0 && ((c & 16) != 0 || KirbyVines.At(map, cx, cy) == KirbyVines.Cell.Ladder);
     }
     private static bool TouchesRollZone(dc.level.LevelMap map, double hostX, double feetY)
     {

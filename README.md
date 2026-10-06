@@ -87,7 +87,8 @@ breakable floors once the Ram rune is unlocked.
 Kirby moves at the Beheaded's speeds, measured in the game: he runs and steers
 in the air at 236.5 px/s, slides as far and as fast as the Beheaded rolls,
 falls at 403 px/s, stomps at the dive's 900 px/s, climbs at 97.5 px/s and
-floats across at running speed. He stops when the direction is released and
+floats across at running speed. He climbs ladders, chains and vines grown with
+the Vine rune, and climbs from a vine onto the ledge it leads to. He stops when the direction is released and
 turns at once, and his jump keeps its height but peaks as fast as the
 Beheaded's. His animations are the original ones; the walk and dash cycles
 play faster with the run so his feet keep up.
@@ -162,6 +163,9 @@ while playing Kirby; healing, equipment and interaction tutorials remain availab
 - Original Crash, Paint and Mike effects were verified in the running host game,
   with the HUD outside the background tint.
 - Original ladder, Suplex, Cook, helper and Wheel helper riding have source tests.
+- In live runs `20261005-232657` and `20261005-232901`, Kirby climbed natural
+  vines grown through the host's own `VineLadder.activate`, hung, climbed down,
+  stood on the ledge at the top and climbed back down from it.
 - In live run `20261005-205320`, original Cook consumed a real Zombie and the host
   dropped exactly one `SmallMeat` food item from that enemy's loot. Kirby walked
   onto it and a real R press ran the host pickup, healing host and source health
