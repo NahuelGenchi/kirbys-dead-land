@@ -241,6 +241,42 @@ def run_case(name):
             b.world([130]*900,43*65536,70*65536);s=b.step(0,30)
             assert abs(s['vy_raw'])<200 and 140<=(s['graphic']&65535)<=180
             return {'source_pose':s['graphic']&65535,'source_vy_raw':s['vy_raw']}
+        if name in ('proxy_water','proxy_water_sword'):
+            # A host enemy standing in a pool: the original Waddle Dee's enter-water
+            # defeat must not run, so the proxy stays capturable and hittable.
+            sword=name=='proxy_water_sword'
+            if sword:transform(b,18)
+            pool=[3 if y>=7 else (130 if y in (5,6) and x>=3 else 0) for y in range(9) for x in range(100)];q=Proxy();seen=set();damage=[];swallowed=None
+            b.world(pool,43*65536,int(153.5*65536));b.step(0,60)
+            for i in range(150):
+                state=b.state();b.world(pool,state['x_raw'],state['y_raw'])
+                if not q.flags&12:assert b.lib.kssu_proxy_set(b.handle,1,(70 if sword else 85)*65536,151*65536,32760 if sword else 100,True)==0
+                b.step(2 if i>=90 and (not sword or i<120) else 0);b.lib.kssu_proxy_state(b.handle,1,C.byref(q))
+                if i<90:seen.add(q.flags)
+                elif sword and q.flags&1 and not q.flags&16 and q.hp<32760:damage.append(32760-q.hp)
+                if q.flags&4:swallowed=i-90;break
+            assert not any(flags&(2|8) for flags in seen),seen
+            if sword:assert damage==[18,16] and not q.flags&8,(damage,q.flags)
+            else:assert swallowed is not None and b.action_flags()&2,(q.flags,swallowed)
+            return {'idle_flags_in_water':sorted(seen),'original_inhale_frames':swallowed,'original_attack_damage':damage}
+        if name=='proxy_water_below':
+            # A pool under a walkway: Kirby's ledge floor is one row above the pool floor.
+            cells=[3 if (x<3 and y>=7) or (x>=3 and y>=8) else (130 if x>=3 and y==7 else 0) for y in range(9) for x in range(100)];q=Proxy();seen=set()
+            b.world(cells,43*65536,int(153.5*65536));b.step(0,60)
+            for i in range(100):
+                state=b.state();b.world(cells,state['x_raw'],state['y_raw'])
+                assert b.lib.kssu_proxy_set(b.handle,1,85*65536,175*65536,100,True)==0
+                b.step();b.lib.kssu_proxy_state(b.handle,1,C.byref(q));seen.add(q.flags)
+            assert not any(flags&(2|8) for flags in seen) and q.hp==100,(seen,q.hp)
+            return {'idle_flags_below_kirby':sorted(seen),'enemy_hp':q.hp}
+        if name=='hurt_water':
+            # The parked damage carrier must survive original water around Kirby.
+            b.world([130]*900,43*65536,70*65536);b.step(0,60)
+            health=[b.lib.kssu_health(b.handle)]
+            for wait in (0,150):
+                b.step(0,wait);assert b.lib.kssu_hurt(b.handle,7,1)==0;b.step(0,3);health.append(b.lib.kssu_health(b.handle))
+            assert health==[76,69,62],health
+            return {'swimming_health':health}
         if name in ('proxy_mix','boss_inhale','boss_suplex','boss_cook','boss_sword'):
             ability={'boss_suplex':6,'boss_cook':24,'boss_sword':18}.get(name,1)
             if ability!=1:transform(b,ability)
@@ -529,7 +565,7 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--case');parser.add_argument('--skip-abilities',action='store_true');args=parser.parse_args()
     if args.case:
         print('RESULT '+json.dumps({'case':args.case,'result':run_case(args.case)}),flush=True);return
-    cases=['scene_doors', 'room_food', 'proxy_birth_contact', 'proxy_birth_inhale', 'proxy_contact', 'proxy_contact_sword', 'proxy_touch_off', 'proxy_swallow_touch_off', 'proxy_suplex_touch_off', 'proxy_ice_detach', 'proxy_lethal', 'motion', 'ladder', 'ladder_top', 'one_way', 'solid_ceiling', 'water', 'proxy_swallow', 'hazard_spit', 'hazard_swallow', 'star_spit', 'star_spit_wall', 'star_big', 'star_ability', 'proxy_sword', 'proxy_reuse', 'proxy_save', 'proxy_mix', 'boss_inhale', 'boss_suplex', 'boss_cook', 'boss_sword', 'proxy_capacity', 'copy_drop_reabsorb', 'wheelie_ride', 'proxy_suplex', 'proxy_cook', 'audio', 'hurt', 'hurt_lethal', 'hurt_cold', 'guard', 'health_invulnerable', 'health_sync', 'proxy_size']
+    cases=['scene_doors', 'room_food', 'proxy_birth_contact', 'proxy_birth_inhale', 'proxy_contact', 'proxy_contact_sword', 'proxy_touch_off', 'proxy_swallow_touch_off', 'proxy_suplex_touch_off', 'proxy_ice_detach', 'proxy_lethal', 'motion', 'ladder', 'ladder_top', 'one_way', 'solid_ceiling', 'water', 'proxy_water', 'proxy_water_sword', 'proxy_water_below', 'hurt_water', 'proxy_swallow', 'hazard_spit', 'hazard_swallow', 'star_spit', 'star_spit_wall', 'star_big', 'star_ability', 'proxy_sword', 'proxy_reuse', 'proxy_save', 'proxy_mix', 'boss_inhale', 'boss_suplex', 'boss_cook', 'boss_sword', 'proxy_capacity', 'copy_drop_reabsorb', 'wheelie_ride', 'proxy_suplex', 'proxy_cook', 'audio', 'hurt', 'hurt_lethal', 'hurt_cold', 'guard', 'health_invulnerable', 'health_sync', 'proxy_size']
     if not args.skip_abilities:cases += [f'ability-{i}' for i in range(2,26)]
     results=[]
     for name in cases:

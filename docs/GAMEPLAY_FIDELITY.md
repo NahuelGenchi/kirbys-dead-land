@@ -263,6 +263,26 @@ Those runs predate the original-unit scale from #3, so they show the colorless
 factor, not today's absolute numbers.
 Other copy forms, bosses and breakables have not been run live with scrolls.
 
+### Enemies in water (intentional deviation)
+
+Issue #27. In the original game a Waddle Dee that enters water is defeated. When
+the in-water byte `(d+0x50)+7` turns on, the source calls the enemy's enter-water
+handler at `(d+0x54)+8`. Waddle Dee's reaction table `0x0219C7C8` holds the
+default handler `0x02159440`, which calls the defeat entry `0x02158FC0`. While an
+enemy recoils from a hit, the shared recoil handler `0x02156540` calls the saved
+table's handler, or that same defeat if the entry is empty. Every host enemy is
+paired with a Waddle Dee proxy, and host water is exported as source water. So a
+Dead Cells enemy standing in a pool had a dying proxy: the source claimed it
+(flags 3), the adapter pinned the host enemy to it every tick, inhale and attacks
+missed, and after about 60 frames it was rebound in the same water. The
+reserved damage carrier died the same way next to a swimming Kirby, so host hits
+did not reach him in water.
+
+Dead Cells enemies do not die in water, and the host owns enemy life. The bridge
+therefore points that one table entry at the original return-zero stub
+`0x020CF36C` (`mov r0,#0; bx lr`) in emulated RAM, after validating both the stub
+and the entry. Kirby's swimming, the exit-water handler and other enemies' water
+reactions are unchanged. Water itself still works on Kirby as before.
 ### Vines (#25)
 
 `VineLadder.buildLadder` (run when the Vine rune grows a vine, and again on load

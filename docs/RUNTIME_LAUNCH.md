@@ -30,6 +30,7 @@ Relevant environment variables are used only by the lab helper:
 - `KIRBY_LAB_RESUME_GAME=1`: call the game's normal saved-run launch action once.
 - `KIRBY_LAB_SAVE_AFTER`: request a normal host save after this many original engine frames.
 - `KIRBY_LAB_OUTFIT`: outfit ID assigned before starting that private run.
+- `KIRBY_LAB_INPUT_PLAN`: `movement`, `combat`, `ability`, `visual`, `breakable`, `boss`, `crowd`, `aim`, `repro`, `hazard`, or `water`, for a reproducible offscreen test. `repro` tests normal keyboard/controller bindings and keeps the normal tutorials.
 - `KIRBY_LAB_INPUT_PLAN`: `movement`, `combat`, `ability`, `visual`, `breakable`, `boss`, `crowd`, `aim`, `repro`, `hazard`, or `stars`, for a reproducible offscreen test. `repro` tests normal keyboard/controller bindings and keeps the normal tutorials.
 - `KIRBY_LAB_TEST_ABILITY`: optional source ability ID for the ability probe, exposed as `--probe-ability 2..25`. The probe prepares it through original inhale, supplied swallowed content, and Down before measuring combat. The separate `combat` probe uses a real enemy's random copy result.
 - `KIRBY_LAB_TEST_SCROLLS`: optional `B,T,S` scroll counts for the ability probe, exposed as `--probe-scrolls`. Before measuring, the probe adds that many real `BrutalityUp`, `TacticUp` and `SurvivalUp` items (`InventItem.fromItem`) through the normal inventory and calls the host's `Hero.computeTiers`. `ability-damage.json` then records the tiers, the host and core colorless multipliers, and each copy hit's source HP drop and host damage.
@@ -230,6 +231,28 @@ Run `20261005-205827` (runtime SHA-256 `3b2d1291428646fc59a38301f0e9e94204193f6b
 
 All four hostile projectiles seen were paired; no hero-owned projectile was paired, but Kirby fired no bow in this run, so that exclusion was not exercised live. The process reached its time limit without fatal errors, and the real save inventories were unchanged.
 
+## Enemies in water
+
+`--input-plan water` (`LabWaterProbe`) looks for a host pool cell with a floor beside a dry bank (the bank may be up to three cells higher), places Kirby on the bank and creates a real Zombie in the pool, holding its AI so it stays in the water. For 120 source frames it records whether the source claims the Zombie, then it taps toward the pool, holds the original inhale until the Zombie is consumed (600-frame limit) and presses DOWN. `water.json` records the site, the frames the Zombie was source-controlled before any input, consumption and mouthful, the first copy after DOWN, and Kirby's life. A generated level may have no usable pool (`site: null`); launch again. All runs used the separate data root `repros/water-20261005`, whose bridge is built from this branch into its own `target/` so other sessions' builds of the shared oracle bridge cannot replace it.
+
+```sh
+python3 scripts/stage_runtime.py --data-root ~/.local/share/kirby-dead-cells/repros/water-20261005 \
+  --original-runtime --outfit-pack "$HOME/.local/share/kirby-dead-cells/outfit-build/res.pak"
+python3 scripts/launch_runtime.py --data-root ~/.local/share/kirby-dead-cells/repros/water-20261005 \
+  --seconds 70 --start-game --outfit KirbySuperStarUltra --input-plan water --capture-fps 15
+```
+
+| Run | Bridge SHA-256 (prefix) | Site | Controlled before input | Inhale | After DOWN |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `20261006-000610` | `41be0932ef86` (before #27) | 1-deep pool, bank 1 cell up | 143 of 143 host frames; Zombie pinned out of place | Timed out after 600 frames, Zombie life 123 unchanged | — |
+| `20261006-001059` | `b2545e79b5fc` (another branch's build, without #27) | Pool under a walkway, bank 3 cells up | 185 of 185; original defeat stars at the Zombie | Timed out | — |
+| `20261006-000045` | `4967f6f4ac84` (#27) | Bank 1 cell up | 0 | Consumed 37 frames in, mouthful | Cutter |
+| `20261006-001715` | `4967f6f4ac84` | Bank 1 cell up | 0 | Consumed 37 frames in, mouthful | Paint |
+| `20261006-001840` | `4967f6f4ac84` | 1-cell pool | 0 | Consumed 37 frames in, mouthful | Cutter (source trace, frame 4955; the probe then read too early) |
+| `20261006-002101` | `4967f6f4ac84` | 1-cell pool | 0 | Consumed 38 frames in, mouthful | Copy at frame 4557; a natural enemy's hit at 4738 knocked it loose |
+| `20261006-002601` | `4967f6f4ac84` | 12-cell pool | 0 | Consumed 37 frames in, mouthful | No copy observed; Kirby kept the inhale pose after consumption (not investigated) |
+
+Every run kept the real saves unchanged and logged no fatal errors. Natural enemies near the pool hurt Kirby in some runs; the probe does not control them. Sword or other attacks on an enemy in water, and a walkway-over-pool site with the fixed bridge, were checked only in the native suite (`proxy_water_sword`, `proxy_water_below`), not live.
 ## Star projectiles
 
 `--input-plan stars` (`LabStarProbe`, issue #20) runs five phases with real Zombies:
