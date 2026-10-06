@@ -30,7 +30,7 @@ Relevant environment variables are used only by the lab helper:
 - `KIRBY_LAB_RESUME_GAME=1`: call the game's normal saved-run launch action once.
 - `KIRBY_LAB_SAVE_AFTER`: request a normal host save after this many original engine frames.
 - `KIRBY_LAB_OUTFIT`: outfit ID assigned before starting that private run.
-- `KIRBY_LAB_INPUT_PLAN`: `movement`, `combat`, `ability`, `visual`, `breakable`, `boss`, `crowd`, `aim`, or `repro`, for a reproducible offscreen test. `repro` tests normal keyboard/controller bindings and keeps the normal tutorials.
+- `KIRBY_LAB_INPUT_PLAN`: `movement`, `combat`, `ability`, `visual`, `breakable`, `boss`, `crowd`, `aim`, `repro`, or `hazard`, for a reproducible offscreen test. `repro` tests normal keyboard/controller bindings and keeps the normal tutorials.
 - `KIRBY_LAB_TEST_ABILITY`: optional source ability ID for the ability probe, exposed as `--probe-ability 2..25`. The probe prepares it through original inhale, supplied swallowed content, and Down before measuring combat. The separate `combat` probe uses a real enemy's random copy result.
 - `KIRBY_LAB_PLAY=1`: keep outfit selection but disable all smoke capture and automatic input.
 
@@ -121,3 +121,26 @@ In that same run, the secondary-weapon tutorial (`attackS`) appears after pickup
 Run `033651` adds the corrected sword grip metadata and records at 15 fps. The blade is attached to Kirby, the wooden shield is visible, and physical movement/jump inputs work near an existing generated Zombie. That enemy moves away to a ledge, so this take supplies visual evidence rather than a parry result. The reviewed 20-second cut is `showcase/recording-fixes/kirby-fixes-20s.mp4`; its manifest records three cuts from actual framebuffer captures, with original effects audio only. Fixture positioning and outfit changes are omitted from the cut. These runs complete without fatal errors or changes to real Steam saves.
 
 The final-pack run `034038` uses outfit SHA-256 `6c141ee357dcdb5087acd55e12f79211338e6690de1e235238282b75bc5b8663`. It acquires the existing Beginner's Bow through the normal R-key pickup and fires it through the secondary weapon binding. The bow is visibly attached, and a projectile kills the generated Zombie for 109 damage. Frames `004800`, `004859`, and `005051` compare the same nearby enemy with Kirby, with only Kirby's bitmap hidden, and with the normal Beheaded outfit: the thin brown body and green head effects remain visible in all three. The comparison does not reproduce enemy occlusion by Kirby's transparent bitmap. This 65-second run finishes without fatal errors or real-save changes.
+
+## Enemy projectiles
+
+`--input-plan hazard` (`LabHazardProbe`) spawns a real Grenader, then a real Archer, 120px ahead of Kirby with their natural AI. It holds the original inhale until a hostile host projectile that the source had controlled is destroyed, then spits it (B) or swallows it (DOWN). The arrow phase jumps before inhaling (see below). `hazard.json` records each phase: the captured host type, mouthful state, Kirby/shooter health, outgoing hits after the action, and every hostile projectile's pairing and closest approach. Both runs used a separate data root, `repros/hazard-20261005`, so the owner's main lab was not restaged.
+
+```sh
+python3 scripts/stage_runtime.py --data-root ~/.local/share/kirby-dead-cells/repros/hazard-20261005 \
+  --original-runtime --outfit-pack "$HOME/.local/share/kirby-dead-cells/outfit-build/res.pak"
+python3 scripts/launch_runtime.py --data-root ~/.local/share/kirby-dead-cells/repros/hazard-20261005 \
+  --seconds 170 --start-game --outfit KirbySuperStarUltra --input-plan hazard
+```
+
+The first probe version (`20261005-205347`) held the inhale on flat ground. One `EnemyGrenade` was captured, held by the source and consumed into the mouthful at full health, but its one-frame spit tap produced no host hit. A host frame can advance zero source frames, so later taps last four frames. Archer arrows were never captured: frames show them passing above Kirby at the Beheaded's chest height, outside the original inhale box (0–34px above the foot). That version left Kirby idle beside a live Grenader after its phases. Later frames show grenade explosions hitting the non-inhaling Kirby (76 → 62), and the run ended in a host death. The probe now removes its shooter when it finishes.
+
+Run `20261005-205827` (runtime SHA-256 `3b2d1291428646fc59a38301f0e9e94204193f6b54cde483796e8dcc1e41e7c6`, bridge `18ab44e430047464eb017009d617d107defef6c9cdfe6c4fb53ed39d2b89df65`) passed all three phases with Kirby at 76/76 throughout:
+
+| Phase | Captured host object | Result |
+| :--- | :--- | :--- |
+| Grenader, spit | `dc.en.gr.EnemyGrenade` | Original mouthful; one star hit on the Grenader for 52 (95 → 43); mouthful cleared |
+| Grenader, swallow | `dc.en.gr.EnemyGrenade` | DOWN: source ability 1, no copy, no outgoing hit |
+| Archer, jump-inhale, spit | `dc.en.Bullet` | Caught in the air; one star hit on the Archer for 52 (56 → 4) |
+
+All four hostile projectiles seen were paired; no hero-owned projectile was paired, but Kirby fired no bow in this run, so that exclusion was not exercised live. The process reached its time limit without fatal errors, and the real save inventories were unchanged.

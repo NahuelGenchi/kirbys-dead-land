@@ -2,10 +2,14 @@ using Entity = dc.Entity;
 using dc.en;
 using dc.en.inter;
 using dc.tool.atk;
+using Kirby.Core;
 
 namespace Kirby.Runtime;
 
-/// <summary>Pairs live host enemies with original enemy objects for source collision and capture logic.</summary>
+/// <summary>
+/// Pairs live host enemies and hostile projectiles with original enemy objects
+/// for source collision and capture logic.
+/// </summary>
 public sealed class KirbyEnemies
 {
     private const int MaxSourceHp = 32760;
@@ -25,7 +29,7 @@ public sealed class KirbyEnemies
     {
         Array.Clear(mobs); Array.Clear(controlled); Array.Clear(abilities); Array.Clear(detached); Array.Clear(assignedHp); restoring = bindings;
     }
-    public bool Controls(Mob mob) => Enumerable.Range(1, Capacity).Any(i => controlled[i] && mobs[i]?.HashlinkPointer == mob.HashlinkPointer);
+    public bool Controls(Entity mob) => Enumerable.Range(1, Capacity).Any(i => controlled[i] && mobs[i]?.HashlinkPointer == mob.HashlinkPointer);
     public void Clear(NdsRuntime nds)
     {
         for (uint i = 1; i <= Capacity; i++) Release(nds, i);
@@ -46,7 +50,7 @@ public sealed class KirbyEnemies
                 if (binding.Detached) { detached[binding.Slot] = true; continue; }
                 for (int j = 0; j < hero._level.entities.length; j++)
                 {
-                    if (hero._level.entities.getDyn(j) is not Entity candidate || candidate.destroyed || candidate.life <= 0 ||
+                    if (hero._level.entities.getDyn(j) is not Entity candidate || !Live(candidate) ||
                         Kind(candidate) != binding.Type || mobs.Any(m => m?.HashlinkPointer == candidate.HashlinkPointer)) continue;
                     double x = (candidate.cx + candidate.xr) * 24, y = (candidate.cy + candidate.yr) * 24;
                     // Hxbit may regenerate __uid when loading. The host's saved
@@ -55,7 +59,8 @@ public sealed class KirbyEnemies
                     mobs[binding.Slot] = candidate;
                     abilities[binding.Slot] = candidate is not Mob ? (byte)0 :
                         binding.Ability is >= 2 and <= 25 ? binding.Ability : RollAbility(session);
-                    controlled[binding.Slot] = candidate is Mob and not dc.en.mob.Boss && nds.Proxy((uint)binding.Slot).Controlled;
+                    controlled[binding.Slot] = (candidate is Mob and not dc.en.mob.Boss || IsHazard(candidate)) &&
+                        nds.Proxy((uint)binding.Slot).Controlled;
                     break;
                 }
                 if (mobs[binding.Slot] is null) Release(nds, (uint)binding.Slot);
@@ -73,7 +78,7 @@ public sealed class KirbyEnemies
             }
             var mob = mobs[i];
             if (mob is null) continue;
-            if (mob.destroyed || mob.life <= 0 || mob._level.HashlinkPointer != hero._level.HashlinkPointer)
+            if (!Live(mob) || mob._level.HashlinkPointer != hero._level.HashlinkPointer)
             { Release(nds, i); continue; }
             var distance = Distance(mob, hx, hy);
             if (!controlled[i] && (distance.X > 320 || distance.Y > 120)) Release(nds, i);
@@ -82,8 +87,9 @@ public sealed class KirbyEnemies
         var entities = hero._level.entities;
         for (int j = 0; j < entities.length; j++)
         {
-            if (entities.getDyn(j) is not Entity mob || mob.destroyed || mob.life <= 0 ||
-                !Eligible(mob) || !mob.canBeHitBy(hero)) continue;
+            if (entities.getDyn(j) is not Entity mob || !Live(mob)) continue;
+            if (IsHazard(mob) ? !MouthfulHazards.CanPair(mob.isOpponent(hero), live: true, mob is Bullet { disabled: true })
+                : !Eligible(mob) || !mob.canBeHitBy(hero)) continue;
             if (mobs.Any(m => m?.HashlinkPointer == mob.HashlinkPointer)) continue;
             var (x, y) = Distance(mob, hx, hy);
             if (x <= 300 && y <= 96) candidates.Add((mob, x * x + y * y));
@@ -101,9 +107,13 @@ public sealed class KirbyEnemies
             if (mobs[i] is not { } mob) continue;
             int x = checked((int)Math.Round(((mob.cx + mob.xr) * 24 - ox) * 65536));
             int y = checked((int)Math.Round(((mob.cy + mob.yr) * 24 - 17 - oy) * 65536));
-            assignedHp[i] = Math.Clamp(mob.life, 1, MaxSourceHp);
+            // A projectile's source object has one HP: any original attack that
+            // strikes it is lethal and removes the host projectile.
+            assignedHp[i] = IsHazard(mob) ? 1 : Math.Clamp(mob.life, 1, MaxSourceHp);
             nds.SetProxy(i, x, y, assignedHp[i]);
-            nds.SetProxyOptions(i, abilities[i], mob is not Mob || mob is dc.en.mob.Boss);
+            // Projectiles stay inhalable; their zero copy byte leaves the original
+            // copyless mouthful, which spits a star and swallows into nothing.
+            nds.SetProxyOptions(i, abilities[i], mob is not Mob && !IsHazard(mob) || mob is dc.en.mob.Boss);
             nds.SetProxyContact(i, mob is Mob);
             nds.SetProxySize(i, (ushort)Math.Clamp(Math.Ceiling(mob.radius * 2), 1, 1024),
                 (ushort)Math.Clamp(Math.Ceiling(mob.hei), 1, 1024));
@@ -117,6 +127,7 @@ public sealed class KirbyEnemies
             if (mobs[i] is not { } mob) continue;
             NdsProxy proxy = nds.Proxy(i);
             if (proxy.Pending) continue;
+            if (IsHazard(mob)) { CompleteHazard(nds, i, mob, proxy, ox, oy); continue; }
             // Cook can also change the source mouthful byte. Classify its
             // destruction before ordinary inhale so it cannot award a copy.
             if (proxy.Gone && (proxy.Flags & 128) != 0)
@@ -170,6 +181,35 @@ public sealed class KirbyEnemies
         }
         return copied;
     }
+    private void CompleteHazard(NdsRuntime nds, uint i, Entity projectile, NdsProxy proxy, int ox, int oy)
+    {
+        var action = MouthfulHazards.Resolve(proxy.Swallowed, proxy.Gone && (proxy.Flags & 128) != 0, proxy.Gone,
+            assignedHp[i] - proxy.Hp, proxy.Controlled);
+        if (action != HazardAction.Remove && projectile.destroyed) action = HazardAction.Release;
+        switch (action)
+        {
+            case HazardAction.Remove:
+                // No copy, loot or explosion: the original mouthful now holds it.
+                if (!projectile.destroyed) projectile.destroy();
+                Release(nds, i);
+                break;
+            case HazardAction.Release:
+                Release(nds, i);
+                break;
+            case HazardAction.Hold:
+                // KirbyEnemyHooks suspends its host update, so it can neither hit
+                // Kirby nor detonate while the original suction carries it.
+                projectile.setPosPixel(proxy.XRaw / 65536.0 + ox, proxy.YRaw / 65536.0 + oy + 17);
+                projectile.spriteUpdate();
+                controlled[i] = true;
+                break;
+            default:
+                controlled[i] = false;
+                break;
+        }
+    }
+    private static bool IsHazard(Entity entity) => entity is Bullet or Grenade;
+    private static bool Live(Entity entity) => !entity.destroyed && (entity.life > 0 || IsHazard(entity));
     private static bool Eligible(Entity entity) => entity is Mob or Door or BreakableProp or ExplosiveBarrel || entity.isBreakableByHero();
     private static (double X, double Y) Distance(Entity entity, double heroX, double heroY) =>
         (Math.Max(0, Math.Abs((entity.cx + entity.xr) * 24 - heroX) - entity.radius),

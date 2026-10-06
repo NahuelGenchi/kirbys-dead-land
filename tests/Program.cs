@@ -62,4 +62,17 @@ Check(mouthful.Absorb(1) == "fire" && mouthful.Absorb(2) == "fire", "Two enemies
 Check(mouthful.Absorb(1) is null && mouthful.IsBaseForm, "Repeated capture neither rerolls nor transforms");
 mouthful.SetSourceAbility("ice");
 Check(mouthful.Absorb(3) is null, "Original transformation closes the inhale window");
+
+Check(MouthfulHazards.CanPair(hostile: true, live: true, disabled: false), "Live enemy projectiles can be inhaled");
+Check(!MouthfulHazards.CanPair(hostile: false, live: true, disabled: false), "Kirby's own arrows are never paired");
+Check(!MouthfulHazards.CanPair(true, live: false, disabled: false) && !MouthfulHazards.CanPair(true, true, disabled: true),
+    "Destroyed or disabled projectiles are not paired");
+Check(MouthfulHazards.Resolve(swallowed: true, cooked: false, gone: false, sourceDamage: 0, controlled: true) == HazardAction.Remove,
+    "Original mouthful consumes the projectile");
+Check(MouthfulHazards.Resolve(false, cooked: true, gone: true, 0, false) == HazardAction.Remove, "Cook capture consumes the projectile");
+Check(MouthfulHazards.Resolve(false, false, false, sourceDamage: 1, controlled: false) == HazardAction.Remove,
+    "An original attack striking the projectile destroys it");
+Check(MouthfulHazards.Resolve(false, false, false, 0, controlled: true) == HazardAction.Hold, "Suction holds the host projectile");
+Check(MouthfulHazards.Resolve(false, false, false, 0, false) == HazardAction.Follow, "Free projectiles keep host physics");
+Check(MouthfulHazards.Resolve(false, false, gone: true, 0, false) == HazardAction.Release, "A vanished source object only frees its slot");
 Console.WriteLine($"PASS: {assertions} user-rule assertions. No claim of NDS physics or in-game verification.");

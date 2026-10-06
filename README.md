@@ -26,6 +26,9 @@ preserved; generated assets and native dependencies remain in the private data r
 - Original inhale, mouthful, Down-to-swallow, spit, flight, guard, slide and copy
   discard are executed by the ROM. All 24 original copy forms load through the
   original transformation code, rather than replacing them with host weapons.
+- Hostile Dead Cells projectiles (arrows, grenades) can be inhaled. The ROM
+  holds them as an ordinary copyless mouthful: spit fires the original star at
+  enemies, and swallowing gives nothing. Kirby's own arrows are never inhaled.
 
 ## Play
 
@@ -105,6 +108,10 @@ while playing Kirby; healing, equipment and interaction tutorials remain availab
   31-Zombie fixture kept all 31 paired objects active and delivered exact Sword
   damage to 21 targets. These controlled checks are scoped in
   [the host boundary report](docs/HOST_BOUNDARY_TESTS.md).
+- Live natural Grenader grenades and an Archer arrow (caught mid-jump; arrows
+  fly above the original inhale box on flat ground) entered the original
+  mouthful without hurting Kirby. Each spat star hit its shooter for 52 damage;
+  a swallowed grenade gave no copy. See [enemy projectiles](docs/RUNTIME_LAUNCH.md#enemy-projectiles).
 - Live Ice damage kills the host enemy once and leaves the original frozen block.
   Source tests also verify kicking the block into another enemy.
 - Original sound effects play at 48 kHz stereo. Only the source BGM player is

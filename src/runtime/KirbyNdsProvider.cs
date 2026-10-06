@@ -30,7 +30,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
     private HostBodySnapshot? originalBody, savedHostBody;
     private bool importHostHealth;
     private bool firstRender;
-    public bool ControlsEnemy(Mob mob) => enemies.Controls(mob);
+    public bool ControlsEnemy(dc.Entity entity) => enemies.Controls(entity);
     private ushort input;
     private nint terrainLevel;
     private nint sourceLevel;
