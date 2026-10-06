@@ -52,6 +52,7 @@ def main() -> None:
     parser.add_argument('--input-plan', choices=['movement', 'combat', 'ability', 'cook', 'visual', 'breakable', 'boss', 'crowd', 'aim', 'repro', 'hazard', 'stars'], help='Run an isolated input test (repro tests normal keyboard/controller bindings).')
     parser.add_argument('--probe-ability', type=int, choices=range(2, 26), metavar='2..25', help='Prepare this original ability through inhale/feed/swallow before the ability probe.')
     parser.add_argument('--probe-scrolls', metavar='B,T,S', help='Give the ability probe this many Brutality, Tactics and Survival scrolls before measuring damage.')
+    parser.add_argument('--probe-hud', action='store_true', help='Add a shield beside the starting sword before the ability probe and record the HUD weapon slots.')
     parser.add_argument('--capture-fps', type=int, choices=range(1, 31), metavar='1..30', help='Capture real gameplay frames at this rate for a private showcase recording.')
     parser.add_argument('--gdb', action='store_true', help=argparse.SUPPRESS)
     parser.add_argument('--start-game', action='store_true', help='Start a fresh run in the isolated lab save.')
@@ -69,6 +70,8 @@ def main() -> None:
         parser.error('--start-game and --resume-game are mutually exclusive')
     if args.probe_ability is not None and args.input_plan != 'ability':
         parser.error('--probe-ability requires --input-plan ability')
+    if args.probe_hud and args.input_plan != 'ability':
+        parser.error('--probe-hud requires --input-plan ability')
     if args.probe_scrolls is not None:
         if args.input_plan != 'ability':
             parser.error('--probe-scrolls requires --input-plan ability')
@@ -138,7 +141,7 @@ def main() -> None:
             if key.startswith('KIRBY_LAB_'):
                 env.pop(key)
     for key in ['KIRBY_LAB_PLAY', 'KIRBY_LAB_INPUT_PLAN', 'KIRBY_LAB_START_GAME', 'KIRBY_LAB_OUTFIT',
-                'KIRBY_LAB_RESUME_GAME', 'KIRBY_LAB_SAVE_AFTER', 'KIRBY_LAB_TEST_ABILITY', 'KIRBY_LAB_TEST_SCROLLS',
+                'KIRBY_LAB_RESUME_GAME', 'KIRBY_LAB_SAVE_AFTER', 'KIRBY_LAB_TEST_ABILITY', 'KIRBY_LAB_TEST_SCROLLS', 'KIRBY_LAB_TEST_HUD',
                 'KIRBY_LAB_CAPTURE_FPS']:
         env.pop(key, None)
     env.update({
@@ -180,6 +183,8 @@ def main() -> None:
         env['KIRBY_LAB_TEST_ABILITY'] = str(args.probe_ability)
     if args.probe_scrolls is not None:
         env['KIRBY_LAB_TEST_SCROLLS'] = args.probe_scrolls
+    if args.probe_hud:
+        env['KIRBY_LAB_TEST_HUD'] = '1'
     if args.capture_fps:
         env['KIRBY_LAB_CAPTURE_FPS'] = str(args.capture_fps)
     if args.start_game:

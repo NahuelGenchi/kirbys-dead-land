@@ -48,6 +48,9 @@ preserved; generated assets and native dependencies remain in the private data r
   1.15^(tier − 1), where tier is 1 + your highest scroll count (Brutality,
   Tactics or Survival). With no scrolls this factor is ×1. See
   [colorless copy damage](docs/GAMEPLAY_FIDELITY.md#colorless-copy-damage).
+- While copied, each non-shield weapon slot in the HUD (normally Left-Click)
+  shows the current ability's original icon in a colorless slot. See the
+  [HUD ability slot](docs/GAMEPLAY_FIDELITY.md#hud-ability-slot).
 
 ## Play
 
@@ -182,6 +185,9 @@ while playing Kirby; healing, equipment and interaction tutorials remain availab
   real level wall, a spit star burst on the wall face and a discarded star
   bounced off it. Stars more than about 128 px from Kirby keep flying and hitting
   but are not drawn. See [star projectiles](docs/RUNTIME_LAUNCH.md#star-projectiles).
+- Taking a real exit door, Kirby walks into the doorway in the original Walk
+  action until the host fade, instead of gliding in one standing frame. See
+  [exit-door walk](docs/RUNTIME_LAUNCH.md#exit-door-walk-2026-10-05).
 - Live Ice damage kills the host enemy once and leaves the original frozen block.
   Source tests also verify kicking the block into another enemy.
 - Original sound effects play at 48 kHz stereo. Only the source BGM player is

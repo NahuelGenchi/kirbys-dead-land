@@ -783,3 +783,59 @@ the all-ability rendering tests as full gameplay acceptance.
   left-facing ones, so `hero.dir` may not follow Kirby's turns. This was not fixed
   here.
 
+## 2026-10-05 — Kirby walks through exit doors (#17)
+
+- Owner recording: after Leave at an exit door, Kirby glided into the doorway
+  and faded in one frozen standing frame. `OnFrame` stopped the source during any
+  host cinematic and only redrew the last frame.
+- While a cinematic moves the hero sideways, `CinematicWalk` (`src/core/`) holds
+  the matching DS direction, and `StepCinematicWalk` steps the original
+  controller. The host keeps position and fade. The door's `stairs` phase lifts
+  the hero where the host has no floor, so the original walks on a flat floor
+  at the starting height instead. The level-change cleanup moved into `EnterLevel`
+  for both step paths.
+- Lifecycle probe: starts 1.5 cells beside the exit, records `door-cinematic`,
+  and accepts `KIRBY_LAB_EXIT`.
+- Source checks: `python3 scripts/check.py` passes (177 core assertions, 7 new),
+  and the Release runtime builds with 0 warnings.
+- Live (`repros/door-walk-20261005`): `214244` with host terrain showed Walk, then
+  Fall on the doorway steps. `214713` with the flat floor stayed in original Walk
+  for 148 of 149 polls, and the frames show walk poses until the fade. Saves were
+  unchanged.
+- Not run: native bridge tests (no native change), drop-type exits, leftward
+  cinematic walks, and normal play with real input.
+
+## 2026-10-05 — HUD ability slot (#18)
+
+- While copied, the HUD weapon slots that fire the ability (non-shield, as in
+  `KirbyInput`) show the original bottom-screen ability icon in a host colorless
+  slot. Base form and discard restore the real equipment icon.
+- Icon: found in the live sub engine as a 32×32 4bpp OBJ at (4, 4) (Wheel state:
+  OAM 20, tile 52, palette 8). `src/core/AbilityIcon.cs` decodes it.
+  `KirbyHud` accepts it after 30 unchanged source frames, which skips the original
+  copy flash and hurt icon seen in live run `215110`. It is drawn in whole screen
+  pixels near the host's `Skill.ICON_SIZE`.
+- Frame and colors: host `Skill.useItem` with a cached `StartSword` + `Colorless`
+  stand-in (decompiled `setBgColors`, `useItem`, `onResize`), then the real item is
+  restored as the slot item. Colorless backgrounds follow the highest scroll stat;
+  ties show Brutality red.
+- Source: decoder tests (OBJ lookup, 2D/8bpp rejection, flips, palette,
+  transparency). `python3 scripts/check.py`: 20 Python, 6 oracle-parser and 177
+  core assertions; Release build 0 warnings/errors.
+- Live checks: `215606` (scrolls 4/0/2) and `215830` (no scrolls, discard). Both
+  confirmed the colorless Sword slot and an untouched shield slot. `215830` also
+  confirmed the restored weapon slot. Real saves were unchanged.
+## 2026-10-05 — shield parries in Kirby's facing direction (#19)
+
+- Owner recording: the host shield and parry arc stayed on Kirby's right while he
+  faced left. `hero.dir` came from player+0x15, which never changes with facing,
+  so the host always saw Kirby facing right.
+- `hero.dir` now follows bit 31 of player+0x6C (`NdsState.FacesLeft`). That bit
+  matched the walking direction on every moving frame of live trace `214458`.
+  The native bridge test now walks left and right and checks the bit.
+- Live (separate data root `repros/left-parry-20261005`): run `215025` mirrored
+  the host block for left-facing guards; run `215320` parried a real Zombie hit
+  from the left (counter callback, `Block`, no damage); run `215401` let a hit
+  from behind through. Saves unchanged.
+- Not resolved: raising the shield while holding the opposite direction. The
+  original guard keeps Kirby's facing while the host turns its shield.
