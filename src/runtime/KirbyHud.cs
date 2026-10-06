@@ -54,6 +54,13 @@ internal static class KirbyHud
             orig(skill);
             if (overlaidSlots.ContainsKey(skill.HashlinkPointer)) FitIcon(skill);
         };
+        // Item cards describe their item through getGameplayDesc. A card drawn
+        // from the colorless stand-in (the pause equipment card) describes the
+        // current copy ability instead of the stand-in sword.
+        dc.tool.Hook_InventItem.getGameplayDesc += (orig, item, level) =>
+            standIn is not null && item.HashlinkPointer == standIn.HashlinkPointer && iconAbility is { } ability
+                ? AbilityDescriptions.Describe(ability).AsHaxeString()
+                : orig(item, level);
     }
 
     /// <summary>Call once per host frame after the original machine stepped.</summary>

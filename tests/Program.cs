@@ -561,4 +561,19 @@ Check(SpeedMatch.RiseVelocity(KirbyActions.Jump, -2682) == -2682 && SpeedMatch.R
     Check(icon.AsSpan(Pixel(31, 31), 4).SequenceEqual(new byte[] { 255, 0, 0, 255 }) &&
           icon.AsSpan(Pixel(16, 23), 4).SequenceEqual(new byte[] { 0, 255, 0, 255 }), "Apply both OBJ flips");
 }
+{
+    // Same IDs and order as KirbyNdsProvider.Abilities (original abilities 2..25).
+    string[] abilityIds = ["Cutter", "Mirror", "Beam", "Fighter", "Suplex", "YoYo", "Wheel", "Bomb", "Ice", "Fire", "Plasma", "Ninja",
+        "Stone", "Wing", "Jet", "Copy", "Sword", "Hammer", "Parasol", "Paint", "Mike", "Crash", "Cook", "Sleep"];
+    Check(abilityIds.All(AbilityDescriptions.Summaries.ContainsKey) && AbilityDescriptions.Summaries.Count == abilityIds.Length,
+        "Every copy ability has exactly one description");
+    Check(AbilityDescriptions.Summaries.Values.All(text => text.Length is > 20 and <= 110),
+        "Descriptions stay short enough for the pause card");
+    // The host's ui.Text treats braces, @ and angle brackets as markup.
+    Check(AbilityDescriptions.Summaries.Values.Append(AbilityDescriptions.Controls).All(text => text.IndexOfAny(['{', '}', '@', '<', '>']) < 0),
+        "Descriptions contain no host text markup");
+    Check(AbilityDescriptions.Describe("Fire") == AbilityDescriptions.Summaries["Fire"] + "\n" + AbilityDescriptions.Controls,
+        "A description ends with the shared controls line");
+    Check(AbilityDescriptions.Describe("Unknown") == AbilityDescriptions.Controls, "An unknown ability still shows the controls");
+}
 Console.WriteLine($"PASS: {assertions} user-rule assertions. No claim of NDS physics or in-game verification.");
