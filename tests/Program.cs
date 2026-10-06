@@ -431,4 +431,42 @@ Check(SpeedMatch.RiseVelocity(KirbyActions.Jump, -2682) == -2682 && SpeedMatch.R
     Check(Enumerable.Range(0, 10).All(_ => pacer.Next(3, 0) == 0), "A pose about to change is never counted below zero");
 }
 }
+{
+    // Sub OAM entry 0 is hidden, 1 is a 32×32 OBJ elsewhere, 2 is the icon at (4, 4).
+    byte[] iconOam = new byte[1024];
+    void Obj(int index, ushort a0, ushort a1, ushort a2)
+    {
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(iconOam.AsSpan(index * 8), a0);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(iconOam.AsSpan(index * 8 + 2), a1);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(iconOam.AsSpan(index * 8 + 4), a2);
+    }
+    for (int index = 3; index < 128; index++) Obj(index, 0x0200, 0, 0);
+    Obj(0, 0x0204, 0x8004, 7);
+    Obj(1, 0x0004, 0x8024, 9);
+    Obj(2, 0x0004, 0x8004, (ushort)(8 << 12 | 52));
+    const uint subDisplay = 0x40111710; // 1D OBJ mapping with a 64-byte tile boundary.
+    Check(AbilityIcon.Find(subDisplay, iconOam) == new AbilityIcon.Sprite(52 * 64, 8, false, false),
+        "Find the 32×32 icon OBJ at (4, 4) with its tile address and palette");
+    Check(AbilityIcon.Find(subDisplay & ~0x10u, iconOam) is null, "Reject 2D OBJ mapping");
+    Obj(2, 0x0004, 0x9004, (ushort)(8 << 12 | 52));
+    Check(AbilityIcon.Find(subDisplay, iconOam)?.FlipX == true, "Report a horizontally flipped icon");
+    Obj(2, 0x2004, 0x8004, 52);
+    Check(AbilityIcon.Find(subDisplay, iconOam) is null, "Ignore an 8bpp OBJ");
+
+    byte[] tiles = new byte[AbilityIcon.TileBytes], iconPalette = new byte[32], icon = new byte[AbilityIcon.Size * AbilityIcon.Size * 4];
+    tiles[0] = 0x21;          // (0,0) colour 1, (1,0) colour 2.
+    tiles[5 * 32 + 3] = 0x30; // Tile (1,1) row 0: (15,8) colour 3.
+    System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(iconPalette.AsSpan(2), 0x001F);  // Red.
+    System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(iconPalette.AsSpan(4), 0x7C00);  // Blue.
+    System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(iconPalette.AsSpan(6), 0x03E0);  // Green.
+    int Pixel(int x, int y) => (x + y * AbilityIcon.Size) * 4;
+    AbilityIcon.Decode(new AbilityIcon.Sprite(0, 0, false, false), tiles, iconPalette, icon);
+    Check(icon.AsSpan(Pixel(0, 0), 4).SequenceEqual(new byte[] { 255, 0, 0, 255 }) &&
+          icon.AsSpan(Pixel(1, 0), 4).SequenceEqual(new byte[] { 0, 0, 255, 255 }) &&
+          icon.AsSpan(Pixel(15, 8), 4).SequenceEqual(new byte[] { 0, 255, 0, 255 }), "Decode 1D 4bpp tiles and BGR555 colours");
+    Check(icon.AsSpan(Pixel(2, 0), 4).SequenceEqual(new byte[4]), "Colour 0 is transparent");
+    AbilityIcon.Decode(new AbilityIcon.Sprite(0, 0, true, true), tiles, iconPalette, icon);
+    Check(icon.AsSpan(Pixel(31, 31), 4).SequenceEqual(new byte[] { 255, 0, 0, 255 }) &&
+          icon.AsSpan(Pixel(16, 23), 4).SequenceEqual(new byte[] { 0, 255, 0, 255 }), "Apply both OBJ flips");
+}
 Console.WriteLine($"PASS: {assertions} user-rule assertions. No claim of NDS physics or in-game verification.");

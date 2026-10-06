@@ -96,6 +96,12 @@ public sealed unsafe class NdsRuntime : IDisposable
         Check(); if (destination.IsEmpty) return;
         fixed (byte* ptr = destination) Result(Native.Read(handle, address, ptr, (nuint)destination.Length));
     }
+    /// <summary>Read GPU registers, palette RAM, VRAM or OAM through the bridge's checked GPU range.</summary>
+    public void ReadGpu(uint address, Span<byte> destination)
+    {
+        Check(); if (destination.IsEmpty) return;
+        fixed (byte* ptr = destination) Result(Native.ReadGpu(handle, address, ptr, (nuint)destination.Length));
+    }
     public void Write(uint address, ReadOnlySpan<byte> source)
     {
         Check(); if (source.IsEmpty) return;

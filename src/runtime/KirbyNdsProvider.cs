@@ -148,6 +148,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
     }
     public void OnDeactivated(KirbySession session)
     {
+        KirbyHud.Clear(session);
         CancelStomp();
         SlideStrike = false;
         // The host destroys a dead hero immediately and stages its corpse. The
@@ -343,6 +344,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
             Step(session, input);
         long stepped = System.Diagnostics.Stopwatch.GetTimestamp();
         RenderSource();
+        KirbyHud.Update(session, nds);
         PumpAudio();
         RecordPacing(steps, stepped - started, System.Diagnostics.Stopwatch.GetTimestamp() - stepped);
     }
