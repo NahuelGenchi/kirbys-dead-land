@@ -954,3 +954,9 @@ the all-ability rendering tests as full gameplay acceptance.
   `ElevatorRide.Effective` now gives the floor's top while the surface is sunk
   into solid floor under Kirby; 17 later runs covered 27 such steps with Kirby
   standing throughout. 229 core assertions.
+- Owner recording 2026-10-06 19:50: rides worked, but Kirby was drawn above the
+  platform going up and sunk into it going down. The host draws the platform
+  up to a tick behind its physical surface (13 px measured, run `195232`).
+  Kirby standing on an elevator, with his equipment, is now drawn with the same
+  lag (`SetDrawOffset`, set from an `Elevator.postUpdate` hook); drawn feet stay
+  0.5 px from the drawn platform in four jittered real-level runs.

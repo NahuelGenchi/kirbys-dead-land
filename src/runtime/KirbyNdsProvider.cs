@@ -154,6 +154,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
     {
         KirbyHud.Clear(session);
         CancelStomp();
+        standingOn = null;
         SlideStrike = false;
         // The host destroys a dead hero immediately and stages its corpse. The
         // original death animation continues from the host frame event instead.
@@ -392,6 +393,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         deathFrames = 0;
         pacer.Reset();
         CancelStomp();
+        standingOn = null;
         SlideStrike = false;
         incoming.Clear();
         deathAnchor = (hero.cx, hero.cy, hero.xr, hero.yr);
@@ -654,6 +656,10 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         // the elevator sets for its cell, and the host then lands the hero again.
         if (riding?.Tracked is { Sunk: false, Elevator: var carrier } && Math.Abs(feet + lift - ElevatorRide.Surface(carrier.cy, carrier.yr)) < 1e-6)
         { hero.cy = carrier.cy; hero.yr = carrier.yr; }
+        // Kirby standing on an elevator is drawn with its platform (AlignToElevator);
+        // off it, that offset eases back over a few frames instead of jumping.
+        standingOn = riding?.Tracked is { } on && Math.Abs(feet + lift - on.Surface) < 0.01 ? on.Elevator : null;
+        if (standingOn is null && renderer is { DrawOffset: not 0 } drawn) drawn.SetDrawOffset(drawn.DrawOffset * 0.5);
         // Host shields block from the front and host weapons aim by this facing.
         hero.dir = state.FacesLeft ? -1 : 1;
         hero.bodyHei = 29.0 / 24; hero.hei = 29;
@@ -728,6 +734,20 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
     internal (int X, int Y)? SourceWindow => window;
     // Host pixels the current step's window is lifted by (ElevatorRide): host y = original-frame y + lift.
     private double lift;
+    // The elevator Kirby stood on at the end of the latest original frame.
+    private dc.en.inter.Elevator? standingOn;
+    // Host pixels the elevator sprite may lag its physical surface: over a tick of the fastest elevators.
+    private const double MaxElevatorDrawLag = 48;
+    /// <summary>
+    /// Host frame event, after an elevator placed its sprite: draw Kirby standing
+    /// on it with the same lag behind its physical surface (see SetDrawOffset).
+    /// </summary>
+    internal void AlignToElevator(dc.en.inter.Elevator elevator)
+    {
+        if (renderer is null || standingOn?.HashlinkPointer != elevator.HashlinkPointer || elevator.spr is not { } sprite) return;
+        double lag = sprite.y - ElevatorRide.Surface(elevator.cy, elevator.yr);
+        renderer.SetDrawOffset(Math.Abs(lag) <= MaxElevatorDrawLag ? lag : 0);
+    }
     // Host elevators on this level, with each one's surface at the previous original frame.
     private sealed class TrackedElevator(dc.en.inter.Elevator elevator)
     {

@@ -278,7 +278,9 @@ python3 scripts/launch_runtime.py --data-root ~/.local/share/kirby-dead-cells/re
 | `130203`–`130452` (4 runs, final build) | same | 3 arrivals each, 12 sunk steps over 3 runs, all frames standing, 76/76 health |
 | `130556` (spawned elevator, final build, jumps) | same | Jumps still leave the platform both ways; he lands again and stands at both stops |
 
-Spawned test elevators never stopped inside level floor, which is why the earlier runs missed this. The host's height-0 landing calls rise to 30–50 a ride when the frame rate is stalled; they play nothing.
+Spawned test elevators never stopped inside level floor, which is why the earlier runs missed this.
+
+The owner's 2026-10-06 19:50 recording (with the fixes above) showed Kirby riding correctly but drawn above the platform on the way up and sunk into it on the way down. The trace now also records the elevator sprite's `y`, the host hero sprite's `y` and Kirby's bitmap `y`. Run `195232` measured the elevator sprite drawn up to 13 px behind its physical surface while Kirby's bitmap followed his physical position (up to 11.1 px apart from the platform as drawn). With the draw offset, runs `195451`, `195557`, `195651` and `195746` keep Kirby's drawn feet 0.5 px from the drawn platform on every moving frame (his usual whole-pixel anchor). The exception is the tick an elevator dips into its floor stop, when Kirby stays on the floor's top 3 px above it. All frames were standing at 76/76. Spawned-elevator run `195850` (jumps) still leaves and lands on the platform both ways, and the offset is at most 2.3 px in the air. The host's height-0 landing calls rise to 30–50 a ride when the frame rate is stalled; they play nothing.
 
 Each run reached its time limit without a fatal log, and the real save inventories were unchanged. The tutorial tip in the captured frames comes from the fresh lab save.
 ## Shield swap

@@ -323,6 +323,14 @@ cells above it (`ElevatorRide`):
   himself, as the speed match does, left the parts attached to him a step off,
   and the original dropped a standing Kirby for a frame every few frames of the
   ride (live runs `20261006-000609` to `001130`, see [RUNTIME_LAUNCH.md](RUNTIME_LAUNCH.md#host-elevators)).
+- The host draws a moving elevator's platform behind its physical surface, by
+  up to a tick of travel (13 px measured on a 64-cell elevator). Kirby standing
+  on it is drawn with the same lag (`KirbySpriteRenderer.SetDrawOffset`, set from
+  an `Elevator.postUpdate` hook), as are his sword and shield. Off the
+  platform, the offset eases back within a few frames. Drawn at his physical
+  position instead, he floated above the platform on the way up and sank into
+  it on the way down (owner recording 2026-10-06 19:50). His physics position is
+  unchanged.
 - His host cell position is copied from the elevator exactly, as its own carry
   does. A pixel round trip could leave him a rounding error below the cell's
   ground height, and the host then called its landing handler every few

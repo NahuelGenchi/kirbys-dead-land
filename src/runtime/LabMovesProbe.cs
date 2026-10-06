@@ -32,6 +32,8 @@ internal static unsafe class LabMovesProbe
     private static uint lastFrame;
     private static Mob? target;
     private static Elevator? ride;
+    private static readonly System.Reflection.FieldInfo BitmapField =
+        typeof(KirbySpriteRenderer).GetField("bitmap", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
     private static int phaseCount;
     private static readonly JsonSerializerOptions Options = new()
     { NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.AllowNamedFloatingPointLiterals };
@@ -139,6 +141,9 @@ internal static unsafe class LabMovesProbe
             {
                 surface = (ride.cy + ride.yr) * 24, ride.cy, ride.yr, ride.cx, ride.cWid,
                 moving = ride.isMoving(), snapping = ride.isSnapping(hero),
+                // What is drawn this frame: the elevator's and the host hero's sprites, and Kirby's bitmap.
+                sprY = ride.spr?.y, heroSprY = hero.spr?.y, hero.easeSpritePos,
+                kirbyY = renderer is null ? (double?)null : (BitmapField.GetValue(renderer) as dc.h2d.Bitmap)?.y,
             },
         }, Options) + "\n");
     }
