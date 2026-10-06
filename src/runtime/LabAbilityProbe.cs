@@ -27,6 +27,8 @@ internal static class LabAbilityProbe
     private static int[]? scrolls;
     private static bool scrollsGiven;
     private static readonly bool hudFixture = Environment.GetEnvironmentVariable("KIRBY_LAB_TEST_HUD") == "1";
+    private static readonly bool pauseFixture = Environment.GetEnvironmentVariable("KIRBY_LAB_TEST_PAUSE") == "1";
+    private static bool pauseOpened;
     private static bool hudEquipped;
     private static uint? hudSettle;
     private static string? lastHud;
@@ -44,6 +46,16 @@ internal static class LabAbilityProbe
         string? requestedScrolls = Environment.GetEnvironmentVariable("KIRBY_LAB_TEST_SCROLLS");
         if (requestedScrolls is not null)
             scrolls = requestedScrolls.Split(',').Select(c => int.Parse(c, System.Globalization.CultureInfo.InvariantCulture)).ToArray();
+        if (pauseFixture)
+            KirbyHud.TestCardDrawn = (card, ability) => System.IO.File.AppendAllText(Path.Combine(output, "pause-cards.jsonl"),
+                JsonSerializer.Serialize(new
+                {
+                    frame = KirbyMod.Instance?.NativeProvider?.Machine?.State.Frame,
+                    ability,
+                    abilityId = KirbyMod.Instance?.ActiveSession?.Rules.AbilityId,
+                    item = card.ii?.getItemKind()?.ToString(),
+                    tree = Tree(card, 0),
+                }) + "\n");
         KirbyEnemies.TestObserver = (mob, sourceDamage, hostDamage) =>
         {
             var enemies = KirbyMod.Instance?.NativeProvider?.Enemies;
@@ -95,6 +107,26 @@ internal static class LabAbilityProbe
                     remainingLife = mob.life,
                 }) + "\n");
             }
+        };
+        // Every host status change on the target (#42: the Ice freeze and its thaw).
+        Hook_Mob.onAffectChange += (orig, mob, affect, active) =>
+        {
+            orig(mob, affect, active);
+            if (target?.HashlinkPointer == mob.HashlinkPointer)
+                System.IO.File.AppendAllText(Path.Combine(run!, "ability-target-affects.jsonl"), JsonSerializer.Serialize(new
+                {
+                    frame = KirbyMod.Instance?.NativeProvider?.Machine?.State.Frame, affect, active, mob.life,
+                }) + "\n");
+        };
+        dc.Hook_Entity.popText += (orig, entity, text, color) =>
+        {
+            if (target?.HashlinkPointer == entity.HashlinkPointer)
+                System.IO.File.AppendAllText(Path.Combine(run!, "ability-target-affects.jsonl"), JsonSerializer.Serialize(new
+                {
+                    frame = KirbyMod.Instance?.NativeProvider?.Machine?.State.Frame, popText = text?.ToString(), color,
+                    stack = Environment.StackTrace.Split('\n').Where(line => line.Contains("dc.")).Take(6).ToArray(),
+                }) + "\n");
+            return orig(entity, text, color);
         };
         KirbyInput.TestOverride = Input;
     }
@@ -167,14 +199,23 @@ internal static class LabAbilityProbe
         if (elapsed >= 120 && target is null)
         {
             target = Spawn(session.Hero);
-            // The Ice fixture must exercise the original frozen death remnant,
-            // which requires killing the proxy with the original breath.
-            if (machine.State.Ability == 10 && setupFed) target.life = 16;
+            // The Ice fixture keeps the Zombie's full life: its first original
+            // breath hits must freeze it with the host status (#42) before a
+            // later lethal hit, which must leave no original ice block.
+            // KIRBY_LAB_TEST_TARGET_LIFE sets a life that outlasts the attack.
+            if (int.TryParse(Environment.GetEnvironmentVariable("KIRBY_LAB_TEST_TARGET_LIFE"), out int life) && life > 0)
+                target.life = target.maxLife = life;
             initialLife = target.life;
         }
         if (elapsed is >= 135 and < 225) return 2;
         // The HUD fixture later discards the copy (original Select) to check the slot returns to its weapon.
-        if (hudFixture && elapsed is >= 900 and < 904) return 4;
+        if (hudFixture && elapsed is >= 900 and < 904 && !pauseFixture) return 4;
+        if (pauseFixture && elapsed >= 700 && !pauseOpened)
+        {
+            // Open the normal pause/equipment screen while copied (its constructor pauses the game). The run ends paused.
+            pauseOpened = true;
+            _ = new dc.ui.pause.DefaultPause();
+        }
         if (elapsed == 226 && machine.State.Ability == 8) return 2;
         if (elapsed >= 350 && attacker is null)
         {
@@ -207,6 +248,36 @@ internal static class LabAbilityProbe
         }) + "\n");
     }
 
+    /// <summary>Original objects running the frozen-block routine (Ice's lethal remnant).</summary>
+    private static int SourceIceBlocks(NdsRuntime machine)
+    {
+        var word = new byte[4];
+        uint Read32(uint address) { machine.Read(address, word); return BitConverter.ToUInt32(word); }
+        int count = 0;
+        for (uint slot = 0; slot < 7; slot++)
+            for (uint node = Read32(0x02049dec + slot * 4), guard = 0; node >= 0x02000000 && node < 0x02400000 && guard < 256; node = Read32(node), guard++)
+                if (Read32(node + 0x30) == 0x021583ec) count++;
+        return count;
+    }
+    /// <summary>A pause card's drawn objects: type, text and position, for locating the parts to verify.</summary>
+    private static object Tree(dc.h2d.Object node, int depth)
+    {
+        var children = node.children;
+        return new
+        {
+            type = node.GetType().Name,
+            text = node is dc.h2d.Text text ? text.text?.ToString() : null,
+            rawText = node is dc.ui.Text raw ? raw.rawText?.ToString() : null,
+            tile = node is dc.h2d.Bitmap bitmap ? bitmap.tile?.innerTex?.name?.ToString() : null,
+            x = node.x, y = node.y, node.visible,
+            children = depth >= 6 || children is null ? [] :
+                Enumerable.Range(0, children.length).Select(i => children.getDyn(i)).OfType<dc.h2d.Object>()
+                    .Select(child => Tree(child, depth + 1)).ToArray(),
+        };
+    }
+    private static string Rgb(dc.h3d.Vector color) =>
+        $"{(int)Math.Round(color.x * 255):x2}{(int)Math.Round(color.y * 255):x2}{(int)Math.Round(color.z * 255):x2}";
+
     /// <summary>Record each HUD weapon slot whenever its drawn state changes.</summary>
     private static void RecordHud(KirbySession session, uint frame)
     {
@@ -229,6 +300,9 @@ internal static class LabAbilityProbe
                 iconWidth = skill.icon?.tile?.width,
                 iconScale = skill.icon?.scaleX,
                 pixelScale = skill.get_pixelScale(),
+                // The two colors the host's RGBReplace shader paints the slot background with.
+                background1 = Rgb(skill.iconBgShader.colorR__),
+                background2 = Rgb(skill.iconBgShader.colorG__),
             };
         }).ToArray();
         var shown = KirbyHud.Shown;
@@ -279,6 +353,9 @@ internal static class LabAbilityProbe
             System.IO.File.AppendAllText(Path.Combine(run, "ability-target-trace.jsonl"), JsonSerializer.Serialize(new
             {
                 frame = lastFrame, target.life, target.destroyed,
+                hostFrozen = target.hasAffect(IceFreeze.FreezeAffect),
+                hostFreezeSeconds = target.getHighestAffectDurationS(IceFreeze.FreezeAffect),
+                sourceIceBlocks = SourceIceBlocks(machine),
                 x = (target.cx + target.xr) * 24, y = (target.cy + target.yr) * 24,
                 target.dx, target.dy, target.bdx, target.bdy, target.radius, target.hei,
                 controlled = KirbyMod.Instance?.NativeProvider?.ControlsEnemy(target),

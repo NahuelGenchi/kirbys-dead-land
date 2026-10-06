@@ -147,6 +147,36 @@ def run_case(name):
                 assert q.x_raw>start_x+200*65536 and kicked_damage==[38,38],kicked_damage
             else:assert gone_frame>dead_frame,(dead_frame,gone_frame)
             return {'native_damage_events':damage,'death_frame':dead_frame,'gone_frame':gone_frame,'frozen_frames':frozen_frames,'remaining_hp':q.hp,'kicked_ice_block_damage':kicked_damage}
+        if name=='proxy_ice_release':
+            # The runtime's Ice path (#42): the host freezes and kills the enemy
+            # itself, so the lethal source Ice hit is retired at once with
+            # active=false instead of being detached into the original block.
+            from oracle_snapshot import inspect_ram
+            def frozen_blocks():
+                entities=inspect_ram(b.read(0x02000000,0x400000))['entities']
+                return [e['address'] for e in entities if struct.unpack('<I',b.read(e['address']+0x30,4))[0]==0x021583ec]
+            transform(b,10)
+            floor=[3 if y>=7 else 0 for y in range(9) for x in range(100)];q=Proxy();hp=16;damage=[];dead_frame=None;victim=None;frozen_frames=[]
+            for i in range(120):
+                state=b.state();b.world(floor,state['x_raw'],state['y_raw'])
+                if dead_frame is None:
+                    assert b.lib.kssu_proxy_set(b.handle,1,75*65536,151*65536,hp,True)==0
+                    b.lib.kssu_proxy_size(b.handle,1,24,34);b.lib.kssu_proxy_options(b.handle,1,18,False)
+                b.step(2 if 5<=i<40 else 0);b.lib.kssu_proxy_state(b.handle,1,C.byref(q))
+                if dead_frame is None and not q.flags&16 and q.hp<hp:
+                    damage.append(hp-q.hp);hp=q.hp
+                    if hp<=0:
+                        dead_frame=i;victim=q.entity;assert b.lib.kssu_proxy_set(b.handle,1,0,0,1,False)==0
+                if dead_frame is not None and frozen_blocks():frozen_frames.append(i)
+            assert dead_frame is not None and damage and victim
+            # Acknowledged with active=false, the slot is unbound at once and the
+            # original destructor removes the victim: no frozen block ever runs.
+            assert q.flags==0 and frozen_frames==[],(q.flags,frozen_frames)
+            assert victim not in [e['address'] for e in inspect_ram(b.read(0x02000000,0x400000))['entities']]
+            # The slot is free again: a new enemy binds and is present.
+            b.lib.kssu_proxy_set(b.handle,1,75*65536,151*65536,100,True);b.step(0,2);b.lib.kssu_proxy_state(b.handle,1,C.byref(q))
+            assert q.flags&1 and not q.flags&8,q.flags
+            return {'native_damage_events':damage,'death_frame':dead_frame,'frames_after_release':120-dead_frame-1,'frozen_block_frames':len(frozen_frames),'rebound_flags':q.flags}
         if name=='motion':
             inputs=[0]*100+[16]*20+[0]*30+[1]+[0]*70+[1]*5+[0]*8+[64]*60+[0]*30
             results=[]
@@ -565,7 +595,7 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--case');parser.add_argument('--skip-abilities',action='store_true');args=parser.parse_args()
     if args.case:
         print('RESULT '+json.dumps({'case':args.case,'result':run_case(args.case)}),flush=True);return
-    cases=['scene_doors', 'room_food', 'proxy_birth_contact', 'proxy_birth_inhale', 'proxy_contact', 'proxy_contact_sword', 'proxy_touch_off', 'proxy_swallow_touch_off', 'proxy_suplex_touch_off', 'proxy_ice_detach', 'proxy_lethal', 'motion', 'ladder', 'ladder_top', 'one_way', 'solid_ceiling', 'water', 'proxy_water', 'proxy_water_sword', 'proxy_water_below', 'hurt_water', 'proxy_swallow', 'hazard_spit', 'hazard_swallow', 'star_spit', 'star_spit_wall', 'star_big', 'star_ability', 'proxy_sword', 'proxy_reuse', 'proxy_save', 'proxy_mix', 'boss_inhale', 'boss_suplex', 'boss_cook', 'boss_sword', 'proxy_capacity', 'copy_drop_reabsorb', 'wheelie_ride', 'proxy_suplex', 'proxy_cook', 'audio', 'hurt', 'hurt_lethal', 'hurt_cold', 'guard', 'health_invulnerable', 'health_sync', 'proxy_size']
+    cases=['scene_doors', 'room_food', 'proxy_birth_contact', 'proxy_birth_inhale', 'proxy_contact', 'proxy_contact_sword', 'proxy_touch_off', 'proxy_swallow_touch_off', 'proxy_suplex_touch_off', 'proxy_ice_detach', 'proxy_ice_release', 'proxy_lethal', 'motion', 'ladder', 'ladder_top', 'one_way', 'solid_ceiling', 'water', 'proxy_water', 'proxy_water_sword', 'proxy_water_below', 'hurt_water', 'proxy_swallow', 'hazard_spit', 'hazard_swallow', 'star_spit', 'star_spit_wall', 'star_big', 'star_ability', 'proxy_sword', 'proxy_reuse', 'proxy_save', 'proxy_mix', 'boss_inhale', 'boss_suplex', 'boss_cook', 'boss_sword', 'proxy_capacity', 'copy_drop_reabsorb', 'wheelie_ride', 'proxy_suplex', 'proxy_cook', 'audio', 'hurt', 'hurt_lethal', 'hurt_cold', 'guard', 'health_invulnerable', 'health_sync', 'proxy_size']
     if not args.skip_abilities:cases += [f'ability-{i}' for i in range(2,26)]
     results=[]
     for name in cases:

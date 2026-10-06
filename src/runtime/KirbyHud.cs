@@ -40,6 +40,10 @@ internal static class KirbyHud
     private static ulong iconHash, pendingHash;
     private static uint pendingSince, lastRead;
     private static bool iconReady, hasPending, standInRefused;
+    /// <summary>The pause card being drawn as the ability, while the host builds it.</summary>
+    private static nint drawingCard;
+    /// <summary>Lab-only observer of each pause equipment card, and whether it shows the ability.</summary>
+    internal static Action<dc.ui.NewItemDesc, bool>? TestCardDrawn;
 
     /// <summary>The ability, tiers and icon currently drawn in the HUD, for lab evidence.</summary>
     internal static (string? Ability, (int, int, int) Tiers, ulong IconHash, bool Active) Shown =>
@@ -48,12 +52,20 @@ internal static class KirbyHud
 
     public static void Install()
     {
+        // Item cards describe their item through getGameplayDesc. A card drawn
+        // from the colorless stand-in (the pause equipment card) describes the
+        // current copy ability instead of the stand-in sword.
+        dc.tool.Hook_InventItem.getGameplayDesc += (orig, item, level) =>
+            standIn is not null && item.HashlinkPointer == standIn.HashlinkPointer && iconAbility is { } ability
+                ? AbilityDescriptions.Describe(ability).AsHaxeString()
+                : orig(item, level);
         Hook_Skill.useItem += UseItem;
         Hook_Skill.onResize += (orig, skill) =>
         {
             orig(skill);
             if (overlaidSlots.ContainsKey(skill.HashlinkPointer)) FitIcon(skill);
         };
+        dc.ui.Hook_NewItemDesc.onResize += DrawCard;
     }
 
     /// <summary>Call once per host frame after the original machine stepped.</summary>
@@ -133,8 +145,76 @@ internal static class KirbyHud
         texture.uploadPixels(pixels, Ref<int>.In(0), Ref<int>.In(0));
     }
 
+    /// <summary>
+    /// The pause screen draws each weapon as a NewItemDesc card from the slot's
+    /// item. A copied slot's card is drawn from the colorless stand-in instead,
+    /// so the host gives it the colorless card look, and then names the ability.
+    /// The card keeps its real item afterward.
+    /// </summary>
+    private static void DrawCard(dc.ui.Hook_NewItemDesc.orig_onResize orig, dc.ui.NewItemDesc card, Ref<double> width, Ref<double> height)
+    {
+        InventItem? real = card.ii;
+        bool ability = AbilityCard(card, real);
+        if (!ability || ColorlessStandIn() is not { } colorless)
+        {
+            orig(card, width, height);
+            if (card.pprocess is dc.ui.pause.DefaultPause) TestCardDrawn?.Invoke(card, false);
+            return;
+        }
+        card.ii = colorless;
+        drawingCard = card.HashlinkPointer;
+        try { orig(card, width, height); }
+        finally { drawingCard = 0; card.ii = real; }
+        Relabel(card);
+        TestCardDrawn?.Invoke(card, true);
+    }
+
+    /// <summary>
+    /// The host card's first two direct text children are the item name and its
+    /// main info line (the weapon's DPS). Name the ability in the host's colorless
+    /// name color and replace the stand-in sword's DPS, which does not describe
+    /// copy damage. The host's own "Colorless" affix line stays.
+    /// </summary>
+    private static void Relabel(dc.ui.NewItemDesc card)
+    {
+        string ability = iconAbility == "YoYo" ? "Yo-Yo" : iconAbility ?? "";
+        var children = card.children;
+        int texts = 0;
+        for (int i = 0; i < children.length && texts < 2; i++)
+        {
+            if (children.getDyn(i) is not dc.ui.Text text) continue;
+            if (texts++ == 0)
+            {
+                // Keep the host's markup (colorless name color); swap only the shown name.
+                string raw = text.rawText?.ToString() ?? "";
+                string shown = System.Text.RegularExpressions.Regex.Replace(text.text?.ToString() ?? "", "<[^>]*>", "");
+                text.set_text((shown.Length > 0 && raw.Contains(shown, StringComparison.Ordinal) ? raw.Replace(shown, ability) : ability).AsHaxeString());
+            }
+            else text.set_text("Copy ability".AsHaxeString());
+        }
+    }
+
+    private static bool AbilityCard(dc.ui.NewItemDesc card, InventItem? item)
+    {
+        if (overlaid is not { } session || !iconReady || texture is null || item is null) return false;
+        if (card.pprocess is not dc.ui.pause.DefaultPause) return false;
+        var inventory = session.Hero.inventory;
+        for (int slot = 0; slot < inventory.nbWeapons; slot++)
+            if (inventory.getEquippedWeaponOn(slot) is { } equipped && equipped.HashlinkPointer == item.HashlinkPointer)
+                return !equipped.hasTag("Shield".AsHaxeString());
+        return false;
+    }
+
     private static void UseItem(Hook_Skill.orig_useItem orig, Skill skill, InventItem? item)
     {
+        if (drawingCard != 0 && item is not null && item.HashlinkPointer == standIn?.HashlinkPointer)
+        {
+            // The ability card's own icon slot: host colorless frame, original icon.
+            orig(skill, item);
+            skill.setIcon(new Tile(texture!, 0, 0, AbilityIcon.Size, AbilityIcon.Size, Ref<int>.In(0), Ref<int>.In(0)));
+            FitIcon(skill);
+            return;
+        }
         if (!AbilitySlot(skill) || ColorlessStandIn() is not { } colorless)
         {
             if (overlaidSlots.Remove(skill.HashlinkPointer, out bool disableAmmo))
@@ -146,6 +226,12 @@ internal static class KirbyHud
             orig(skill, item);
             return;
         }
+        // useItem's same-item-kind path colors the slot from its previous item
+        // before switching to the new one (Skill.hx:540-545). With the starting
+        // sword in the slot that gave the sword's Brutality red. Without a slot
+        // item, the host assigns the colorless stand-in first and picks the
+        // highest scroll stat (Skill.hx:521-522, 390-391).
+        skill.ii = null;
         orig(skill, colorless);
         // Inventory, equip and cooldown logic still see the real equipment.
         skill.ii = item;

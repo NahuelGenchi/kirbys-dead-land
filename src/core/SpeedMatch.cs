@@ -54,27 +54,51 @@ public static class SpeedMatch
     public const ushort Free = 0, Solid = 3, Water = 130, OneWay = 131, SlopeUpRight = 132, SlopeUpLeft = 133, Ladder = 134;
     public delegate ushort Terrain(int cx, int cy);
 
-    public enum Motion { None, Ground, Air, Float, Slide }
+    public enum Motion { None, Ground, Air, Float, Slide, Carry }
+
+    /// <summary>
+    /// An ability move that carries Kirby: a dash attack, or any move faster
+    /// than the original dash (Wheel's roll, Jet's charged dash). Not an
+    /// original action code; <see cref="ActionFilter"/> gives it in place of 142C.
+    /// </summary>
+    public const ushort Carry = 0xFFFF;
+    /// <summary>The original dash velocity (2.0625 px/frame); ability moves beyond it carry Kirby.</summary>
+    public const int DashVelocity = 528;
 
     /// <summary>
     /// The ability action (142C) is also the exhale that ends a float, with B or
-    /// on landing. It moves like floating while it follows a float; copy-ability
-    /// attacks under it keep their original motion.
+    /// on landing. It moves like floating while it follows a float. A move under
+    /// it that starts from a dash, or that becomes faster than the original
+    /// dash, carries Kirby: it moves as much faster than the matched run as the
+    /// original's is than its dash. Every other copy-ability attack keeps its
+    /// original motion.
     /// </summary>
     public sealed class ActionFilter
     {
         private ushort last;
         private bool exhale;
+        private int dashDirection, heading;
         /// <summary>The latest action as SpeedMatch should treat it.</summary>
         public ushort Effective { get; private set; }
-        /// <summary>Record the original action after a frame and return it as SpeedMatch should treat it.</summary>
-        public ushort Next(ushort action)
+        /// <summary>Record the original action and horizontal velocity after a frame and return the action as SpeedMatch should treat it.</summary>
+        public ushort Next(ushort action, int vx = 0)
         {
             exhale = action == KirbyActions.Ability && (exhale || last == KirbyActions.Float);
+            // The move keeps carrying Kirby until the ability action ends, and
+            // turns with him (Wheel) once he is fast the other way.
+            if (action != KirbyActions.Ability || exhale) heading = 0;
+            else if (Math.Abs(vx) > DashVelocity) heading = Math.Sign(vx);
+            else if (last == KirbyActions.Dash) heading = dashDirection;
+            if (action == KirbyActions.Dash) dashDirection = Math.Sign(vx);
             last = action;
-            return Effective = exhale ? KirbyActions.Float : action;
+            return Effective = exhale ? KirbyActions.Float : heading != 0 ? Carry : action;
         }
-        public void Reset() { last = Effective = 0; exhale = false; }
+        /// <summary>
+        /// The direction whose motion SpeedMatch speeds up: the carrying move's
+        /// own, whatever is held, otherwise the held direction.
+        /// </summary>
+        public int Direction(int held) => heading != 0 ? heading : held;
+        public void Reset() { last = Effective = 0; exhale = false; dashDirection = heading = 0; }
     }
 
     public static Motion Classify(ushort action) => action switch
@@ -83,6 +107,7 @@ public static class SpeedMatch
         KirbyActions.Jump or KirbyActions.Fall => Motion.Air,
         KirbyActions.Float => Motion.Float,
         KirbyActions.Slide => Motion.Slide,
+        Carry => Motion.Carry,
         _ => Motion.None,
     };
 
@@ -107,6 +132,8 @@ public static class SpeedMatch
     {
         if (dx == 0) return 0;
         if (motion == Motion.Slide) return dx * (Math.Abs(vx) >= SlideFullVelocity ? SlideFastScale : SlideSlowScale);
+        // A carrying ability move keeps its original lead over the dash, so it outruns the matched run.
+        if (motion == Motion.Carry) return Math.Sign(dx) == direction ? dx * GroundScale : dx;
         // Only motion the player is asking for speeds up; skids and recoil keep their original speed.
         if (direction == 0 || Math.Sign(dx) != direction) return dx;
         double scale = motion switch { Motion.Ground => GroundScale, Motion.Air => AirScale, Motion.Float => FloatScale, _ => 1 };
@@ -135,7 +162,8 @@ public static class SpeedMatch
         double ex = Horizontal(motion, direction, dx, vx) - dx;
         double ey = Vertical(motion, dy) - dy;
         double x = x1, feet = feet1;
-        if (motion is Motion.Ground or Motion.Slide)
+        // A carrying ability move follows the floor while the original keeps Kirby on it; hops leave it to the air.
+        if (motion is Motion.Ground or Motion.Slide || (motion == Motion.Carry && Surface(tile, x1, feet1, Edge) is not null))
         {
             // The original keeps Kirby on the floor and follows slopes from his
             // centre; follow the same surface over the added distance.

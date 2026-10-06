@@ -20,6 +20,9 @@ preserved; generated assets and native dependencies remain in the private data r
 ## Requested rules
 
 - Absorbing a Dead Cells enemy selects a random original copy ability.
+  While copied, the pause screen (Escape) describes the ability and its main
+  moves in the mod's controls; see
+  [ability descriptions](docs/GAMEPLAY_FIDELITY.md#ability-descriptions).
 - Absorbing an Elite always gives original Sword, which deals double damage
   until the ability is lost (hit off, discarded, made into a helper, or a new run).
   This is a deliberate deviation; see `docs/GAMEPLAY_FIDELITY.md`.
@@ -52,7 +55,8 @@ preserved; generated assets and native dependencies remain in the private data r
   [colorless copy damage](docs/GAMEPLAY_FIDELITY.md#colorless-copy-damage).
 - While copied, each non-shield weapon slot in the HUD (normally Left-Click)
   shows the current ability's original icon in a colorless slot. See the
-  [HUD ability slot](docs/GAMEPLAY_FIDELITY.md#hud-ability-slot).
+  [HUD ability slot](docs/GAMEPLAY_FIDELITY.md#hud-ability-slot). The pause
+  screen's equipment card for that slot shows the ability too.
 
 ## Play
 
@@ -93,8 +97,10 @@ speed. He climbs at his own original speed (139 px/s up, 165 px/s down), faster
 than the Beheaded's 97.5 px/s. He climbs ladders, chains and vines grown with
 the Vine rune, and climbs from a vine onto the ledge it leads to. He stops when the direction is released and
 turns at once, and his jump keeps its height but peaks as fast as the
-Beheaded's. His animations are the original ones; the walk and dash cycles
-play faster with the run so his feet keep up.
+Beheaded's. Dash attacks, Wheel's roll and other copy-ability moves faster
+than his dash keep their original lead over the run. His animations are the
+original ones; the walk and dash cycles play faster with the run so his feet
+keep up.
 
 As in Dead Cells, touching an enemy does not hurt Kirby: only enemy attacks do
 (and the few Dead Cells enemies whose bodies are spiked or electric). Bumping
@@ -200,8 +206,10 @@ while playing Kirby; healing, equipment and interaction tutorials remain availab
 - Taking a real exit door, Kirby walks into the doorway in the original Walk
   action until the host fade, instead of gliding in one standing frame. See
   [exit-door walk](docs/RUNTIME_LAUNCH.md#exit-door-walk-2026-10-05).
-- Live Ice damage kills the host enemy once and leaves the original frozen block.
-  Source tests also verify kicking the block into another enemy.
+- Ice uses Dead Cells' own freeze status: Kirby's breath freezes the host enemy
+  for 3 s (with host diminishing returns), his later Ice hits damage it without
+  shattering the freeze, and the host thaw follows. An Ice kill leaves no original
+  ice block. See [Ice freeze](docs/GAMEPLAY_FIDELITY.md#ice-freezes-with-the-host-status-intentional-deviation).
 - Original sound effects play at 48 kHz stereo. Only the source BGM player is
   muted, retaining Dead Cells music. Jump/landing audio and the SDL queue passed
   tests, including coexistence with the host's SDL3 and successful queuing to the
@@ -244,7 +252,8 @@ dotnet run --project tests/speed -c Release -- \
 
 `tests/speed` runs Kirby's movement on the original controller with the speed
 match and checks it against the Beheaded's measured speeds, walls, ceilings,
-slopes, ledges and one-way platforms, and that thrown objects and attached
+slopes, ledges and one-way platforms, that dash attacks and Wheel's roll keep
+their original lead over the run, and that thrown objects and attached
 effects (Bomb's bombs, Fire's and Plasma's head emitters) keep their original
 places as the source window moves, that Kirby stays framed on the original
 screen, and that his walk cycle keeps up with the run.
