@@ -1,7 +1,11 @@
+using Path = System.IO.Path;
 using System.Text.Json;
 using dc.en;
 using dc.en.mob;
+using dc.tool;
 using dc.tool.atk;
+using Kirby.Core;
+using ModCore.Utilities;
 
 namespace Kirby.Runtime;
 
@@ -20,10 +24,41 @@ internal static class LabAbilityProbe
     private static uint? setupStart;
     private static bool setupFed, setupDone;
     private static bool savedAttackState;
+    private static int[]? scrolls;
+    private static bool scrollsGiven;
+    private static int[]? tiers;
+    private static readonly List<object> copyHits = [];
+    // KIRBY_LAB_ABILITY_PLAN: original buttons by frame after the ability is ready,
+    // [{"from":30,"to":55,"mask":2}, ...], instead of the damage test. Original
+    // objects are then logged each frame in host pixels (ability-actors.jsonl).
+    private sealed record PlanStep(uint From, uint To, ushort Mask);
+    private static List<PlanStep>? plan;
 
     public static void Install(string output)
     {
         run = output;
+        string? requestedScrolls = Environment.GetEnvironmentVariable("KIRBY_LAB_TEST_SCROLLS");
+        if (requestedScrolls is not null)
+            scrolls = requestedScrolls.Split(',').Select(c => int.Parse(c, System.Globalization.CultureInfo.InvariantCulture)).ToArray();
+        KirbyEnemies.TestObserver = (mob, sourceDamage, hostDamage) =>
+        {
+            var enemies = KirbyMod.Instance?.NativeProvider?.Enemies;
+            if (target?.HashlinkPointer != mob.HashlinkPointer || enemies is null) return;
+            copyHits.Add(new
+            {
+                frame = KirbyMod.Instance?.NativeProvider?.Machine?.State.Frame,
+                hostLifeBefore = mob.life,
+                sourceDamage,
+                hostDamage,
+                colorlessTier = enemies.ColorlessTier,
+                hostMultiplier = enemies.ColorlessMultiplier,
+                // What the host itself computes for colorless gear with this base damage.
+                hostColorlessDamage = (int)dc.Const.Class.scaleHeroValueToTier((double)sourceDamage, enemies.ColorlessTier),
+            });
+        };
+        if (Environment.GetEnvironmentVariable("KIRBY_LAB_ABILITY_PLAN") is { } planPath && System.IO.File.Exists(planPath))
+            plan = JsonSerializer.Deserialize<List<PlanStep>>(System.IO.File.ReadAllText(planPath),
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
         dc.tool.Hook_Tutorial.tryToStart += (_, _, _) => false;
         dc.Hook_Entity.kill += (orig, entity) =>
         {
@@ -92,9 +127,23 @@ internal static class LabAbilityProbe
                 return 128;
             }
         }
+        if (scrolls is not null && !scrollsGiven)
+        {
+            // Real scroll items through the normal inventory, then the host's
+            // own tier computation (Hero.computeTiers counts these item IDs).
+            string[] ids = ["BrutalityUp", "TacticUp", "SurvivalUp"];
+            for (int stat = 0; stat < 3; stat++)
+                for (int n = 0; n < scrolls[stat]; n++)
+                    session.Hero.inventory.add(InventItem.Class.fromItem(ids[stat].AsHaxeString(), null));
+            session.Hero.computeTiers();
+            tiers = [session.Hero.brutalityTier, session.Hero.tacticTier, session.Hero.survivalTier];
+            scrollsGiven = true;
+        }
         start ??= machine.State.Frame;
         uint elapsed = machine.State.Frame - start.Value;
         initialAbility ??= session.Rules.AbilityId;
+        if (plan is not null)
+            return (ushort)plan.Where(step => elapsed >= step.From && elapsed < step.To).Aggregate(0, (mask, step) => mask | step.Mask);
         // A saved Wheel roll continues without a held button. End it before
         // positioning the fresh test target, then perform a new real attack.
         if (elapsed == 0 && machine.State.Ability == 8 && machine.State.VxRaw != 0) return 2;
@@ -120,12 +169,36 @@ internal static class LabAbilityProbe
         return 0;
     }
 
+    private static void LogActors(KirbySession session, NdsRuntime machine, uint elapsed, (int X, int Y) window)
+    {
+        var word = new byte[4];
+        uint Read32(uint address) { machine.Read(address, word); return BitConverter.ToUInt32(word); }
+        uint player = machine.State.Player;
+        var actors = new List<object>();
+        for (uint slot = 0; slot < 7; slot++)
+            for (uint node = Read32(0x02049dec + slot * 4), guard = 0; node >= 0x02000000 && node < 0x02400000 && guard < 256; node = Read32(node), guard++)
+                if (node != player)
+                    actors.Add(new { node, kind = (byte)Read32(node + 0x16), parent = Read32(node + 4) == player ? "kirby" : Read32(node + 4).ToString("X"),
+                        x = (int)Read32(node + 0x80) / 65536.0 + window.X * 24, y = (int)Read32(node + 0x84) / 65536.0 + window.Y * 24 });
+        var hero = session.Hero;
+        System.IO.File.AppendAllText(Path.Combine(run!, "ability-actors.jsonl"), JsonSerializer.Serialize(new
+        {
+            frame = lastFrame, elapsed, action = machine.Action, ability = machine.State.Ability,
+            x = (hero.cx + hero.xr) * 24, feet = (hero.cy + hero.yr) * 24, actors,
+        }) + "\n");
+    }
+
     public static void Poll()
     {
         var session = KirbyMod.Instance?.ActiveSession;
         var machine = KirbyMod.Instance?.NativeProvider?.Machine;
         if (run is null || session is null || machine is null || machine.State.Frame == lastFrame) return;
         lastFrame = machine.State.Frame;
+        if (plan is not null)
+        {
+            if (start is uint begun && KirbyMod.Instance?.NativeProvider?.SourceWindow is { } window) LogActors(session, machine, lastFrame - begun, window);
+            return;
+        }
         if (!savedAttackState && start is uint started && lastFrame - started >= 155)
         {
             machine.SaveState(Path.Combine(run, "ability-mid-attack.state"));
@@ -173,6 +246,13 @@ internal static class LabAbilityProbe
             incomingFrame,
             afterAttackHostLife,
             afterAttackSourceHealth,
+            scrolls,
+            tiers,
+            currentTiers = new[] { session.Hero.brutalityTier, session.Hero.tacticTier, session.Hero.survivalTier },
+            colorlessTier = KirbyMod.Instance?.NativeProvider?.Enemies.ColorlessTier,
+            hostMultiplier = KirbyMod.Instance?.NativeProvider?.Enemies.ColorlessMultiplier,
+            coreMultiplier = KirbyMod.Instance?.NativeProvider?.Enemies is { } e ? ColorlessDamage.Multiplier(e.ColorlessTier) : (double?)null,
+            copyHits,
         }, new JsonSerializerOptions { WriteIndented = true }));
     }
 }

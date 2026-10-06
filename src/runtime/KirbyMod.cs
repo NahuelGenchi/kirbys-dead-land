@@ -18,12 +18,13 @@ namespace Kirby.Runtime;
 /// DCCM host hooks for the selectable original-ROM Kirby character.
 /// </summary>
 public sealed class KirbyMod(ModInfo info) : ModBase(info), IOnHeroUpdate,
-    IOnHeroDispose, IOnAfterLoadingAssets
+    IOnHeroDispose, IOnAfterLoadingAssets, IOnFrameUpdate
 {
     private IKirbyGameplayProvider? provider;
     private KirbySession? session;
     private RuntimeConfig config = new();
     private bool warnedNoProvider;
+    private KirbyCamera? camera;
     public static KirbyMod? Instance { get; private set; }
     public KirbySession? ActiveSession => session;
     public KirbyNdsProvider? NativeProvider => provider as KirbyNdsProvider;
@@ -37,11 +38,15 @@ public sealed class KirbyMod(ModInfo info) : ModBase(info), IOnHeroUpdate,
             config = JsonSerializer.Deserialize<RuntimeConfig>(File.ReadAllText(path))
                 ?? throw new InvalidDataException("Kirby runtime configuration is null.");
         KirbyInput.Install();
+        KirbyNdsProvider.Log = message => Logger.Information(message);
         KirbyEnemyHooks.Install();
         KirbyDamage.Install();
         if (config.EnableOriginalRuntime)
         {
             KirbyTutorials.Install(config.OutfitId);
+            KirbyHostVisuals.Install(config.OutfitId);
+            KirbyHostSkills.Install();
+            camera = new KirbyCamera(config.CameraZoom);
             RegisterProvider(new KirbyNdsProvider(config, Info.ModRoot.GetFilePath(".")));
         }
         dc.Hook_User.newGame += (orig, user, seed, level, custom, scoring, mode) =>
@@ -58,6 +63,7 @@ public sealed class KirbyMod(ModInfo info) : ModBase(info), IOnHeroUpdate,
         };
         Hook_Weapon.tryToUse += TryUseWeapon;
         Hook_Inventory.equip += Equip;
+        Hook_InventItem.isUsefulFor += IsUsefulFor;
         Hook_Hero.fixedUpdate += FixedUpdate;
         Hook_Hero.updateMaxLife += (orig, hero) =>
         {
@@ -132,6 +138,7 @@ public sealed class KirbyMod(ModInfo info) : ModBase(info), IOnHeroUpdate,
         {
             Deactivate();
             session = new KirbySession(hero, provider);
+            KirbyHostVisuals.ClearHead(hero);
             CaptureShield(session);
             provider.OnActivated(session);
         }
@@ -193,18 +200,32 @@ public sealed class KirbyMod(ModInfo info) : ModBase(info), IOnHeroUpdate,
         };
     }
 
+    /// <summary>
+    /// The host asks this before every pickup, purchase and altar or timed-door
+    /// reward. When it is false the host shows its own "not useful right now"
+    /// message and leaves the item where it is; a long press still recycles a
+    /// dropped item. Kirby declines the equipment his rules do not allow here.
+    /// </summary>
+    private bool IsUsefulFor(Hook_InventItem.orig_isUsefulFor orig, InventItem item, Hero hero)
+    {
+        KirbySession? state = Synchronize(hero);
+        // Non-combat progression items, outfits, consumables and mutations remain host-owned.
+        if (state is null || (item.kind is not InventItemKind.Weapon && item.kind is not InventItemKind.Active))
+            return orig(item, hero);
+        return state.Rules.CanEquip(Classify(item)) && orig(item, hero);
+    }
+
     private bool Equip(Hook_Inventory.orig_equip orig, Inventory inventory, InventItem item)
     {
         KirbySession? state = Synchronize(Game.Instance.HeroInstance);
         if (state is null || inventory.HashlinkPointer != state.Hero.inventory.HashlinkPointer)
             return orig(inventory, item);
-        // Non-combat progression items, outfits, consumables and mutations remain host-owned.
-        if (item.kind is not InventItemKind.Weapon && item.kind is not InventItemKind.Active)
-            return orig(inventory, item);
-        if (!state.Rules.CanEquip(Classify(item)))
-            return false;
+        // Never refuse here: Inventory.add has already listed the item with
+        // posID -1 and expects equip to give it a slot. A refusal left it
+        // slotless and the host HUD threw "unexpected posId" on the pickup.
+        // Kirby declines unusable items earlier, in IsUsefulFor.
         bool equipped = orig(inventory, item);
-        if (equipped && state.Rules.IsBaseForm)
+        if (equipped && state.Rules.IsBaseForm && item.kind is InventItemKind.Weapon)
             CaptureShield(state);
         return equipped;
     }
@@ -233,6 +254,15 @@ public sealed class KirbyMod(ModInfo info) : ModBase(info), IOnHeroUpdate,
     }
 
     void IOnHeroDispose.OnHeroDispose() => Deactivate();
+
+    void IOnFrameUpdate.OnFrameUpdate(double dt)
+    {
+        if (provider is null) return;
+        KirbyHostVisuals.OnFrame();
+        NativeProvider?.OnHostFrame(dt);
+        var native = NativeProvider;
+        camera?.Update(session?.Hero._level ?? native?.DeathLevel, session is not null || native?.PlayingDeath == true);
+    }
 }
 
 public sealed class RuntimeConfig
@@ -244,4 +274,38 @@ public sealed class RuntimeConfig
     public bool LoadDecodedAssetAtlases { get; set; }
     public string[] SwordIds { get; set; } = [];
     public string[] BowIds { get; set; } = [];
+    /// <summary>
+    /// Host camera zoom while Kirby plays. 1 keeps the Beheaded's camera; 2
+    /// shows about 200 host pixels of height, the original DS screen's 192,
+    /// so Kirby's size and speed on screen match the original.
+    /// </summary>
+    public double CameraZoom { get; set; } = 1;
+    /// <summary>
+    /// Shown share of the original hurt, guard and transformation palette
+    /// flashes: 1 keeps the original 10 Hz orange/whitened alternation, 0
+    /// removes it. 0.35 keeps the timing as a gentle tint.
+    /// </summary>
+    public double FlashStrength { get; set; } = 0.35;
+    /// <summary>A held direction dashes through the original double-tap; a light analog tilt walks.</summary>
+    public bool AlwaysDash { get; set; } = true;
+    /// <summary>
+    /// Kirby runs, rolls, jumps, falls, floats and climbs at the Beheaded's
+    /// measured speeds, and stops and turns as promptly. False keeps the
+    /// original DS speeds. The stomp is the host's dive and always moves at its speed.
+    /// </summary>
+    public bool MatchHostSpeed { get; set; } = true;
+    /// <summary>
+    /// The original game's touch damage: bumping into an enemy hurts Kirby
+    /// and weak enemies. False (the default) follows Dead Cells, where only
+    /// enemy attacks hurt the hero and touching hurts neither side; Kirby's
+    /// inhale, slide and copy attacks still hit, and Dead Cells' own touch
+    /// attacks (spiked and electric enemies) still hurt him.
+    /// </summary>
+    public bool OriginalTouchDamage { get; set; }
+    /// <summary>
+    /// Host damage per original damage point against a tier-1 enemy, before
+    /// the host's own per-tier life scaling. The original game kills a basic
+    /// 16-18 HP enemy with one ability hit; 3.5 makes a 120-life Zombie take two.
+    /// </summary>
+    public double CopyDamageScale { get; set; } = 3.5;
 }

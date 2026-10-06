@@ -3,7 +3,7 @@ using dc.tool.atk;
 
 namespace Kirby.Runtime;
 
-/// <summary>Keep original damage values after the host resolves target validity and blocking.</summary>
+/// <summary>Apply exact adapter damage (original, scaled as colorless gear) after the host resolves target validity and blocking.</summary>
 internal static class KirbyDamage
 {
     private static readonly Dictionary<nint, int> sourceHits = [];

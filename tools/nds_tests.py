@@ -94,6 +94,24 @@ def run_case(name):
                     b.lib.kssu_proxy_set(b.handle,1,51*65536,151*65536,32760,True);b.step()
                 assert b.lib.kssu_health(b.handle)==69
             return {'overlap_health':76,'original_attack_damage':damage,'reenabled_health':b.lib.kssu_health(b.handle)}
+        if name=='proxy_touch_off':
+            # A capturable enemy overlapping Kirby with original touch damage off:
+            # neither is hurt; turned back on, the original touch costs Kirby 7 HP.
+            floor=[3 if y>=7 else 0 for y in range(9) for x in range(100)];q=Proxy()
+            b.world(floor,43*65536,int(153.5*65536));b.step(0,60)
+            for i in range(110):
+                state=b.state();b.world(floor,state['x_raw'],state['y_raw'])
+                b.lib.kssu_proxy_set(b.handle,1,(85 if i<5 else 51)*65536,151*65536,100,True)
+                assert b.lib.kssu_proxy_options(b.handle,1,18,False)==0
+                assert b.lib.kssu_proxy_contact(b.handle,1,False)==0
+                b.step(0)
+            b.lib.kssu_proxy_state(b.handle,1,C.byref(q))
+            assert b.lib.kssu_health(b.handle)==76 and q.flags&1 and q.hp==100,(b.lib.kssu_health(b.handle),q.flags,q.hp)
+            b.lib.kssu_proxy_contact(b.handle,1,True)
+            for i in range(5):
+                b.lib.kssu_proxy_set(b.handle,1,51*65536,151*65536,100,True);b.step()
+            assert b.lib.kssu_health(b.handle)==69
+            return {'overlap_health':76,'overlap_enemy_hp':100,'reenabled_health':69}
         if name in ('proxy_ice_detach','proxy_lethal'):
             transform(b,10 if name=='proxy_ice_detach' else 18)
             floor=[3 if y>=7 else 0 for y in range(9) for x in range(100)];q=Proxy();hp=16 if name=='proxy_ice_detach' else 1;damage=[];dead_frame=None;gone_frame=None;frozen_frames=0
@@ -161,14 +179,15 @@ def run_case(name):
             high=b.step(64,30);still=b.step(0,30);low=b.step(128,30)
             assert high['y_raw']==still['y_raw'] and high['y_raw']<100*65536 and low['y_raw']==int(153.5*65536)
             return {'up_y':high['y_raw']/65536,'released_y':still['y_raw']/65536,'down_y':low['y_raw']/65536,'source_pose':high['graphic']&65535}
-        if name in ('proxy_suplex','proxy_cook'):
-            ability=6 if name=='proxy_suplex' else 24;transform(b,ability)
+        if name in ('proxy_suplex','proxy_cook','proxy_suplex_touch_off'):
+            ability=24 if name=='proxy_cook' else 6;transform(b,ability)
             floor=[3 if y>=7 else 0 for y in range(9) for x in range(100)];q=Proxy();damage=[];captured=0;gone=None
             for i in range(380):
                 s=b.state();b.world(floor,s['x_raw'],s['y_raw'])
                 result=b.lib.kssu_proxy_set(b.handle,1,75*65536,151*65536,32760,True)
                 if result==-3:break
                 assert result==0
+                if name.endswith('touch_off'):assert b.lib.kssu_proxy_contact(b.handle,1,False)==0
                 b.step(2 if 5<=i<40 else (66 if 60<=i<80 else 0));b.lib.kssu_proxy_state(b.handle,1,C.byref(q))
                 captured+=bool(q.flags&2)
                 if q.flags&1 and not q.flags&16 and q.hp<32760:damage.append([i,32760-q.hp])
@@ -281,12 +300,13 @@ def run_case(name):
             assert len(mounted)>30 and abilities=={1} and b.state()['graphic']&65535!=65535, (len(mounted),abilities,b.state()['graphic']&65535)
             assert mounted[-1][1]-mounted[0][1]>60
             return {'native_mounted_frames':len(mounted),'mounted_ability':1,'native_jump_dismount':True}
-        if name=='proxy_swallow':
+        if name in ('proxy_swallow','proxy_swallow_touch_off'):
             floor=[3 if y>=7 else 0 for y in range(9) for x in range(100)]
             b.world(floor,43*65536,int(153.5*65536));b.step(0,60);controlled=0;q=Proxy()
             for i in range(60):
                 s=b.state();b.world(floor,s['x_raw'],s['y_raw'])
                 assert b.lib.kssu_proxy_set(b.handle,1,85*65536,151*65536,100,True)==0
+                if name.endswith('touch_off'):assert b.lib.kssu_proxy_contact(b.handle,1,False)==0
                 b.step(2 if i>=5 else 0);b.lib.kssu_proxy_state(b.handle,1,C.byref(q))
                 controlled+=bool(q.flags&32)
                 if q.flags&4:break
@@ -375,7 +395,7 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--case');parser.add_argument('--skip-abilities',action='store_true');args=parser.parse_args()
     if args.case:
         print('RESULT '+json.dumps({'case':args.case,'result':run_case(args.case)}),flush=True);return
-    cases=['scene_doors','room_food','proxy_birth_contact','proxy_birth_inhale','proxy_contact','proxy_contact_sword','proxy_ice_detach','proxy_lethal','motion','ladder','one_way','solid_ceiling','water','proxy_swallow','proxy_sword','proxy_reuse','proxy_save','proxy_mix','boss_inhale','boss_suplex','boss_cook','boss_sword','proxy_capacity','copy_drop_reabsorb','wheelie_ride','proxy_suplex','proxy_cook','audio','hurt','hurt_lethal','hurt_cold','guard','health_invulnerable','health_sync','proxy_size']
+    cases=['scene_doors','room_food','proxy_birth_contact','proxy_birth_inhale','proxy_contact','proxy_contact_sword','proxy_touch_off','proxy_swallow_touch_off','proxy_suplex_touch_off','proxy_ice_detach','proxy_lethal','motion','ladder','one_way','solid_ceiling','water','proxy_swallow','proxy_sword','proxy_reuse','proxy_save','proxy_mix','boss_inhale','boss_suplex','boss_cook','boss_sword','proxy_capacity','copy_drop_reabsorb','wheelie_ride','proxy_suplex','proxy_cook','audio','hurt','hurt_lethal','hurt_cold','guard','health_invulnerable','health_sync','proxy_size']
     if not args.skip_abilities:cases += [f'ability-{i}' for i in range(2,26)]
     results=[]
     for name in cases:

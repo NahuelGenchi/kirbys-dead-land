@@ -20,15 +20,25 @@ preserved; generated assets and native dependencies remain in the private data r
 ## Requested rules
 
 - Absorbing a Dead Cells enemy selects a random original copy ability.
+- Absorbing an Elite always gives original Sword, which deals double damage
+  until the ability is lost (hit off, discarded, made into a helper, or a new run).
+  This is a deliberate deviation; see `docs/GAMEPLAY_FIDELITY.md`.
 - Base Kirby can use Dead Cells swords, bows and shields.
 - Copied Kirby uses the original ability's attacks and retains the exact shield
   it carried for parrying. Equipping replacement weapons while copied is blocked.
+- Items Kirby cannot use (other weapons and skills, or any weapon while copied)
+  get Dead Cells' own "Can't use that right now" message and stay on the ground;
+  a long press still recycles them.
 - Original inhale, mouthful, Down-to-swallow, spit, flight, guard, slide and copy
   discard are executed by the ROM. All 24 original copy forms load through the
   original transformation code, rather than replacing them with host weapons.
 - Each ordinary enemy consumed by the original Cook also drops one Dead Cells
   healing food item through the game's own loot drop. Cook's original damage is
   unchanged; Bosses and Elites drop no food.
+- Copy attacks count as colorless gear: their damage is multiplied by
+  1.15^(tier − 1), where tier is 1 + your highest scroll count (Brutality,
+  Tactics or Survival). With no scrolls this factor is ×1. See
+  [colorless copy damage](docs/GAMEPLAY_FIDELITY.md#colorless-copy-damage).
 
 ## Play
 
@@ -42,10 +52,47 @@ Choose **New Game** for a new run, or continue your existing private Kirby save.
 New runs start with the new Kirby outfit.
 The launcher uses the real display, keyboard/controller and sound, with separate
 local saves, Cloud save redirection, backups and a read-only view of the installed
-game. It leaves no loader in the Steam game directory. A complete user play
-recording was reviewed after the initial release; see the
-[recording review](docs/RECORDING_REVIEW_2026-10-04.md) for observed problems,
-corrections and the scope of subsequent live checks.
+game. It leaves no loader in the Steam game directory. Five complete user play
+recordings were reviewed after the initial release; see the
+[first](docs/RECORDING_REVIEW_2026-10-04.md),
+[second](docs/RECORDING_REVIEW_2026-10-04_0907.md),
+[third](docs/RECORDING_REVIEW_2026-10-04_1109.md),
+[fourth](docs/RECORDING_REVIEW_2026-10-04_2108.md) and
+[fifth](docs/RECORDING_REVIEW_2026-10-04_2143.md) recording reviews for observed
+problems, corrections and the scope of subsequent live checks. Kirby now appears
+in the arrival flash, keeps host weapons behind his body, plays his original
+death animation, steps one original frame per frame on a ~60 Hz display, and takes
+host damage scaled to his 76 HP. He no longer blinks out when hit, a held
+direction dashes, and copy abilities deal damage on the host's scale. The
+original game's hurt and guard palette flash is kept but softened to a tint,
+because the whitened frames vanished against light scenery on a large monitor.
+Kirby no longer jumps a terrain cell for a frame as he moves. His slide (Down +
+jump) is his roll: it passes Dead Cells roll-zone tunnels and bursts doors. In
+the air, the Dead Cells dive binding (Down + jump by default) makes him stomp
+with the host's own dive attack: it hits and stuns enemies and breaks
+breakable floors once the Ram rune is unlocked.
+
+Kirby moves at the Beheaded's speeds, measured in the game: he runs and steers
+in the air at 236.5 px/s, slides as far and as fast as the Beheaded rolls,
+falls at 403 px/s, stomps at the dive's 900 px/s, climbs at 97.5 px/s and
+floats across at running speed. He stops when the direction is released and
+turns at once, and his jump keeps its height but peaks as fast as the
+Beheaded's. His animations are the original ones; the walk and dash cycles
+play faster with the run so his feet keep up.
+
+As in Dead Cells, touching an enemy does not hurt Kirby: only enemy attacks do
+(and the few Dead Cells enemies whose bodies are spiked or electric). Bumping
+into enemies does not hurt them either; inhaling, sliding and copy attacks do.
+
+Six options in the staged `config.json` tune the adaptation: `CameraZoom`
+(1 keeps the Beheaded's camera; 2 shows about the DS screen's height),
+`AlwaysDash` (a held direction dashes; a light analog tilt still walks),
+`MatchHostSpeed` (true: the Beheaded's speeds; false keeps the DS speeds; the
+stomp always moves at the dive's speed),
+`OriginalTouchDamage` (false: Dead Cells' rules; true restores the original
+game's touch damage, which hurts Kirby and weak enemies on contact),
+`CopyDamageScale` (3.5: a Zombie takes about two Sword hits) and
+`FlashStrength` (0.35; 1 restores the original full flash).
 
 Existing Dead Cells bindings are used:
 
@@ -53,6 +100,8 @@ Existing Dead Cells bindings are used:
 |---|---|
 | Move / directional input | Original movement and move combinations |
 | Jump | Jump / puff / flight |
+| Down + jump on the ground | Original slide; passes roll-zone tunnels and bursts doors like a roll |
+| Dive attack binding in the air or on a chain (Down + jump by default) | Stomp through the host dive attack; a floating Kirby exhales first, a climbing Kirby kicks off the chain |
 | Dodge | Original Kirby guard |
 | Skill 1 | Inhale / spit / copy ability attack |
 | Down with a mouthful | Swallow and transform |
@@ -151,7 +200,17 @@ python3 tools/nds_tests.py
 python3 tools/verify_renderer.py
 python3 tools/verify_background.py
 python3 tools/verify_native_init.py
+dotnet run --project tests/speed -c Release -- \
+  "$HOME/.local/share/kirby-dead-cells/oracle/vendor/melon-rs/target/release/libkssu_bridge.so" \
+  "/path/to/Kirby Super Star Ultra (USA).nds" "$HOME/.local/share/kirby-dead-cells/oracle/ready2/000.state"
 ```
+
+`tests/speed` runs Kirby's movement on the original controller with the speed
+match and checks it against the Beheaded's measured speeds, walls, ceilings,
+slopes, ledges and one-way platforms, and that thrown objects and attached
+effects (Bomb's bombs, Fire's and Plasma's head emitters) keep their original
+places as the source window moves, that Kirby stays framed on the original
+screen, and that his walk cycle keeps up with the run.
 
 The static extraction tools remain available for research and outfit scaffolding:
 `tools/extract_kirby.py`, `tools/build_assets.py`, and `tools/verify_assets.py`.
