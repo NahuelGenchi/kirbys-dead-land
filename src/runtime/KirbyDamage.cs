@@ -55,9 +55,11 @@ internal static class KirbyDamage
         var attack = AttackUtils.Class.createFromHero(hero, damage, null);
         attack.useHeroScaling = false;
         if (frozenSafe) attack.dmgType = Frost;
+        bool alive = !mob.destroyed && mob.life > 0;
         sourceHits.Add(attack.HashlinkPointer, damage);
         try { AttackUtils.Class.hit(attack, mob); }
         finally { sourceHits.Remove(attack.HashlinkPointer); }
+        if (alive && (mob.destroyed || mob.life <= 0)) KirbyDamageLog.Kill(mob);
         return attack.isSuccess();
     }
 }

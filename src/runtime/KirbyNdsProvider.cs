@@ -286,6 +286,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
             carrier = attack.carrier?.GetType().FullName, dmgType = attack.dmgType?.GetType().Name });
         if (incoming.Count < 64)
             incoming.Enqueue((attack.source, ScaleIncomingDamage(attack.finalDmg), -Math.Sign(attack.dirSourceToTarget())));
+        KirbyDamageLog.HostAttack(session.Hero, attack, ScaleIncomingDamage(attack.finalDmg));
         attack.inflictedDmg = 0;
     }
     /// <summary>
@@ -528,7 +529,10 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         }
         hero.maxLife = sourceMaxLife;
         if (nds!.Health != hero.life && nds.Health >= 0)
+        {
+            if (hero.life < nds.Health) KirbyDamageLog.HostLife(hero, nds.Health, hero.life);
             nds.SetHealth((ushort)Math.Clamp(hero.life, 0, sourceMaxLife), (ushort)sourceMaxLife);
+        }
         var map = hero._level.map;
         double hostX = (hero.cx + hero.xr) * 24;
         double centerY = (hero.cy + hero.yr) * 24 - 14.5;
@@ -617,6 +621,8 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         nds.Step(mask);
         if (riding is not null) Diagnostic?.Invoke("elevator-stepped", new { action = nds.Action, y = nds.State.YRaw, vy = nds.State.VyRaw });
         int healthAfter = nds.Health;
+        if (healthBefore >= 0 && healthAfter >= 0 && healthAfter < healthBefore)
+            KirbyDamageLog.SourceHit(hero, nds, healthBefore, healthAfter, damageSource);
         // The bridge normalizes the original signed lethal HP sentinel to zero.
         // Stop normal stepping here: only the original death animation runs on,
         // the host owns the run's death transition, and its last-hit protection
