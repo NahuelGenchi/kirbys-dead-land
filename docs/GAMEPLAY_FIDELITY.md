@@ -63,7 +63,8 @@ Its source collision metadata carries that ability before absorption; the adapte
 does not overwrite the mouthful aggregate afterward. Thus multiple captures use
 the original Mix machinery. Each actual captured host enemy is removed once, and
 Kirby's form changes when the ROM performs the swallow/transformation. Spitting
-keeps the original source behavior.
+keeps the original source behavior. Floor ability items carry their own ability
+the same way; see [ability items](#ability-items-intentional-addition).
 
 ### Projectiles in the mouthful
 
@@ -659,6 +660,83 @@ Limits: the stand-in's own data (Brutality starting sword) is only drawn, never
 equipped. A host weapon that changes its own HUD icon (Shovel, via
 `HUD.updateIcon`) could briefly replace the ability icon until the next refresh;
 this was not exercised. Live checks used a 1024×768 HUD (`pixelScale` 1.5).
+
+### Ability items (intentional addition)
+
+Issue #55, step 1 of #54. Kirby fights only with his own moves, copy abilities
+and a Dead Cells shield, so host weapons and skills on the floor are useless to
+him. While Kirby plays, they become **ability items**: one Dead Cells item per
+original copy ability. The original game has no such items; this is a mod
+addition built from host items and the original inhale and swallow.
+
+- **Items.** `tools/build_outfit.py` adds 24 `KirbyAbility<Name>` rows to the
+  private outfit pack (host item group Melee, not droppable by the host's own
+  pools) with matching `weapon` rows copied from the starting sword's. The host
+  needs a weapon row and weapon object for any item in a weapon slot;
+  `Hook__Weapon.create` builds the starting sword's class for an ability item
+  (the host throws for an item ID it does not know), and `KirbyMod` never lets
+  it attack. Icons are the original bottom-screen ability icons that the HUD
+  shows, captured headlessly by `tools/capture_ability_icons.py` and reduced from
+  32×32 to the host's 24×24 item cells (area average, then snapped to the icon's
+  own colors). Each item is created with the host's `Colorless` affix, so the
+  highest scroll stat applies, at the item level of the item it replaces; it has
+  no other rolls yet (#56, #57).
+- **Replacement.** `ItemDrop`'s constructor passes its item through `initItem`
+  before anything else, and every floor item is built that way: level loot,
+  chests, enemy drops and the run's starting items. When the run's outfit is
+  Kirby, a host weapon other than a shield, or a skill (host kind `Active`),
+  becomes a random ability item, chosen uniformly among the 24 like an enemy's
+  copy and not from the level seed. Shields, amulets, food, gold, blueprints and
+  keys stay. Saved levels are unserialized without `initItem` and keep their
+  items. Shop booths are a separate entity and still sell host weapons and
+  skills (#58). The run's starting Rusty Sword is equipped by the host, not
+  dropped; it stays in its slot until the first copy replaces it (#39 owns the
+  rule that it never attacks).
+- **Taking one.** `InventItem.isUsefulFor` is false for an ability item for every
+  hero. A short press shows "Inhale and swallow it to copy"; a long press still
+  recycles it for gold. Walking near one shows the host's own item tip: its name
+  (`Yo-Yo` with a hyphen) and item level, "Copy ability" in place of the weapon
+  row's DPS, the ability's description from `AbilityDescriptions`, and the host's
+  "Colorless (the highest level applies)" line. The prompt keeps the host's
+  "Take" label.
+- **Inhale and swallow.** While Kirby is in base form, the only form that can
+  inhale, ability items pair with the same 31 original proxies as enemies
+  (`KirbyEnemies`), with the item's copy byte, full HP, no body contact and a
+  hurtbox of at least 16×16. They take no damage. The item follows its proxy only
+  while the original inhale pulls it (proxy flags 2 and 32), and the host's own
+  float physics is held meanwhile; an original hit recoil (a spit star or a slide
+  striking the proxy) never moves it. Once it is in the original mouth, the item
+  leaves the floor. The original swallow
+  then copies its ability, exactly as for an enemy carrying the same copy byte;
+  in a mouthful of several objects the original roulette decides, and only the
+  item of the chosen ability is taken. When the original mouth empties in base
+  form (a spit, or a mouthful lost), the items go back where they lay before the
+  suction, without the host loot bounce. A mouthful carried into another level
+  returns under Kirby there. Copied Kirby cannot inhale, as in the original, so
+  he discards his copy first.
+- **Weapon slot.** Once per host frame `KirbyAbilityItems.Sync` keeps the slots in
+  step with the copy: the copy's item sits in one non-shield slot, and base form
+  has none. The swallowed floor item itself goes into the slot; a copy from an
+  enemy gets a new base item of its ability at the level's loot level. The slot
+  is the one already holding that item, else a slot holding another non-shield
+  weapon (removed: it is unusable to Kirby), else an empty slot, else a shield
+  other than the retained one (dropped to the floor). The host HUD is then
+  reassigned with `Hero.hudInitItems` (`HUD.refreshItems` only redraws each
+  slot's current item). Losing the copy removes its item; #56 will keep it with
+  the dropped star for 7 seconds. The HUD overlay of the original icon (#18)
+  still draws over the slot.
+
+Limits: an ability item's proxy is an ordinary original enemy object, so base
+Kirby's attacks can strike it. In lab run `20261006-223514` a spit star struck a
+spat item's proxy and, before the recoil rule above, pushed the item three cells.
+A single spit star is therefore expected to burst on an ability item as on an
+enemy (not checked visually). Making the proxy inhalable but not hittable needs a
+bridge change. Items in Kirby's mouth when the game is saved are not kept; after a
+reload, the original swallow gives a new base item of that ability. The forge
+and shops do not handle ability items yet (#58), and quality and affixes have
+no effect yet (#56, #57). Only the Prisoners' Quarters start level and items the
+probe created were checked live; other biomes' loot, chests, timed doors, Boss
+Rush and the Collector's armory were not exercised.
 
 ## Evidence and current limits
 

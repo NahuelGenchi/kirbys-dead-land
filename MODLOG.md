@@ -1099,6 +1099,40 @@ the all-ability rendering tests as full gameplay acceptance.
   - `013806` (tiers 1/1/5): Survival green `17ce75` + gray `b2c0dd`.
   - `013956` (tiers 1/5/1): Tactics purple `a051ff` + gray.
   - In both, discard restored the sword's red. Real saves were unchanged.
+## 2026-10-06 — Ability items replace weapon and skill loot (#55)
+
+- Owner request (#54): Kirby uses only his own moves, copy abilities and a
+  shield, so host weapons and skills on the floor are useless to him. Step 1 of
+  four: they become colorless Kirby ability items, taken only by the original
+  inhale and swallow. Owner decisions for later steps: enemy copies are base
+  items, Elites give high quality, a dropped star keeps its item for 7 s (#56).
+- Host findings (crashlink on the lab `hlboot.dat`): `ItemDrop`'s constructor
+  calls `initItem` before `super`; `Weapon.create` throws for an unknown item ID;
+  `HUD.refreshItems` only redraws each slot's current item, while
+  `Hero.hudInitItems` re-reads the inventory; Dead Cells rarity is affix-based
+  (`Colorless`, `QualityUp`, `Legendary`, rolled by `LootGen.finalizeItem`);
+  shops are `ShopBooth` entities; `Assets.getItem` honors the CDB icon size.
+- Build: `tools/capture_ability_icons.py` captures the 24 original bottom-screen
+  ability icons headlessly; `tools/build_outfit.py` adds 24 `KirbyAbility<Name>`
+  item rows, starting-sword `weapon` rows and 24×24 icons to the private outfit
+  pack.
+- Runtime: `KirbyAbilityItems` (replacement in `ItemDrop.initItem`, the weapon
+  object, no pickup, the item card's text, slot sync); `KirbyEnemies` pairs floor
+  ability items with proxies carrying their copy byte in base form and moves them
+  only with the original inhale (flag 32); `MouthfulItems` in `src/core` settles
+  the mouthful (the swallow takes the copied ability's item, a spit returns them
+  where they lay).
+- Source: `python3 scripts/check.py` passes (26 Python tests including 6 new for
+  the item rows, 267 core assertions, Release build). `tools/nds_tests.py` was
+  not run (no native change).
+- Live (separate data root `repros/ability-items-20261006`, `--input-plan items`):
+  final runs `223826` (Paint), `223958` (Beam) and `224129` (Ice) passed every
+  check; saves unchanged, no fatal log. Iterations fixed the HUD refresh
+  (`215522`), the spat item's bounce (`221819`) and a spit star's recoil pushing
+  a returned item (`223514`). `221525` captured the floor item tip.
+- Not run: the short-press hint, long-press recycle, an enemy copy filling the
+  slot, mixed item and enemy mouthfuls, save/resume with an ability item, other
+  biomes, chests, timed doors, shops and the forge.
 ## 2026-10-06 — Suplex's dash attack bursts doors (#50)
 
 - Owner recording 21:05: Suplex Kirby's dash grab bounced off a closed door and

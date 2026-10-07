@@ -32,13 +32,16 @@ When the host destroys a dead hero, the renderer detaches: Kirby's bitmap stays 
 
 `tools/build_outfit.py` builds `KirbySuperStarUltra` as a new item/skin pair under `data.cdb_`, using DCCM's differential CDB merge. The model has no native head or scarf. Its fallback atlas covers every original host animation name using the authentic ROM's neutral bkir pose 184, permitting normal outfit initialization and previews. Those fallback frames do not supply gameplay animation or source timing.
 
-The builder reads the current game PAK without changing it. Existing outfit rows are not replaced. It preserves all existing `heroSkins` entries and all icon pixels outside one previously unused 24-pixel cell. A source PAK that already contains Kirby is rejected. Equipment pixels retain their original host palette/normal data after removing native body color indices 478–499. The original palette is preserved and Kirby's colors occupy unused slots.
+The builder reads the current game PAK without changing it. Existing outfit rows are not replaced. It preserves all existing `heroSkins` entries and all icon pixels outside previously unused 24-pixel cells: one for the outfit and 24 for the ability items (#55). A source PAK that already contains Kirby or ability items is rejected.
+
+The pack also holds the 24 `KirbyAbility<Name>` item rows and their `weapon` rows (see [ability items](GAMEPLAY_FIDELITY.md#ability-items-intentional-addition)). Their icons come from `tools/capture_ability_icons.py`, which runs each copy ability in a private headless bridge from the ready2 seed, decodes the steady bottom-screen ability icon exactly as `KirbyHud` does live, and writes the 32×32 original and a 24×24 item icon (area average, kept where at least half covered, snapped to the icon's own colors) to `~/.local/share/kirby-dead-cells/ability-icons/`. Run it before the builder; the builder refuses to run without them. Equipment pixels retain their original host palette/normal data after removing native body color indices 478–499. The original palette is preserved and Kirby's colors occupy unused slots.
 
 Equipment is retargeted to `(8, -11)` relative to Kirby's foot. `Prop2` is the off hand in the starting sword's `atkBackStabberB` and `atkSaberA` animations, with no corresponding weapon-hand track available. Using it universally placed the blade far away from Kirby. Main-weapon placement now uses the original opaque body/equipment contact centroid when present. Bows and block/parry retain their verified `Prop2` tracks: tall bows also touch the lower body, making a contact centroid inappropriate. Missing-contact frames retain the existing fallback. This host equipment attachment remains a visual approximation. The correction changes only atlas origins; all 10,234 source pixel rectangles, textures, normals and palettes remain identical. All 860 bow-named and 204 shield atlas rows also retain their previous origins.
 
 Build privately:
 
 ```sh
+python3 tools/capture_ability_icons.py
 python3 tools/build_outfit.py
 ```
 

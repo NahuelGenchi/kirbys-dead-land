@@ -34,6 +34,14 @@ preserved; generated assets and native dependencies remain in the private data r
 - Items Kirby cannot use (other weapons and skills, or a sword or bow while
   copied) get Dead Cells' own "Can't use that right now" message and stay on the
   ground; a long press still recycles them.
+- In a Kirby run, every new floor weapon other than a shield, and every skill,
+  becomes a colorless **ability item**: one of the 24 copy abilities, shown with
+  its original icon. Walking near one shows its name, description and colorless
+  rarity. It cannot be picked up: inhale it and swallow it to copy that ability;
+  spitting it out puts it back. While copied, the ability's item fills a weapon
+  slot and the HUD; the forge and shops are not adapted yet, and quality and
+  affixes have no effect yet (#56–#58). See
+  [ability items](docs/GAMEPLAY_FIDELITY.md#ability-items-intentional-addition).
 - Original inhale, mouthful, Down-to-swallow, spit, flight, guard, slide and copy
   discard are executed by the ROM. All 24 original copy forms load through the
   original transformation code, rather than replacing them with host weapons.
@@ -218,6 +226,11 @@ while playing Kirby; healing, equipment and interaction tutorials remain availab
   muted, retaining Dead Cells music. Jump/landing audio and the SDL queue passed
   tests, including coexistence with the host's SDL3 and successful queuing to the
   default desktop audio device.
+- In live Kirby runs the start level's starting bow, weapons and skills became
+  ability items while shields and gold stayed. An ability item was inhaled, spat
+  back to its cell, inhaled again and swallowed into its ability, which then
+  filled the weapon slot and the HUD; discarding cleared both. See
+  [ability items](docs/RUNTIME_LAUNCH.md#ability-items-55).
 - Actual lab launches have preserved the hashes of the user's original local
   and Steam saves. DCCM disables achievements.
 
@@ -230,6 +243,7 @@ beneath `~/.local/share/kirby-dead-cells/`, not into system directories.
 ```sh
 python3 scripts/setup_runtime.py --build
 python3 tools/nds_build.py
+python3 tools/capture_ability_icons.py
 python3 tools/build_outfit.py --help
 python3 scripts/stage_runtime.py --original-runtime \
   --outfit-pack "$HOME/.local/share/kirby-dead-cells/outfit-build/res.pak"
