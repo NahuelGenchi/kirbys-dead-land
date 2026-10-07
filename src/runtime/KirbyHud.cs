@@ -217,7 +217,9 @@ internal static class KirbyHud
         var inventory = session.Hero.inventory;
         for (int slot = 0; slot < inventory.nbWeapons; slot++)
             if (inventory.getEquippedWeaponOn(slot) is { } equipped && equipped.HashlinkPointer == item.HashlinkPointer)
-                return !equipped.hasTag("Shield".AsHaxeString());
+                // A real ability item (#55) is drawn as itself, with its level,
+                // quality and affixes; only another weapon needs the stand-in.
+                return !equipped.hasTag("Shield".AsHaxeString()) && !KirbyAbilityItems.IsAbilityItem(equipped);
         return false;
     }
 
