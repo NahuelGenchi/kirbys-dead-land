@@ -23,14 +23,16 @@ preserved; generated assets and native dependencies remain in the private data r
 - Absorbing an Elite always gives original Sword, which deals double damage
   until the ability is lost (hit off, discarded, made into a helper, or a new run).
   This is a deliberate deviation; see `docs/GAMEPLAY_FIDELITY.md`.
-- Base Kirby can use Dead Cells swords, bows and shields.
-- Copied Kirby uses the original ability's attacks and retains the exact shield
-  it carried for parrying. Taking a dropped shield swaps it in as in Dead Cells,
-  in either form, and the new shield becomes the one that parries. Equipping
-  swords and bows while copied is blocked.
-- Items Kirby cannot use (other weapons and skills, or a sword or bow while
-  copied) get Dead Cells' own "Can't use that right now" message and stay on the
-  ground; a long press still recycles them.
+- Kirby fights only with original inhale and copy abilities plus a Dead Cells
+  shield (#39). Every non-shield weapon button (left-click by default) is the
+  original B button: inhale/spit in base form, the copy attack while copied.
+  Host swords and bows never attack, including the starting sword.
+- Copied Kirby retains the exact shield it carried for parrying. Taking a
+  dropped shield swaps it in as in Dead Cells, in either form, and the new
+  shield becomes the one that parries.
+- Items Kirby cannot use (every weapon other than a shield, and skills) get
+  Dead Cells' own "Can't use that right now" message and stay on the ground; a
+  long press still recycles them.
 - Original inhale, mouthful, Down-to-swallow, spit, flight, guard, slide and copy
   discard are executed by the ROM. All 24 original copy forms load through the
   original transformation code, rather than replacing them with host weapons.
@@ -122,15 +124,17 @@ Existing Dead Cells bindings are used:
 | Down with a mouthful | Swallow and transform |
 | Skill 2 | Discard the current copy ability |
 | Homunculus | Create / return the original helper |
-| Weapon buttons, base form | Equipped allowed sword, bow or shield |
-| Weapon buttons, copied form | Copy attack; retained shield button still parries |
+| Weapon buttons other than a shield (left-click by default), base form | Inhale / spit (original B) |
+| Weapon buttons other than a shield, copied form | Copy attack (original B) |
+| Shield button | Host shield parry and original guard; while copied, only the retained shield |
 
 Shared bindings remain shared: if W is assigned to both Up and Jump, it sends
 both actions. Change either binding in the game's controls menu to separate them.
-In the recorded profile's default keyboard layout, **E** inhales/spits/attacks
-with a copy ability, **Q** discards it, **Space** jumps, and **right-click** uses
-the secondary weapon/shield. Keyboard X is a contextual menu binding; controller
-X is the primary weapon button. The adapter follows the configured actions, so
+In the recorded profile's default keyboard layout, **left-click** and **E**
+inhale/spit/attack with a copy ability, **Q** discards it, **Space** jumps, and
+**right-click** uses the shield (or, if the second slot holds another weapon,
+also inhales). Keyboard X is a contextual menu binding; controller X is the
+primary weapon button. The adapter follows the configured actions, so
 remapping them in the game's controls menu also changes Kirby's controls.
 Host tutorials for replaced jump, dodge and Homunculus actions are suppressed
 while playing Kirby; healing, equipment and interaction tutorials remain available.
@@ -140,9 +144,10 @@ while playing Kirby; healing, equipment and interaction tutorials remain availab
 - The new outfit walks and jumps in a real isolated Prisoners' Quarters run at
   the original approximately 59.8261 frames per second. Host/source positions
   remain stable, including landing on an upper platform.
-- Normal host key bindings, inverted movement and upward Pure Nail attacks pass
-  the live input check. Its movement phase uses the production input reader,
-  moving 94.6875px and rising 49.890625px during the original jump.
+- Normal host key bindings and inverted movement pass the live input check. In
+  base form, holding left-click on the starting sword sent original B and ran the
+  original inhale, with no host sword attack (run `20261006-122227`, #39). Its
+  movement phase uses the production input reader.
 - Native movement rebasing preserves original position, velocity and animation
   traces. Original one-way platforms, slopes and swimming have source tests.
 - The runtime sprite compositor matched 3,068,161 original framebuffer pixels

@@ -191,11 +191,13 @@ public sealed class KirbyMod(ModInfo info) : ModBase(info), IOnHeroUpdate,
         KirbySession? state = Synchronize(weapon.owner);
         if (state is null)
             return orig(weapon);
+        // Inhale and copy attacks arrive as DS B through KirbyInput; a host
+        // sword or bow never swings, even one already in the inventory.
         AttackRoute route = state.Rules.ResolveAttack(Classify(weapon.item), StableItemId(weapon.item));
         return route switch
         {
-            AttackRoute.HostWeapon or AttackRoute.Parry => orig(weapon),
-            AttackRoute.Ability => provider!.TryAbilityAttack(state, state.Rules.AbilityId!, weapon),
+            AttackRoute.Parry => orig(weapon),
+            AttackRoute.Ability => state.Rules.AbilityId is { } ability && provider!.TryAbilityAttack(state, ability, weapon),
             _ => false
         };
     }
