@@ -31,6 +31,22 @@ internal static class LabAbilityItemProbe
     private static InventItem? swordItem;
     private static (int Cx, int Cy) swordOrigin;
     private static ItemDrop? returned;
+    private static readonly bool affixTest = Environment.GetEnvironmentVariable("KIRBY_LAB_ITEMS_AFFIXES") == "1";
+    private static dc.en.mob.Zombie? zombie;
+    private static HashSet<string>? entityTypesBefore;
+    private static readonly HashSet<string> spawnedTypes = [];
+    private static readonly List<int> lifeAfterAttacks = [];
+    private static int uses;
+    private static bool carriedAffix;
+
+    private static HashSet<string> EntityTypes(Hero hero)
+    {
+        var types = new HashSet<string>();
+        var entities = hero._level.entities;
+        for (int j = 0; j < entities.length; j++)
+            if (entities.getDyn(j) is dc.Entity { destroyed: false } e) types.Add(e.GetType().FullName ?? "");
+        return types;
+    }
     private static string? swordAbility, grenadeAbility, copied, slotAbility;
     private static bool followedSuction;
     private static bool swordUsefulToKirby = true, swordPaired, firstInMouth, mouthEmptied, spatCopied = true, returnedToOrigin;
@@ -114,7 +130,10 @@ internal static class LabAbilityItemProbe
 
     private static ItemDrop Spawn(Hero hero, string id, int cx)
     {
-        var drop = new ItemDrop(hero._level, cx, hero.cy, InventItem.Class.fromItem(id.AsHaxeString(), null), true, Ref<bool>.In(false));
+        var host = InventItem.Class.fromItem(id.AsHaxeString(), null);
+        // #57: a host-rolled affix on the replaced weapon must carry over.
+        if (affixTest && id == "BroadSword") host.addAffix("BleedOnHit".AsHaxeString(), Ref<bool>.In(true));
+        var drop = new ItemDrop(hero._level, cx, hero.cy, host, true, Ref<bool>.In(false));
         drop.init();
         return drop;
     }
@@ -191,6 +210,11 @@ internal static class LabAbilityItemProbe
             sword = Spawn(hero, "BroadSword", hero.cx + dir);
             grenade = Spawn(hero, "ExplosiveGrenade", hero.cx - 3 * dir);
             shield = Spawn(hero, "StartShield", hero.cx + 6 * dir);
+            if (affixTest)
+            {
+                carriedAffix = sword.item.hasAffix("BleedOnHit".AsHaxeString());
+                sword.replaceItem(KirbyAbilityItems.Create("Sword", 1));
+            }
             swordItem = sword.item;
             swordAbility = KirbyAbilityItems.AbilityOf(swordItem);
             grenadeAbility = KirbyAbilityItems.AbilityOf(grenade.item);
@@ -238,6 +262,26 @@ internal static class LabAbilityItemProbe
                     slotHoldsSwallowedItem = SlotHolds(hero, swordItem);
                     hudShowsCopy = swordAbility is not null && HudItems(hero).Contains(AbilityItems.ItemId(swordAbility));
                     Event("copied", new { copied, slotAbility, slotHoldsSwallowedItem, hud = HudItems(hero) });
+                    if (affixTest)
+                    {
+                        // #57: give the copy's item an on-use and an on-hit affix, then fight a Zombie.
+                        foreach (var affix in new[] { "FrontArrow", "BleedOnHit" })
+                            swordItem?.addAffix(affix.AsHaxeString(), Ref<bool>.In(true));
+                        zombie = dc.en.mob.Zombie.Class.create(hero._level, hero.cx + 3 * (hero.dir >= 0 ? 1 : -1), hero.cy, 1, 1);
+                        // Enough life to survive the attacks, so a bleed shows as life lost afterwards.
+                        zombie.maxLife = zombie.life = 30000;
+                        entityTypesBefore = EntityTypes(hero);
+                        KirbyAbilityItems.TestUsed = _ => uses++;
+                        var copyItem = KirbyAbilityItems.CopyItem(hero);
+                        Event("affix-setup", new
+                        {
+                            copyItem = copyItem?.getItemKind()?.ToString(), manager = hero.weaponsManager?.GetType().FullName,
+                            weapon = copyItem is null ? null : hero.weaponsManager?.findItemInMain(copyItem)?.GetType().FullName,
+                            affixes = new[] { "FrontArrow", "BleedOnHit" }.Select(a => copyItem?.hasAffix(a.AsHaxeString())).ToArray(),
+                        });
+                        Next(frame, 10);
+                        return 0;
+                    }
                     if (keep)
                     {
                         // Keep the copy for a save: give its item a rerolled-style affix, as the forge would.
@@ -251,6 +295,33 @@ internal static class LabAbilityItemProbe
                     return 0;
                 }
                 return t is >= 10 and < 16 ? (ushort)128 : (ushort)0;
+            case 10: // Attack the Zombie with B presses for 240 frames, then watch its life without attacking.
+                if (zombie is { destroyed: false })
+                {
+                    zombie.lockAiS(1);
+                    if (t >= 240) lifeAfterAttacks.Add(zombie.life);
+                }
+                if (t < 240)
+                {
+                    var newTypes = EntityTypes(hero).Except(entityTypesBefore ?? []).ToHashSet();
+                    foreach (var type in newTypes) spawnedTypes.Add(type);
+                    return Pulse(t, 2);
+                }
+                if (t >= 420)
+                {
+                    bool bleeding = lifeAfterAttacks.Count > 1 && lifeAfterAttacks[^1] < lifeAfterAttacks[0];
+                    // The host's arrow affix fires a dc.en.Bullet.
+                    bool arrows = spawnedTypes.Contains("dc.en.Bullet");
+                    File.WriteAllText(Path.Combine(run!, "ability-affixes.json"), JsonSerializer.Serialize(new
+                    {
+                        copied = session.Rules.AbilityId, carriedAffix, uses, spawnedTypes, arrows,
+                        lifeAfterAttacks = lifeAfterAttacks.Where((_, i) => i % 20 == 0).ToArray(), bleeding,
+                        zombieDead = zombie is null || zombie.destroyed || zombie.life <= 0,
+                        passed = carriedAffix && uses > 0 && arrows && (bleeding || zombie is null || zombie.destroyed || zombie.life <= 0),
+                    }, new JsonSerializerOptions { WriteIndented = true }));
+                    finishedAt = frame;
+                }
+                return 0;
             case 5: // Discard with SELECT until base form; the slot and HUD must clear.
                 if (session.Rules.IsBaseForm && settledAt is null) settledAt = t;
                 if (settledAt is uint since && t - since >= 90 || t > 400)

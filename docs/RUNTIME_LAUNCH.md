@@ -698,3 +698,22 @@ each equipment card's texts to `pause-cards.jsonl`.
 
 The owner's missing passive was the stand-in card hiding the real item. Affixes
 do not act on copy attacks until #57.
+
+### Ability item affixes (#57)
+
+`KIRBY_LAB_ITEMS_AFFIXES=1 … --input-plan items` gives the probe's Broadsword the
+host `BleedOnHit` affix before it is dropped (it must carry over), forces the
+floor item to Sword, and after the swallow adds `FrontArrow` and `BleedOnHit` to
+the copy's item. A Zombie with 30000 life stands three cells ahead; Kirby presses
+B every 16 frames for 240 frames, then stops while its life is sampled.
+
+- `20261007-004739`, `004958` and `005200` (`repros/ability-items-20261006`):
+  15 affix uses (one per press), a host `dc.en.Bullet` (the arrow) spawned, and
+  the Zombie lost life after the attacks stopped (bleed; 29125 → 29059 in
+  `004739`). In `005200` the replaced Broadsword's `BleedOnHit` carried over to
+  the ability item. All `passed: true`, saves unchanged, no fatal log.
+- `20261007-004127` (before the fix) showed no affix use: the press check also
+  required an empty original mouth, whose count bit stays stale after a swallow.
+
+Not run: the Grenade affix, on-kill affixes, a forge reroll in play, and the
+arrow captured on screen.

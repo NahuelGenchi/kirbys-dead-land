@@ -765,6 +765,18 @@ addition built from host items and the original inhale and swallow.
   shows its own message. A booth's price is the one the host set for the item it
   replaced. A shop mimic is not triggered by an ability item. A long press still
   sells or recycles. Legendary altars are not converted.
+- **Affixes (#57).** A floor ability item also keeps the replaced item's affixes
+  that the host lets it take (`canReceiveAffix`: its Melee group, `NoCritical`
+  tag and each affix's own tag rules); weapon- or skill-only ones are dropped.
+  Forge rerolls add affixes the same way. They act on copy attacks as on a Dead
+  Cells weapon's: every copy hit is an attack whose source item is the copy's
+  ability item (`useItemAffixes`, as `AttackUtils.createFromHeroItem` does), so
+  on-hit and on-kill affixes (bleed, poison, burning, oil, freeze…) apply; and
+  every copy attack press (DS B while copied) uses the item as a weapon strike
+  does: `Weapon.prepare`'s Grenade affix grenade, then `Weapon.executeAffixes`
+  (the arrow affixes and the on-use shield), with the host's own cooldowns. The
+  press, not each original hit, is the "use": an ability that hits many times per
+  press (Fire's breath) triggers on-use affixes once.
 - **Taking one.** `InventItem.isUsefulFor` is false for an ability item for every
   hero but Kirby (#61: true for him, so a shop short of gold says so; his presses
   never pick one up). A short press shows "Inhale and swallow it to copy"; a long press still
