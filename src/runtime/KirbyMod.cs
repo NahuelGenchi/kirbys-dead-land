@@ -213,9 +213,12 @@ public sealed class KirbyMod(ModInfo info) : ModBase(info), IOnHeroUpdate,
     /// </summary>
     private bool IsUsefulFor(Hook_InventItem.orig_isUsefulFor orig, InventItem item, Hero hero)
     {
-        // An ability item is only taken by the original inhale and swallow.
-        if (KirbyAbilityItems.IsAbilityItem(item)) return false;
         KirbySession? state = Synchronize(hero);
+        // Only Kirby takes an ability item, and always through the original
+        // inhale and swallow: floor items never reach here (KirbyAbilityItems
+        // handles their press), and altars, timed items and shops drop it.
+        // For him it is "useful", so a shop short of gold says so.
+        if (KirbyAbilityItems.IsAbilityItem(item)) return state is not null;
         // Non-combat progression items, outfits, consumables and mutations remain host-owned.
         if (state is null || (item.kind is not InventItemKind.Weapon && item.kind is not InventItemKind.Active))
             return orig(item, hero);

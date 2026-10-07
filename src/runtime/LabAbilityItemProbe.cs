@@ -36,9 +36,27 @@ internal static class LabAbilityItemProbe
     private static bool swordUsefulToKirby = true, swordPaired, firstInMouth, mouthEmptied, spatCopied = true, returnedToOrigin;
     private static bool secondInMouth, slotHoldsSwallowedItem, hudShowsCopy, slotClearedAfterDiscard, hudClearedAfterDiscard;
 
+    private static readonly bool keep = Environment.GetEnvironmentVariable("KIRBY_LAB_ITEMS_KEEP") == "1";
+    private static readonly bool resume = Environment.GetEnvironmentVariable("KIRBY_LAB_ITEMS_RESUME") == "1";
+
     internal static void Install(string output)
     {
         run = output;
+        KirbyHud.TestCardDrawn = (card, ability) =>
+        {
+            var texts = new List<string>();
+            void Collect(dc.h2d.Object node, int depth)
+            {
+                if (node is dc.ui.Text text) texts.Add(text.text?.ToString() ?? "");
+                if (depth < 8)
+                    for (int i = 0; i < node.children.length; i++)
+                        if (node.children.getDyn(i) is dc.h2d.Object child) Collect(child, depth + 1);
+            }
+            Collect(card, 0);
+            // The pause screen stops the game, so each card is written as it is drawn.
+            File.AppendAllText(Path.Combine(output, "pause-cards.jsonl"),
+                JsonSerializer.Serialize(new { ability, item = card.ii?.getItemKind()?.ToString(), texts }) + "\n");
+        };
         dc.tool.Hook_Tutorial.tryToStart += (_, _, _) => false;
         KirbyAbilityItems.TestReplaced = (original, ability) => Event("replaced", new { original, ability });
         KirbyAbilityItems.TestSlot = (ability, level, fromFloor) => Event("slot", new { ability, level, fromFloor });
@@ -63,7 +81,7 @@ internal static class LabAbilityItemProbe
     /// other interactive object (items, lore, doors) within eight cells and no
     /// enemy within sixteen.
     /// </summary>
-    private static object? MoveToClearFloor(Hero hero)
+    internal static object? MoveToClearFloor(Hero hero)
     {
         var map = hero._level.map;
         var others = new List<(int X, int Y)>();
@@ -158,6 +176,7 @@ internal static class LabAbilityItemProbe
         uint frame = machine.State.Frame;
         start ??= frame;
         if (!hero.awake || hero._level.game.hasCinematic() || frame - start.Value < 180 || finishedAt is not null) return 0;
+        if (resume) { Resumed(session, frame); return 0; }
         if (placedAt is null)
         {
             scan = Scan(hero);
@@ -219,6 +238,15 @@ internal static class LabAbilityItemProbe
                     slotHoldsSwallowedItem = SlotHolds(hero, swordItem);
                     hudShowsCopy = swordAbility is not null && HudItems(hero).Contains(AbilityItems.ItemId(swordAbility));
                     Event("copied", new { copied, slotAbility, slotHoldsSwallowedItem, hud = HudItems(hero) });
+                    if (keep)
+                    {
+                        // Keep the copy for a save: give its item a rerolled-style affix, as the forge would.
+                        var grenade = "Grenade".AsHaxeString();
+                        swordItem?.addAffix(grenade, Ref<bool>.In(true));
+                        Event("kept", new { grenadeAffix = swordItem?.hasAffix(grenade) });
+                        Finish(frame);
+                        return 0;
+                    }
                     Next(frame, 5);
                     return 0;
                 }
@@ -238,6 +266,29 @@ internal static class LabAbilityItemProbe
         return 0;
     }
 
+    /// <summary>
+    /// After <c>--resume-game</c> of a run saved with KIRBY_LAB_ITEMS_KEEP: the
+    /// copy's item must still hold its affix, and the pause card must show it.
+    /// </summary>
+    private static void Resumed(KirbySession session, uint frame)
+    {
+        var hero = session.Hero;
+        if (frame - start!.Value < 300) return;
+        finishedAt = frame;
+        var slots = Enumerable.Range(0, hero.inventory.nbWeapons).Select(slot => hero.inventory.getEquippedWeaponOn(slot)).Select(item => item is null ? null : new
+        {
+            item = item.getItemKind().ToString(), level = item.getRawItemLevel(),
+            grenade = item.hasAffix("Grenade".AsHaxeString()), colorless = item.hasAffix("Colorless".AsHaxeString()),
+        }).ToArray();
+        File.WriteAllText(Path.Combine(run!, "ability-items-resume.json"), JsonSerializer.Serialize(new
+        {
+            ability = session.Rules.AbilityId, slots,
+            passed = session.Rules.AbilityId is not null && slots.Any(s => s is { grenade: true, colorless: true }),
+        }, new JsonSerializerOptions { WriteIndented = true }));
+        // Then the normal pause screen (its constructor pauses the game); see pause-cards.jsonl.
+        _ = new dc.ui.pause.DefaultPause();
+    }
+
     private static void Next(uint frame, int next)
     {
         phase = next;
@@ -254,7 +305,9 @@ internal static class LabAbilityItemProbe
             scan, clearSpot, swordAbility, grenadeAbility, shieldKept, swordUsefulToKirby, swordPaired, followedSuction, firstInMouth, mouthEmptied,
             spatCopied, returnedToOrigin, secondInMouth, copied, slotAbility, slotHoldsSwallowedItem, hudShowsCopy,
             slotClearedAfterDiscard, hudClearedAfterDiscard, phase,
-            passed = swordAbility is not null && grenadeAbility is not null && shieldKept && !swordUsefulToKirby && swordPaired && followedSuction &&
+            // Ability items are "useful" to Kirby since #61 (a shop short of gold says so); the floor press
+            // never picks one up, which the suction and mouth checks below establish.
+            passed = swordAbility is not null && grenadeAbility is not null && shieldKept && swordPaired && followedSuction &&
                 firstInMouth && mouthEmptied && !spatCopied && returnedToOrigin && secondInMouth && copied == swordAbility &&
                 slotAbility == swordAbility && slotHoldsSwallowedItem && hudShowsCopy && slotClearedAfterDiscard && hudClearedAfterDiscard,
         }, new JsonSerializerOptions { WriteIndented = true }));
