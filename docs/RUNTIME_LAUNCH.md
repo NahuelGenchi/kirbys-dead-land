@@ -35,6 +35,7 @@ Relevant environment variables are used only by the lab helper:
 - `KIRBY_LAB_TEST_SCROLLS`: optional `B,T,S` scroll counts for the ability probe, exposed as `--probe-scrolls`. Before measuring, the probe adds that many real `BrutalityUp`, `TacticUp` and `SurvivalUp` items (`InventItem.fromItem`) through the normal inventory and calls the host's `Hero.computeTiers`. `ability-damage.json` then records the tiers, the host and core colorless multipliers, and each copy hit's source HP drop and host damage.
 - `KIRBY_LAB_TEST_HUD=1`: with the ability probe, exposed as `--probe-hud`. After the new run settles, it adds a real `StartShield` beside the starting sword through the normal inventory. It later discards the copy with the original Select button, and writes `hud.jsonl` whenever a HUD weapon slot changes: real item, slot item, icon texture, frame group, icon size and scale, and ammo flag. Each distinct decoded icon is saved as private `hud-icon-<hash>.rgba`.
 - `KIRBY_LAB_TEST_PAUSE=1`: with `--probe-hud`, exposed as `--probe-pause`. At 700 probe frames it opens the normal pause screen (`new DefaultPause()`, whose constructor pauses the game), instead of the discard. It writes `pause-cards.jsonl` for every pause equipment card: whether it was drawn as the ability, the real item, and the card's object tree with texts. The run ends paused; set `KIRBY_LAB_CAPTURE_ALL=1` to capture the paused screen.
+- `KIRBY_LAB_TEST_LEGENDARY=1`: with `--probe-hud`, exposed as `--probe-legendary`. Once the copy's ability item is in a weapon slot, it gives that item the host `Legendary` affix, calls `Hero.hudInitItems`, and appends the slot and affix result to `hud.jsonl`.
 - `KIRBY_LAB_COMBAT_ELITE=1`: with the `combat` plan, makes the swallowed Zombie an Elite (Elite skills disabled) and records in `combat.json` whether the copy was empowered and the damage that the second Zombie takes from each hit. Set it in the environment of `launch_runtime.py`.
 - `KIRBY_LAB_PLAY=1`: keep outfit selection but disable all smoke capture and automatic input.
 
@@ -242,6 +243,28 @@ the slot's two background shader colors.
   after the discard.
 - `013956` (`--probe-scrolls 0,4,0`, tiers 1/5/1): `a051ff` (Tactics purple) and
   `b2c0dd`; `ec2424` again after the discard.
+
+### Legendary ability item HUD frame (2026-10-07)
+
+Issue #82. Separate root `repros/legendary-hud-20261007`. Bridge built privately
+there from `main`'s `src/nds/lib.rs` (`df42119e…`): `ce0067c123eb843200bd7d5c6a5197886016b31f7977ba89f24f270d4362308d`.
+Runtime DLL: `1fb2576ded89b3ffedc7cc5efc283dd26b28ca0f18da78f91ed1388bfc0fbdf9`.
+Outfit pack copied from `repros/scroll-claim-20261007` (with the ability item rows).
+
+- `20261007-124255`: `KIRBY_LAB_CAPTURE_ALL=1 ... --seconds 90 --start-game
+  --outfit KirbySuperStarUltra --input-plan ability --probe-ability 18
+  --probe-scrolls 0,0,4 --probe-hud --probe-legendary`. Sword was copied at source
+  frame 4412 and slot 0 got `KirbyAbilitySword`; the probe gave it `Legendary`
+  (`hasLegendary: true`). From 4482 the overlaid slot showed the original Sword
+  icon in the host `skillSlotLegendary` frame, colors `17ce75` (Survival green)
+  and `f4db4d` (legendary gold), ammo pips hidden; the shield slot was unchanged.
+  The captured frame (host frame 10530) shows gold corners on the green slot. The
+  Select discard at 5314 emptied the slot. Expected timeout, no fatal log lines,
+  real saves unchanged.
+
+No run of the previous code with a Legendary item was made; before #82 every
+copied slot was drawn from the Colorless-only stand-in, which `setBgColors` gives
+`skillSlotColorless` (`b2c0dd`), as in `013806` above.
 
 ## Private showcase capture
 

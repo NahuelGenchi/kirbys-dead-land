@@ -694,6 +694,13 @@ the equipment Kirby cannot use while copied; shield slots keep the real shield.
   same-item-kind path in `useItem` colors the slot from its previous item before
   switching. With the starting sword in the slot, that made every copy slot red.
   Ties take the first tier the host lists; no tie has been run live since #36.
+  Since #82, a slot holding the copy's own ability item (#55) is drawn from that
+  real item instead of the stand-in, as its pause card already was (#62). The
+  host's `Skill.setBgColors` (`ui/hud/Skill.hx:395-404`) picks
+  `skillSlotLegendary` for an item with the `Legendary` affix before it checks
+  `Colorless`, so a Legendary ability item gets the gold legendary frame and
+  colors; other ability items keep the colorless frame. The stand-in remains
+  for another weapon, or an empty slot, in a copied slot.
 - **Refresh:** the HUD is redrawn when the ability, its icon or the scroll tiers
   change. Base form, discard, ability loss and deactivation redraw the real
   equipment.

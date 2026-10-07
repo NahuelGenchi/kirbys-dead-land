@@ -13,9 +13,9 @@ namespace Kirby.Runtime;
 
 /// <summary>
 /// Shows copied Kirby's ability in the HUD weapon slots that fire it (every
-/// non-shield slot, as in KirbyInput). The host draws the slot from a colorless
-/// stand-in item, so its frame and colours are exactly those of host colorless
-/// gear. The icon is the original bottom-screen ability icon, decoded from the
+/// non-shield slot, as in KirbyInput). The host draws the slot from the slot's
+/// own ability item, or else from a colorless stand-in item, so its frame and
+/// colours are exactly those the host gives that item. The icon is the original bottom-screen ability icon, decoded from the
 /// running machine once it is steady after each copy, so the original's copy
 /// flash and hurt variants do not flicker in the slot. It is drawn at the host
 /// item icon size in whole screen pixels. The slot keeps its real item for all
@@ -233,7 +233,7 @@ internal static class KirbyHud
             FitIcon(skill);
             return;
         }
-        if (!AbilitySlot(skill) || ColorlessStandIn() is not { } colorless)
+        if (!AbilitySlot(skill) || SlotItem(item) is not { } drawn)
         {
             if (overlaidSlots.Remove(skill.HashlinkPointer, out bool disableAmmo))
             {
@@ -250,7 +250,7 @@ internal static class KirbyHud
         // item, the host assigns the colorless stand-in first and picks the
         // highest scroll stat (Skill.hx:521-522, 390-391).
         skill.ii = null;
-        orig(skill, colorless);
+        orig(skill, drawn);
         // Inventory, equip and cooldown logic still see the real equipment.
         skill.ii = item;
         if (overlaidSlots.TryAdd(skill.HashlinkPointer, skill.disableAmmo)) skill.disableAmmo = true;
@@ -278,6 +278,16 @@ internal static class KirbyHud
                 return session.Hero.inventory.getEquippedWeaponOn(slot)?.hasTag("Shield".AsHaxeString()) != true;
         return false;
     }
+
+    /// <summary>
+    /// The item a copied HUD slot is drawn from. A real ability item (#55) is
+    /// drawn as itself, so the host gives it its own frame and level: setBgColors
+    /// picks skillSlotLegendary for a Legendary item before skillSlotColorless
+    /// (Skill.hx:395-404). Another weapon, or an empty slot, is drawn as the
+    /// colorless stand-in.
+    /// </summary>
+    private static InventItem? SlotItem(InventItem? item) =>
+        KirbyAbilityItems.IsAbilityItem(item) ? item : ColorlessStandIn();
 
     private static InventItem? ColorlessStandIn()
     {
