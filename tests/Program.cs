@@ -421,6 +421,11 @@ Check(KirbyActions.CanStomp(KirbyActions.Jump) && KirbyActions.CanStomp(KirbyAct
 Check(!KirbyActions.CanStomp(KirbyActions.Standing) && !KirbyActions.CanStomp(KirbyActions.Slide) && !KirbyActions.CanStomp(KirbyActions.Ability),
     "No stomp on the ground, while sliding or during an exhale or inhale");
 Check(KirbyActions.CanSlide(KirbyActions.Walk) && !KirbyActions.CanSlide(KirbyActions.Fall), "Slides start on the ground only");
+Check(HostStrikes.Slide(KirbyActions.Slide, -704) && !HostStrikes.Slide(KirbyActions.Slide, 384) && !HostStrikes.Slide(KirbyActions.Dash, 704),
+    "Only the slide's fast part strikes like a roll");
+Check(HostStrikes.Grab(HostStrikes.Suplex, SpeedMatch.Carry, -1766) && !HostStrikes.Grab(HostStrikes.Suplex, SpeedMatch.Carry, 300) &&
+      !HostStrikes.Grab(HostStrikes.Suplex, KirbyActions.Dash, 528) && !HostStrikes.Grab(18, SpeedMatch.Carry, 1766),
+    "Only Suplex's fast grab lunge bursts doors");
 var stompRun = new StompController();
 Check(!stompRun.TryStart(KirbyActions.Standing, 480), "A grounded Kirby cannot stomp");
 Check(stompRun.TryStart(KirbyActions.Fall, 400) && stompRun.Active, "A falling Kirby stomps");
@@ -474,7 +479,18 @@ Check(MNear(16 * 2.75 * SpeedMatch.SlideFastScale + 27 * SpeedMatch.SlideSlowSca
 ushort MLadder(int cx, int cy) => cy >= 30 ? SpeedMatch.Solid : cx == 12 ? SpeedMatch.Ladder : SpeedMatch.Free;
 var mUp = SpeedMatch.Move(KirbyActions.Climb, 0, 0, 300, 600, 300, 600 - 592 / 256.0, MLadder);
 var mDown = SpeedMatch.Move(KirbyActions.Climb, 0, 0, 300, 600, 300, 600 + 704 / 256.0, MLadder);
-Check(mUp == (300, 600 - 592 / 256.0) && mDown == (300, 600 + 704 / 256.0), "Ladders keep the original climb, faster than the Beheaded's");
+Check(MNear((600 - mUp.Feet) * 60, 592 / 256.0 * 60 * SpeedMatch.GroundScale) && MNear((mDown.Feet - 600) * 60, 704 / 256.0 * 60 * SpeedMatch.GroundScale) && mUp.X == 300,
+    "Ladders climb as much faster than the original as the run");
+// The added climb stops a full step short of a ladder's ends, its one-way top and ceilings.
+ushort MTopped(int cx, int cy) => cy >= 30 ? SpeedMatch.Solid : cx != 12 || cy < 20 ? SpeedMatch.Free : cy == 20 ? SpeedMatch.OneWay : SpeedMatch.Ladder;
+Check(SpeedMatch.Move(KirbyActions.Climb, 0, 0, 300, 487, 300, 487 - 592 / 256.0, MTopped).Feet == 484 && SpeedMatch.Move(KirbyActions.Climb, 0, 0, 300, 483, 300, 483 - 592 / 256.0, MTopped).Feet == 483 - 592 / 256.0,
+    "Climbing up stops a step short of the one-way top; the original climbs onto it");
+Check(SpeedMatch.Move(KirbyActions.Climb, 0, 0, 300, 712, 300, 712 + 704 / 256.0, MTopped).Feet == 720 - SpeedMatch.LandingMargin &&
+    MNear(SpeedMatch.Move(KirbyActions.Climb, 0, 0, 300, 480, 300, 480 + 704 / 256.0, MTopped).Feet, 480 + 704 / 256.0 * SpeedMatch.GroundScale),
+    "Climbing down from the one-way top speeds up and stops a step above the floor");
+ushort MCapped(int cx, int cy) => cy >= 30 ? SpeedMatch.Solid : cx == 12 && cy >= 20 ? SpeedMatch.Ladder : cy == 19 ? SpeedMatch.Solid : SpeedMatch.Free;
+Check(SpeedMatch.Move(KirbyActions.Climb, 0, 0, 300, 502, 300, 502 - 592 / 256.0, MCapped).Feet == 480 + SpeedMatch.Height + SpeedMatch.Margin,
+    "Climbing up stops short of a solid block above the ladder");
 Check(SpeedMatch.Move(0x0B1A, 1, 512, 300, 700, 302, 690, MFlat) == (302, 690), "Other actions (hits, abilities, swimming) keep their original motion");
 // Contacts stay with the original collision.
 ushort MWall(int cx, int cy) => cy >= 30 || cx == 18 ? SpeedMatch.Solid : SpeedMatch.Free;
@@ -615,6 +631,7 @@ Check(SpeedMatch.RiseVelocity(KirbyActions.Jump, -2682) == -2682 && SpeedMatch.R
     // Same IDs and order as KirbyNdsProvider.Abilities (original abilities 2..25).
     string[] abilityIds = ["Cutter", "Mirror", "Beam", "Fighter", "Suplex", "YoYo", "Wheel", "Bomb", "Ice", "Fire", "Plasma", "Ninja",
         "Stone", "Wing", "Jet", "Copy", "Sword", "Hammer", "Parasol", "Paint", "Mike", "Crash", "Cook", "Sleep"];
+    Check(abilityIds[HostStrikes.Suplex - 2] == "Suplex", "HostStrikes uses Suplex's original ability ID");
     Check(abilityIds.All(AbilityDescriptions.Summaries.ContainsKey) && AbilityDescriptions.Summaries.Count == abilityIds.Length,
         "Every copy ability has exactly one description");
     Check(AbilityDescriptions.Summaries.Values.All(text => text.Length is > 20 and <= 110),

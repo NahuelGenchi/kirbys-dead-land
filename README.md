@@ -93,7 +93,8 @@ direction dashes, and copy abilities deal damage on the host's scale. The
 original game's hurt and guard palette flash is kept but softened to a tint,
 because the whitened frames vanished against light scenery on a large monitor.
 Kirby no longer jumps a terrain cell for a frame as he moves. His slide (Down +
-jump) is his roll: it passes Dead Cells roll-zone tunnels and bursts doors. In
+jump) is his roll: it passes Dead Cells roll-zone tunnels and bursts doors.
+Suplex's grab lunge, which doors resist, bursts them the same way. In
 the air, the Dead Cells dive binding (Down + jump by default) makes him stomp
 with the host's own dive attack: it hits and stuns enemies and breaks
 breakable floors once the Ram rune is unlocked.
@@ -101,8 +102,8 @@ breakable floors once the Ram rune is unlocked.
 Kirby moves at the Beheaded's speeds, measured in the game: he runs and steers
 in the air at 236.5 px/s, slides as far and as fast as the Beheaded rolls,
 falls at 403 px/s, stomps at the dive's 900 px/s and floats across at running
-speed. He climbs at his own original speed (139 px/s up, 165 px/s down), faster
-than the Beheaded's 97.5 px/s. He climbs ladders, chains and vines grown with
+speed. His climb speeds up as his run does, to 265 px/s up and 315 px/s down,
+faster than the Beheaded's 97.5 px/s. He climbs ladders, chains and vines grown with
 the Vine rune, and climbs from a vine onto the ledge it leads to. He stops when the direction is released and
 turns at once, and his jump keeps its height but peaks as fast as the
 Beheaded's. Dash attacks, Wheel's roll and other copy-ability moves faster
@@ -174,6 +175,8 @@ while playing Kirby; healing, equipment and interaction tutorials remain availab
 - Standing 12×12 and crouching 12×6 source hurtboxes passed actual host collision
   queries: interior attacks hit and attacks just outside miss. Every temporary
   projection restored the host physical body afterward.
+- A generated Dead Cells door breaks from Suplex's dash grab lunge, through the
+  host's roll check (run `20261006-211833`; the control without it left the door shut).
 - A generated Dead Cells door breaks from original Sword damage. Actual biome
   transitions preserve copy and shield, and changing outfits preserves health.
   Lethal source damage ends the host run; New Game resets Kirby's full original state.

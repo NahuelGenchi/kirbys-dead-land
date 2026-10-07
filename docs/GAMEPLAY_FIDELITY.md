@@ -15,13 +15,12 @@ in [NDS_BRIDGE.md](NDS_BRIDGE.md). The original bootstrap experiment remains in
 | System | Original code and host adapter |
 |---|---|
 | Clock | 33,513,982 / 560,190 source ticks per second. A display within 3% of that rate presents one original frame per host frame, like an emulator synchronized to vblank; other rates accumulate real time |
-| Movement | The ROM updates fixed-point position, velocity and action state; the host follows its physical foot. With `MatchHostSpeed` (default) Kirby moves at the Beheaded's measured speeds: each original frame's own motion is carried on through free space (run and air control 236.5 px/s, float across at the same speed, fall 403 px/s, floating up and down at the run's tempo), the original horizontal velocity is cleared when the direction is released or reversed, and the jump keeps its 50 px but peaks after 0.25 s, as the Beheaded's does. Added motion stops short of walls and ceilings, leaves the original a full fall step above floors, follows slopes at the original's whole-pixel surface, and never applies to hits, swimming, climbing or ability moves. Ladders, chains and vines keep the original climb, 139 px/s up and 165 px/s down, faster than the Beheaded's 97.5 px/s average: matched to that average, the owner found climbing too slow (#48). The original walk and dash cycles play faster with the run (up to 1.67 times, one frame a pose), so his feet cover about the ground they did natively. `false` keeps the original DS speeds (the stomp keeps the dive's) |
-| Movement | The ROM updates fixed-point position, velocity and action state; the host follows its physical foot. With `MatchHostSpeed` (default) Kirby moves at the Beheaded's measured speeds: each original frame's own motion is carried on through free space (run and air control 236.5 px/s, float across at the same speed, fall 403 px/s, ladders 97.5 px/s both ways, floating up and down at the run's tempo), the original horizontal velocity is cleared when the direction is released or reversed, and the jump keeps its 50 px but peaks after 0.25 s, as the Beheaded's does. Added motion stops short of walls and ceilings, leaves the original a full fall step above floors, follows slopes at the original's whole-pixel surface, and never applies to hits or swimming. Ability moves keep their original motion unless they carry Kirby: a dash attack, or any move faster than the original dash, moves at the run's scale (see [Carrying ability moves](#carrying-ability-moves-40)). The original walk and dash cycles play faster with the run (up to 1.67 times, one frame a pose), so his feet cover about the ground they did natively. `false` keeps the original DS speeds (the stomp keeps the dive's) |
+| Movement | The ROM updates fixed-point position, velocity and action state; the host follows its physical foot. With `MatchHostSpeed` (default) Kirby moves at the Beheaded's measured speeds: each original frame's own motion is carried on through free space (run and air control 236.5 px/s, float across at the same speed, fall 403 px/s, floating up and down at the run's tempo), the original horizontal velocity is cleared when the direction is released or reversed, and the jump keeps its 50 px but peaks after 0.25 s, as the Beheaded's does. Added motion stops short of walls and ceilings, leaves the original a full fall step above floors, follows slopes at the original's whole-pixel surface, and never applies to hits or swimming. Ladders, chains and vines climb as much faster than the original as the run, 265 px/s up and 315 px/s down (original 139 and 165, the Beheaded's average 97.5): at the original's speed the owner still found climbing too slow (#48, #51). The added climb stops a full step short of a ladder's ends, the one-way top it leads onto, ceilings and floors, so the original makes its own last steps onto and off the ladder. Ability moves keep their original motion unless they carry Kirby: a dash attack, or any move faster than the original dash, moves at the run's scale (see [Carrying ability moves](#carrying-ability-moves-40)). The original walk and dash cycles play faster with the run (up to 1.67 times, one frame a pose), so his feet cover about the ground they did natively. `false` keeps the original DS speeds (the stomp keeps the dive's) |
 | Terrain | Nearby host solids, one-way floors, slopes, ladders and water become source collision cells; all linked source objects and cached terrain probes move together when the window rebases by whole cells, while effects attached to a parent (Fire's head flame, Plasma's spark, attack effects) keep their offsets from it. Host movement of Kirby (speed match, stomp) moves only him and his terrain probes, so thrown bombs, cutters, effects and the helper keep their original paths. Over a moving host elevator the window is lifted to its surface and original objects ride with him (see [Host elevators](#host-elevators-deviation)) |
 | Input | Existing host bindings become original digital buttons; ordinary source directional combinations still apply. A held direction dashes through the original double tap (`AlwaysDash`); a light analog tilt walks. A key bound to both Up and jump (W and the Up arrow by default) climbs at a ladder or chain, as in the host, instead of jumping first |
 | Terrain | Nearby host solids, one-way floors, slopes, ladders and water become source collision cells. Vines grown with the Vine rune (`en.inter.VineLadder`) have no collision bits, only level spots (0, where the Beheaded climbs, and 18); their cells become source ladders, and the solid blocks a vine passes through or ends under become one-way ladder tops in that column. A ladder under a solid block stops the original below it, so this deviation lets Kirby climb onto the ledge, as the Beheaded's `exitLadderTop` does; all linked source objects and cached terrain probes move together when the window rebases by whole cells, while effects attached to a parent (Fire's head flame, Plasma's spark, attack effects) keep their offsets from it. Host movement of Kirby (speed match, stomp) moves only him and his terrain probes, so thrown bombs, cutters, effects and the helper keep their original paths |
 | Input | Existing host bindings become original digital buttons; ordinary source directional combinations still apply. A held direction dashes through the original double tap (`AlwaysDash`); a light analog tilt walks. A key bound to both Up and jump (W and the Up arrow by default) climbs at a ladder, chain or vine, as in the host, instead of jumping first |
-| Roll | Kirby's original slide is his roll and covers the Beheaded's roll: 131 px at up to 339 px/s. Host roll-zone tunnels (collision 65) open while he slides and stay open until he leaves one entered by sliding; walking cannot enter. The slide's fast part counts as a roll for the host's door and breakable-tile checks |
+| Roll | Kirby's original slide is his roll and covers the Beheaded's roll: 131 px at up to 339 px/s. Host roll-zone tunnels (collision 65) open while he slides and stay open until he leaves one entered by sliding; walking cannot enter. The slide's fast part counts as a roll for the host's door and breakable-tile checks, and Suplex's grab lunge for its door check (see [Suplex's lunge bursts doors](#suplexs-lunge-bursts-doors-50)) |
 | Dive attack | The player's host dive binding in the air or on a ladder or chain (original jump, fall, float or climb) starts the host `DiveAttack` under its own rules. The original controller keeps its falling or exhaling animation and physics (3.5 px/frame cap) and drops straight down; the host adds 11.5 px/frame of descent through free space, 15 px a frame in all like the Beheaded's dive (about 900 px/s), and leaves the original a full fall step to make the floor contact; the host skill resolves the landing (shockwave, stun, damage, breakable floors with the Ram rune). Only what stops the original fall counts as floor: solids, slopes and one-way platforms from above, never ladders or chains. Enemy touch damage is off while stomping and for 30 frames after landing |
 | Camera | `CameraZoom` (default 1, the host camera) can zoom the host viewport; 2 shows about 200 host pixels of height, close to the DS screen's 192. Host cinematics and host zoom changes keep their framing |
 | Palette flashes | The original hurt and guard flashes of Kirby's first two palette banks are shown at `FlashStrength` (0.35) of their colour change, with original timing; lasting palette changes are adopted after four frames |
@@ -469,6 +468,14 @@ grown through the host's own `VineLadder.activate`:
   165.0 px/s per original frame; Kirby stood on the ledge (feet 2712, the
   block's top, one frame after 2711.19 as before) and Down climbed back to the
   floor (2880). Life stayed 76.
+- `20261006-211757` (#51, the climb sped up as the run, same data root): two
+  climbs up at 265.2 px/s and one down at 315.3 px/s per original frame;
+  Kirby stood on the ledge (1344, the block's top) and climbed back to the
+  floor (1656). A natural Grenader on the ledge hit him at 9.6 s, and its
+  recoil overlapped the second Down, which did not start a descent.
+- `20261006-211905` (#51, `ladder` setup, an ordinary ten-cell ladder): two
+  climbs each way at 265.2 and 315.3 px/s; Kirby stood on the ladder top (600)
+  each time and climbed down to the floor (864). Life stayed 76.
 
 Not run: hanging vines (`goingUp` false), a stomp from a vine, and a vine in a
 saved run after loading.
@@ -535,6 +542,33 @@ ability probe replaying original buttons (`KIRBY_LAB_ABILITY_PLAN`):
 
 Both runs ended at their time limit without fatal log lines. Not run live:
 other abilities, slopes and ledges during a carrying move, Wheel turning.
+### Suplex's lunge bursts doors (#50)
+
+Owner recording 2026-10-06 21:05: Suplex Kirby's dash attack ran into a closed
+door, bounced off it and left it intact. A copy attack reaches a host door only
+through the original object `KirbyEnemies` pairs with it, and every non-mob
+pairing (doors, props, gold, breakable tiles) takes the boss option: original
+hit-node mask `0x53` rejects grab, Cook and inhale and keeps damage. Suplex's
+grab only captures, so it never connected with a door. Every other copy dash
+attack damages the door's object.
+
+Doors keep that resistance; grabbing the door's Waddle Dee stand-in would draw
+it in Kirby's hands. Instead `HostStrikes.Grab` (`src/core/`) reports Suplex's
+lunge to the host's own `Hero.canBreakDoors`, as the slide's fast part already
+does, so the host bursts the door as it does for the Beheaded's roll. It holds
+while Suplex (ability 6) carries Kirby (`SpeedMatch.Carry`) at 2 px a frame or
+more: the 24-frame lunge of the dash grab (1760 falling to 1024), and the
+standing, Down+B and mid-air lunges that carry him. The whiff stumble after the
+lunge (32 frames at 384) does not count. Headless (`tests/speed`): a wall within
+the lunge ends the grab on the frame Kirby meets it (action `0509`, velocity
+0); the strike holds until he is a pixel from it. Breakable tiles are unchanged:
+`canBreakTiles` still reports only the slide.
+
+Live in `repros/suplex-door-20261006` (see `docs/RUNTIME_LAUNCH.md`, "Suplex
+lunge into doors"): with the change, the lunge broke a real generated door on
+its sixth frame; the control without the door hook bounced off a door the same
+way and left it closed.
+
 ### Cinematic walks (intentional deviation)
 
 Issue #17. Before this change, the source machine stopped during every host

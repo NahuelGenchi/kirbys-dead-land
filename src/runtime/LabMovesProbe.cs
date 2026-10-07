@@ -50,6 +50,7 @@ internal static unsafe class LabMovesProbe
         Hook_BreakableTile.onDie += (orig, tile) => { Event("breakable-tile-broken", new { tile.cx, tile.cy }); orig(tile); };
         Hook_Door.onDamage += (orig, door, attack) =>
         { Event("door-hit", new { door.cx, door.cy, attack.finalDmg, door.broken }); orig(door, attack); };
+        Hook_Door.onDie += (orig, door) => { Event("door-broken", new { door.cx, door.cy, door.lastHitDir }); orig(door); };
         if (Environment.GetEnvironmentVariable("KIRBY_LAB_HERO_PHASES") == "1")
         {
             void Phase(string where)
@@ -131,7 +132,7 @@ internal static unsafe class LabMovesProbe
         {
             elapsed = Elapsed, frame = state.Frame, action = nds.Action,
             x = (hero.cx + hero.xr) * 24, feet = (hero.cy + hero.yr) * 24, state.VxRaw, state.VyRaw,
-            stomping = provider!.Stomping, provider.SlideStrike, diving,
+            stomping = provider!.Stomping, provider.SlideStrike, provider.GrabStrike, diving,
             ignore = hero.ignoreGround is { } ig ? ig.untilY : (int?)null,
             displayed = new[] { nds.DisplayedOrigin.X, nds.DisplayedOrigin.Y },
             current = new[] { (int)Math.Floor(state.X) - state.CameraX, (int)Math.Floor(state.Y) - state.CameraY },

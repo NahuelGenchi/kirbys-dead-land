@@ -1133,3 +1133,44 @@ the all-ability rendering tests as full gameplay acceptance.
 - Not run: the short-press hint, long-press recycle, an enemy copy filling the
   slot, mixed item and enemy mouthfuls, save/resume with an ability item, other
   biomes, chests, timed doors, shops and the forge.
+## 2026-10-06 — Suplex's dash attack bursts doors (#50)
+
+- Owner recording 21:05: Suplex Kirby's dash grab bounced off a closed door and
+  left it intact.
+- Cause: doors pair with original objects that take the boss resistance (mask
+  `0x53`: no grab, Cook or inhale). Suplex's grab only captures, so it never hit.
+- Fix: `HostStrikes.Grab` reports Suplex's grab lunge (carrying Kirby at 2 px a
+  frame or more) to the host's `Hero.canBreakDoors`, as the slide already does.
+  Doors keep their grab resistance. `HostStrikes.Slide` now holds the slide rule.
+- `python3 scripts/check.py` passes (248 core assertions; Release build 0
+  warnings/errors). `tests/speed` passes, with two new checks: the strike covers
+  the dash grab's 24 lunge frames only, and holds until the lunge is a pixel from
+  a wall.
+- Live (`repros/suplex-door-20261006`): `211833` broke a real door on the lunge's
+  sixth frame; control `211959` without the hook bounced off a door and left it
+  shut. Not run live: other Suplex lunges, doors on Kirby's left.
+## 2026-10-06 — Kirby climbs as much faster as he runs (#51)
+
+- Owner recording (21:07, base Kirby on a chain): still too slow after #48. Its
+  camera scroll put Kirby at about 137 px/s up, the original speed.
+- `SpeedMatch` now speeds the climb (`0x916`) up by the run's factor
+  (`ClimbScale` = `GroundScale`, 1.91×): 265 px/s up and 315 px/s down. The
+  original climbs up a little faster than it dashes; the matched climb keeps
+  that ratio to the matched run. The added climb stops a full step short of
+  the ladder's ends (a one-way top counts as ladder), ceilings and floors,
+  looking four cells ahead, so the original makes its last steps itself.
+- Source: `python3 scripts/check.py` passes (248 core assertions, Release build
+  0 warnings/errors). `tests/speed` passes all 36 checks. The new ones compare
+  the matched climb with the original controller at a one-way top, a ladder
+  under a solid block, a ladder ending in open air (the original stands for a
+  frame and falls off) and a hanging ladder's bottom; each lets go within one
+  original step of where the original does and ends in the same place.
+- Live (separate data root `repros/climb-20261006`): vine run
+  `20261006-211757` and ordinary ladder run `20261006-211905` climbed at
+  265.2 px/s up and 315.3 px/s down per original frame, stood on the top and
+  climbed down to the floor. In the vine run a natural Grenader's grenade
+  (9.6 s) and its recoil overlapped the second Down. Saves unchanged, no fatal
+  log. The movement row in `docs/GAMEPLAY_FIDELITY.md` had two copies after
+  merges; they are now one.
+- Not run: chains live, hanging vines, the climb animation's pace (its
+  hand-over-hand cycle keeps the original tempo, now slower than the motion).
