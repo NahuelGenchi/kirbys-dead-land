@@ -1099,6 +1099,22 @@ the all-ability rendering tests as full gameplay acceptance.
   - `013806` (tiers 1/1/5): Survival green `17ce75` + gray `b2c0dd`.
   - `013956` (tiers 1/5/1): Tactics purple `a051ff` + gray.
   - In both, discard restored the sword's red. Real saves were unchanged.
+## 2026-10-06 — Suplex's dash attack bursts doors (#50)
+
+- Owner recording 21:05: Suplex Kirby's dash grab bounced off a closed door and
+  left it intact.
+- Cause: doors pair with original objects that take the boss resistance (mask
+  `0x53`: no grab, Cook or inhale). Suplex's grab only captures, so it never hit.
+- Fix: `HostStrikes.Grab` reports Suplex's grab lunge (carrying Kirby at 2 px a
+  frame or more) to the host's `Hero.canBreakDoors`, as the slide already does.
+  Doors keep their grab resistance. `HostStrikes.Slide` now holds the slide rule.
+- `python3 scripts/check.py` passes (248 core assertions; Release build 0
+  warnings/errors). `tests/speed` passes, with two new checks: the strike covers
+  the dash grab's 24 lunge frames only, and holds until the lunge is a pixel from
+  a wall.
+- Live (`repros/suplex-door-20261006`): `211833` broke a real door on the lunge's
+  sixth frame; control `211959` without the hook bounced off a door and left it
+  shut. Not run live: other Suplex lunges, doors on Kirby's left.
 ## 2026-10-06 — Kirby climbs as much faster as he runs (#51)
 
 - Owner recording (21:07, base Kirby on a chain): still too slow after #48. Its

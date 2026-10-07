@@ -89,6 +89,11 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
     /// smash breakable tiles and burst doors; Kirby's slide is his roll.
     /// </summary>
     public bool SlideStrike { get; private set; }
+    /// <summary>
+    /// Suplex's grab lunge is carrying Kirby at speed (HostStrikes.Grab). Doors
+    /// resist the original grab, so it bursts them like a roll.
+    /// </summary>
+    public bool GrabStrike { get; private set; }
     /// <summary>True while Kirby's stomp drives the host dive attack.</summary>
     public bool Stomping => stomp.Active;
     /// <summary>True while the original death animation finishes after the host destroyed the hero.</summary>
@@ -142,7 +147,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         LabActivationTrace.Mark("Audio complete");
         pacer.Reset(); dash.Reset(); rollZones.Reset(); CancelStomp(); previousAbility = nds.State.Ability; window = null;
         motionActions.Reset();
-        previousInput = 0; previousDiveButton = false; upJumpClimbs = false; SlideStrike = false;
+        previousInput = 0; previousDiveButton = false; upJumpClimbs = false; SlideStrike = GrabStrike = false;
         deathFrames = -1; deathAnchor = null; sourceDead = nds.Health == 0;
         session.Hero.radius = 9;
         session.Hero.bodyHei = 29.0 / 24; session.Hero.hei = 29;
@@ -155,7 +160,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         KirbyHud.Clear(session);
         CancelStomp();
         standingOn = null;
-        SlideStrike = false;
+        SlideStrike = GrabStrike = false;
         // The host destroys a dead hero immediately and stages its corpse. The
         // original death animation continues from the host frame event instead.
         if (session.Hero.life <= 0 && renderer is not null && nds is not null && deathFrames < DeathAnimationFrames)
@@ -394,7 +399,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         pacer.Reset();
         CancelStomp();
         standingOn = null;
-        SlideStrike = false;
+        SlideStrike = GrabStrike = false;
         incoming.Clear();
         deathAnchor = (hero.cx, hero.cy, hero.xr, hero.yr);
         // A host-side lethal effect still uses the original lethal recoil.
@@ -664,7 +669,8 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         hero.dir = state.FacesLeft ? -1 : 1;
         hero.bodyHei = 29.0 / 24; hero.hei = 29;
         if (stomp.Active) FinishStompFrame(hero, map, after, healthAfter < healthBefore);
-        SlideStrike = after == KirbyActions.Slide && Math.Abs(state.VxRaw) >= SlideStrikeSpeed;
+        SlideStrike = HostStrikes.Slide(after, state.VxRaw);
+        GrabStrike = HostStrikes.Grab(state.Ability, motion, state.VxRaw);
         if (state.Ability != previousAbility)
         {
             if (state.Ability == 1 && !pendingCopy) session.DropAbility();
@@ -683,7 +689,6 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
     // the Beheaded (bit 1) except while he rolls.
     private const int RollZoneBit = 64;
     private const short StompVelocity = 0x700;
-    private const int SlideStrikeSpeed = 512;
     // Kirby's original body: about 16 pixels wide and 22 tall above his feet.
     private const double BodyHalfWidth = 8, BodyHeight = 22;
     private void ExportTerrain(Hero hero, int originX, int originY, bool rollThrough)

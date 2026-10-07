@@ -214,6 +214,21 @@ foreach (ushort t in new ushort[] { SpeedMatch.SlopeUpRight, SpeedMatch.SlopeUpL
     int contact = Range(w.Start, w.End - w.Start + 1).FirstOrDefault(i => Math.Abs(w.Rows[i].X - 759.5) < 0.01, -1);
     Check(contact >= 0 && w.Rows.Max(x => x.X) <= 759.5 + 1e-6 && w.Rows.Skip(contact).All(x => Math.Abs(x.X - 759.5) < 0.01),
         $"A dash attack into a wall stops at the original contact, never inside (frame {contact - w.Start + 1} of the attack)");
+    // Doors resist the original grab, so the lunge itself bursts them as the
+    // host's roll does: it must still count when Kirby meets the door.
+    bool Grabbing(Row x) => HostStrikes.Grab(HostStrikes.Suplex, x.Motion, x.Vx);
+    var free = DashAttack(6, true);
+    int strikes = Range(free.Start, free.End - free.Start + 1).Count(i => Grabbing(free.Rows[i]));
+    Check(strikes >= 10 && Range(0, free.Start).All(i => !Grabbing(free.Rows[i])) && Range(free.End + 1, free.Rows.Count - free.End - 1).All(i => !Grabbing(free.Rows[i])),
+        $"Suplex's dash grab strikes doors during its lunge only ({strikes} of {free.End - free.Start + 1} frames)");
+    // A wall within the lunge (not its whiff stumble afterwards) ends the grab
+    // the frame Kirby meets it; the strike holds until he is a pixel from it.
+    var near = new Sim(nds, seed);
+    for (int y = 20; y < 30; y++) near.Tiles[(26, y)] = 3;
+    var n = DashAttack(6, true, near);
+    int met = Range(n.Start, n.Rows.Count - n.Start).FirstOrDefault(i => Math.Abs(n.Rows[i].X - 615.5) < 0.01, -1);
+    Check(met > n.Start && n.Rows[met].Action != KirbyActions.Ability && Grabbing(n.Rows[met - 1]) && n.Rows[met - 1].X >= 614.5 - 1e-6,
+        $"Suplex's dash grab strikes until its lunge is a pixel from a wall (frame {met - n.Start} of the attack)");
 }
 {
     // Fire's and Plasma's head emitters are placed by an offset from Kirby; the
@@ -269,7 +284,7 @@ foreach (ushort t in new ushort[] { SpeedMatch.SlopeUpRight, SpeedMatch.SlopeUpL
 Console.WriteLine(failures == 0 ? "PASS: Kirby's movement matches the Beheaded's speeds on the original controller." : $"{failures} FAILED");
 return failures;
 
-record Row(ushort Action, double X, double Feet, int Vx, int Vy);
+record Row(ushort Action, double X, double Feet, int Vx, int Vy, ushort Motion = 0);
 
 /// <summary>KirbyNdsProvider.Step's movement path: world rebase, velocity matching, original frame, added motion.</summary>
 sealed class Sim
@@ -388,6 +403,6 @@ sealed class Sim
         ushort motion = motionActions.Next(after, s.VxRaw);
         (hostX, feet) = match ? SpeedMatch.Move(motion, motionActions.Direction(direction), s.VxRaw, x0, f0, s.X + ox * 24, s.Y + oy * 24 + 14.5, TileAt)
             : (s.X + ox * 24, s.Y + oy * 24 + 14.5);
-        return new Row(after, hostX, feet, s.VxRaw, s.VyRaw);
+        return new Row(after, hostX, feet, s.VxRaw, s.VyRaw, motion);
     }
 }

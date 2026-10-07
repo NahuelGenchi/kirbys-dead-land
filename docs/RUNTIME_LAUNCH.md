@@ -321,6 +321,37 @@ KIRBY_LAB_BREAKABLE_TARGET=gold python3 scripts/launch_runtime.py \
 Each run reached its time limit without fatal errors, and real saves were unchanged.
 `GoldNugget` and copy forms other than Sword were not run.
 
+## Suplex lunge into doors
+
+Issue #50. The ability probe copies Suplex (`--probe-ability 6`) and replays
+original buttons from `KIRBY_LAB_ABILITY_PLAN`, counted from when the copy is
+ready: Left over frames 90–120, then Right from 130 to 200 with B at 150–152 (a
+dash, then the dash grab). `KIRBY_LAB_MOVES_SETUP=door@1` places Kirby 2.5 cells
+left of the first breakable, unlocked generated door, facing it. `LabMovesProbe`
+logs `door-hit` (`Door.onDamage`), `door-broken` (`Door.onDie`) and `GrabStrike`
+on every source frame. Separate data root `repros/suplex-door-20261006`; bridge
+unchanged (`libkssu_bridge.so` SHA-256
+`ef72fc725634bc14784498b66150ae29743754105073f84aec227ce26768d13c`, built from this
+`src/nds/lib.rs`).
+
+```sh
+python3 scripts/stage_runtime.py --data-root ~/.local/share/kirby-dead-cells/repros/suplex-door-20261006 \
+  --original-runtime --outfit-pack "$HOME/.local/share/kirby-dead-cells/outfit-build/res.pak"
+KIRBY_LAB_ABILITY_PLAN=<plan> KIRBY_LAB_MOVES_SETUP=door@1 \
+python3 scripts/launch_runtime.py --data-root ~/.local/share/kirby-dead-cells/repros/suplex-door-20261006 \
+  --seconds 45 --start-game --outfit KirbySuperStarUltra --input-plan ability --probe-ability 6 --capture-fps 10
+```
+
+| Run | Build | Result |
+| :--- | :--- | :--- |
+| `20261006-211833` | #50 | Dash grab lunge from source frame 4385 at 1728; door (97, 85) hit for 1 and broken on frame 4390 with `GrabStrike` set; Kirby recoiled (action `1228`). Frame `007094` shows the door bursting, `007344` the open doorway |
+| `211959` | control: `canBreakDoors` hook for the lunge removed | Same lunge from frame 4383 into door (317, 177); Kirby recoiled at frame 4390 from x 7595.5, 12.5 px left of the door's cell; no door hit or break event |
+
+The two runs generated different levels, so the doors differ. Both reached their
+time limit without a fatal log, and real saves were unchanged. Not run live: the
+standing, Down+B and mid-air lunges, a door approached from the right, and a
+lunge that grabs an enemy just before a door.
+
 ## Host elevators
 
 `LabMovesProbe` has three elevator scenarios for `KIRBY_LAB_MOVES_SETUP`: `elevator-spawn` builds a real `SimpleElevator` in the tallest open three-cell shaft and initializes it as `Level.spawnEntitiesFromMarkers` does (the first Prisoners' Quarters level has none), `elevator` stands Kirby on the first elevator, and `elevator-use` activates it through `canBeActivated`/`onActivate`. `moves-trace.jsonl` then records the elevator surface beside Kirby's feet on every source frame. The runs used a separate data root, `repros/elevator-20261006`, and a bridge rebuilt from this branch (`libkssu_bridge.so` SHA-256 `b2545e79b5fcbfd9670e252e369255be571122d169d05166ee2ef942fd40f8a8`).

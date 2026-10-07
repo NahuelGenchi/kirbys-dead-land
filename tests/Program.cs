@@ -421,6 +421,11 @@ Check(KirbyActions.CanStomp(KirbyActions.Jump) && KirbyActions.CanStomp(KirbyAct
 Check(!KirbyActions.CanStomp(KirbyActions.Standing) && !KirbyActions.CanStomp(KirbyActions.Slide) && !KirbyActions.CanStomp(KirbyActions.Ability),
     "No stomp on the ground, while sliding or during an exhale or inhale");
 Check(KirbyActions.CanSlide(KirbyActions.Walk) && !KirbyActions.CanSlide(KirbyActions.Fall), "Slides start on the ground only");
+Check(HostStrikes.Slide(KirbyActions.Slide, -704) && !HostStrikes.Slide(KirbyActions.Slide, 384) && !HostStrikes.Slide(KirbyActions.Dash, 704),
+    "Only the slide's fast part strikes like a roll");
+Check(HostStrikes.Grab(HostStrikes.Suplex, SpeedMatch.Carry, -1766) && !HostStrikes.Grab(HostStrikes.Suplex, SpeedMatch.Carry, 300) &&
+      !HostStrikes.Grab(HostStrikes.Suplex, KirbyActions.Dash, 528) && !HostStrikes.Grab(18, SpeedMatch.Carry, 1766),
+    "Only Suplex's fast grab lunge bursts doors");
 var stompRun = new StompController();
 Check(!stompRun.TryStart(KirbyActions.Standing, 480), "A grounded Kirby cannot stomp");
 Check(stompRun.TryStart(KirbyActions.Fall, 400) && stompRun.Active, "A falling Kirby stomps");
@@ -626,6 +631,7 @@ Check(SpeedMatch.RiseVelocity(KirbyActions.Jump, -2682) == -2682 && SpeedMatch.R
     // Same IDs and order as KirbyNdsProvider.Abilities (original abilities 2..25).
     string[] abilityIds = ["Cutter", "Mirror", "Beam", "Fighter", "Suplex", "YoYo", "Wheel", "Bomb", "Ice", "Fire", "Plasma", "Ninja",
         "Stone", "Wing", "Jet", "Copy", "Sword", "Hammer", "Parasol", "Paint", "Mike", "Crash", "Cook", "Sleep"];
+    Check(abilityIds[HostStrikes.Suplex - 2] == "Suplex", "HostStrikes uses Suplex's original ability ID");
     Check(abilityIds.All(AbilityDescriptions.Summaries.ContainsKey) && AbilityDescriptions.Summaries.Count == abilityIds.Length,
         "Every copy ability has exactly one description");
     Check(AbilityDescriptions.Summaries.Values.All(text => text.Length is > 20 and <= 110),
