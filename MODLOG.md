@@ -1206,4 +1206,13 @@ the all-ability rendering tests as full gameplay acceptance.
   inhaled. `isUsefulFor` is true for Kirby so a shop short of gold says so.
 - Live `20261006-235600` (`rewards` plan): all three converted, taken and
   dropped; 1000 gold charged. Saves unchanged.
+## 2026-10-06 — Pause card shows the real ability item (#62)
+
+- Owner report: a forge reroll's grenade passive on Plasma disappeared from the
+  pause card in the next level. The #41 card path drew any copied slot from a
+  colorless stand-in sword, hiding the real ability item's level and affixes.
+- `KirbyHud` now draws a slot holding an ability item from that item.
+- Live (`repros/ability-items-20261006`): `234721` saved Wheel with the host
+  `Grenade` affix; `235012` resumed with the affix still on the slot item, and
+  its pause card listed it. Saves unchanged, no fatal log.
 - Source: `python3 scripts/check.py` passes.

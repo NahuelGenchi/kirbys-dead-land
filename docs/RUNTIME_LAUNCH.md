@@ -645,3 +645,20 @@ altar's ability tip and the "-1000" gold pop. `passed: true`, saves unchanged,
 no fatal log. Not run: real kill-count or timed-door rooms, pick-one altar
 groups, a level saved before this fix, a shop short of gold, mimics and
 legendary altars.
+### Pause card and save of an ability item (#62)
+
+`KIRBY_LAB_ITEMS_KEEP=1` makes the `items` probe keep the swallowed copy and give
+its item the host `Grenade` affix (the passive a forge reroll offered the owner).
+`KIRBY_LAB_ITEMS_RESUME=1` with `--resume-game` records the weapon slots 300
+source frames after the resume, then opens the normal pause screen and appends
+each equipment card's texts to `pause-cards.jsonl`.
+
+- `20261006-234721`: Wheel copied from a floor item, `Grenade` added, saved with
+  `--save-after 1000` at source frame 5166 (ability Wheel).
+- `20261006-235012` (resume): slot 0 held `KirbyAbilityWheel`, level 1, with
+  `Grenade` and `Colorless`. Its pause card read "Wheel I", "Copy ability", the
+  Wheel description, "Colorless (the highest level applies)." and "Launches a
+  grenade (15 damage)", in the captured frame. Saves unchanged, no fatal log.
+
+The owner's missing passive was the stand-in card hiding the real item. Affixes
+do not act on copy attacks until #57.
