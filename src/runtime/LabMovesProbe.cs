@@ -14,7 +14,8 @@ namespace Kirby.Runtime;
 /// = scenario@seconds teleports Kirby next to one (rollzone, air, breakable,
 /// door, tile, ladder, vine), optionally with a Zombie below (KIRBY_LAB_MOVES_TARGET=1 still, 2 active).
 /// "elevator-spawn" builds a real host elevator where a level has none,
-/// "elevator" stands Kirby on the first one and "elevator-use" activates it as
+/// "elevator" stands Kirby on the first one (or the one at column
+/// KIRBY_LAB_ELEVATOR_CX) and "elevator-use" activates it as
 /// the interact key does; the trace then records its surface.
 /// KIRBY_LAB_RUNE=1 grants the floor-breaking rune for the run. Inputs come
 /// from the normal-binding repro plan; this probe only places and records.
@@ -31,6 +32,8 @@ internal static unsafe class LabMovesProbe
     private static uint lastFrame;
     private static Mob? target;
     private static Elevator? ride;
+    private static readonly System.Reflection.FieldInfo BitmapField =
+        typeof(KirbySpriteRenderer).GetField("bitmap", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
     private static int phaseCount;
     private static readonly JsonSerializerOptions Options = new()
     { NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.AllowNamedFloatingPointLiterals };
@@ -138,6 +141,9 @@ internal static unsafe class LabMovesProbe
             {
                 surface = (ride.cy + ride.yr) * 24, ride.cy, ride.yr, ride.cx, ride.cWid,
                 moving = ride.isMoving(), snapping = ride.isSnapping(hero),
+                // What is drawn this frame: the elevator's and the host hero's sprites, and Kirby's bitmap.
+                sprY = ride.spr?.y, heroSprY = hero.spr?.y, hero.easeSpritePos,
+                kirbyY = renderer is null ? (double?)null : (BitmapField.GetValue(renderer) as dc.h2d.Bitmap)?.y,
             },
         }, Options) + "\n");
     }
@@ -367,7 +373,8 @@ internal static unsafe class LabMovesProbe
                     }
                 if (bestHeight >= 8)
                 {
-                    int travel = Math.Min(bestHeight - 3, 12);
+                    int travel = Math.Min(bestHeight - 3,
+                        int.TryParse(Environment.GetEnvironmentVariable("KIRBY_LAB_ELEVATOR_TRAVEL"), out int cells) ? cells : 12);
                     var spawned = new dc.en.inter.elevator.SimpleElevator(hero._level, bestX, bestGround - travel, 3, travel, false);
                     spawned.init();
                     detail = new { x = bestX, ground = bestGround, height = bestHeight, travel, spawned.cx, spawned.cy, spawned.yr,
@@ -377,7 +384,9 @@ internal static unsafe class LabMovesProbe
             }
             case "elevator":
             {
-                if (Entities<Elevator>(hero).FirstOrDefault(e => !e.destroyed) is { } elevator)
+                // KIRBY_LAB_ELEVATOR_CX picks the elevator at that cell column; otherwise the first one.
+                int? column = int.TryParse(Environment.GetEnvironmentVariable("KIRBY_LAB_ELEVATOR_CX"), out int cx) ? cx : null;
+                if (Entities<Elevator>(hero).FirstOrDefault(e => !e.destroyed && (column is null || e.cx == column)) is { } elevator)
                 {
                     ride = elevator;
                     Teleport(hero, (elevator.cx + elevator.xr) * 24, (elevator.cy + elevator.yr) * 24);

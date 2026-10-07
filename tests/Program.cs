@@ -104,6 +104,16 @@ Check(MouthfulHazards.Resolve(false, false, false, 0, controlled: true) == Hazar
 Check(MouthfulHazards.Resolve(false, false, false, 0, false) == HazardAction.Follow, "Free projectiles keep host physics");
 Check(MouthfulHazards.Resolve(false, false, gone: true, 0, false) == HazardAction.Release, "A vanished source object only frees its slot");
 
+Check(IceFreeze.FreezeAffect == 23 && IceFreeze.FreezeSeconds == 3 && (IceFreeze.DiminishingKey, IceFreeze.DiminishingFullPowerUses,
+      IceFreeze.DiminishingMaxUses) == (3, 1, 8), "Ice uses the host Frost Blast freeze and its diminishing returns");
+Check(IceFreeze.Freezes(sourceAbility: 10, sourceDamage: 4, hostAlive: true, frozen: false), "An Ice hit freezes a living host enemy");
+Check(!IceFreeze.Freezes(10, 4, hostAlive: true, frozen: true), "A frozen enemy is not refrozen by the continuing breath");
+Check(!IceFreeze.Freezes(10, 4, hostAlive: false, frozen: false), "A killed enemy is not frozen");
+Check(!IceFreeze.Freezes(10, sourceDamage: 0, true, false), "No Ice damage, no freeze");
+Check(!IceFreeze.Freezes(sourceAbility: 11, 4, true, false) && !IceFreeze.Freezes(1, 4, true, false), "Other forms never freeze");
+Check(IceFreeze.Applies(10) && !IceFreeze.Applies(18) && !IceFreeze.Applies(1),
+      "Only Ice deals host Frost damage and skips the original remnant (no ice block)");
+
 Check(StarProjectiles.Identify(0x020BD718) == StarKind.Spit && StarProjectiles.Identify(0x020BDD08) == StarKind.BigSpit &&
       StarProjectiles.Identify(0x02166A54) == StarKind.Ability, "The three original star routines are recognized");
 Check(StarProjectiles.Identify(0x020C3700) == StarKind.None && StarProjectiles.Identify(0x020B2714) == StarKind.None,
@@ -363,22 +373,41 @@ gate.Update(true, true); gate.Reset();
 Check(!gate.Open && !gate.Update(false, true), "Reset forgets an entered roll zone");
 
 // Elevator at centre column 10, four cells wide, cell row 10; its solid row is 11 (top 264).
-Check(ElevatorRide.Over(10, 264, 10, 4, 10, 1, 0) is { Lift: 0, Raise: 0, Carrying: false }, "An elevator at rest needs no lift and carries nothing");
-Check(ElevatorRide.Over(10, 264, 10, 4, 10, 1, 0.5) is { Lift: 0, Carrying: true }, "An elevator that arrived this frame still carried Kirby");
+Check(ElevatorRide.Over(10, 264, 10, 4, 10, 1, 0, false) is { Lift: 0, Raise: 0, Carrying: false }, "An elevator at rest needs no lift and carries nothing");
+Check(ElevatorRide.Over(10, 264, 10, 4, 10, 1, 0.5, false) is { Lift: 0, Carrying: true }, "An elevator that arrived this frame still carried Kirby");
 Check(default(ElevatorRide.Ride) is { Carrying: false }, "Away from elevators nothing carries Kirby");
-var riding = ElevatorRide.Over(10, 261.6, 10, 4, 10, 0.9, 2.4);
+var riding = ElevatorRide.Over(10, 261.6, 10, 4, 10, 0.9, 2.4, false);
 Check(riding is { } r1 && Math.Abs(r1.Lift + 2.4) < 1e-9 && r1.Raise == 0 && Math.Abs(261.6 - r1.Lift - 264) < 1e-9,
     "Kirby carried to a moving surface stands on the lifted solid row");
-Check(ElevatorRide.Over(10, 264, 10, 4, 10, 0.9, 2.4) is { } r2 && Math.Abs(r2.Raise - 2.4) < 1e-9,
+Check(ElevatorRide.Over(10, 264, 10, 4, 10, 0.9, 2.4, false) is { } r2 && Math.Abs(r2.Raise - 2.4) < 1e-9,
     "Kirby left on the solid row is raised back onto the surface");
-Check(ElevatorRide.Over(10, 256, 10, 4, 9, 0.5, 30) is { Raise: 28, Lift: -12, Carrying: true },
+Check(ElevatorRide.Over(10, 256, 10, 4, 9, 0.5, 30, false) is { Raise: 28, Lift: -12, Carrying: true },
     "A rising elevator that passed Kirby's feet since the last frame catches him");
-Check(ElevatorRide.Over(10, 256, 10, 4, 9, 0.5, 0) is null && ElevatorRide.Over(10, 256, 10, 4, 9, 0.5, -30) is null, "A surface that did not rise past Kirby does not catch him");
-Check(ElevatorRide.Over(10, 200, 10, 4, 10, 0.5, 0) is { Raise: 0, Lift: -12 }, "A jump above a moving elevator keeps its floor lifted");
-Check(ElevatorRide.Over(10, 252 - ElevatorRide.Reach - 1, 10, 4, 10, 0.5, 0) is null, "High above an elevator the window is not lifted");
-Check(ElevatorRide.Over(8, 252, 10, 4, 10, 0.5, 0) is not null && ElevatorRide.Over(12, 252, 10, 4, 10, 0.5, 0) is null &&
-      ElevatorRide.Over(7, 252, 10, 4, 10, 0.5, 0) is null, "Across, Kirby rides where the host carries an entity");
-Check(ElevatorRide.Over(10, 241, 10, 4, 10, 0, 0) is { Lift: -24 }, "A surface at the top of its cell is a whole cell above the solid row");
+Check(ElevatorRide.Over(10, 256, 10, 4, 9, 0.5, 0, false) is null && ElevatorRide.Over(10, 256, 10, 4, 9, 0.5, -30, false) is null, "A surface that did not rise past Kirby does not catch him");
+Check(ElevatorRide.Over(10, 200, 10, 4, 10, 0.5, 0, false) is { Raise: 0, Lift: -12 }, "A jump above a moving elevator keeps its floor lifted");
+Check(ElevatorRide.Over(10, 252 - ElevatorRide.Reach - 1, 10, 4, 10, 0.5, 0, false) is null, "High above an elevator the window is not lifted");
+Check(ElevatorRide.Over(8, 252, 10, 4, 10, 0.5, 0, false) is not null && ElevatorRide.Over(12, 252, 10, 4, 10, 0.5, 0, false) is null &&
+      ElevatorRide.Over(7, 252, 10, 4, 10, 0.5, 0, false) is null, "Across, Kirby rides where the host carries an entity");
+Check(ElevatorRide.Over(10, 241, 10, 4, 10, 0, 0, false) is { Lift: -24 }, "A surface at the top of its cell is a whole cell above the solid row");
+// Descending 10 px since the last frame, from 252 to 262: Kirby left at 252 is carried down to it.
+Check(ElevatorRide.Over(10, 252, 10, 4, 10, 262.0 / 24 - 10, -10, false) is { } carriedDown && Math.Abs(carriedDown.Raise + 10) < 1e-9 && carriedDown.Carrying,
+    "Kirby standing on a descending elevator is carried down with it");
+Check(ElevatorRide.Over(10, 252, 10, 4, 10, 262.0 / 24 - 10, -10, true) is { Raise: 0 },
+    "A jump from a descending elevator is not pulled back down");
+Check(ElevatorRide.Over(10, 247, 10, 4, 10, 262.0 / 24 - 10, -10, false) is { Raise: 0 },
+    "Feet more than 2 px above the previous surface are not carried down");
+Check(ElevatorRide.Over(10, 252, 10, 4, 10, 240.0 / 24 - 10, 12, false) is { } carriedUp && Math.Abs(carriedUp.Raise - 12) < 1e-9,
+    "Kirby standing on a rising elevator is carried up with it");
+// A stop set into level floor: the elevator overshot its rest (row 106 top, 2544) by 4.92 px into the solid row 106.
+double overshot = 2544 + 4.92;
+Check(ElevatorRide.Effective(106, 4.92 / 24, sunk: true) == 2544 && ElevatorRide.Effective(106, 4.92 / 24, sunk: false) == overshot,
+    "An elevator sunk into a floor offers the floor's top");
+Check(ElevatorRide.Over(10, 2544, 10, 4, 106, 4.92 / 24, 0, false, sunk: true) is { Lift: 0, Raise: 0 },
+    "Kirby stays on the floor's top while the elevator overshoots into it");
+Check(ElevatorRide.Over(10, overshot, 10, 4, 106, 4.92 / 24, 0, false, sunk: true) is { Lift: 0 } intoFloor && Math.Abs(intoFloor.Raise - 4.92) < 1e-9,
+    "Kirby the host carried into the floor is put back on its top");
+Check(ElevatorRide.Over(10, overshot, 10, 4, 106, 4.92 / 24, 0, false) is { } followed && Math.Abs(followed.Lift - (4.92 - 24)) < 1e-9,
+    "Without a floor under the overshoot, Kirby follows the elevator");
 
 var doorWalk = new CinematicWalk();
 Check(doorWalk.Update(100, 1 / 60.0) == 0, "A cinematic starts with Kirby standing");
@@ -449,7 +478,7 @@ Check(MNear(16 * 2.75 * SpeedMatch.SlideFastScale + 27 * SpeedMatch.SlideSlowSca
 ushort MLadder(int cx, int cy) => cy >= 30 ? SpeedMatch.Solid : cx == 12 ? SpeedMatch.Ladder : SpeedMatch.Free;
 var mUp = SpeedMatch.Move(KirbyActions.Climb, 0, 0, 300, 600, 300, 600 - 592 / 256.0, MLadder);
 var mDown = SpeedMatch.Move(KirbyActions.Climb, 0, 0, 300, 600, 300, 600 + 704 / 256.0, MLadder);
-Check(MNear((600 - mUp.Feet) * 60, 97.5) && MNear((mDown.Feet - 600) * 60, 97.5), "Ladders climb at the Beheaded's 97.5 px/s both ways");
+Check(mUp == (300, 600 - 592 / 256.0) && mDown == (300, 600 + 704 / 256.0), "Ladders keep the original climb, faster than the Beheaded's");
 Check(SpeedMatch.Move(0x0B1A, 1, 512, 300, 700, 302, 690, MFlat) == (302, 690), "Other actions (hits, abilities, swimming) keep their original motion");
 // Contacts stay with the original collision.
 ushort MWall(int cx, int cy) => cy >= 30 || cx == 18 ? SpeedMatch.Solid : SpeedMatch.Free;
@@ -482,14 +511,35 @@ Check(SpeedMatch.Brakes(KirbyActions.Dash, 0, 528) && SpeedMatch.Brakes(KirbyAct
 Check(!SpeedMatch.Brakes(KirbyActions.Dash, 1, 528) && !SpeedMatch.Brakes(KirbyActions.Slide, 0, 704) && !SpeedMatch.Brakes(0x0B1A, 0, 300),
     "Held directions, slides and recoils keep their velocity");
 Check(!SpeedMatch.Brakes(KirbyActions.Ability, 0, 2048) && SpeedMatch.Move(KirbyActions.Ability, 1, 2048, 300, 700, 308, 698, MFlat) == (308, 698),
-    "Ability moves (Wheel, Jet, Yo-Yo, Suplex dashes) keep their original velocity and motion");
+    "Ability moves slower than the dash, not started from one, keep their original velocity and motion");
 {
     var actions = new SpeedMatch.ActionFilter();
     actions.Next(KirbyActions.Float);
     bool exhale = actions.Next(KirbyActions.Ability) == KirbyActions.Float && actions.Next(KirbyActions.Ability) == KirbyActions.Float;
     bool after = actions.Next(KirbyActions.Standing) == KirbyActions.Standing && actions.Next(KirbyActions.Ability) == KirbyActions.Ability;
     Check(exhale && after, "The exhale ending a float moves like floating; an attack from the ground keeps the ability action");
+    actions.Reset();
+    actions.Next(KirbyActions.Dash, -528);
+    bool attack = actions.Next(KirbyActions.Ability, 256) == SpeedMatch.Carry && actions.Direction(1) == -1 &&
+                  actions.Next(KirbyActions.Ability, 0) == SpeedMatch.Carry && actions.Direction(0) == -1;
+    bool ends = actions.Next(KirbyActions.Standing) == KirbyActions.Standing && actions.Direction(1) == 1 &&
+                actions.Next(KirbyActions.Ability) == KirbyActions.Ability && actions.Direction(0) == 0;
+    Check(attack && ends, "An ability used straight from a dash carries Kirby in the dash's direction until it ends");
+    actions.Reset();
+    bool belowDash = actions.Next(KirbyActions.Ability, 256) == KirbyActions.Ability && actions.Next(KirbyActions.Ability, -528) == KirbyActions.Ability;
+    bool roll = actions.Next(KirbyActions.Ability, -896) == SpeedMatch.Carry && actions.Direction(1) == -1 &&
+                actions.Next(KirbyActions.Ability, 100) == SpeedMatch.Carry && actions.Direction(0) == -1 &&
+                actions.Next(KirbyActions.Ability, 896) == SpeedMatch.Carry && actions.Direction(-1) == 1;
+    Check(belowDash && roll, "An ability move faster than the dash (Wheel's roll) carries Kirby, turning with him");
 }
+var mAttack = SpeedMatch.Move(SpeedMatch.Carry, 1, 1024, 300, 720, 304, 720, MFlat);
+Check(MNear(mAttack.X - 300, 4 * SpeedMatch.GroundScale) && mAttack.Feet == 720 && !SpeedMatch.Brakes(SpeedMatch.Carry, 0, 1024) &&
+      SpeedMatch.Move(SpeedMatch.Carry, 1, -256, 300, 720, 299, 720, MFlat).X == 299,
+    "A carrying move keeps its lead over the run whatever is held; motion back keeps its original speed");
+var mHop = SpeedMatch.Move(SpeedMatch.Carry, 1, 384, 300, 720, 301.5, 719.1, MFlat);
+Check(MNear(mHop.X - 300, 1.5 * SpeedMatch.GroundScale) && mHop.Feet == 719.1 &&
+      MNear(SpeedMatch.Move(SpeedMatch.Carry, 1, 512, 420, 720, 422, 720, MWall).X, 432 - SpeedMatch.HalfWidth - SpeedMatch.Margin),
+    "A carrying move keeps the original's hops and stops a pixel short of a wall");
 Check(SpeedMatch.RiseVelocity(KirbyActions.Jump, -2682) == -2682 && SpeedMatch.RiseVelocity(KirbyActions.Jump, -744) == SpeedMatch.JumpRiseVelocity &&
       SpeedMatch.RiseVelocity(KirbyActions.Jump, -940) == -940 + SpeedMatch.JumpGravity && SpeedMatch.RiseVelocity(KirbyActions.Jump, 100) == 100 &&
       SpeedMatch.RiseVelocity(KirbyActions.Float, -546) == -546, "The jump keeps its take-off, then rises and peaks at the Beheaded's tempo");
@@ -564,5 +614,20 @@ Check(SpeedMatch.RiseVelocity(KirbyActions.Jump, -2682) == -2682 && SpeedMatch.R
     AbilityIcon.Decode(new AbilityIcon.Sprite(0, 0, true, true), tiles, iconPalette, icon);
     Check(icon.AsSpan(Pixel(31, 31), 4).SequenceEqual(new byte[] { 255, 0, 0, 255 }) &&
           icon.AsSpan(Pixel(16, 23), 4).SequenceEqual(new byte[] { 0, 255, 0, 255 }), "Apply both OBJ flips");
+}
+{
+    // Same IDs and order as KirbyNdsProvider.Abilities (original abilities 2..25).
+    string[] abilityIds = ["Cutter", "Mirror", "Beam", "Fighter", "Suplex", "YoYo", "Wheel", "Bomb", "Ice", "Fire", "Plasma", "Ninja",
+        "Stone", "Wing", "Jet", "Copy", "Sword", "Hammer", "Parasol", "Paint", "Mike", "Crash", "Cook", "Sleep"];
+    Check(abilityIds.All(AbilityDescriptions.Summaries.ContainsKey) && AbilityDescriptions.Summaries.Count == abilityIds.Length,
+        "Every copy ability has exactly one description");
+    Check(AbilityDescriptions.Summaries.Values.All(text => text.Length is > 20 and <= 110),
+        "Descriptions stay short enough for the pause card");
+    // The host's ui.Text treats braces, @ and angle brackets as markup.
+    Check(AbilityDescriptions.Summaries.Values.Append(AbilityDescriptions.Controls).All(text => text.IndexOfAny(['{', '}', '@', '<', '>']) < 0),
+        "Descriptions contain no host text markup");
+    Check(AbilityDescriptions.Describe("Fire") == AbilityDescriptions.Summaries["Fire"] + "\n" + AbilityDescriptions.Controls,
+        "A description ends with the shared controls line");
+    Check(AbilityDescriptions.Describe("Unknown") == AbilityDescriptions.Controls, "An unknown ability still shows the controls");
 }
 Console.WriteLine($"PASS: {assertions} user-rule assertions. No claim of NDS physics or in-game verification.");

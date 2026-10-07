@@ -774,6 +774,48 @@ the all-ability rendering tests as full gameplay acceptance.
   (the copied path is unchanged), controller weapon buttons, a second-slot bow,
   and a real enemy inhaled through left-click.
 
+## 2026-10-06 — Ice uses the host freeze status (#42)
+
+- Owner report: an Ice kill turned the Dead Cells enemy into the original ice
+  block instead of using Dead Cells' freeze. The runtime detached the source
+  object on the host death, so its original frozen block stayed.
+- Host routines read from `hlboot.dat` (`59350cad…07ce7e`) with crashlink:
+  `tool.weap.Freeze.onExecute` (affect 23, `props.duration` 3 s from the MDK
+  `data.cdb`, `getDiminishingFactor(3, 1, 8)`), `Entity.getDiminishingFactor`,
+  `en.Mob.onAffectChange` (thaw: "Slowed", slow 133, stun 8) and
+  `MobAttackTarget.preHitResultUpdate` (a hit shatters a freeze unless it is
+  `Frost`, `Poison`, `Bleed`, `ExtraDamage`, tag 13 or small and not `Fire`; the
+  type is compared by identity with the game's global value).
+- `src/core/IceFreeze.cs` and `KirbyEnemies.Complete`: while the source step has
+  Ice, copy hits are host `Frost` damage (`KirbyDamage.Frost` finds the game's
+  singleton among the module globals), a surviving unfrozen enemy gets affect 23
+  for 3 s × the host diminishing factor, and a host death retires the source
+  object at once instead of detaching it.
+- First live version froze only; the affect log (`125326`) showed every later
+  breath hit shattering and refreezing the enemy with a "Slowed" each time. The
+  Frost-typed hits fixed that (`125935`: one freeze, six hits, one natural thaw
+  after 179 source frames; `130140`: frozen kill with no original block). The
+  final build only freezes after a host-resolved hit and repeats both results
+  (`130608`, `130738`).
+- Native: new `proxy_ice_release` case; `tools/nds_tests.py` passes 74 cases.
+  `scripts/check.py` passes (228 assertions) and the Release runtime builds with
+  zero warnings. The shared bridge was built from this branch's unchanged
+  `lib.rs`.
+- Not run: bosses/Elites and freeze resistance, repeated freezes (diminishing
+  factor), Ice on breakables and hazards, Ice kills other than the breath.
+## 2026-10-06 — copy attacks break gold deposits (#35)
+
+- Owner report: with Wing copied, the host "Break" gold deposit never broke;
+  base-form weapons broke it.
+- Cause: `KirbyEnemies.Eligible` left out `PileOfGold` and `GoldNugget`, so no
+  source proxy existed for original attacks to hit. Both are now eligible.
+  Disassembly of `hlboot.dat` (constructors, `onDamage`, `canBeActivated`)
+  confirmed host life, targetable and gold drops in `onDamage`.
+- `LabBreakableProbe` gained `KIRBY_LAB_BREAKABLE_TARGET=gold`, which spawns a
+  real `PileOfGold` beside Kirby. Live (`repros/gold-20261006`): `013937` Sword
+  broke it in four hits with four gold drops; control `014052` without the
+  change: no damage. `GoldNugget` not run live.
+
 ## 2026-10-06 — Kirby rides host elevators (#28)
 
 - Owner recording 2026-10-05 23:51: the elevator left without Kirby, who then
@@ -948,3 +990,132 @@ the all-ability rendering tests as full gameplay acceptance.
   from behind through. Saves unchanged.
 - Not resolved: raising the shield while holding the opposite direction. The
   original guard keeps Kirby's facing while the host turns its shield.
+
+## 2026-10-06 — Kirby stays on descending elevators (#33)
+
+- Owner recording 2026-10-06 01:15: after #28, Kirby left descending elevators
+  once they sped up and fell behind them. Lab run `20261006-011803` (no inputs)
+  reproduced it: at about 10 px a tick the host carry missed him for one tick,
+  and the original's 3.5 px a frame fall never caught up.
+- `ElevatorRide.Over` now carries Kirby itself, up or down, when his feet were
+  within the host's 2 px of the surface on the previous original frame and the
+  original is not moving him upward (`lastVy < 0` is a jump or float).
+- Live `012037`: full descents and climbs at up to 12.4 px a frame, all frames
+  standing, feet exactly on the surface; the runtime carried him 74 times.
+  Live `012131`: jumps still leave a moving elevator in both directions.
+- Core rule tests: 225 assertions; `scripts/check.py` passes; Release build has
+  zero warnings. Not run: `tools/nds_tests.py` (no native change), other
+  elevator types and generated elevator levels.
+- Owner recording 2026-10-06 12:26 (play build with this branch): Kirby sank into
+  the platform at the bottom stop, then rebounded and landed with stars. A copy
+  of the owner's save in `repros/elevator-real-20261006`, with the host frame
+  rate stalled to 25–100 fps (`KIRBY_LAB_FRAME_SLEEP_MS`), reproduced it on a real
+  64-cell elevator (`124646`, `124727`). Its stop sits in level floor; a full-speed
+  overshoot took the surface 4.9 px into that solid row, the lifted window put
+  Kirby inside it, and the original pushed him out a cell above the elevator.
+  `ElevatorRide.Effective` now gives the floor's top while the surface is sunk
+  into solid floor under Kirby; 17 later runs covered 27 such steps with Kirby
+  standing throughout. 229 core assertions.
+- Owner recording 2026-10-06 19:50: rides worked, but Kirby was drawn above the
+  platform going up and sunk into it going down. The host draws the platform
+  up to a tick behind its physical surface (13 px measured, run `195232`).
+  Kirby standing on an elevator, with his equipment, is now drawn with the same
+  lag (`SetDrawOffset`, set from an `Elevator.postUpdate` hook); drawn feet stay
+  0.5 px from the drawn platform in four jittered real-level runs.
+## 2026-10-06 — Kirby climbs at the original speed (#48)
+
+- Owner recording (19:53, Sword Kirby on a Vine-rune vine): climbing is too
+  slow. Its camera scroll put Kirby at about 95 px/s up and down: `SpeedMatch`
+  scaled the original climb (139 px/s up, 165 px/s down) down to the Beheaded's
+  97.5 px/s average, the only motion it slowed. The Beheaded climbs in
+  front-loaded 26 px pulses (13 px in the first host step), so his average
+  feels quicker than a steady 97.5 px/s.
+- `SpeedMatch` now leaves the climb (`0x916`) at the original's own motion. The
+  hand-over-hand cycle matches the movement again. Recorded as a deviation from
+  the host speeds in `docs/GAMEPLAY_FIDELITY.md`.
+- Source: `python3 scripts/check.py` passes (221 core assertions, Release build
+  0 warnings/errors); `tests/speed` passes all 26 checks, including the climb
+  at 139 px/s up and 165 px/s down, and Fire's and Plasma's head effects staying
+  on a climbing Kirby.
+- Live (separate data root `repros/climb-20261006`, `vine` setup, W then Down
+  twice): run `20261006-200031` climbed at 138.8 px/s up and 165.0 px/s down per
+  original frame, stood on the ledge at the vine's top and climbed back down.
+  Run `195931` hit its 30 s limit during boot, 2 s into play (139 px/s up).
+  Saves unchanged, no fatal log. Not run: ordinary ladders and chains at the new
+  speed, hanging vines.
+## 2026-10-06 — carrying ability moves keep their lead over the run (#40)
+
+- Owner recordings 12:19 (Wing) and 12:30 (Wheel): Condor Head and Wheel's roll
+  moved slower than Kirby's matched run. Every ability move runs under action
+  142C, which the speed match left at its original speed, while the run is 1.91
+  times the original dash.
+- `SpeedMatch.ActionFilter` marks an ability move that starts from a dash, or
+  becomes faster than the original dash (528), as carrying Kirby until the
+  action ends; its motion in its own direction is scaled like the run. Floor
+  frames follow the surface, hops stay in the air, walls stop it a pixel short.
+- Survey of all 24 abilities (standing, charged, Down+B, mid-air, dash) on the
+  original controller: every dash attack keeps its original duration and its
+  original peak-to-dash ratio (Wing 1.94, Cutter 2.73, Suplex 3.33); Wheel,
+  Jet's bursts and Suplex's grab lunge scale from any start; nothing else
+  changes. `tests/speed` passes 32 checks; `scripts/check.py` passes (225 unit
+  assertions, runtime build).
+- Live, separate data root `repros/dash-attack-20261006`: Wing `124027` dash
+  3.94 then Condor Head 7.64 px a frame; Wheel `124135` dash 3.94 then roll
+  6.69 px a frame, stopping outside a wall. No fatal logs. Not run live: other
+  abilities, slopes, ledges, Wheel turning. Details in `docs/GAMEPLAY_FIDELITY.md`.
+
+## 2026-10-06 — Ability descriptions (#45)
+
+- The owner asked whether the pause card says what each ability does; it did not.
+  The owner chose mod-written text over ROM text, because ROM text names DS
+  buttons.
+- `src/core/AbilityDescriptions.cs`: a short summary for each of the 24 abilities,
+  naming only well-established original moves in the mod's controls, plus a
+  shared "Skill 1 or this button: attack. Skill 2: discard." line. Tests cover all
+  24 IDs, length and host-markup characters.
+- `KirbyHud` hooks `InventItem.getGameplayDesc` for the colorless stand-in, so
+  the host's own card layout shows the text.
+- `python3 scripts/check.py` passes (226 core assertions; Release build 0
+  warnings/errors).
+- Live checks used a local-only merge with #41's branch: `125345` Fire, `125617`
+  Yo-Yo, `125747` Stone and `125923` Fire (final text). Real saves were unchanged.
+  Not every listed move has been checked live.
+## 2026-10-06 — Pause equipment card (#41)
+
+- The owner's recording showed the pause screen listing "Rusty Sword I" while
+  Kirby had Fire.
+- `ui.pause.DefaultPause` builds each card as a `ui.NewItemDesc` from the slot
+  item (DefaultPause.hx:210–218). The card's icon is its own `ui.hud.Skill`; its
+  name and main info are its first two direct `ui.Text` children.
+- `KirbyHud` hooks `NewItemDesc.onResize` for pause cards of an equipped
+  non-shield weapon while copied:
+  - It builds the card from the colorless stand-in, then restores the real item.
+    This gives the host colorless card and affix line, and the original icon
+    through the `Skill.useItem` hook.
+  - It renames the card in the host markup (`{Fire@CL}`) and replaces the DPS
+    line with "Copy ability".
+- Lab: `--probe-pause` opens the pause screen while copied and dumps each card's
+  tree.
+- `python3 scripts/check.py` passes (221 core assertions; Release build 0
+  warnings/errors).
+- Live checks:
+  - `124012`: Fire card in the colorless frame; shield and collar cards unchanged.
+  - `124145`: base form keeps "Rusty Sword I / 138 DPS".
+  - Real saves were unchanged.
+## 2026-10-06 — HUD slot stat color (#36)
+
+- The owner reported a red colorless ability slot while Survival was highest.
+- Cause: the host's `Skill.useItem` same-item-kind path (Skill.hx:540–545) calls
+  `setBgColors` before it assigns the new item, and `setBgColors` takes the tier
+  from the slot's current item. The `StartSword` stand-in matched the real starting
+  sword, so the colors came from that Brutality sword. The #18 runs could not show
+  this.
+- Fix: `KirbyHud` clears the slot item before passing the stand-in, so the host
+  takes its full path (item assigned first).
+- The HUD fixture now records the background shader colors.
+- `python3 scripts/check.py` passes (221 core assertions; Release build 0
+  warnings/errors).
+- Live checks:
+  - `013806` (tiers 1/1/5): Survival green `17ce75` + gray `b2c0dd`.
+  - `013956` (tiers 1/5/1): Tactics purple `a051ff` + gray.
+  - In both, discard restored the sword's red. Real saves were unchanged.

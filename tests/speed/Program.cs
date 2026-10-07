@@ -73,8 +73,8 @@ double Speed(List<Row> r, int a, int b) => (r[b].X - r[a].X) / (b - a) * 60;
     for (int y = 15; y < 30; y++) sim.Tiles[(12, y)] = 134;
     var up = sim.Run(R(64, 90));
     var down = sim.Run(R(128, 60));
-    Check(Math.Abs(up[20].Feet - up[80].Feet - 97.5) < 3 && Math.Abs((down[40].Feet - down[10].Feet) * 2 - 97.5) < 3,
-        "Climbs ladders at the Beheaded's 97.5 px/s both ways");
+    Check(Math.Abs(up[20].Feet - up[80].Feet - 138.75) < 3 && Math.Abs((down[40].Feet - down[10].Feet) * 2 - 165) < 3,
+        "Climbs ladders at the original's 139 px/s up and 165 px/s down");
 }
 foreach (ushort t in new ushort[] { SpeedMatch.SlopeUpRight, SpeedMatch.SlopeUpLeft })
 {
@@ -130,13 +130,14 @@ foreach (ushort t in new ushort[] { SpeedMatch.SlopeUpRight, SpeedMatch.SlopeUpL
     Check(compared >= 30 && worst < 0.01, $"A lobbed bomb keeps its original path while Kirby runs off ({compared} frames, {worst:0.###} px)");
 }
 {
-    // Copy abilities that carry Kirby run under the shared ability action and
-    // keep their original motion: Wheel's roll, Jet's charged dash, Yo-Yo's dash.
+    // Copy abilities that carry Kirby faster than his dash run under the shared
+    // ability action and keep their lead over the run: Wheel's roll, Jet's
+    // charged dash, Suplex's grab.
     foreach (var (ability, name, plan) in new (byte, string, ushort[])[]
     {
         (8, "Wheel's roll", R(0, 5).Concat(R(2, 2)).Concat(R(0, 100)).ToArray()),
         (16, "Jet's charged dash", R(0, 5).Concat(R(2, 70)).Concat(R(0, 100)).ToArray()),
-        (6, "Yo-Yo's dash", R(0, 5).Concat(R(2, 2)).Concat(R(0, 100)).ToArray()),
+        (6, "Suplex's grab", R(0, 5).Concat(R(2, 2)).Concat(R(0, 100)).ToArray()),
     })
     {
         var ends = new List<(double X, double Feet)>();
@@ -146,11 +147,42 @@ foreach (ushort t in new ushort[] { SpeedMatch.SlopeUpRight, SpeedMatch.SlopeUpL
             if (!sim.Transform(ability)) throw new Exception($"Ability {ability} transformation failed");
             Row last = default!;
             foreach (ushort m in plan) last = sim.Step(m);
-            ends.Add((last.X, last.Feet));
+            ends.Add((last.X - 300, last.Feet));
         }
-        Check(Math.Abs(ends[0].X - ends[1].X) < 0.01 && Math.Abs(ends[0].Feet - ends[1].Feet) < 0.01 && Math.Abs(ends[0].X - 300) > 50,
-            $"{name} keeps its original distance ({ends[0].X - 300:0} px)");
+        Check(Math.Abs(ends[0].X) > 50 && Math.Abs(ends[1].X / ends[0].X - SpeedMatch.GroundScale) < 0.1 && Math.Abs(ends[0].Feet - ends[1].Feet) < 0.01,
+            $"{name} keeps its lead over the matched run ({ends[1].X:0} px, original {ends[0].X:0})");
     }
+}
+{
+    // A dash attack outruns the dash it starts from by as much as the original's
+    // does, so it stays faster than the matched run. It lasts as long as the
+    // original, and a wall still stops it at the original contact.
+    (List<Row> Rows, int Start, int End) DashAttack(byte ability, bool match, Sim? on = null)
+    {
+        var sim = on ?? new Sim(nds, seed, match: match);
+        if (!sim.Transform(ability)) throw new Exception($"Ability {ability} transformation failed");
+        var r = sim.Run(P(R(16, 40), R(18, 2), R(16, 70)));
+        int a = Range(40, r.Count - 40).First(i => r[i].Action == KirbyActions.Ability), b = a;
+        while (b + 1 < r.Count && r[b + 1].Action == KirbyActions.Ability) b++;
+        return (r, a, b);
+    }
+    double Peak(List<Row> r, int a, int b) => Range(a, b - a + 1).Max(i => r[i].X - r[i - 1].X);
+    foreach (var (ability, name) in new (byte, string)[] { (15, "Wing's Condor Head"), (6, "Suplex's dash grab"), (2, "Cutter's dash"), (5, "Fighter's dash"), (18, "Sword's dash") })
+    {
+        var o = DashAttack(ability, false);
+        var m = DashAttack(ability, true);
+        double oRatio = Peak(o.Rows, o.Start, o.End) / (o.Rows[39].X - o.Rows[38].X), mRun = m.Rows[39].X - m.Rows[38].X;
+        double mRatio = Peak(m.Rows, m.Start, m.End) / mRun, distance = m.Rows[m.End].X - m.Rows[m.Start - 1].X;
+        Check(oRatio > 1.3 && Math.Abs(mRatio - oRatio) < 0.02 && m.End - m.Start == o.End - o.Start &&
+              Math.Abs(distance / (o.Rows[o.End].X - o.Rows[o.Start - 1].X) - SpeedMatch.GroundScale) < 0.1,
+            $"{name} outruns the matched run as the original outruns its dash ({mRatio:0.00}x the run, {distance:0} px, {m.End - m.Start + 1} frames)");
+    }
+    var walled = new Sim(nds, seed);
+    for (int y = 20; y < 30; y++) walled.Tiles[(32, y)] = 3;
+    var w = DashAttack(6, true, walled);
+    int contact = Range(w.Start, w.End - w.Start + 1).FirstOrDefault(i => Math.Abs(w.Rows[i].X - 759.5) < 0.01, -1);
+    Check(contact >= 0 && w.Rows.Max(x => x.X) <= 759.5 + 1e-6 && w.Rows.Skip(contact).All(x => Math.Abs(x.X - 759.5) < 0.01),
+        $"A dash attack into a wall stops at the original contact, never inside (frame {contact - w.Start + 1} of the attack)");
 }
 {
     // Fire's and Plasma's head emitters are placed by an offset from Kirby; the
@@ -322,8 +354,8 @@ sealed class Sim
         NdsState s = nds.State;
         lastVx = s.VxRaw; lastVy = s.VyRaw;
         ushort after = nds.Action;
-        ushort motion = motionActions.Next(after);
-        (hostX, feet) = match ? SpeedMatch.Move(motion, direction, s.VxRaw, x0, f0, s.X + ox * 24, s.Y + oy * 24 + 14.5, TileAt)
+        ushort motion = motionActions.Next(after, s.VxRaw);
+        (hostX, feet) = match ? SpeedMatch.Move(motion, motionActions.Direction(direction), s.VxRaw, x0, f0, s.X + ox * 24, s.Y + oy * 24 + 14.5, TileAt)
             : (s.X + ox * 24, s.Y + oy * 24 + 14.5);
         return new Row(after, hostX, feet, s.VxRaw, s.VyRaw);
     }

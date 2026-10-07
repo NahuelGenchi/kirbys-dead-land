@@ -15,7 +15,8 @@ in [NDS_BRIDGE.md](NDS_BRIDGE.md). The original bootstrap experiment remains in
 | System | Original code and host adapter |
 |---|---|
 | Clock | 33,513,982 / 560,190 source ticks per second. A display within 3% of that rate presents one original frame per host frame, like an emulator synchronized to vblank; other rates accumulate real time |
-| Movement | The ROM updates fixed-point position, velocity and action state; the host follows its physical foot. With `MatchHostSpeed` (default) Kirby moves at the Beheaded's measured speeds: each original frame's own motion is carried on through free space (run and air control 236.5 px/s, float across at the same speed, fall 403 px/s, ladders 97.5 px/s both ways, floating up and down at the run's tempo), the original horizontal velocity is cleared when the direction is released or reversed, and the jump keeps its 50 px but peaks after 0.25 s, as the Beheaded's does. Added motion stops short of walls and ceilings, leaves the original a full fall step above floors, follows slopes at the original's whole-pixel surface, and never applies to hits, swimming or ability moves. The original walk and dash cycles play faster with the run (up to 1.67 times, one frame a pose), so his feet cover about the ground they did natively. `false` keeps the original DS speeds (the stomp keeps the dive's) |
+| Movement | The ROM updates fixed-point position, velocity and action state; the host follows its physical foot. With `MatchHostSpeed` (default) Kirby moves at the Beheaded's measured speeds: each original frame's own motion is carried on through free space (run and air control 236.5 px/s, float across at the same speed, fall 403 px/s, floating up and down at the run's tempo), the original horizontal velocity is cleared when the direction is released or reversed, and the jump keeps its 50 px but peaks after 0.25 s, as the Beheaded's does. Added motion stops short of walls and ceilings, leaves the original a full fall step above floors, follows slopes at the original's whole-pixel surface, and never applies to hits, swimming, climbing or ability moves. Ladders, chains and vines keep the original climb, 139 px/s up and 165 px/s down, faster than the Beheaded's 97.5 px/s average: matched to that average, the owner found climbing too slow (#48). The original walk and dash cycles play faster with the run (up to 1.67 times, one frame a pose), so his feet cover about the ground they did natively. `false` keeps the original DS speeds (the stomp keeps the dive's) |
+| Movement | The ROM updates fixed-point position, velocity and action state; the host follows its physical foot. With `MatchHostSpeed` (default) Kirby moves at the Beheaded's measured speeds: each original frame's own motion is carried on through free space (run and air control 236.5 px/s, float across at the same speed, fall 403 px/s, ladders 97.5 px/s both ways, floating up and down at the run's tempo), the original horizontal velocity is cleared when the direction is released or reversed, and the jump keeps its 50 px but peaks after 0.25 s, as the Beheaded's does. Added motion stops short of walls and ceilings, leaves the original a full fall step above floors, follows slopes at the original's whole-pixel surface, and never applies to hits or swimming. Ability moves keep their original motion unless they carry Kirby: a dash attack, or any move faster than the original dash, moves at the run's scale (see [Carrying ability moves](#carrying-ability-moves-40)). The original walk and dash cycles play faster with the run (up to 1.67 times, one frame a pose), so his feet cover about the ground they did natively. `false` keeps the original DS speeds (the stomp keeps the dive's) |
 | Terrain | Nearby host solids, one-way floors, slopes, ladders and water become source collision cells; all linked source objects and cached terrain probes move together when the window rebases by whole cells, while effects attached to a parent (Fire's head flame, Plasma's spark, attack effects) keep their offsets from it. Host movement of Kirby (speed match, stomp) moves only him and his terrain probes, so thrown bombs, cutters, effects and the helper keep their original paths. Over a moving host elevator the window is lifted to its surface and original objects ride with him (see [Host elevators](#host-elevators-deviation)) |
 | Input | Existing host bindings become original digital buttons; ordinary source directional combinations still apply. A held direction dashes through the original double tap (`AlwaysDash`); a light analog tilt walks. A key bound to both Up and jump (W and the Up arrow by default) climbs at a ladder or chain, as in the host, instead of jumping first |
 | Terrain | Nearby host solids, one-way floors, slopes, ladders and water become source collision cells. Vines grown with the Vine rune (`en.inter.VineLadder`) have no collision bits, only level spots (0, where the Beheaded climbs, and 18); their cells become source ladders, and the solid blocks a vine passes through or ends under become one-way ladder tops in that column. A ladder under a solid block stops the original below it, so this deviation lets Kirby climb onto the ledge, as the Beheaded's `exitLadderTop` does; all linked source objects and cached terrain probes move together when the window rebases by whole cells, while effects attached to a parent (Fire's head flame, Plasma's spark, attack effects) keep their offsets from it. Host movement of Kirby (speed match, stomp) moves only him and his terrain probes, so thrown bombs, cutters, effects and the helper keep their original paths |
@@ -124,6 +125,21 @@ recording is the dropped Cudgel's sprite overlapping a standing Kirby; no guard
 input was involved. Live `20261006-004147` (Sword copy) and `20261006-004316`
 (base form) each took a Warrior's Shield, then swapped it for a Cudgel through the
 host replace dialog; see `docs/RUNTIME_LAUNCH.md`. Guard and parry code is unchanged.
+### Gold deposits (#35)
+
+Copied attacks reach a host entity only through a source proxy that
+`KirbyEnemies` pairs with it. Before #35 the pairing accepted mobs, doors,
+breakable props, explosive barrels and `isBreakableByHero` tiles, so the host
+gold deposits (`en.inter.PileOfGold`, `en.inter.GoldNugget`) were never hit by a
+copy attack; base-form host weapons broke them. Both now pair like breakable
+props: not inhalable, no copy, no touch damage. Per `hlboot.dat` both call
+`Entity.initLife` and `set_targetable(true)` in their constructors and drop gold
+from their own `onDamage`/`onDie`, so the host still decides every gold drop.
+Live (`docs/RUNTIME_LAUNCH.md`, "Gold deposits"): Sword Kirby broke a real
+`PileOfGold` in four hits (life 4 → 0, four host gold drops); the same fixture
+without the change did no damage. `GoldNugget` was not run live. Other host hittables outside the pairing list (`PiggyBank`,
+`Gift`, `BreakableWall`, `HiddenBlock`, `Flower`, …) are unchanged and unchecked.
+
 ### Star projectiles
 
 Issue #20. Kirby's stars act as host projectiles. The ROM still spawns, moves and
@@ -259,8 +275,9 @@ attack.
 Lethality stays in agreement. The paired source enemy receives the smallest HP
 whose truncated, scaled damage reaches the host's remaining life (rounded up from
 life ÷ combined multiplier and checked with the host's arithmetic). Original death
-reactions such as the Ice block therefore still occur in the tick of the host
-kill. Source HP stays clamped to the native range (32,760); a single-tick source
+reactions therefore still occur in the tick of the host kill. (Ice now leaves no
+original block; see [Ice freezes with the host status](#ice-freezes-with-the-host-status-intentional-deviation).)
+Source HP stays clamped to the native range (32,760); a single-tick source
 kill at that cap kills the host enemy.
 
 Unchanged: incoming damage, retained-shield parries, boss
@@ -303,16 +320,38 @@ While Kirby is inside an elevator's carry width, from its surface up to three
 cells above it (`ElevatorRide`):
 
 - The original's terrain window is lifted by the surface's offset from the
-  solid row, so the ROM floor is the elevator surface. The host's own carry
-  moves Kirby with it; in the live runs the runtime never had to raise him.
+  solid row, so the ROM floor is the elevator surface.
+- Kirby whose feet were within the host's 2 px of the surface on the previous
+  original frame, and whom the original is not moving upward, moves with it,
+  up or down, by the host's own carry rule. The host's carry alone missed him
+  on fast descents: from about 10 px a tick the surface dropped away, and the
+  original's fall (at most 3.5 px a frame) never caught it until the bottom
+  ([#33](https://github.com/NahuelGenchi/kirbys-dead-land/issues/33), owner
+  recording 2026-10-06 01:15, lab run `20261006-011803`).
 - A rising elevator that passed his feet since the last original frame lifts
   him onto its surface, as the host rescues the Beheaded.
+- A fast elevator overshoots its stop by up to a tick of travel and is put back
+  on the next tick. Where the stop is set into level floor, that overshoot takes
+  its surface into the solid floor cell. Kirby then stands on the floor's top
+  (no lift, no carry into it). Following the elevator put his body inside the
+  floor; the original pushed him out, the elevator came back a cell below him,
+  and he dropped onto it with a squash, or at desktop frame rates with the
+  original fast-landing rebound and stars (owner recording 2026-10-06 12:26,
+  lab runs `20261006-124646` and `124727`).
 - While the elevator moves, the source window is placed with Kirby, so **original
   objects (thrown bombs, cutters, effects, the helper) ride along with him**.
   This is the intentional deviation. Moving them alone and then Kirby back by
   himself, as the speed match does, left the parts attached to him a step off,
   and the original dropped a standing Kirby for a frame every few frames of the
   ride (live runs `20261006-000609` to `001130`, see [RUNTIME_LAUNCH.md](RUNTIME_LAUNCH.md#host-elevators)).
+- The host draws a moving elevator's platform behind its physical surface, by
+  up to a tick of travel (13 px measured on a 64-cell elevator). Kirby standing
+  on it is drawn with the same lag (`KirbySpriteRenderer.SetDrawOffset`, set from
+  an `Elevator.postUpdate` hook), as are his sword and shield. Off the
+  platform, the offset eases back within a few frames. Drawn at his physical
+  position instead, he floated above the platform on the way up and sank into
+  it on the way down (owner recording 2026-10-06 19:50). His physics position is
+  unchanged.
 - His host cell position is copied from the elevator exactly, as its own carry
   does. A pixel round trip could leave him a rounding error below the cell's
   ground height, and the host then called its landing handler every few
@@ -323,12 +362,17 @@ cells above it (`ElevatorRide`):
 
 Live checks (separate data root `repros/elevator-20261006`, a real
 `SimpleElevator` built and initialized as `Level.spawnEntitiesFromMarkers` does):
-Kirby rides up and down standing (`0406`) with his feet on the surface, can jump
-on a rising elevator and land on it again, and stops at both ends. Not run live:
-`PurpleElevator` and `MultiFloorElevator` levels, walking off a moving elevator
-onto a landing, and elevators placed by real level generation. One host landing
-of height 0 (no sound, smoke or shake below 0.3 cells) remains on the first tick
-of a departure. Floating platforms (`en.inter.FloatingPlatform`) are a separate
+Kirby rides up and down standing (`0406`) with his feet on the surface, including
+full-speed descents of 12.4 px a frame, can jump on a rising elevator and land on
+it again, and stops at both ends. A jump on a fast descending elevator leaves it
+behind; he lands on it once it stops. Real generated elevators (a copy of the
+owner's save, resumed in a separate data root) were also ridden 64 cells down and
+up at a frame rate stalled to 25–100 fps, including overshoots into the floor at
+the bottom stop. Not run live: `PurpleElevator` and `MultiFloorElevator` levels
+and walking off a moving elevator onto a landing. The host calls its landing
+handler with height 0 (no sound, smoke or shake below 0.3 cells) on a departure
+and, at low frame rates, a few dozen times a ride when it carries Kirby between
+two original frames. Floating platforms (`en.inter.FloatingPlatform`) are a separate
 host mechanism and are not covered.
 ### Enemies in water (intentional deviation)
 
@@ -350,6 +394,54 @@ therefore points that one table entry at the original return-zero stub
 `0x020CF36C` (`mov r0,#0; bx lr`) in emulated RAM, after validating both the stub
 and the entry. Kirby's swimming, the exit-water handler and other enemies' water
 reactions are unchanged. Water itself still works on Kirby as before.
+### Ice freezes with the host status (intentional deviation)
+
+Issue #42. In the original game an enemy reduced to zero HP by Ice becomes a
+kickable ice block; the runtime used to detach that source object so the block
+stayed in Dead Cells beside the host death. The owner asked for Dead Cells' own
+freeze status instead. Host routines were read from `hlboot.dat` (SHA-256
+`59350cad…07ce7e`) with crashlink:
+
+- `tool.weap.Freeze.onExecute` (Frost Blast) applies affect 23 for the weapon's
+  `props.duration` × `getDiminishingFactor(3, 1, 8)`. The MDK's v35 `data.cdb`
+  gives that duration as 3 s.
+- `Entity.getDiminishingFactor` counts uses per key; the count resets 5 s after
+  the last use.
+- `en.Mob.onAffectChange`: when affect 23 ends the host pops "Slowed" and applies
+  its thaw slow (133) and stun (8).
+- `MobAttackTarget.preHitResultUpdate`: a hit on a frozen mob removes affect 23
+  (the thaw above) unless the attack has tag 13 or its damage type is
+  `ExtraDamage`, `Poison`, `Bleed` or `Frost`; small hits that are not `Fire`
+  also leave it. The type is compared with the game's global enum value by
+  identity, so a newly allocated `Frost` value does not count.
+
+While the source step runs with Ice (ability 10), `KirbyEnemies.Complete`:
+
+- deals each copy hit as host `Frost` damage. `KirbyDamage.Frost` finds the
+  game's own singleton among the module globals (type `DamageType`, constructor
+  `Frost`). A continuing breath therefore damages a frozen enemy without
+  shattering the freeze, like the host's ice weapons; other attacks still
+  shatter it as usual.
+- freezes a host enemy that survives a hit the host resolved (not blocked or
+  parried) and is not already frozen: affect 23 for 3 s × the host diminishing
+  factor, as Frost Blast does. Host resistances apply inside `setAffectS`.
+  Unlike Frost Blast, it neither resets the factor after 18 s nor pops
+  "Resists" at factor 0.
+- retires the source object at once (`proxy_set(active=false)`) when the host
+  enemy dies, instead of detaching it, so the original ice block never appears.
+  The host death, loot and death effects are unchanged.
+
+Ice damage, its timing and the lethal hit still come from the original breath.
+Other abilities keep their original death remnants. Limit: the choice is made from
+Kirby's ability in that source step, so a non-breath kill while Kirby holds Ice
+(for example an Ice slide) also has no original remnant.
+
+Evidence: `nds_tests.py` case `proxy_ice_release` kills a 16-HP proxy with the
+original breath (11 + 5), retires it in the lethal frame and finds no object
+running the frozen-block routine `0x021583EC` in the 94 frames after. The same
+scan on the old detach path finds the block in all 94. Live runs are in
+[RUNTIME_LAUNCH.md](RUNTIME_LAUNCH.md#ice-host-freeze-2026-10-06).
+
 ### Vines (#25)
 
 `VineLadder.buildLadder` (run when the Vine rune grows a vine, and again on load
@@ -375,8 +467,77 @@ grown through the host's own `VineLadder.activate`:
 - `20261005-233002`: an ordinary ladder, same plan: climb, hang and descend as
   before.
 
+- `20261006-200031` (#48, original climb speed, separate data root
+  `repros/climb-20261006`): two climbs up at 138.8 px/s and two down at
+  165.0 px/s per original frame; Kirby stood on the ledge (feet 2712, the
+  block's top, one frame after 2711.19 as before) and Down climbed back to the
+  floor (2880). Life stayed 76.
+
 Not run: hanging vines (`goingUp` false), a stomp from a vine, and a vine in a
 saved run after loading.
+### Carrying ability moves (#40)
+
+Every copy-ability attack runs under the original action `142C`, which the speed
+match had left at the original speed. The run is 1.91 times the original dash
+(3.94 px a frame), so a dash attack or Wheel's roll, which the original makes
+faster than the dash, ended up at or below running speed. Owner recordings
+2026-10-06 12:19 (Wing's Condor Head) and 12:30 (Wheel).
+
+`SpeedMatch.ActionFilter` now marks an ability move as carrying Kirby when it
+starts straight from a dash, or once its horizontal velocity exceeds the
+original dash's (528, 2.0625 px a frame). It stays marked until the ability
+action ends. Its motion in the carried direction is scaled by the run's factor
+(`GroundScale`), so it keeps the original's lead over the dash whatever is held.
+The carried direction is the dash's, then the move's own once it is fast, so
+Wheel keeps its speed after turning. Motion the other way keeps the original
+speed. On the floor, the added motion follows the surface. When the original
+lifts Kirby (Suplex's stumble, Wheel's wall bounce), it is added in the air.
+Either way it stops a pixel short of walls, as the run does. The float exhale
+and moves slower than the dash keep their original motion. This replaces the
+earlier rule that every ability move keeps its original motion
+([Jet fix](RECORDING_REVIEW_2026-10-05_1013.md)); braking still never applies to
+them.
+
+A headless survey of all 24 abilities (original controller, `tests/speed`
+harness) compared standing, charged (70 frames), Down+B, mid-air and dash
+attacks with and without the speed match. Only these change:
+
+| Move | Original peak | Matched peak | Frames |
+| :--- | ---: | ---: | :--- |
+| Dash attacks: Cutter, Beam, Fighter, Suplex, Yo-Yo, Wheel, Bomb, Ice, Fire, Plasma, Ninja, Stone, Wing, Jet, Copy, Sword, Hammer, Parasol | 1.9–6.9 px | 1.91 times that | Same as the original for all 24 |
+| Wing's Condor Head | 4.0 px | 7.64 px | 51 |
+| Suplex's dash grab | 6.9 px | 13.1 px | 57 |
+| Wheel's roll, from any start | 3.5 px | 6.69 px | Same |
+| Jet's bursts and charged dash; Suplex's standing, Down+B and mid-air grab lunge | 4.0–6.9 px | 1.91 times that | Same |
+
+Each dash attack's peak is the same multiple of the matched run as the
+original's is of the original dash (for example Wing 1.94, Cutter 2.73, Suplex
+3.33), and its distance is 1.9 times the original's. Mirror, Paint, Mike, Crash,
+Cook and Sleep do not move in their dash attacks. Fighter attacks when B is
+released, still straight from the dash. All other standing, charged, Down+B and
+mid-air attacks keep their original motion.
+
+`tests/speed` checks Wing, Suplex, Cutter, Fighter and Sword dash attacks
+against the original, a Suplex dash attack into a wall, and Wheel's roll, Jet's
+charged dash and Suplex's grab from a standstill (321, 216 and 124 px originally;
+the last was labelled Yo-Yo before, but ability 6 is Suplex).
+
+Live, in the separate data root `repros/dash-attack-20261006` (runtime
+SHA-256 `62c31847e3cfae10716d7f24f23e4a211c283274603b116c89404523573a5abe`, core
+`e9e87b28f7441230e6f59259e037bf360384339b0fac28a8eafc9598f66f21c0`, shared bridge
+`654c2023ff6a0a17775253ce4ede68a3089f19f668abc6a55b5f1b6ef5441597`), with the
+ability probe replaying original buttons (`KIRBY_LAB_ABILITY_PLAN`):
+
+- `20261006-124027`, Wing: a dash left at 3.94 px a frame, then Condor Head at
+  7.64 px a frame, slowing at its end as the original's does. The rightward
+  pass only walked (2.63 px a frame), so its attack was the ordinary Wing attack.
+- `20261006-124135`, Wheel: a dash left at 3.94 px a frame, then the roll at
+  6.69 px a frame until it met a wall. The original's wall bounce then
+  lifted Kirby, and he stayed outside the wall. A standing start rolled one
+  frame at 6.69 px into a wall right beside him.
+
+Both runs ended at their time limit without fatal log lines. Not run live:
+other abilities, slopes and ledges during a carrying move, Wheel turning.
 ### Cinematic walks (intentional deviation)
 
 Issue #17. Before this change, the source machine stopped during every host
@@ -402,6 +563,24 @@ Live run `20261005-214713` took the T_Courtyard door: 148 of 149 cinematic polls
 were in the original Walk action (`0x060B`), facing right, with no Fall. Captured
 frames show changing walk poses up the steps until the fade. Exits where the
 host drops the hero, and walks to the left, have not been checked live.
+### Ability descriptions
+
+Issue #45. Intentional addition, mod-written text: these descriptions do not come
+from the ROM. The original game's ability explanations name DS buttons, which do
+not match Dead Cells bindings, so the owner chose text written for the mod's
+controls. `AbilityDescriptions` in `src/core/` holds one short summary per copy
+ability, followed by the shared line "Skill 1 or this button: attack. Skill 2:
+discard."
+
+The summaries name only well-established moves of the original game, such as
+Fire's dash fireball or Stone's drop, and give no damage numbers. Not every listed
+move has been checked live in the mod.
+
+They appear on the pause screen's ability card (#41). Cards describe their item
+through `InventItem.getGameplayDesc`; for the colorless stand-in, `KirbyHud`
+returns the current ability's text, and the host lays it out, wraps it and
+scrolls it. Nothing else describes the stand-in.
+
 ### HUD ability slot
 
 Issue #18. In copied form every weapon button whose slot does not hold a shield
@@ -421,11 +600,30 @@ the equipment Kirby cannot use while copied; shield slots keep the real shield.
   for colorless gear. It then puts the real item back as the slot's item, so
   inventory, equip and cooldown logic are unchanged, and hides ammo pips. Like
   colorless gear in Dead Cells, the background takes the color of the highest
-  scroll stat. With a tie the host picks Brutality, so a run with no scrolls shows
-  the gray frame on a red background.
+  scroll stat, paired with the colorless gray.
+  The slot's item is cleared before the stand-in is passed (#36). The host's
+  same-item-kind path in `useItem` colors the slot from its previous item before
+  switching. With the starting sword in the slot, that made every copy slot red.
+  Ties take the first tier the host lists; no tie has been run live since #36.
 - **Refresh:** the HUD is redrawn when the ability, its icon or the scroll tiers
   change. Base form, discard, ability loss and deactivation redraw the real
   equipment.
+- **Pause equipment screen (#41):** `ui.pause.DefaultPause` builds each weapon
+  card as a `ui.NewItemDesc` from the slot's item. While copied, the card of an
+  equipped non-shield weapon is built from the same colorless stand-in, then the
+  real item is put back. The host therefore draws the colorless card frame, its
+  own "Colorless (the highest level applies)" line, and the card's icon slot. The
+  existing `Skill.useItem` hook fills that slot with the original icon.
+  `KirbyHud` then renames the card's first two texts:
+  - The name becomes the ability (`YoYo` is shown as "Yo-Yo"). Only the name
+    inside the host markup changes, so the colorless name color stays.
+  - The main info line becomes "Copy ability". The stand-in sword's DPS does not
+    describe copy damage, which also includes the original-unit and Elite
+    scaling.
+
+  Shield cards, other equipment and base form are unchanged. Only cards whose
+  process is the pause screen are affected. An empty weapon slot, which also
+  fires the ability, keeps the host's empty card.
 
 Limits: the stand-in's own data (Brutality starting sword) is only drawn, never
 equipped. A host weapon that changes its own HUD icon (Shovel, via

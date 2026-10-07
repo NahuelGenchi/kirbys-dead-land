@@ -149,8 +149,8 @@ public sealed class KirbyEnemies
             // A projectile's source object has one HP: any original attack that
             // strikes it is lethal and removes the host projectile. Enemies hold
             // the host life in original damage units, so both games agree on
-            // which hit is lethal (Ice freezes, death reactions); the Elite
-            // empowerment and the colorless scroll multiplier apply on top.
+            // which hit is lethal (death reactions); the Elite empowerment and
+            // the colorless scroll multiplier apply on top.
             assignedHp[i] = IsHazard(mob) ? 1 : ColorlessDamage.SourceHp(mob.life, HostMultiplier(scale, mob), MaxSourceHp);
             nds.SetProxy(i, x, y, assignedHp[i]);
             // Projectiles stay inhalable; their zero copy byte leaves the original
@@ -164,6 +164,8 @@ public sealed class KirbyEnemies
     public string? Complete(KirbySession session, NdsRuntime nds, int ox, double oy, Func<Entity, double> scale)
     {
         string? copied = null;
+        // Kirby's ability in the source step just run: Ice hits use the host freeze.
+        byte sourceAbility = nds.State.Ability;
         stars.Scan(nds);
         for (uint i = 1; i <= Capacity; i++)
         {
@@ -193,10 +195,9 @@ public sealed class KirbyEnemies
                 Release(nds, i);
                 continue;
             }
-            // Native HP follows the host's actual remaining life. Lethal Ice
-            // hits must enter the original freeze reaction in the same tick:
-            // an original lethal hit removes the remaining host life, and a
-            // surviving original enemy leaves the host enemy alive.
+            // Native HP follows the host's actual remaining life: an original
+            // lethal hit removes the remaining host life, and a surviving
+            // original enemy leaves the host enemy alive.
             int damage = assignedHp[i] - proxy.Hp;
             if (damage > 0 && !mob.destroyed && mob.life > 0)
             {
@@ -208,15 +209,19 @@ public sealed class KirbyEnemies
                     KirbyStars.TestObserver?.Invoke(star, mob, hostDamage, true);
                     KirbyStars.Stagger(struck, direction, () => KirbyDamage.Hit(session.Hero, mob, hostDamage));
                 }
-                else KirbyDamage.Hit(session.Hero, mob, hostDamage);
+                // Only a hit the host resolved (not blocked or parried) freezes.
+                else if (KirbyDamage.Hit(session.Hero, mob, hostDamage, frozenSafe: IceFreeze.Applies(sourceAbility)) &&
+                    mob is Mob chilled && IceFreeze.Freezes(sourceAbility, damage, !mob.destroyed && mob.life > 0,
+                    mob.hasAffect(IceFreeze.FreezeAffect))) Freeze(chilled);
             }
             if (mob.destroyed || mob.life <= 0)
             {
-                if (!proxy.Gone && mob is Mob and not dc.en.mob.Boss)
+                if (!proxy.Gone && mob is Mob and not dc.en.mob.Boss && !IceFreeze.Applies(sourceAbility))
                 {
                     // Loot/death belong to the host; the original defeated
-                    // object's ice cube, star or other reaction keeps running.
-                    // Reserve the slot until its native destructor completes.
+                    // object's star or other reaction keeps running. Reserve
+                    // the slot until its native destructor completes. An Ice
+                    // kill is retired at once instead: no original ice block.
                     nds.DetachProxy(i);
                     mobs[i] = null; controlled[i] = false; detached[i] = true;
                 }
@@ -240,6 +245,17 @@ public sealed class KirbyEnemies
         }
         stars.StrikeHost(session.Hero, this, ox, oy, scale);
         return copied;
+    }
+    /// <summary>
+    /// The host Frost Blast's freeze (tool.weap.Freeze.onExecute): affect 23 for
+    /// 3 s times the host's diminishing factor. Host resistances apply inside
+    /// setAffectS, and the host thaw adds its own slow and stun.
+    /// </summary>
+    private static void Freeze(Mob mob)
+    {
+        double factor = mob.getDiminishingFactor(IceFreeze.DiminishingKey, IceFreeze.DiminishingFullPowerUses,
+            IceFreeze.DiminishingMaxUses, null);
+        if (factor > 0) mob.setAffectS(IceFreeze.FreezeAffect, IceFreeze.FreezeSeconds * factor, Ref<double>.Null, null);
     }
     private void CompleteHazard(NdsRuntime nds, uint i, Entity projectile, NdsProxy proxy, int ox, double oy)
     {
@@ -280,7 +296,9 @@ public sealed class KirbyEnemies
         var food = dc.tool.InventItem.Class.fromItem(dc.level.LootGen.Class.getSmallHealingKind(), 1);
         mob.addToLoot(new dc.LootType.InvItem(food), Ref<bool>.In(false));
     }
-    private static bool Eligible(Entity entity) => entity is Mob or Door or BreakableProp or ExplosiveBarrel || entity.isBreakableByHero();
+    // Gold deposits (PileOfGold, GoldNugget) have host life and drop gold in onDamage, like breakable props.
+    private static bool Eligible(Entity entity) =>
+        entity is Mob or Door or BreakableProp or ExplosiveBarrel or PileOfGold or GoldNugget || entity.isBreakableByHero();
     private static (double X, double Y) Distance(Entity entity, double heroX, double heroY) =>
         (Math.Max(0, Math.Abs((entity.cx + entity.xr) * 24 - heroX) - entity.radius),
          Math.Max(0, Math.Abs((entity.cy + entity.yr) * 24 - entity.hei / 2 - (heroY - 14.5)) - (entity.hei + 29) / 2));

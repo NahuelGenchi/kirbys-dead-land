@@ -1,5 +1,8 @@
 using dc.en;
 using dc.tool.atk;
+using Hashlink.Marshaling;
+using Hashlink.Proxy.Values;
+using HaxeProxy.Runtime;
 
 namespace Kirby.Runtime;
 
@@ -28,11 +31,30 @@ internal static class KirbyDamage
             orig(mob, attack);
         };
     }
+    private static dc.DamageType? frost;
+    /// <summary>
+    /// The host's own Frost damage type. Haxe compares parameterless enum values
+    /// by identity (MobAttackTarget.preHitResultUpdate checks against the global
+    /// singleton), so a newly allocated Frost value would not count as Frost.
+    /// </summary>
+    internal static dc.DamageType Frost => frost ??= FindFrost();
+    private static dc.DamageType FindFrost()
+    {
+        var type = HaxeProxyUtils.GetHashlinkType(typeof(dc.DamageType));
+        int index = (int)dc.DamageType.Indexes.Frost;
+        foreach (var global in HashlinkMarshal.Module.Globals)
+            if (ReferenceEquals(global.Type, type) && global.Value is HashlinkEnum value && value.Index == index)
+                return value.AsHaxe<dc.DamageType>();
+        throw new InvalidOperationException("The host Frost damage type was not found.");
+    }
+    /// <param name="frozenSafe">Deal the hit as host Frost damage, which leaves a host freeze in place
+    /// (Kirby's Ice); any other hit large enough shatters it, as host attacks do.</param>
     /// <returns>True when the host resolved a successful hit (not blocked, parried or missed).</returns>
-    public static bool Hit(Hero hero, dc.Entity mob, int damage)
+    public static bool Hit(Hero hero, dc.Entity mob, int damage, bool frozenSafe = false)
     {
         var attack = AttackUtils.Class.createFromHero(hero, damage, null);
         attack.useHeroScaling = false;
+        if (frozenSafe) attack.dmgType = Frost;
         sourceHits.Add(attack.HashlinkPointer, damage);
         try { AttackUtils.Class.hit(attack, mob); }
         finally { sourceHits.Remove(attack.HashlinkPointer); }

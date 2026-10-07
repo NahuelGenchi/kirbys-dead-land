@@ -40,6 +40,9 @@ public sealed unsafe class KirbySpriteRenderer : IDisposable
     // headPopStart reaches its white flash on frame 20; Kirby appears just before it.
     private const int ArrivalRevealFrame = 17;
     private bool arriving, detached;
+    // Whole host pixels Kirby and his equipment are drawn below their physical
+    // position: the lag of the elevator sprite he stands on (see SetDrawOffset).
+    private double drawOffsetY, bitmapBaseY, equipmentBaseY;
     public int RenderedObjects { get; private set; }
     public int BodyPixels { get; private set; }
     /// <summary>Body pixel bounds relative to Kirby's anchor in the last texture (diagnostics).</summary>
@@ -87,13 +90,33 @@ public sealed unsafe class KirbySpriteRenderer : IDisposable
         // the original does, instead of the fractional physics position; at
         // the Kirby camera zoom a fraction of a pixel is several screen pixels.
         bitmap!.x = System.Math.Floor((hero.cx + hero.xr) * 24 + 1e-6);
-        bitmap.y = System.Math.Floor((hero.cy + hero.yr) * 24 - 14.5 + 1e-6);
+        bitmapBaseY = System.Math.Floor((hero.cy + hero.yr) * 24 - 14.5 + 1e-6);
+        bitmap.y = bitmapBaseY + drawOffsetY;
         bitmap.alpha = hostSprite.alpha;
         bitmap.visible = hero.visible && hostSprite.visible && !arriving;
         bitmap.posChanged = true;
         RenderEquipment(hostSprite, state.Ability == 1);
         KeepBodyInFront();
     }
+
+    /// <summary>
+    /// Draw Kirby and his equipment this many host pixels below their physical
+    /// position. Host elevators draw their platform behind their physical
+    /// position while they move (up to a tick of travel); Kirby standing on one
+    /// is drawn with the same lag, so he stays on the platform as drawn instead
+    /// of floating above it on the way up and sinking into it on the way down.
+    /// Applies at once, whether or not Render already ran this frame.
+    /// </summary>
+    public void SetDrawOffset(double offset)
+    {
+        offset = System.Math.Round(offset);
+        if (offset == drawOffsetY) return;
+        drawOffsetY = offset;
+        if (bitmap is not null) { bitmap.y = bitmapBaseY + offset; bitmap.posChanged = true; }
+        if (equipment is not null) { equipment.y = equipmentBaseY + offset; equipment.posChanged = true; }
+    }
+
+    public double DrawOffset => drawOffsetY;
 
     /// <summary>Forget flash-softening history after the machine loads another state.</summary>
     public void ResetPalette() => softener?.Reset();
@@ -211,7 +234,8 @@ public sealed unsafe class KirbySpriteRenderer : IDisposable
         equipment.blendMode = host.blendMode;
         equipment.color = host.color;
         equipment.x = host.x;
-        equipment.y = host.y;
+        equipmentBaseY = host.y;
+        equipment.y = host.y + drawOffsetY;
         equipment.scaleX = host.scaleX;
         equipment.scaleY = host.scaleY;
         equipment.rotation = host.rotation;

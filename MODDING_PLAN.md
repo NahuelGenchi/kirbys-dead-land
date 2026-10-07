@@ -16,7 +16,7 @@ and DCCM equipment/damage/save integration.
 | Persistence | Fresh process resumes exact original frame/copy/position/shield |
 | Original graphics/audio | All standard form OBJ tests, helper/riding tests, source background comparisons, sound queue tests |
 | Host lifecycle | Outfit/stat health, actual biome transition, lethal source damage and normal New Game reset passed |
-| Host boundaries | Original Ice block, generated door, active Concierge resistance/damage and 31-enemy capacity passed |
+| Host boundaries | Original Ice block (replaced by the host freeze status in #42), generated door, active Concierge resistance/damage and 31-enemy capacity passed |
 | Final input | All nine real binding masks, inverted directions and physical-reader movement/jump passed; base-form left-click on the starting sword runs the original inhale with no host attack (#39) |
 | Local delivery | Final build staged; fresh-profile launch passed,20s real gameplay captured, test saves archived and play profile empty |
 
