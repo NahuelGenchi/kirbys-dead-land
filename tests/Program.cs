@@ -425,6 +425,18 @@ Check(KirbyActions.CanStomp(KirbyActions.Jump) && KirbyActions.CanStomp(KirbyAct
 Check(!KirbyActions.CanStomp(KirbyActions.Standing) && !KirbyActions.CanStomp(KirbyActions.Slide) && !KirbyActions.CanStomp(KirbyActions.Ability),
     "No stomp on the ground, while sliding or during an exhale or inhale");
 Check(KirbyActions.CanSlide(KirbyActions.Walk) && !KirbyActions.CanSlide(KirbyActions.Fall), "Slides start on the ground only");
+var slideKey = new SlideKey();
+Check(slideKey.Filter(16, true, KirbyActions.Dash, 16) == 145 && slideKey.Filter(16, true, KirbyActions.Slide, 145) == 16 &&
+    slideKey.Filter(16, true, KirbyActions.Slide, 16) == 16, "The slide key sends Down + jump once per press, keeping the held direction");
+slideKey.Reset();
+Check(slideKey.Filter(0, true, KirbyActions.Fall, 0) == 0 && slideKey.Filter(0, true, KirbyActions.Standing, 0) == 0 &&
+    slideKey.Filter(0, false, KirbyActions.Standing, 0) == 0 && slideKey.Filter(0, true, KirbyActions.Standing, 0) == 129,
+    "A slide key press in the air does nothing and is not kept for landing");
+slideKey.Reset();
+Check(slideKey.Filter(1, true, KirbyActions.Standing, 1) == 128 && slideKey.Filter(1, true, KirbyActions.Standing, 128) == 129,
+    "With jump already held, the slide key releases it for a frame so the jump is a new press");
+slideKey.Reset();
+Check(slideKey.Filter(64, true, KirbyActions.Standing, 0) == 129, "The slide key's Down replaces a held Up");
 Check(HostStrikes.Slide(KirbyActions.Slide, -704) && !HostStrikes.Slide(KirbyActions.Slide, 384) && !HostStrikes.Slide(KirbyActions.Dash, 704),
     "Only the slide's fast part strikes like a roll");
 Check(HostStrikes.Grab(HostStrikes.Suplex, SpeedMatch.Carry, -1766) && !HostStrikes.Grab(HostStrikes.Suplex, SpeedMatch.Carry, 300) &&

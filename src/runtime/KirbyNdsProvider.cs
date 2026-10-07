@@ -23,6 +23,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
     private const int DeathAnimationFrames = 180;
     private readonly FramePacer pacer = new();
     private readonly DashAssist dash = new();
+    private readonly SlideKey slideKey = new();
     private readonly RollZoneGate rollZones = new();
     private readonly StompController stomp = new();
     private readonly SpeedMatch.ActionFilter motionActions = new();
@@ -147,7 +148,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         LabActivationTrace.Mark("Audio begin");
         audio = new NdsAudio(nds);
         LabActivationTrace.Mark("Audio complete");
-        pacer.Reset(); dash.Reset(); rollZones.Reset(); CancelStomp(); previousAbility = nds.State.Ability; window = null;
+        pacer.Reset(); dash.Reset(); slideKey.Reset(); rollZones.Reset(); CancelStomp(); previousAbility = nds.State.Ability; window = null;
         motionActions.Reset();
         previousInput = 0; previousDiveButton = false; upJumpClimbs = false; SlideStrike = GrabStrike = false;
         deathFrames = -1; deathAnchor = null; sourceDead = nds.Health == 0;
@@ -547,6 +548,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         if (!KirbyInput.JumpFromUpOnly) upJumpClimbs = false;
         else if (action == KirbyActions.Climb || AtLadder(map, hostX, centerY + 14.5)) upJumpClimbs = true;
         if (upJumpClimbs) mask &= unchecked((ushort)~1);
+        mask = slideKey.Filter(mask, KirbyInput.SlideButton && !stomp.Active, action, previousInput);
         ushort raw = mask;
         int direction = (raw & 48) switch { 16 => 1, 32 => -1, _ => 0 };
         bool diveButton = KirbyInput.DiveButton;
