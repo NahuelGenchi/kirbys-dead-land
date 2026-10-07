@@ -628,3 +628,21 @@ Not run live: the short-press hint, a long-press recycle, a copy from an enemy
 filling the slot, a mouthful of an item and an enemy together, a shield
 displaced from a full slot, save and resume with an ability item in the slot,
 other biomes, chests, timed doors and Boss Rush.
+
+### Pause card and save of an ability item (#62)
+
+`KIRBY_LAB_ITEMS_KEEP=1` makes the `items` probe keep the swallowed copy and give
+its item the host `Grenade` affix (the passive a forge reroll offered the owner).
+`KIRBY_LAB_ITEMS_RESUME=1` with `--resume-game` records the weapon slots 300
+source frames after the resume, then opens the normal pause screen and appends
+each equipment card's texts to `pause-cards.jsonl`.
+
+- `20261006-234721`: Wheel copied from a floor item, `Grenade` added, saved with
+  `--save-after 1000` at source frame 5166 (ability Wheel).
+- `20261006-235012` (resume): slot 0 held `KirbyAbilityWheel`, level 1, with
+  `Grenade` and `Colorless`. Its pause card read "Wheel I", "Copy ability", the
+  Wheel description, "Colorless (the highest level applies)." and "Launches a
+  grenade (15 damage)", in the captured frame. Saves unchanged, no fatal log.
+
+The owner's missing passive was the stand-in card hiding the real item. Affixes
+do not act on copy attacks until #57.

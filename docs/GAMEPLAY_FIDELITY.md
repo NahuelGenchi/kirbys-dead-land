@@ -657,7 +657,10 @@ the equipment Kirby cannot use while copied; shield slots keep the real shield.
     scaling.
 
   Shield cards, other equipment and base form are unchanged. Only cards whose
-  process is the pause screen are affected. An empty weapon slot, which also
+  process is the pause screen are affected. Since #55 a copied slot holds the
+  copy's own ability item; its card is drawn from that real item (#62), so its
+  level, quality and affixes (for example a forge reroll) show, with "Copy
+  ability" as the info line. The stand-in remains only for another weapon. An empty weapon slot, which also
   fires the ability, keeps the host's empty card.
 
 Limits: the stand-in's own data (Brutality starting sword) is only drawn, never
