@@ -85,7 +85,8 @@ direction dashes, and copy abilities deal damage on the host's scale. The
 original game's hurt and guard palette flash is kept but softened to a tint,
 because the whitened frames vanished against light scenery on a large monitor.
 Kirby no longer jumps a terrain cell for a frame as he moves. His slide (Down +
-jump) is his roll: it passes Dead Cells roll-zone tunnels and bursts doors. In
+jump) is his roll: it passes Dead Cells roll-zone tunnels and bursts doors.
+Suplex's grab lunge, which doors resist, bursts them the same way. In
 the air, the Dead Cells dive binding (Down + jump by default) makes him stomp
 with the host's own dive attack: it hits and stuns enemies and breaks
 breakable floors once the Ram rune is unlocked.
@@ -166,6 +167,8 @@ while playing Kirby; healing, equipment and interaction tutorials remain availab
 - Standing 12×12 and crouching 12×6 source hurtboxes passed actual host collision
   queries: interior attacks hit and attacks just outside miss. Every temporary
   projection restored the host physical body afterward.
+- A generated Dead Cells door breaks from Suplex's dash grab lunge, through the
+  host's roll check (run `20261006-211833`; the control without it left the door shut).
 - A generated Dead Cells door breaks from original Sword damage. Actual biome
   transitions preserve copy and shield, and changing outfits preserves health.
   Lethal source damage ends the host run; New Game resets Kirby's full original state.

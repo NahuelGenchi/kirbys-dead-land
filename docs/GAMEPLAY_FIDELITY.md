@@ -21,7 +21,7 @@ in [NDS_BRIDGE.md](NDS_BRIDGE.md). The original bootstrap experiment remains in
 | Input | Existing host bindings become original digital buttons; ordinary source directional combinations still apply. A held direction dashes through the original double tap (`AlwaysDash`); a light analog tilt walks. A key bound to both Up and jump (W and the Up arrow by default) climbs at a ladder or chain, as in the host, instead of jumping first |
 | Terrain | Nearby host solids, one-way floors, slopes, ladders and water become source collision cells. Vines grown with the Vine rune (`en.inter.VineLadder`) have no collision bits, only level spots (0, where the Beheaded climbs, and 18); their cells become source ladders, and the solid blocks a vine passes through or ends under become one-way ladder tops in that column. A ladder under a solid block stops the original below it, so this deviation lets Kirby climb onto the ledge, as the Beheaded's `exitLadderTop` does; all linked source objects and cached terrain probes move together when the window rebases by whole cells, while effects attached to a parent (Fire's head flame, Plasma's spark, attack effects) keep their offsets from it. Host movement of Kirby (speed match, stomp) moves only him and his terrain probes, so thrown bombs, cutters, effects and the helper keep their original paths |
 | Input | Existing host bindings become original digital buttons; ordinary source directional combinations still apply. A held direction dashes through the original double tap (`AlwaysDash`); a light analog tilt walks. A key bound to both Up and jump (W and the Up arrow by default) climbs at a ladder, chain or vine, as in the host, instead of jumping first |
-| Roll | Kirby's original slide is his roll and covers the Beheaded's roll: 131 px at up to 339 px/s. Host roll-zone tunnels (collision 65) open while he slides and stay open until he leaves one entered by sliding; walking cannot enter. The slide's fast part counts as a roll for the host's door and breakable-tile checks |
+| Roll | Kirby's original slide is his roll and covers the Beheaded's roll: 131 px at up to 339 px/s. Host roll-zone tunnels (collision 65) open while he slides and stay open until he leaves one entered by sliding; walking cannot enter. The slide's fast part counts as a roll for the host's door and breakable-tile checks, and Suplex's grab lunge for its door check (see [Suplex's lunge bursts doors](#suplexs-lunge-bursts-doors-50)) |
 | Dive attack | The player's host dive binding in the air or on a ladder or chain (original jump, fall, float or climb) starts the host `DiveAttack` under its own rules. The original controller keeps its falling or exhaling animation and physics (3.5 px/frame cap) and drops straight down; the host adds 11.5 px/frame of descent through free space, 15 px a frame in all like the Beheaded's dive (about 900 px/s), and leaves the original a full fall step to make the floor contact; the host skill resolves the landing (shockwave, stun, damage, breakable floors with the Ram rune). Only what stops the original fall counts as floor: solids, slopes and one-way platforms from above, never ladders or chains. Enemy touch damage is off while stomping and for 30 frames after landing |
 | Camera | `CameraZoom` (default 1, the host camera) can zoom the host viewport; 2 shows about 200 host pixels of height, close to the DS screen's 192. Host cinematics and host zoom changes keep their framing |
 | Palette flashes | The original hurt and guard flashes of Kirby's first two palette banks are shown at `FlashStrength` (0.35) of their colour change, with original timing; lasting palette changes are adopted after four frames |
@@ -534,6 +534,33 @@ ability probe replaying original buttons (`KIRBY_LAB_ABILITY_PLAN`):
 
 Both runs ended at their time limit without fatal log lines. Not run live:
 other abilities, slopes and ledges during a carrying move, Wheel turning.
+### Suplex's lunge bursts doors (#50)
+
+Owner recording 2026-10-06 21:05: Suplex Kirby's dash attack ran into a closed
+door, bounced off it and left it intact. A copy attack reaches a host door only
+through the original object `KirbyEnemies` pairs with it, and every non-mob
+pairing (doors, props, gold, breakable tiles) takes the boss option: original
+hit-node mask `0x53` rejects grab, Cook and inhale and keeps damage. Suplex's
+grab only captures, so it never connected with a door. Every other copy dash
+attack damages the door's object.
+
+Doors keep that resistance; grabbing the door's Waddle Dee stand-in would draw
+it in Kirby's hands. Instead `HostStrikes.Grab` (`src/core/`) reports Suplex's
+lunge to the host's own `Hero.canBreakDoors`, as the slide's fast part already
+does, so the host bursts the door as it does for the Beheaded's roll. It holds
+while Suplex (ability 6) carries Kirby (`SpeedMatch.Carry`) at 2 px a frame or
+more: the 24-frame lunge of the dash grab (1760 falling to 1024), and the
+standing, Down+B and mid-air lunges that carry him. The whiff stumble after the
+lunge (32 frames at 384) does not count. Headless (`tests/speed`): a wall within
+the lunge ends the grab on the frame Kirby meets it (action `0509`, velocity
+0); the strike holds until he is a pixel from it. Breakable tiles are unchanged:
+`canBreakTiles` still reports only the slide.
+
+Live in `repros/suplex-door-20261006` (see `docs/RUNTIME_LAUNCH.md`, "Suplex
+lunge into doors"): with the change, the lunge broke a real generated door on
+its sixth frame; the control without the door hook bounced off a door the same
+way and left it closed.
+
 ### Cinematic walks (intentional deviation)
 
 Issue #17. Before this change, the source machine stopped during every host
