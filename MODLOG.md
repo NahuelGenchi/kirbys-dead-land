@@ -1099,3 +1099,28 @@ the all-ability rendering tests as full gameplay acceptance.
   - `013806` (tiers 1/1/5): Survival green `17ce75` + gray `b2c0dd`.
   - `013956` (tiers 1/5/1): Tactics purple `a051ff` + gray.
   - In both, discard restored the sword's red. Real saves were unchanged.
+## 2026-10-06 — Kirby climbs as much faster as he runs (#51)
+
+- Owner recording (21:07, base Kirby on a chain): still too slow after #48. Its
+  camera scroll put Kirby at about 137 px/s up, the original speed.
+- `SpeedMatch` now speeds the climb (`0x916`) up by the run's factor
+  (`ClimbScale` = `GroundScale`, 1.91×): 265 px/s up and 315 px/s down. The
+  original climbs up a little faster than it dashes; the matched climb keeps
+  that ratio to the matched run. The added climb stops a full step short of
+  the ladder's ends (a one-way top counts as ladder), ceilings and floors,
+  looking four cells ahead, so the original makes its last steps itself.
+- Source: `python3 scripts/check.py` passes (248 core assertions, Release build
+  0 warnings/errors). `tests/speed` passes all 36 checks. The new ones compare
+  the matched climb with the original controller at a one-way top, a ladder
+  under a solid block, a ladder ending in open air (the original stands for a
+  frame and falls off) and a hanging ladder's bottom; each lets go within one
+  original step of where the original does and ends in the same place.
+- Live (separate data root `repros/climb-20261006`): vine run
+  `20261006-211757` and ordinary ladder run `20261006-211905` climbed at
+  265.2 px/s up and 315.3 px/s down per original frame, stood on the top and
+  climbed down to the floor. In the vine run a natural Grenader's grenade
+  (9.6 s) and its recoil overlapped the second Down. Saves unchanged, no fatal
+  log. The movement row in `docs/GAMEPLAY_FIDELITY.md` had two copies after
+  merges; they are now one.
+- Not run: chains live, hanging vines, the climb animation's pace (its
+  hand-over-hand cycle keeps the original tempo, now slower than the motion).
