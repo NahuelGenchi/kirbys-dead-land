@@ -20,12 +20,16 @@ public sealed class KirbyEnemies
     private readonly bool[] detached = new bool[Capacity + 1];
     private readonly bool[] controlled = new bool[Capacity + 1];
     private readonly byte[] abilities = new byte[Capacity + 1];
+    /// <summary>Where each paired floor ability item lay before the original suction moved it.</summary>
+    private readonly (int Cx, int Cy)[] itemOrigins = new (int, int)[Capacity + 1];
     /// <summary>Swallowing an Elite always yields original Sword.</summary>
     private static readonly byte EliteAbility = checked((byte)(Array.IndexOf(KirbyNdsProvider.Abilities, "Sword") + 2));
     // Sampled when source HP is assigned so the matching delta scales identically.
     private double damageMultiplier = 1;
     private EnemyBinding[]? restoring;
     private readonly KirbyStars stars = new();
+    /// <summary>Floor ability items the original inhale put in Kirby's mouth this source tick.</summary>
+    internal readonly List<KirbyAbilityItems.Held> Swallowed = [];
     /// <summary>Highest scroll tier sampled for the current source tick.</summary>
     internal int ColorlessTier { get; private set; } = 1;
     /// <summary>The host's colorless damage multiplier for <see cref="ColorlessTier"/>.</summary>
@@ -61,6 +65,7 @@ public sealed class KirbyEnemies
     {
         for (uint i = 1; i <= Capacity; i++) Release(nds, i);
         stars.Clear();
+        Swallowed.Clear();
     }
     private void Release(NdsRuntime nds, uint i)
     {
@@ -89,7 +94,9 @@ public sealed class KirbyEnemies
                     // type and exact world position identify the restored object.
                     if (Math.Abs(x - binding.X) > 0.01 || Math.Abs(y - binding.Y) > 0.01) continue;
                     mobs[binding.Slot] = candidate;
-                    abilities[binding.Slot] = candidate is not Mob ? (byte)0 :
+                    itemOrigins[binding.Slot] = (candidate.cx, candidate.cy);
+                    abilities[binding.Slot] = KirbyAbilityItems.IsAbilityDrop(candidate) ? KirbyAbilityItems.CopyByte(candidate) :
+                        candidate is not Mob ? (byte)0 :
                         binding.Ability is >= 2 and <= 25 ? binding.Ability : RollAbility(session);
                     controlled[binding.Slot] = (candidate is Mob and not dc.en.mob.Boss || IsHazard(candidate)) &&
                         nds.Proxy((uint)binding.Slot).Controlled;
@@ -125,8 +132,10 @@ public sealed class KirbyEnemies
         for (int j = 0; j < entities.length; j++)
         {
             if (entities.getDyn(j) is not Entity mob || !Live(mob)) continue;
-            if (IsHazard(mob) ? !MouthfulHazards.CanPair(mob.isOpponent(hero), live: true, mob is Bullet { disabled: true })
-                : !Eligible(mob) || !mob.canBeHitBy(hero)) continue;
+            // A floor ability item is never hit; it is only there to be inhaled.
+            if (!KirbyAbilityItems.IsAbilityDrop(mob) &&
+                (IsHazard(mob) ? !MouthfulHazards.CanPair(mob.isOpponent(hero), live: true, mob is Bullet { disabled: true })
+                : !Eligible(mob) || !mob.canBeHitBy(hero))) continue;
             if (mobs.Any(m => m?.HashlinkPointer == mob.HashlinkPointer) || TestUnpaired?.Invoke(mob) == true) continue;
             var (x, y) = Distance(mob, hx, hy);
             if (x <= 300 && y <= 96) candidates.Add((mob, x * x + y * y));
@@ -137,7 +146,8 @@ public sealed class KirbyEnemies
             int slot = Enumerable.Range(1, Capacity).FirstOrDefault(i => mobs[i] is null && !detached[i], -1);
             if (slot < 0) break;
             mobs[slot] = candidate.Mob;
-            abilities[slot] = candidate.Mob is Mob ? RollAbility(session) : (byte)0;
+            abilities[slot] = candidate.Mob is Mob ? RollAbility(session) : KirbyAbilityItems.CopyByte(candidate.Mob);
+            itemOrigins[slot] = (candidate.Mob.cx, candidate.Mob.cy);
         }
         for (uint i = 1; i <= Capacity; i++)
         {
@@ -151,14 +161,18 @@ public sealed class KirbyEnemies
             // the host life in original damage units, so both games agree on
             // which hit is lethal (death reactions); the Elite empowerment and
             // the colorless scroll multiplier apply on top.
-            assignedHp[i] = IsHazard(mob) ? 1 : ColorlessDamage.SourceHp(mob.life, HostMultiplier(scale, mob), MaxSourceHp);
+            // A floor ability item takes no damage: its proxy keeps full HP.
+            bool item = KirbyAbilityItems.IsAbilityDrop(mob);
+            assignedHp[i] = IsHazard(mob) ? 1 : item ? MaxSourceHp :
+                ColorlessDamage.SourceHp(mob.life, HostMultiplier(scale, mob), MaxSourceHp);
             nds.SetProxy(i, x, y, assignedHp[i]);
             // Projectiles stay inhalable; their zero copy byte leaves the original
             // copyless mouthful, which spits a star and swallows into nothing.
-            nds.SetProxyOptions(i, abilities[i], mob is not Mob && !IsHazard(mob) || mob is dc.en.mob.Boss);
+            // A floor ability item carries its ability's copy byte.
+            nds.SetProxyOptions(i, abilities[i], !item && (mob is not Mob && !IsHazard(mob) || mob is dc.en.mob.Boss));
             nds.SetProxyContact(i, mob is Mob && bodyContact);
-            nds.SetProxySize(i, (ushort)Math.Clamp(Math.Ceiling(mob.radius * 2), 1, 1024),
-                (ushort)Math.Clamp(Math.Ceiling(mob.hei), 1, 1024));
+            nds.SetProxySize(i, (ushort)Math.Clamp(Math.Ceiling(Math.Max(mob.radius * 2, item ? 16 : 1)), 1, 1024),
+                (ushort)Math.Clamp(Math.Ceiling(Math.Max(mob.hei, item ? 16 : 1)), 1, 1024));
         }
     }
     public string? Complete(KirbySession session, NdsRuntime nds, int ox, double oy, Func<Entity, double> scale)
@@ -173,6 +187,7 @@ public sealed class KirbyEnemies
             NdsProxy proxy = nds.Proxy(i);
             if (proxy.Pending) continue;
             if (IsHazard(mob)) { CompleteHazard(nds, i, mob, proxy, ox, oy); continue; }
+            if (mob is ItemDrop drop) { copied = CompleteItem(session, nds, i, drop, proxy, ox, oy) ?? copied; continue; }
             // Cook can also change the source mouthful byte. Classify its
             // destruction before ordinary inhale so it cannot award a copy.
             if (proxy.Gone && (proxy.Flags & 128) != 0)
@@ -284,8 +299,40 @@ public sealed class KirbyEnemies
                 break;
         }
     }
+    /// <summary>
+    /// A floor ability item follows the original suction, and the original
+    /// inhale takes it off the floor into Kirby's mouth. It is never damaged;
+    /// any other end of its proxy (for example Cook) just releases the slot.
+    /// </summary>
+    private string? CompleteItem(KirbySession session, NdsRuntime nds, uint i, ItemDrop drop, NdsProxy proxy, int ox, double oy)
+    {
+        if (drop.destroyed || !KirbyAbilityItems.IsAbilityItem(drop.item)) { Release(nds, i); return null; }
+        if (proxy.Swallowed)
+        {
+            string? copied = abilities[i] is >= 2 and <= 25 &&
+                session.CompleteItemAbsorption(drop, KirbyNdsProvider.Abilities[abilities[i] - 2]) is { } ability ? ability : null;
+            if (copied is not null)
+            {
+                Swallowed.Add(new KirbyAbilityItems.Held(drop.item, itemOrigins[i].Cx, itemOrigins[i].Cy, drop._level.HashlinkPointer));
+                drop.destroy();
+            }
+            Release(nds, i);
+            return copied;
+        }
+        if (proxy.Gone) { Release(nds, i); return null; }
+        controlled[i] = proxy.Controlled;
+        // Where it lies until the original suction takes hold of it.
+        if (!proxy.Controlled) itemOrigins[i] = (drop.cx, drop.cy);
+        if (proxy.Controlled)
+        {
+            drop.dx = drop.dy = 0;
+            drop.setPosPixel(proxy.XRaw / 65536.0 + ox, proxy.YRaw / 65536.0 + oy + 17);
+            drop.spriteUpdate();
+        }
+        return null;
+    }
     private static bool IsHazard(Entity entity) => entity is Bullet or Grenade;
-    private static bool Live(Entity entity) => !entity.destroyed && (entity.life > 0 || IsHazard(entity));
+    private static bool Live(Entity entity) => !entity.destroyed && (entity.life > 0 || IsHazard(entity) || entity is ItemDrop);
     /// <summary>
     /// Cook's requested host reward: one host food item joins the cooked
     /// enemy's own loot, so the host death path drops it at that enemy.

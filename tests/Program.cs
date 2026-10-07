@@ -626,4 +626,52 @@ Check(SpeedMatch.RiseVelocity(KirbyActions.Jump, -2682) == -2682 && SpeedMatch.R
         "A description ends with the shared controls line");
     Check(AbilityDescriptions.Describe("Unknown") == AbilityDescriptions.Controls, "An unknown ability still shows the controls");
 }
+{
+    // Kirby ability items (#55).
+    Check(AbilityItems.ItemId("Fire") == "KirbyAbilityFire" && AbilityItems.AbilityOf("KirbyAbilityFire") == "Fire",
+        "Ability item IDs map to their ability and back");
+    Check(AbilityItems.AbilityOf("StartSword") is null && AbilityItems.AbilityOf("KirbyAbility") is null &&
+          AbilityItems.AbilityOf(null) is null, "Other item IDs are not ability items");
+    Check(AbilityItems.DisplayName("YoYo") == "Yo-Yo" && AbilityItems.DisplayName("Fire") == "Fire", "Yo-Yo keeps its hyphen");
+    Check(AbilityItems.Replaces(weapon: true, skill: false, shield: false, abilityItem: false), "A floor sword or bow becomes an ability item");
+    Check(AbilityItems.Replaces(weapon: false, skill: true, shield: false, abilityItem: false), "A floor skill becomes an ability item");
+    Check(!AbilityItems.Replaces(weapon: true, skill: false, shield: true, abilityItem: false), "A floor shield stays");
+    Check(!AbilityItems.Replaces(weapon: false, skill: false, shield: false, abilityItem: false), "Amulets, food and other items stay");
+    Check(!AbilityItems.Replaces(weapon: true, skill: false, shield: false, abilityItem: true), "An ability item is never replaced again");
+
+    Check(AbilityItems.Slot([SlotContent.Other, SlotContent.Empty]) == 0, "The copy replaces an unusable host weapon first");
+    Check(AbilityItems.Slot([SlotContent.Empty, SlotContent.Other]) == 1, "An unusable weapon is replaced before an empty slot is used");
+    Check(AbilityItems.Slot([SlotContent.Shield, SlotContent.Empty], retainedShieldSlot: 0) == 1, "The copy takes the empty slot beside a shield");
+    Check(AbilityItems.Slot([SlotContent.Empty, SlotContent.Ability]) == 1, "The slot already holding the copy's item is kept");
+    Check(AbilityItems.Slot([SlotContent.Shield, SlotContent.Shield], retainedShieldSlot: 1) == 0, "A second shield yields its slot");
+    Check(AbilityItems.Slot([SlotContent.Shield], retainedShieldSlot: 0) == -1, "The retained shield is never replaced");
+
+    object first = new(), second = new(), third = new();
+    var mouth = new MouthfulItems<object>();
+    mouth.Add(first, "Fire");
+    mouth.Add(first, "Fire");
+    mouth.Add(second, "Ice");
+    Check(mouth.Count == 2, "An item enters the mouth once");
+    var (taken, returned) = mouth.Resolve("Ice");
+    Check(ReferenceEquals(taken, second) && returned.Count == 1 && ReferenceEquals(returned[0], first) && mouth.Count == 0,
+        "The swallow takes the item of the copied ability; the others go back");
+    mouth.Add(first, "Fire");
+    mouth.Add(third, "Fire");
+    (taken, returned) = mouth.Resolve("Fire");
+    Check(ReferenceEquals(taken, first) && returned.Count == 1 && ReferenceEquals(returned[0], third), "Of two equal items the first is taken");
+    mouth.Add(first, "Fire");
+    (taken, returned) = mouth.Resolve(null);
+    Check(taken is null && returned.Count == 1, "A mouthful lost without a copy returns every item");
+    mouth.Add(first, "Fire");
+    mouth.Observe(mouthFull: false, baseForm: true);
+    Check(!mouth.Emptied, "The mouth is not empty before the original mouthful is seen");
+    mouth.Observe(mouthFull: true, baseForm: true);
+    mouth.Observe(mouthFull: false, baseForm: false);
+    Check(!mouth.Emptied, "A copied Kirby has swallowed, not spat");
+    mouth.Observe(mouthFull: false, baseForm: true);
+    Check(mouth.Emptied, "The mouth emptying in base form is a spit");
+    mouth.Resolve(null);
+    mouth.Observe(mouthFull: false, baseForm: true);
+    Check(!mouth.Emptied && mouth.Count == 0, "Settling clears the spit state");
+}
 Console.WriteLine($"PASS: {assertions} user-rule assertions. No claim of NDS physics or in-game verification.");

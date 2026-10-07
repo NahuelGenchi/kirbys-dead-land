@@ -53,6 +53,8 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
     private KirbySave? boundSave;
     private KirbySession? lastSession;
     private readonly KirbyEnemies enemies = new();
+    /// <summary>Floor ability items in Kirby's mouth until the original swallow or spit settles them.</summary>
+    private readonly MouthfulItems<KirbyAbilityItems.Held> mouthfulItems = new();
     /// <summary>
     /// Host life per original damage point for this target. Host enemy life
     /// grows with its tier; the same host curve keeps original abilities as
@@ -191,6 +193,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         EndDetachedDeath();
         save.Value = new KirbySave(); boundSave = null;
         lastSession?.Rules.Reset(); pendingCopy = false; importHostHealth = false; sourceLevel = 0;
+        mouthfulItems.Clear();
         deathFrames = -1; deathAnchor = null; sourceDead = false;
         if (nds is not null) { enemies.Clear(nds); nds.LoadState(config.SeedStatePath); }
         window = null;
@@ -210,6 +213,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
             session.Rules.Restore(value.Ability, value.Shield, value.AbilityEmpowered, value.PendingEmpowerment);
             if (value.KirbyActive && value.HostBody is not null) originalBody = value.HostBody;
             pendingCopy = value.PendingCopy;
+            mouthfulItems.Clear();
             enemies.Restore(value.Enemies);
         }
         else if (boundSave is not null)
@@ -355,6 +359,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
             Step(session, input);
         long stepped = System.Diagnostics.Stopwatch.GetTimestamp();
         RenderSource();
+        KirbyAbilityItems.Sync(session, mouthfulItems, pendingCopy);
         KirbyHud.Update(session, nds);
         PumpAudio();
         RecordPacing(steps, stepped - started, System.Diagnostics.Stopwatch.GetTimestamp() - stepped);
@@ -636,6 +641,8 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
             }
         }
         if (enemies.Complete(session, nds, originX * 24, originY * 24 + lift, SourceDamageScale) is not null) pendingCopy = true;
+        foreach (var swallowed in enemies.Swallowed) mouthfulItems.Add(swallowed, KirbyAbilityItems.AbilityOf(swallowed.Item)!);
+        enemies.Swallowed.Clear();
         NdsState state = nds.State;
         lastVx = state.VxRaw; lastVy = state.VyRaw;
         ushort after = nds.Action;
@@ -677,6 +684,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         }
         if (pendingCopy && state.Ability == 1 && (nds.ActionFlags & 2) == 0 && (mask & 2) != 0)
         { pendingCopy = false; session.DropAbility(); }
+        mouthfulItems.Observe((nds.ActionFlags & 2) != 0, state.Ability == 1);
     }
     // Host collision bits (CollisionData.fromColType): 1|2 solid, 8 one-way,
     // 16 ladder, 512/1024 slopes, and 64 roll zone. A roll zone is solid for
