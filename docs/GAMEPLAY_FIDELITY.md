@@ -278,6 +278,24 @@ and after a kill, and the slot 14 hurtbox union through kills.
 Not verified live: no run has yet reproduced a Zombie leap interrupted by a
 copy hit, with or without this change.
 
+Still open: on 2026-10-07 the owner was hit again a moment after killing a
+Zombie, on a staged build that included this change. Dead Cells runs `onDie`
+inside `Entity.applyAttackResult` on the killing hit, and `Entity.onDie`
+destroys the mob, so the killed Zombie cannot be the attacker. To identify the
+source, the runtime now logs every way Kirby loses health, with a
+`Kirby damage:` prefix in the DCCM log:
+
+- `host hit`: a Dead Cells attack Kirby accepted. Logs the attacker's type,
+  uid, life and offset from Kirby, the carrier, weapon, hit result, damage type
+  and projected hurtbox, plus the managed hooks the call came through.
+- `source hit`: an original health drop. Logs the queued host source, if any,
+  and the original hit boxes within 8 px of Kirby's slot 14 body, named by
+  proxy slot.
+- `host life`: host health that fell without an original hit, before it is
+  synced into the original.
+- `kill`: each enemy a copy hit killed. Each hit line also gives the time since
+  the last kill and that kill's position relative to Kirby.
+
 ### Elite Sword (intentional deviation)
 
 Elite host mobs do not roll a random ability: their source collision metadata

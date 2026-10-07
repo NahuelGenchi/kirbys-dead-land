@@ -1263,3 +1263,10 @@ the all-ability rendering tests as full gameplay acceptance.
   enemies, all 24 abilities' defeat reactions, projectile proxies, health sync,
   hurtbox union).
 - Source: `python3 scripts/check.py` passes. Not run live.
+- Later the same day the owner was hit again just after killing a Zombie, on a
+  staged integration build that included the leap change. The cause is not yet
+  known. Added `KirbyDamageLog` (`Kirby damage:` lines in the DCCM log) for
+  host hits, original health drops, host-only health loss and copy-hit kills.
+  Its runtime DLL was swapped into the owner's staged integration build
+  (`de34d4f` + this commit). The previous DLL was backed up to
+  `lab/checkpoints/before-damage-log-20261007-122317`. Not run live by the agent.
