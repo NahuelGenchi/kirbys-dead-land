@@ -81,7 +81,7 @@ internal static class LabAbilityItemProbe
     /// other interactive object (items, lore, doors) within eight cells and no
     /// enemy within sixteen.
     /// </summary>
-    private static object? MoveToClearFloor(Hero hero)
+    internal static object? MoveToClearFloor(Hero hero)
     {
         var map = hero._level.map;
         var others = new List<(int X, int Y)>();
@@ -305,7 +305,9 @@ internal static class LabAbilityItemProbe
             scan, clearSpot, swordAbility, grenadeAbility, shieldKept, swordUsefulToKirby, swordPaired, followedSuction, firstInMouth, mouthEmptied,
             spatCopied, returnedToOrigin, secondInMouth, copied, slotAbility, slotHoldsSwallowedItem, hudShowsCopy,
             slotClearedAfterDiscard, hudClearedAfterDiscard, phase,
-            passed = swordAbility is not null && grenadeAbility is not null && shieldKept && !swordUsefulToKirby && swordPaired && followedSuction &&
+            // Ability items are "useful" to Kirby since #61 (a shop short of gold says so); the floor press
+            // never picks one up, which the suction and mouth checks below establish.
+            passed = swordAbility is not null && grenadeAbility is not null && shieldKept && swordPaired && followedSuction &&
                 firstInMouth && mouthEmptied && !spatCopied && returnedToOrigin && secondInMouth && copied == swordAbility &&
                 slotAbility == swordAbility && slotHoldsSwallowedItem && hudShowsCopy && slotClearedAfterDiscard && hudClearedAfterDiscard,
         }, new JsonSerializerOptions { WriteIndented = true }));

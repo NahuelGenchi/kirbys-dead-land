@@ -33,6 +33,7 @@ internal static class KirbyAbilityItems
     {
         outfitId = outfit;
         Hook_ItemDrop.initItem += InitItem;
+        InstallRewards();
         // Weapon.create throws for an item ID it does not know. An ability
         // item's weapon object is the starting sword's class over its own
         // weapon row; Kirby's weapon hook never lets it attack.
@@ -51,7 +52,9 @@ internal static class KirbyAbilityItems
         {
             // A short press would show the host's "not useful" message; say how
             // to take it instead. A long press still recycles it for gold.
-            if (!longPress && IsAbilityItem(drop.item) && !drop.destroyed)
+            // A long press normally recycles it; with the host's long-press pickup
+            // option it would pick it up instead, which Kirby never does.
+            if ((!longPress || drop.longPressPickup) && IsAbilityItem(drop.item) && !drop.destroyed)
                 drop.popError("Inhale and swallow it to copy".AsHaxeString(), null);
             else orig(drop, by, longPress);
         };
@@ -95,13 +98,87 @@ internal static class KirbyAbilityItems
     private static InventItem InitItem(Hook_ItemDrop.orig_initItem orig, ItemDrop drop, InventItem item)
     {
         var result = orig(drop, item);
-        if (result is null || !KirbyRun()) return result!;
-        bool weapon = result.kind is InventItemKind.Weapon, skill = result.kind is InventItemKind.Active;
-        if (!AbilityItems.Replaces(weapon, skill, weapon && result.hasTag("Shield".AsHaxeString()), IsAbilityItem(result)))
-            return result;
+        return result is null ? result! : Replacement(result) ?? result;
+    }
+
+    /// <summary>
+    /// The ability item replacing a host weapon other than a shield, or a skill,
+    /// in a Kirby run; null for any other item or outside a Kirby run.
+    /// </summary>
+    private static InventItem? Replacement(InventItem item)
+    {
+        if (!KirbyRun()) return null;
+        bool weapon = item.kind is InventItemKind.Weapon, skill = item.kind is InventItemKind.Active;
+        if (!AbilityItems.Replaces(weapon, skill, weapon && item.hasTag("Shield".AsHaxeString()), IsAbilityItem(item)))
+            return null;
         string ability = KirbyNdsProvider.Abilities[Random.Shared.Next(KirbyNdsProvider.Abilities.Length)];
-        TestReplaced?.Invoke(result.getItemKind().ToString(), ability);
-        return Create(ability, result.getRawItemLevel());
+        TestReplaced?.Invoke(item.getItemKind().ToString(), ability);
+        return Create(ability, item.getRawItemLevel());
+    }
+
+    private static bool IsKirby(Hero? hero) =>
+        hero is not null && KirbyMod.Instance?.ActiveSession?.Hero.HashlinkPointer == hero.HashlinkPointer;
+
+    /// <summary>
+    /// Challenge rewards (item altars, including pick-one groups, and timed
+    /// items) and shop booths take their item in their own constructors, not
+    /// through ItemDrop (#61). Their item is replaced before their graphics are
+    /// built, which also converts those in a saved level. Taking or buying an
+    /// ability item follows the host's own step for that entity (the altar's
+    /// disable, the timed item's emptying, the booth's buy) and drops the item on
+    /// the floor, to be inhaled and swallowed like any floor ability item.
+    /// </summary>
+    private static void InstallRewards()
+    {
+        Hook_ItemAltar.initGfx += (orig, altar) =>
+        {
+            if (altar.isEnabled && altar.item is { } item && Replacement(item) is { } ability) altar.item = ability;
+            orig(altar);
+        };
+        Hook_TimedItem.initGfx += (orig, timed) =>
+        {
+            if (timed.item is { } item && Replacement(item) is { } ability) timed.item = ability;
+            orig(timed);
+        };
+        Hook_ShopBooth.initGfx += (orig, booth) =>
+        {
+            if (booth.item is { } item && Replacement(item) is { } ability) booth.item = ability;
+            orig(booth);
+        };
+        Hook_ItemAltar.onActivate += (orig, altar, by, longPress) =>
+        {
+            // A long press sells it, as the host does.
+            if (longPress || !altar.isEnabled || !IsAbilityItem(altar.item) || !IsKirby(by)) { orig(altar, by, longPress); return; }
+            var item = altar.item;
+            int cx = altar.cx, cy = altar.cy;
+            var level = altar._level;
+            altar.removeLargeTip(Ref<bool>.In(true));
+            // cine.TierItemFound.destroyItem: a taken altar item disables its altar (and its link).
+            altar.disable(true);
+            Drop(level, item, cx, cy, pop: true);
+        };
+        Hook_TimedItem.onActivate += (orig, timed, by, longPress) =>
+        {
+            bool open = timed.frozenTime is not null || timed.limitS - timed._level.game.data.gameTimeS > 0;
+            if (longPress || !open || !IsAbilityItem(timed.item) || !IsKirby(by)) { orig(timed, by, longPress); return; }
+            var item = timed.item;
+            // The host's own take callback: the pedestal empties.
+            timed.removeAllAffects(31);
+            timed.item = null!;
+            if (timed.icon is { } icon) { icon.parent?.removeChild(icon); timed.icon = null!; }
+            timed.updateRender();
+            Drop(timed._level, item, timed.cx, timed.cy, pop: true);
+        };
+        Hook_ShopBooth.onActivate += (orig, booth, by, longPress) =>
+        {
+            // Without the gold the host shows its own message.
+            if (longPress || booth.item is not { } item || !IsAbilityItem(item) || !IsKirby(by) ||
+                by._level.game.data.money < booth.price) { orig(booth, by, longPress); return; }
+            int cx = booth.cx, cy = booth.cy;
+            var level = booth._level;
+            booth.buy(by, Ref<bool>.In(true));
+            Drop(level, item, cx, cy, pop: true);
+        };
     }
 
     /// <summary>
@@ -185,7 +262,11 @@ internal static class KirbyAbilityItems
     /// <summary>A new floor item; <paramref name="pop"/> gives it the host's loot bounce.</summary>
     private static void Drop(Hero hero, InventItem item, int cx, int cy, bool pop)
     {
-        if (hero._level is not { } level) return;
+        if (hero._level is { } level) Drop(level, item, cx, cy, pop);
+    }
+
+    private static void Drop(dc.pr.Level level, InventItem item, int cx, int cy, bool pop)
+    {
         var drop = new ItemDrop(level, cx, cy, item, false, Ref<bool>.In(false));
         drop.init();
         if (pop) drop.onDropAsLoot();

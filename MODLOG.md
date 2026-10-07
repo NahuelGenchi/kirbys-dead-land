@@ -1194,6 +1194,18 @@ the all-ability rendering tests as full gameplay acceptance.
   merges; they are now one.
 - Not run: chains live, hanging vines, the climb animation's pace (its
   hand-over-hand cycle keeps the original tempo, now slower than the motion).
+## 2026-10-06 — Challenge rewards and shops offer ability items (#61)
+
+- Owner reports (Promenade of the Condemned and a kill-count room): altars,
+  timed rewards and shops still offered host weapons and skills. They are
+  `ItemAltar`, `TimedItem` and `ShopBooth`, which take their item in their own
+  constructors, not through `ItemDrop`.
+- Their item is replaced in `initGfx`. Taking one follows the host's own step
+  (`ItemAltar.disable(true)` from `cine.TierItemFound.destroyItem`, the timed
+  item's take callback, `ShopBooth.buy`) and drops the ability item to be
+  inhaled. `isUsefulFor` is true for Kirby so a shop short of gold says so.
+- Live `20261006-235600` (`rewards` plan): all three converted, taken and
+  dropped; 1000 gold charged. Saves unchanged.
 ## 2026-10-06 — Pause card shows the real ability item (#62)
 
 - Owner report: a forge reroll's grenade passive on Plasma disappeared from the
