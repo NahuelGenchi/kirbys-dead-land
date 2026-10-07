@@ -531,7 +531,43 @@ Run `20261005-221418` passed all five phases with Kirby at 76/76. It used runtim
 | Spit into a wall (face x 984) | The star's last box was 974–994, centered on the wall face; no turn |
 | Discarded Sword star into the same wall | Turned with its left edge at 983, then came back |
 
-The process reached its time limit without fatal errors, and the real save inventories were unchanged. The captures show the discarded star above Kirby right after SELECT. Near the wall, about 156 px from Kirby, no star is drawn, because the original leaves objects outside its 256-pixel screen out of OAM.
+The process reached its time limit without fatal errors, and the real save inventories were unchanged. The captures show the discarded star above Kirby right after SELECT. Near the wall, about 156 px from Kirby, no star is drawn, because the original leaves objects outside its 256-pixel screen out of OAM. (#63 later widened that cull; see [Far shots](#far-shots-63).)
+## Far shots (#63)
+
+The ability probe copies Plasma (`--probe-ability 12`) and replays original
+buttons from `KIRBY_LAB_ABILITY_PLAN`, counted from when the copy is ready: Up
+and Down alternating every two frames over frames 30–230 (a full charge), Right
+at 232, B at 240–242; then the same charge, Left at 532 and B at 540–542.
+Separate data root `repros/far-shots-20261006`, with an outfit pack rebuilt
+from this branch (`8e44122d86f4d8b509bfdd08ee4acde4bf9f4b4cc21fd3e9a7d0e30d3b5be7af`;
+the older shared `outfit-build/res.pak` predates ability items and stops at the
+title screen with `Invalid ItemKind: KirbyAbilitySleep`), runtime DLL
+`e7b5cf83c190ec7a1272a48c9d3190fde31543c6e8f5bd2457f9e9465c7221ff` and bridge
+`60f2fc39f40457797d80f5133ede21d39078f18b12c3a0f866318db153b5d487`, both built
+from this branch.
+
+```sh
+python3 tools/build_outfit.py --output ~/.local/share/kirby-dead-cells/repros/far-shots-20261006/outfit-build
+python3 scripts/stage_runtime.py --data-root ~/.local/share/kirby-dead-cells/repros/far-shots-20261006 \
+  --original-runtime --outfit-pack ~/.local/share/kirby-dead-cells/repros/far-shots-20261006/outfit-build/res.pak
+KIRBY_LAB_ABILITY_PLAN=<plan> KIRBY_LAB_CAPTURE_ALL=1 \
+python3 scripts/launch_runtime.py --data-root ~/.local/share/kirby-dead-cells/repros/far-shots-20261006 \
+  --seconds 60 --start-game --outfit KirbySuperStarUltra --input-plan ability --probe-ability 12 --capture-fps 15
+```
+
+Run `20261006-235639` reached its time limit without a fatal log, and the real
+saves were unchanged. `ability-actors.jsonl` places the ball against the 15 fps
+captures:
+
+| Shot | Ball drawn (captures) | What ended it |
+|---|---|---|
+| Right, source frames 4481–4528 | At 114 and 174 px (`008267`, `008273`) | A level wall about 190 px right: sparks at its face at 204 px (`008277`). The ball's object went on to 336 px inside the wall, which the host draws over Kirby's sprite layer; in the ROM the charged ball passes through walls |
+| Left, source frames 4782–4830 | At 114, 174, 210 and 246 px (`008476`–`008490`; at 246 px its outer half is past the edge of the drawn range) | The drawn range: not drawn at 270 px and beyond, while its object flew on to 324 px |
+
+The offscreen 1024×768 view showed about 360 host px each side of Kirby
+(estimated from the ball's position in the captures), so here roughly the last
+100 px to the screen edge stay empty. Not run live: Ninja, Beam
+and Sword far shots, spit stars, and an enemy hit beyond the old 128 px.
 ## Exit-door walk (2026-10-05)
 
 Issue #17. The lifecycle probe (`KIRBY_LAB_LIFECYCLE=1`) now places Kirby 1.5

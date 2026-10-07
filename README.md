@@ -219,8 +219,13 @@ while playing Kirby; healing, equipment and interaction tutorials remain availab
   unpaired one (through the host). A discarded star hit a Zombie behind Kirby.
   Each hit stunned the Zombie for about a second and pushed it away. Beside a
   real level wall, a spit star burst on the wall face and a discarded star
-  bounced off it. Stars more than about 128 px from Kirby keep flying and hitting
-  but are not drawn. See [star projectiles](docs/RUNTIME_LAUNCH.md#star-projectiles).
+  bounced off it. Stars far from Kirby keep flying and hitting; past the drawn
+  range (below) they are not drawn. See [star projectiles](docs/RUNTIME_LAUNCH.md#star-projectiles).
+- Shots stay drawn to about 252 px either side of Kirby, double the DS
+  screen's 128 px (#63): live, a fully charged Plasma ball was drawn 246 px
+  left of Kirby. Charged Plasma, Ninja's star, Beam's wave and Sword's beam
+  were cut off before. A wider host view can still lose a shot near its edge.
+  See [far shots](docs/GAMEPLAY_FIDELITY.md#far-shots-63).
 - Taking a real exit door, Kirby walks into the doorway in the original Walk
   action until the host fade, instead of gliding in one standing frame. See
   [exit-door walk](docs/RUNTIME_LAUNCH.md#exit-door-walk-2026-10-05).

@@ -45,6 +45,26 @@ def run_case(name):
             assert poses, 'Source ability did not run'
             assert min(health)==76, (ability,health)
             return {'ability':ability,'source_after':b.state()['ability'],'poses':sorted(poses),'hits':sorted(hits),'minimum_health':min(health)}
+        if name=='far_shot_draw':
+            # Charged Plasma's ball keeps flying past the DS screen; the widened
+            # OBJ cull keeps drawing it out to screen x 380 (Kirby at about 128).
+            transform(b,12);floor=[3 if y>=7 else 0 for y in range(9) for x in range(100)]
+            b.lib.kssu_read_gpu.argtypes=[C.c_void_p,C.c_uint32,C.c_void_p,C.c_size_t]
+            b.world(floor,(30*24+12)*65536,int(153.5*65536));oam=C.create_string_buffer(1024);xs=[];raw=set()
+            for i in range(380):
+                s=b.state();b.world(floor,s['x_raw'],s['y_raw'])
+                b.step([64,0,128,0][i%4] if i<200 else (16,0,2,2)[i-200] if i<204 else 0)
+                if i<204:continue
+                assert b.lib.kssu_read_gpu(b.handle,0x07000000,oam,1024)==0
+                for k in range(128):
+                    a0,a1,a2=struct.unpack_from('<3H',oam.raw,k*8)
+                    if a0&0x300==0x200 or a2>>12>7 or (a0&255)==0xf8:continue
+                    raw.add(a1&511);xs.append((a1&511)-(512 if a1&511>=384 else 0)-(s['x_raw']//65536-s['camera_x']))
+            assert b.lib.kssu_read_gpu(b.handle,0x07000400,oam,1024)==0
+            icon=any(struct.unpack_from('<H',oam.raw,k*8)[0]&255==4 and struct.unpack_from('<H',oam.raw,k*8+2)[0]&511==4 for k in range(128))
+            assert max(xs)>=240 and not raw&{381,382,383},(max(xs),sorted(raw)[-5:])
+            assert icon,'Sub-screen ability icon missing'
+            return {'farthest_piece_from_kirby':max(xs),'pieces_past_old_cull':sum(x>128 for x in xs),'sub_icon':icon}
         if name=='room_food':
             from oracle_snapshot import inspect_ram
             transform(b,24);floor=[3 if y>=7 else 0 for y in range(9) for x in range(100)];q=Proxy()
@@ -595,7 +615,7 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--case');parser.add_argument('--skip-abilities',action='store_true');args=parser.parse_args()
     if args.case:
         print('RESULT '+json.dumps({'case':args.case,'result':run_case(args.case)}),flush=True);return
-    cases=['scene_doors', 'room_food', 'proxy_birth_contact', 'proxy_birth_inhale', 'proxy_contact', 'proxy_contact_sword', 'proxy_touch_off', 'proxy_swallow_touch_off', 'proxy_suplex_touch_off', 'proxy_ice_detach', 'proxy_ice_release', 'proxy_lethal', 'motion', 'ladder', 'ladder_top', 'one_way', 'solid_ceiling', 'water', 'proxy_water', 'proxy_water_sword', 'proxy_water_below', 'hurt_water', 'proxy_swallow', 'hazard_spit', 'hazard_swallow', 'star_spit', 'star_spit_wall', 'star_big', 'star_ability', 'proxy_sword', 'proxy_reuse', 'proxy_save', 'proxy_mix', 'boss_inhale', 'boss_suplex', 'boss_cook', 'boss_sword', 'proxy_capacity', 'copy_drop_reabsorb', 'wheelie_ride', 'proxy_suplex', 'proxy_cook', 'audio', 'hurt', 'hurt_lethal', 'hurt_cold', 'guard', 'health_invulnerable', 'health_sync', 'proxy_size']
+    cases=['scene_doors', 'far_shot_draw', 'room_food', 'proxy_birth_contact', 'proxy_birth_inhale', 'proxy_contact', 'proxy_contact_sword', 'proxy_touch_off', 'proxy_swallow_touch_off', 'proxy_suplex_touch_off', 'proxy_ice_detach', 'proxy_ice_release', 'proxy_lethal', 'motion', 'ladder', 'ladder_top', 'one_way', 'solid_ceiling', 'water', 'proxy_water', 'proxy_water_sword', 'proxy_water_below', 'hurt_water', 'proxy_swallow', 'hazard_spit', 'hazard_swallow', 'star_spit', 'star_spit_wall', 'star_big', 'star_ability', 'proxy_sword', 'proxy_reuse', 'proxy_save', 'proxy_mix', 'boss_inhale', 'boss_suplex', 'boss_cook', 'boss_sword', 'proxy_capacity', 'copy_drop_reabsorb', 'wheelie_ride', 'proxy_suplex', 'proxy_cook', 'audio', 'hurt', 'hurt_lethal', 'hurt_cold', 'guard', 'health_invulnerable', 'health_sync', 'proxy_size']
     if not args.skip_abilities:cases += [f'ability-{i}' for i in range(2,26)]
     results=[]
     for name in cases:

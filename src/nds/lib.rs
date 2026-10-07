@@ -162,6 +162,7 @@ pub unsafe extern "C" fn kssu_step(handle: *mut std::ffi::c_void, mask: u16, fra
     let b = &mut *(handle as *mut Bridge);
     if !mute_proxy_footsteps(b.nds.main_ram_mut())
         || !keep_proxies_alive_in_water(b.nds.main_ram_mut())
+        || !widen_obj_cull(b.nds.main_ram_mut())
     {
         return -6;
     }
@@ -1613,5 +1614,32 @@ fn keep_proxies_alive_in_water(r: &mut [u8]) -> bool {
         return false;
     }
     put32(r, p, IGNORE);
+    true
+}
+
+// The original OAM builder0x020100A0 drops every OBJ piece whose screen x is
+// <= -64 (`cmp r8,fp` with fp=-64) or > 256 (`cmp r8,#0x100`): its own DS
+// screen. The host view is wider, so a shot more than about 128 px from Kirby
+// kept flying and hitting but was not drawn (charged Plasma, Ninja's star, the
+// Beam wave, Sword's beam, spit stars). Keep pieces from -127 to 380 instead:
+// the 512 values a 9-bit OAM x can tell apart, around Kirby at x 128, which
+// NdsObjRenderer decodes on its 512-pixel canvas. Only these two compares
+// change; the vertical cull, the 128-entry limit and every object's own
+// update and removal stay original. The DS hardware still hides the added
+// pieces unless they are double-size affine. The user's ROM file is never changed.
+fn widen_obj_cull(r: &mut [u8]) -> bool {
+    const PATCHES: [(u32, u32, u32); 2] = [
+        (0x02010238, 0xe158000b, 0xe3780080), // cmp r8,fp -> cmn r8,#0x80
+        (0x02010258, 0xe3580c01, 0xe3580f5f), // cmp r8,#0x100 -> cmp r8,#0x17c
+    ];
+    for (address, original, wide) in PATCHES {
+        let instruction = u32at(r, (address - BASE) as usize);
+        if instruction != original && instruction != wide {
+            return false;
+        }
+    }
+    for (address, _, wide) in PATCHES {
+        put32(r, (address - BASE) as usize, wide);
+    }
     true
 }
