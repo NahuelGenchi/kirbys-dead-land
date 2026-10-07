@@ -696,8 +696,21 @@ addition built from host items and the original inhale and swallow.
   skills (#58). The run's starting Rusty Sword is equipped by the host, not
   dropped; it stays in its slot until the first copy replaces it (#39 owns the
   rule that it never attacks).
+- **Challenge rewards and shops (#61).** Item altars (including pick-one groups
+  behind kill-count and timed doors), timed items and shop booths take their item
+  in their own constructors, not through `ItemDrop`. Their item is replaced the
+  same way just before their graphics are built, which also converts those of a
+  saved level. Taking one follows the host's own step for that entity, then drops
+  the ability item on the floor to be inhaled: an altar is disabled as the host's
+  item-found cinematic does (`disable(true)`, which also handles its link); a
+  timed item's pedestal empties as its own take callback does; a booth is bought
+  with `ShopBooth.buy` (price taken, booth removed). Without enough gold the host
+  shows its own message. A booth's price is the one the host set for the item it
+  replaced. A shop mimic is not triggered by an ability item. A long press still
+  sells or recycles. Legendary altars are not converted.
 - **Taking one.** `InventItem.isUsefulFor` is false for an ability item for every
-  hero. A short press shows "Inhale and swallow it to copy"; a long press still
+  hero but Kirby (#61: true for him, so a shop short of gold says so; his presses
+  never pick one up). A short press shows "Inhale and swallow it to copy"; a long press still
   recycles it for gold. Walking near one shows the host's own item tip: its name
   (`Yo-Yo` with a hyphen) and item level, "Copy ability" in place of the weapon
   row's DPS, the ability's description from `AbilityDescriptions`, and the host's

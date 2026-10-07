@@ -63,7 +63,7 @@ internal static class LabAbilityItemProbe
     /// other interactive object (items, lore, doors) within eight cells and no
     /// enemy within sixteen.
     /// </summary>
-    private static object? MoveToClearFloor(Hero hero)
+    internal static object? MoveToClearFloor(Hero hero)
     {
         var map = hero._level.map;
         var others = new List<(int X, int Y)>();

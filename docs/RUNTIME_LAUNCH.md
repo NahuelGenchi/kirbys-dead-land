@@ -628,3 +628,20 @@ Not run live: the short-press hint, a long-press recycle, a copy from an enemy
 filling the slot, a mouthful of an item and an enemy together, a shield
 displaced from a full slot, save and resume with an ability item in the slot,
 other biomes, chests, timed doors and Boss Rush.
+
+### Challenge rewards and shops (#61)
+
+`--input-plan rewards` (`LabRewardItemsProbe`) places Kirby on a clear floor of a
+new run and creates, through their own constructors, an item altar with a
+Broadsword, a 60-second timed item with an explosive grenade and a shop booth
+with a Lightning Whip (price argument 1000). With 5000 gold it activates each
+as a short press does and writes `rewards.json`.
+
+`20261006-235600` (`repros/ability-items-20261006`): the altar held Ice, the
+timed item Mike and the booth Stone. Taking the altar item disabled the altar;
+the timed pedestal emptied; buying took 1000 gold and removed the booth. Each
+item lay on the floor once as a floor ability item. Captured frames show the
+altar's ability tip and the "-1000" gold pop. `passed: true`, saves unchanged,
+no fatal log. Not run: real kill-count or timed-door rooms, pick-one altar
+groups, a level saved before this fix, a shop short of gold, mimics and
+legendary altars.
