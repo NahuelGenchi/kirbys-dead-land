@@ -1248,3 +1248,18 @@ the all-ability rendering tests as full gameplay acceptance.
   `Grenade` affix; `235012` resumed with the affix still on the slot item, and
   its pause card listed it. Saves unchanged, no fatal log.
 - Source: `python3 scripts/check.py` passes.
+
+## 2026-10-07 — Zombies no longer bite after the original recoil (#78)
+
+- Owner report: Kirby sometimes took a hit with the original knockback right as
+  he killed a Zombie, with no visible attack.
+- Cause (bytecode review of `hlboot.dat`): the Zombie's leap keeps cooldown key
+  `1226833920` set, and `Zombie.fixedUpdate` applies its jump hit while the key
+  is set. The original recoil's control skipped the Zombie's updates without
+  ending the leap, so the leap resumed on release and bit Kirby.
+- `KirbyEnemies` now unsets the leap key while the original holds an enemy.
+  Record: [Leaps held by the original recoil](docs/GAMEPLAY_FIDELITY.md#leaps-held-by-the-original-recoil-78).
+- Headless original-ROM scratch checks ruled out the source side (detached
+  enemies, all 24 abilities' defeat reactions, projectile proxies, health sync,
+  hurtbox union).
+- Source: `python3 scripts/check.py` passes. Not run live.
