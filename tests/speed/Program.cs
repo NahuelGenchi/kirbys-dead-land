@@ -71,10 +71,41 @@ double Speed(List<Row> r, int a, int b) => (r[b].X - r[a].X) / (b - a) * 60;
 {
     var sim = new Sim(nds, seed);
     for (int y = 15; y < 30; y++) sim.Tiles[(12, y)] = 134;
+    sim.Tiles[(12, 14)] = SpeedMatch.OneWay;
     var up = sim.Run(R(64, 90));
     var down = sim.Run(R(128, 60));
-    Check(Math.Abs(up[20].Feet - up[80].Feet - 138.75) < 3 && Math.Abs((down[40].Feet - down[10].Feet) * 2 - 165) < 3,
-        "Climbs ladders at the original's 139 px/s up and 165 px/s down");
+    Check(Math.Abs(up[20].Feet - up[40].Feet - 138.75 * SpeedMatch.ClimbScale / 3) < 3 && Math.Abs((down[40].Feet - down[30].Feet) * 6 - 165 * SpeedMatch.ClimbScale) < 3,
+        $"Climbs ladders as much faster than the original as the run (up {(up[20].Feet - up[40].Feet) * 3:F0}, down {(down[40].Feet - down[30].Feet) * 6:F0} px/s)");
+}
+// Every end of a ladder is reached as the original reaches it: the added climb
+// stops a step short and the original makes the last steps. At an open top the
+// original stands for a frame and falls; off a hanging ladder's bottom it falls.
+foreach (var (name, top, bottom, start, plan) in new (string, ushort?, int, double?, ushort[])[]
+{
+    ("a one-way ladder top", SpeedMatch.OneWay, 29, null, P(R(64, 240), R(0, 10), R(128, 240)).ToArray()),
+    ("a ladder under a solid block", SpeedMatch.Solid, 29, null, P(R(64, 240), R(128, 240)).ToArray()),
+    ("a ladder ending in open air", null, 29, null, P(R(64, 240), R(128, 240)).ToArray()),
+    ("a hanging ladder's bottom", SpeedMatch.OneWay, 22, 14 * 24, P(R(0, 10), R(128, 200)).ToArray()),
+})
+{
+    List<Row> Climb(bool match)
+    {
+        var sim = new Sim(nds, seed, match: match, feet: start);
+        for (int y = 15; y <= bottom; y++) sim.Tiles[(12, y)] = SpeedMatch.Ladder;
+        if (top is { } t) sim.Tiles[(12, 14)] = t;
+        return sim.Run(plan);
+    }
+    var native = Climb(false);
+    var matched = Climb(true);
+    // Where a run first lets go of the ladder (its last climbing frame) and what
+    // the original does next. A matched fall lands sooner, so later grabs differ.
+    (double Feet, ushort Action) Exit(List<Row> r) =>
+        Range(1, r.Count - 1).Where(i => r[i].Action != KirbyActions.Climb && r[i - 1].Action == KirbyActions.Climb)
+            .Select(i => (r[i - 1].Feet, r[i].Action)).DefaultIfEmpty((double.NaN, (ushort)0)).First();
+    var (n, m) = (Exit(native), Exit(matched));
+    Console.WriteLine($"  {name}: native lets go at {n.Feet:F2} ({n.Action:X4}), ends {native[^1].Feet:F2}; matched {m.Feet:F2} ({m.Action:X4}), ends {matched[^1].Feet:F2}");
+    // Within one original climbing step (2.75 px down), the phase the two runs arrive in.
+    Check(n.Action == m.Action && Math.Abs(n.Feet - m.Feet) < 2.75 && native[^1] == matched[^1], $"The faster climb leaves {name} where the original does");
 }
 foreach (ushort t in new ushort[] { SpeedMatch.SlopeUpRight, SpeedMatch.SlopeUpLeft })
 {
