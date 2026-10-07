@@ -1,7 +1,7 @@
 namespace Kirby.Core;
 
 public enum HostWeaponKind { None, Sword, Bow, Shield, Other }
-public enum AttackRoute { None, HostWeapon, Ability, Parry }
+public enum AttackRoute { None, Ability, Parry }
 
 /// <summary>
 /// The requested changes to Kirby's rules, independent of either game's engine.
@@ -39,11 +39,11 @@ public sealed class KirbyRules
     public string? RetainedShieldId { get; private set; }
 
     /// <summary>
-    /// A shield can be taken in any form, as in Dead Cells: Take swaps it for
-    /// the equipped one. Swords and bows need base form.
+    /// Kirby fights only with original inhale and copy abilities plus a host
+    /// shield. A shield can be taken in any form, as in Dead Cells: Take swaps
+    /// it for the equipped one. No other host weapon or skill is taken.
     /// </summary>
-    public bool CanEquip(HostWeaponKind kind) => kind == HostWeaponKind.Shield ||
-        IsBaseForm && kind is HostWeaponKind.Sword or HostWeaponKind.Bow;
+    public bool CanEquip(HostWeaponKind kind) => kind == HostWeaponKind.Shield;
 
     /// <summary>
     /// Record the stable ID of the shield the host actually equipped, never its
@@ -68,21 +68,24 @@ public sealed class KirbyRules
             EquipShield(ids.FirstOrDefault());
     }
 
+    /// <summary>Only shields remain host actions: any equipped one in base form, the retained one while copied.</summary>
     public bool CanUse(HostWeaponKind kind, string? itemId = null)
     {
-        if (IsBaseForm)
-            return kind is HostWeaponKind.Sword or HostWeaponKind.Bow or HostWeaponKind.Shield;
-        return kind == HostWeaponKind.Shield && RetainedShieldId is not null &&
+        if (kind != HostWeaponKind.Shield)
+            return false;
+        return IsBaseForm || RetainedShieldId is not null &&
                StringComparer.Ordinal.Equals(itemId, RetainedShieldId);
     }
 
+    /// <summary>
+    /// Every other weapon button is original DS B (inhale in base form, the
+    /// copy attack while copied); the host weapon itself never attacks.
+    /// </summary>
     public AttackRoute ResolveAttack(HostWeaponKind kind, string? itemId = null)
     {
         if (kind == HostWeaponKind.Shield)
             return CanUse(kind, itemId) ? AttackRoute.Parry : AttackRoute.None;
-        if (!IsBaseForm)
-            return AttackRoute.Ability;
-        return CanUse(kind, itemId) ? AttackRoute.HostWeapon : AttackRoute.None;
+        return AttackRoute.Ability;
     }
 
     /// <summary>

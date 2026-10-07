@@ -1,28 +1,29 @@
 using System.Text.Json;
 using dc.tool;
 using dc.tool.hero;
-using dc.tool.weap;
-using HaxeProxy.Runtime;
-using ModCore.Utilities;
 using File = System.IO.File;
 using Path = System.IO.Path;
 
 namespace Kirby.Runtime;
 
-/// <summary>Uses a real Pure Nail and the normal weapon manager with private virtual keys.</summary>
+/// <summary>
+/// Holds the real binding of the host weapon in slot 0 (left-click by default,
+/// the starting sword) through the production input path in base form. It must
+/// reach the source as DS B, start the original inhale, and never let the host
+/// weapon attack, even while the host reports its button down.
+/// </summary>
 internal static unsafe class LabWeaponAimProbe
 {
     private static string? run;
     private static uint? start, aimStart;
     private static uint tick, lastReport;
     private static InventItem? item;
-    private static PureNail? nail;
     private static int upKey = -1, weaponKey = -1;
-    private static int prepares, maskedBefore, maskedAfter;
-    private static bool upwardStrike, jumpStayedMasked, skillStayedMasked, restored;
+    private static int maskedBefore, maskedAfter;
+    private static int hostAttempts, hostAttacks, inhaleFrames, heldInputs;
+    private static ushort weaponMask;
+    private static bool restored, baseForm;
     private static bool upAlsoJump;
-    private static double vertical;
-    private static int cycle = -1;
     private static int mappingKey = -1;
     private static readonly Dictionary<int, ushort> directionMasks = [];
     private static readonly Dictionary<int, ushort> invertedMasks = [];
@@ -36,7 +37,7 @@ internal static unsafe class LabWeaponAimProbe
         run = output;
         dc.tool.Hook_Tutorial.tryToStart += (_, _, _) => false;
         dc.hxd.Hook__Key.isDown += (orig, key) => key >= 0 && key == mappingKey ||
-            Held && (key == upKey || key == weaponKey) || orig(key);
+            Held && key == weaponKey || orig(key);
         dc.hxd.Hook__Key.isPressed += (orig, key) =>
             Held && aimStart is uint at && tick - at < 2 && key == weaponKey || orig(key);
         Hook_HeroWeaponsManager.hasButtonDownForWeapon += (orig, manager, weapon) =>
@@ -50,22 +51,20 @@ internal static unsafe class LabWeaponAimProbe
             orig(manager);
             if (inspect && Binding(manager.hero.controller, 10) == -1) maskedAfter++;
         };
-        Hook_PureNail.onBeforeCurSkillPrepare += (orig, self) =>
+        Hook_Weapon.tryToUse += (orig, weapon) =>
         {
-            if (item?.permanentId != self.item.permanentId) { orig(self); return; }
-            prepares++;
-            vertical = self.dirInputValueVertical();
-            jumpStayedMasked |= Binding(self.owner.controller, 0) == -1;
-            skillStayedMasked |= Binding(self.owner.controller, 4) == -1;
-            orig(self);
-            cycle = self.get_cycle();
-            upwardStrike |= self.currentNailAttackType is dc.tool.weap.PureNailAttackType.PureNailUp && cycle == 2;
-            File.AppendAllText(Path.Combine(run!, "weapon-aim-events.jsonl"), JsonSerializer.Serialize(new
+            bool used = orig(weapon);
+            if (item is not null && weapon.item.permanentId == item.permanentId)
             {
-                tick, vertical, cycle, attackType = self.currentNailAttackType.GetType().Name,
-                up = Binding(self.owner.controller, 10), jump = Binding(self.owner.controller, 0),
-                skill = Binding(self.owner.controller, 4),
-            }) + "\n");
+                hostAttempts++;
+                if (used) hostAttacks++;
+                File.AppendAllText(Path.Combine(run!, "weapon-aim-events.jsonl"), JsonSerializer.Serialize(new
+                {
+                    tick, used, weapon = weapon.GetType().FullName,
+                    ability = KirbyMod.Instance?.ActiveSession?.Rules.AbilityId,
+                }) + "\n");
+            }
+            return used;
         };
         KirbyInput.TestOverride = Input;
     }
@@ -77,16 +76,16 @@ internal static unsafe class LabWeaponAimProbe
         tick = machine.State.Frame;
         start ??= tick;
         var hero = session.Hero;
-        if (tick - start < 120) return 0;
-        if (item is null)
+        if (Held)
         {
-            item = new InventItem(new InventItemKind.Weapon("PureNail".AsHaxeString()));
-            hero.inventory.add(item);
-            if (hero.weaponsManager is dc.tool.hero.weap.BeheadedWeaponsManager manager)
-                manager.onEquippedItemsUpdated(Ref<bool>.In(false));
+            heldInputs++;
+            baseForm = session.Rules.IsBaseForm;
         }
-        nail ??= hero.weaponsManager.findItemInMain(item) as PureNail;
-        if (nail is not null && aimStart is null && tick - start >= 180)
+        if (aimStart is uint since && tick - since < 60 && (machine.ActionFlags & 1) != 0) inhaleFrames++;
+        if (tick - start < 120) return 0;
+        // The new run's starting weapon, on the first weapon binding.
+        item ??= hero.inventory.getEquippedWeaponOn(0);
+        if (item is not null && aimStart is null && tick - start >= 180)
         {
             var overrideInput = KirbyInput.TestOverride;
             var options = dc.Main.Class.ME.options;
@@ -118,11 +117,24 @@ internal static unsafe class LabWeaponAimProbe
                 options.invertPlayerMovements = originalInversion;
             }
             upKey = Binding(hero.controller, 10);
-            for (int slot = 0; slot < hero.inventory.nbWeapons; slot++)
-                if (hero.inventory.getEquippedWeaponOn(slot)?.permanentId == item.permanentId)
-                    weaponKey = Binding(hero.controller, slot + 2);
+            weaponKey = Binding(hero.controller, 2);
+            try
+            {
+                KirbyInput.TestOverride = null;
+                options.invertPlayerMovements = false;
+                mappingKey = weaponKey;
+                weaponMask = KirbyInput.Read(session);
+            }
+            finally
+            {
+                mappingKey = -1;
+                KirbyInput.TestOverride = overrideInput;
+                options.invertPlayerMovements = originalInversion;
+            }
             aimStart = tick;
         }
+        // Production physical input while the weapon key is held.
+        if (Held) return null;
         uint elapsed = tick - start.Value;
         if (elapsed >= 260)
         {
@@ -153,8 +165,8 @@ internal static unsafe class LabWeaponAimProbe
         var bindings = session.Hero.controller.parent.get_bindings();
         File.WriteAllText(Path.Combine(run, "weapon-aim.json"), JsonSerializer.Serialize(new
         {
-            tick, weapon = nail?.GetType().FullName, upKey, weaponKey, prepares, vertical, cycle,
-            upwardStrike, jumpStayedMasked, skillStayedMasked, maskedBefore, maskedAfter, restored,
+            tick, item = item?.getItemKind().ToString(), upKey, weaponKey, weaponMask, heldInputs, baseForm,
+            inhaleFrames, hostAttempts, hostAttacks, maskedBefore, maskedAfter, restored,
             directionMasks, invertedMasks, upAlsoJump,
             keyboardUpAndJump = new[] { bindings.primary, bindings.secondary, bindings.third }
                 .Select(array => new { jump = ((int*)array.bytes)[0], up = ((int*)array.bytes)[10] }).ToArray(),
@@ -169,7 +181,7 @@ internal static unsafe class LabWeaponAimProbe
                 session.Hero.controller.parent.mode,
                 cinematic = session.Hero._level.game.hasCinematic(),
             },
-            passed = upwardStrike && vertical > 0 && jumpStayedMasked && skillStayedMasked &&
+            passed = item is not null && weaponMask == 2 && heldInputs > 0 && baseForm && inhaleFrames > 0 && hostAttacks == 0 &&
                 maskedBefore > 0 && maskedBefore == maskedAfter && restored &&
                 directionMasks.GetValueOrDefault(10) == (upAlsoJump ? 65 : 64) && directionMasks.GetValueOrDefault(11) == 32 &&
                 directionMasks.GetValueOrDefault(12) == 128 && directionMasks.GetValueOrDefault(13) == 16 &&

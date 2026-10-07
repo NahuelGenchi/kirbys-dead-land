@@ -32,7 +32,7 @@ in [NDS_BRIDGE.md](NDS_BRIDGE.md). The original bootstrap experiment remains in
 | Star projectiles | The ROM moves Kirby's spit, big spit and discarded ability stars through host terrain (spit stars burst on walls, the ability star bounces). Each star strikes host enemies once and staggers them with the host dive's stun and bump; paired enemies take spit-star damage through their source object, all others from the host (see below) |
 | Boss collision | Original resistance bits prevent inhale, Suplex capture and Cook; damage still uses original collision/debounce, while the host retains boss AI and phases |
 | Host triggers | Pressure plates (trap plates and pulley points too) and hidden triggers test Kirby's physical foot on the ground, as for the Beheaded; enemy attacks still test the projected original hurtbox |
-| Facing | The host hero's direction follows the original facing (bit 31 of player+0x6C) every source frame, so host shields block, and base-form host weapons aim, the way Kirby faces |
+| Facing | The host hero's direction follows the original facing (bit 31 of player+0x6C) every source frame, so host shields block the way Kirby faces |
 | Incoming damage | Host shield/parry resolves first; remaining damage, converted to the same fraction of Kirby's 76 HP as of the host's current maximum, enters the next original collision tick, preserving original guard, recoil and invulnerability |
 | Touching enemies | As in Dead Cells, touching an enemy hurts neither Kirby nor the enemy: the original body-contact damage is excluded for every paired enemy, while Kirby's inhale, slide and copy attacks still hit, and the host's own touch attacks (spiked or electric enemies) still reach him as incoming damage. `OriginalTouchDamage: true` restores the original rule (7 of 76 HP to Kirby, and weak enemies destroyed by the bump) |
 | Outgoing damage | Paired original enemies hold the host life in original units: host life ÷ (`CopyDamageScale` 3.5 × the host's per-tier life scale). Original HP deltas are multiplied back, so both games agree on the lethal hit; the result is then scaled like Dead Cells colorless gear (see below), and the deliberate Elite Sword bonus below multiplies it again; no other host hero multiplier alters copy attacks |
@@ -99,15 +99,19 @@ and Kirby's 12×12 hurtbox. Kirby catches them by inhaling in the air; low
 projectiles such as grenades are caught from the ground. This is the ROM's
 geometry, not an adapter limit.
 
-Base form permits host swords, bows and shields. Copied form maps attack buttons
-to the original ability and keeps only the exact retained shield for host
-parries. A shield can be taken in either form: as in Dead Cells, Take swaps it
+Kirby fights only with the original inhale and copy abilities plus a host shield
+(#39, owner request 2026-10-06). Every non-shield weapon button (left-click by
+default) is original DS B in both forms: inhale/spit in base form, the copy attack
+while copied. `KirbyRules.ResolveAttack` never routes to a host sword or bow, so
+`Weapon.tryToUse` declines even the starting sword already in the inventory; its
+sprite stays in the HUD slot but never swings. Base form uses any equipped shield;
+copied form keeps only the exact retained shield for host parries. A shield can be taken in either form: as in Dead Cells, Take swaps it
 for the equipped one (the old one drops), and the newly equipped shield becomes
 the retained shield (#31). The retained shield follows the host inventory every
 frame: it stays while equipped, otherwise the first equipped shield, or none, is
 retained. If two shields are equipped, the most recently taken one parries while
-copied. Swords, bows and skills while copied, and skills or other weapons in base
-form, are declined through `InventItem.isUsefulFor`, the check the host makes
+copied. Every weapon other than a shield, and every skill, is declined in either
+form through `InventItem.isUsefulFor`, the check the host makes
 before every item drop, altar, shop purchase and timed-door reward. The host then
 shows its own "Can't use that right now" message, leaves the item in place and
 charges nothing. Shield identity uses the physical item's permanent ID. Source copy
@@ -276,7 +280,7 @@ original block; see [Ice freezes with the host status](#ice-freezes-with-the-hos
 Source HP stays clamped to the native range (32,760); a single-tick source
 kill at that cap kills the host enemy.
 
-Unchanged: base-form host weapons, incoming damage, retained-shield parries, boss
+Unchanged: incoming damage, retained-shield parries, boss
 capture resistance, source attack cadence and repeat-hit debounce. Only the scroll
 multiplier is applied. Host weapon quality, affixes, mutations/perks, critical hits
 and other hero bonuses still do not alter copy attacks.
@@ -759,6 +763,12 @@ actual host key bindings: all nine action masks and inverted directions matched,
 including the host's shared Up/Jump binding. Kirby moved94.6875px and jumped
 49.890625px. Actual Pure Nail preparation selected its upward attack while host
 jump and skill inputs stayed suppressed and every binding scope was restored.
+That host weapon path no longer exists (#39). Live run `20261006-122227` held the
+real left-click binding on the new run's `StartSword` in base form: the production
+reader sent original B (mask 2), the source inhale flag was set for 32 frames,
+and while the probe forced the host's button-down check for the sword, no
+`Weapon.tryToUse` call reached the host sword and it made no attack. The
+nine action masks, inversion, movement (195.5px) and jump (49.97px) matched again.
 The input gate uses the host's exact native clock and absolute suspension expiry.
 
 The real Concierge retained active host AI, resisted 96 original inhale frames

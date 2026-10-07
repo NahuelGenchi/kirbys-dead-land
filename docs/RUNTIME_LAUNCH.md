@@ -110,6 +110,15 @@ The `022453` boss fixture used the actual Bridge arena and naturally created Beh
 
 The final physical-input test `025047` passed using native bridge `f94997d82877bcdce29ed8d8cb3741545f08044ad813fa61f59f9406c6314b2c`. It verified all nine physical action mappings, both-axis inversion, and a real Pure Nail upward strike (`PureNailUp`, cycle 2). Jump and skill bindings stayed masked during host weapon aiming, and all five observed outer movement scopes restored their bindings. The production input path then moved Kirby 94.6875 px and produced a 49.890625 px jump. This profile binds W to both Up and Jump; the test recorded the exact combined original mask 65, or 129 with inversion enabled. The timestamp check now matches the host's absolute `sys_time` suspension deadline. The run finished without fatal errors or changes to real saves.
 
+Issue #39 removed host sword and bow attacks, so the `aim` plan (`LabWeaponAimProbe`) now holds the real slot-0 weapon binding (left-click, key 0) on the new run's starting weapon through the production reader, while forcing the host's button-down checks for that item. It passes when that binding reads as original B (mask 2) in base form, the source inhale flag (`ActionFlags & 1`) is set within 60 frames, the item makes no host attack, and the earlier mapping, inversion, masking and movement checks still hold. Run `20261006-122227`, in the separate data root `repros/left-click-20261006` (bridge `libkssu_bridge.so` SHA-256 `654c2023ff6a0a17775253ce4ede68a3089f19f668abc6a55b5f1b6ef5441597`, unchanged by #39), passed: `StartSword`, mask 2, 21 held inputs in base form, 32 inhale frames, no `Weapon.tryToUse` call reached the sword, all nine masks and inversions matched, 195.5 px moved and a 49.97 px jump. No fatal errors; real saves unchanged.
+
+```sh
+python3 scripts/stage_runtime.py --data-root ~/.local/share/kirby-dead-cells/repros/left-click-20261006 \
+  --original-runtime --outfit-pack "$HOME/.local/share/kirby-dead-cells/outfit-build/res.pak"
+python3 scripts/launch_runtime.py --data-root ~/.local/share/kirby-dead-cells/repros/left-click-20261006 \
+  --seconds 50 --start-game --outfit KirbySuperStarUltra --input-plan aim
+```
+
 The final `025627` test started from an empty private save directory with no automated input plan. The normal new-game path activated Kirby, kept the hero awake at full 76 health, and advanced the original engine normally. The incompatible host jump/dodge/helper tutorials did not appear; the ordinary `attackM` prompt remained available. The 45-second launch completed without fatal errors or changes to real saves. Both the preceding fixture profile and this fresh-profile smoke save were preserved by directory rename under `lab/checkpoints`; the final `lab/save` directory is empty for the user's New Game. `lab/final-stage.json` records the exact runtime/native/outfit hashes and preserved checkpoint path.
 
 `--start-game --input-plan cook` (`LabCookProbe`) checks Cook food drops. It

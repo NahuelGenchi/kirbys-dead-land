@@ -10,13 +10,16 @@ void Check(bool condition, string description)
 int next = 0;
 var rules = new KirbyRules(["fire", "sword", "ice"], n => next++ % n);
 Check(rules.IsBaseForm, "Start in base form");
-Check(rules.CanEquip(HostWeaponKind.Sword) && rules.CanEquip(HostWeaponKind.Bow) &&
-      rules.CanEquip(HostWeaponKind.Shield), "Base equipment whitelist");
-Check(!rules.CanEquip(HostWeaponKind.Other), "Reject unsupported host equipment");
+Check(rules.CanEquip(HostWeaponKind.Shield), "Base form takes a shield");
+Check(!rules.CanEquip(HostWeaponKind.Sword) && !rules.CanEquip(HostWeaponKind.Bow) &&
+      !rules.CanEquip(HostWeaponKind.Other), "Base form takes no other host weapon");
 rules.EquipShield("shield-42");
 Check(rules.RetainedShieldId == "shield-42", "Record base-form shield");
-Check(rules.ResolveAttack(HostWeaponKind.Sword) == AttackRoute.HostWeapon, "Base sword");
-Check(rules.ResolveAttack(HostWeaponKind.Bow) == AttackRoute.HostWeapon, "Base bow");
+Check(!rules.CanUse(HostWeaponKind.Sword) && !rules.CanUse(HostWeaponKind.Bow), "No host sword or bow in base form");
+Check(rules.ResolveAttack(HostWeaponKind.Sword) == AttackRoute.Ability, "Base sword button inhales");
+Check(rules.ResolveAttack(HostWeaponKind.Bow) == AttackRoute.Ability, "Base bow button inhales");
+Check(rules.ResolveAttack(HostWeaponKind.None) == AttackRoute.Ability, "Empty base weapon slot inhales");
+Check(rules.ResolveAttack(HostWeaponKind.Shield, "shield-42") == AttackRoute.Parry, "Base shield parries");
 Check(rules.Absorb(100) == "fire", "Confirmed enemy gives ability");
 Check(rules.IsBaseForm, "A mouthful does not transform before the original swallow");
 rules.SetSourceAbility("fire");
@@ -33,7 +36,8 @@ rules.FollowEquippedShields(["shield-42"]);
 Check(rules.RetainedShieldId == "shield-42", "Equipped retained shield is kept");
 Check(rules.Absorb(101) is null, "Cannot inhale while copied");
 rules.DropAbility();
-Check(rules.IsBaseForm && rules.CanUse(HostWeaponKind.Bow), "Drop restores base weapon actions");
+Check(rules.IsBaseForm && !rules.CanUse(HostWeaponKind.Bow) &&
+      rules.ResolveAttack(HostWeaponKind.Sword) == AttackRoute.Ability, "Drop restores base inhale, not host weapons");
 Check(rules.Absorb(100) is null, "Duplicate absorbed enemy cannot reroll");
 Check(rules.Absorb(101) == "sword", "Another enemy selects another random index");
 rules.SetSourceAbility("sword");

@@ -754,6 +754,26 @@ the all-ability rendering tests as full gameplay acceptance.
   spits hit the shooter for 52; the swallow gave no copy. Saves unchanged.
 
 
+## 2026-10-06 — left-click inhales; only copy abilities and a shield (#39)
+
+- Owner request: left-click swung the Dead Cells sword in base form; it should
+  inhale, and Kirby may use only his copy ability and a shield.
+- `KirbyInput.Read` now sends original B for every non-shield weapon button in
+  both forms (it was copied form only). `KirbyRules.CanEquip` accepts only
+  shields, `CanUse` only shields, and `ResolveAttack` never routes to a host
+  weapon (`AttackRoute.HostWeapon` removed), so `Weapon.tryToUse` declines the
+  starting sword too. Shield, guard and parry rules are unchanged.
+- `LabWeaponAimProbe` (`--input-plan aim`) now checks left-click inhale on the
+  starting sword instead of a Pure Nail upward strike, which can no longer happen.
+- Core rule tests: 224 assertions; `scripts/check.py` passes; Release build 0
+  warnings/errors.
+- Live (separate data root `repros/left-click-20261006`, run `20261006-122227`):
+  `StartSword` on key 0 read as mask 2, original inhale for 32 frames, no host
+  sword attack, mappings/inversion/movement unchanged. Real saves unchanged.
+- Not run: `tools/nds_tests.py` (no native change), left-click with a copy ability
+  (the copied path is unchanged), controller weapon buttons, a second-slot bow,
+  and a real enemy inhaled through left-click.
+
 ## 2026-10-06 — Ice uses the host freeze status (#42)
 
 - Owner report: an Ice kill turned the Dead Cells enemy into the original ice

@@ -153,13 +153,14 @@ internal static unsafe class KirbyInput
             ushort directions = (ushort)(keys & 240);
             keys = (ushort)((keys & ~240) | ((directions & 80) << 1) | ((directions & 160) >> 1));
         }
-        if (!session.Rules.IsBaseForm)
-            for (int slot = 0; slot < h.inventory.nbWeapons; slot++)
-            {
-                var item = h.inventory.getEquippedWeaponOn(slot);
-                if (item?.hasTag("Shield".AsHaxeString()) == true) continue;
-                if (Down(c, slot + 2)) keys |= 2;
-            }
+        // Every non-shield weapon button (left-click by default) is DS B in
+        // both forms: original inhale in base form, the copy attack while copied.
+        for (int slot = 0; slot < h.inventory.nbWeapons; slot++)
+        {
+            var item = h.inventory.getEquippedWeaponOn(slot);
+            if (item?.hasTag("Shield".AsHaxeString()) == true) continue;
+            if (Down(c, slot + 2)) keys |= 2;
+        }
         return WithShieldGuard(session, keys);
     }
     private static ushort WithShieldGuard(KirbySession session, ushort keys)
