@@ -223,6 +223,11 @@ while playing Kirby; healing, equipment and interaction tutorials remain availab
   muted, retaining Dead Cells music. Jump/landing audio and the SDL queue passed
   tests, including coexistence with the host's SDL3 and successful queuing to the
   default desktop audio device.
+- In live Kirby runs the start level's starting bow, weapons and skills became
+  ability items while shields and gold stayed. An ability item was inhaled, spat
+  back to its cell, inhaled again and swallowed into its ability, which then
+  filled the weapon slot and the HUD; discarding cleared both. See
+  [ability items](docs/RUNTIME_LAUNCH.md#ability-items-55).
 - Actual lab launches have preserved the hashes of the user's original local
   and Steam saves. DCCM disables achievements.
 

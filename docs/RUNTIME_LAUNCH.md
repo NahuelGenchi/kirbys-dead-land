@@ -535,3 +535,56 @@ With the fix (runtime SHA-256 `15b0b560908f0627bb0131a3464690f047ed055704ba7f1ea
 | `20261005-215401` | Right | Hit `Normal`; the attack entered the next original collision tick |
 
 All three runs reached their time limit without fatal errors, and the real saves were unchanged. Holding the opposite direction while raising the shield was traced but not resolved (see [GAMEPLAY_FIDELITY.md](GAMEPLAY_FIDELITY.md)).
+
+## Ability items (#55)
+
+`--input-plan items` (`LabAbilityItemProbe`) checks the
+[ability items](GAMEPLAY_FIDELITY.md#ability-items-intentional-addition) on a new
+run. It lists the start level's floor items and places Kirby on a dry floor with
+no other interactive object within eight cells and no enemy within sixteen. It
+then creates a Broadsword in front of him, an explosive grenade three cells
+behind him and a starting shield, through the normal `ItemDrop` constructor.
+Kirby holds the original inhale on the sword's ability item and spits it out with
+B, pressed until the item is back. He inhales it again, swallows it with Down,
+then discards the copy with Select. `ability-items.json` records each step;
+`ability-items.jsonl` records every replacement, slot change and returned item.
+
+All runs used the separate data root `repros/ability-items-20261006` (a copy of
+the private lab), the outfit pack built from this branch (SHA-256
+`8e44122d86f4d8b509bfdd08ee4acde4bf9f4b4cc21fd3e9a7d0e30d3b5be7af`) and the
+shared private bridge build (`ef72fc725634bc14784498b66150ae29743754105073f84aec227ce26768d13c`;
+this branch does not change `src/nds`):
+
+```sh
+python3 scripts/launch_runtime.py --data-root "$HOME/.local/share/kirby-dead-cells/repros/ability-items-20261006" \
+  --seconds 90 --start-game --outfit KirbySuperStarUltra --input-plan items
+```
+
+Final runtime DLL `d769b054bc53811d209f3e1ec91946c6c0344260ad2d28f21b740513f7440c75`,
+three runs, all `passed: true`, each ended by its time limit without fatal log
+lines and with the real saves unchanged:
+
+| Run | Start level replacements (item ID → ability) | Probe item | Result |
+| :--- | :--- | :--- | :--- |
+| `20261006-223826` | `StartBow` → Jet, `FastGrenade` → Cook, `LightningWhip` → Plasma | Paint | Spat back to its cell; swallowed into Paint; slot and HUD held that item; discard cleared both |
+| `20261006-223958` | `StartBow` → Sleep, `StunMace` → Stone, `ExtraHeal` → Cutter, `FastGrenade` → Plasma, `StandardTurret` → Mike | Beam | Same |
+| `20261006-224129` | `StartBow` → Stone, `StandardTurret` → Sleep, `DualDaggers` → Mike | Ice | Same |
+
+In each run the starting shield and the gold bag stayed, the shield the probe
+created stayed a shield, the Broadsword and grenade became ability items with the
+`Colorless` affix at item level 1, `isUsefulFor` was false, and the item followed
+the original suction (proxy flags 2 and 32) into the mouth.
+
+Earlier iterations of the same probe found and fixed three problems before the
+final build. `HUD.refreshItems` did not show the new slot item (`215522`), so
+`Hero.hudInitItems` is used. A spat item returned with the host's loot bounce
+(`221819`). A spit star's original recoil on a returned item's proxy pushed the
+item three cells (`223514`): the item now follows only the original inhale, and
+pairs only in base form. `221525` captured the host item tip on the floor: "Bomb I",
+"Copy ability", the Bomb description and controls line, and "Colorless (the
+highest level applies)" with the host's "Take" prompt.
+
+Not run live: the short-press hint, a long-press recycle, a copy from an enemy
+filling the slot, a mouthful of an item and an enemy together, a shield
+displaced from a full slot, save and resume with an ability item in the slot,
+other biomes, chests, timed doors and Boss Rush.

@@ -32,6 +32,7 @@ internal static class LabAbilityItemProbe
     private static (int Cx, int Cy) swordOrigin;
     private static ItemDrop? returned;
     private static string? swordAbility, grenadeAbility, copied, slotAbility;
+    private static bool followedSuction;
     private static bool swordUsefulToKirby = true, swordPaired, firstInMouth, mouthEmptied, spatCopied = true, returnedToOrigin;
     private static bool secondInMouth, slotHoldsSwallowedItem, hudShowsCopy, slotClearedAfterDiscard, hudClearedAfterDiscard;
 
@@ -184,6 +185,7 @@ internal static class LabAbilityItemProbe
         uint t = frame - phaseAt!.Value;
         var drop = FloorDrop(hero, swordItem);
         if (drop is not null && (provider.Enemies.Pairs(drop) || provider.ControlsEnemy(drop))) swordPaired = true;
+        if (drop is not null && provider.ControlsEnemy(drop)) followedSuction = true;
         switch (phase)
         {
             case 1: // Stand by the item (its focus tooltip), then hold the original inhale until it is in the mouth.
@@ -249,10 +251,10 @@ internal static class LabAbilityItemProbe
         bool shieldKept = shield is not null && !KirbyAbilityItems.IsAbilityItem(shield.item);
         File.WriteAllText(Path.Combine(run!, "ability-items.json"), JsonSerializer.Serialize(new
         {
-            scan, clearSpot, swordAbility, grenadeAbility, shieldKept, swordUsefulToKirby, swordPaired, firstInMouth, mouthEmptied,
+            scan, clearSpot, swordAbility, grenadeAbility, shieldKept, swordUsefulToKirby, swordPaired, followedSuction, firstInMouth, mouthEmptied,
             spatCopied, returnedToOrigin, secondInMouth, copied, slotAbility, slotHoldsSwallowedItem, hudShowsCopy,
             slotClearedAfterDiscard, hudClearedAfterDiscard, phase,
-            passed = swordAbility is not null && grenadeAbility is not null && shieldKept && !swordUsefulToKirby && swordPaired &&
+            passed = swordAbility is not null && grenadeAbility is not null && shieldKept && !swordUsefulToKirby && swordPaired && followedSuction &&
                 firstInMouth && mouthEmptied && !spatCopied && returnedToOrigin && secondInMouth && copied == swordAbility &&
                 slotAbility == swordAbility && slotHoldsSwallowedItem && hudShowsCopy && slotClearedAfterDiscard && hudClearedAfterDiscard,
         }, new JsonSerializerOptions { WriteIndented = true }));

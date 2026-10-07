@@ -665,11 +665,14 @@ addition built from host items and the original inhale and swallow.
   row's DPS, the ability's description from `AbilityDescriptions`, and the host's
   "Colorless (the highest level applies)" line. The prompt keeps the host's
   "Take" label.
-- **Inhale and swallow.** Ability items pair with the same 31 original proxies as
-  enemies (`KirbyEnemies`), with the item's copy byte, full HP, no body contact
-  and a hurtbox of at least 16×16. They take no damage. The original suction
-  moves the item toward Kirby while the host's own float physics is held. Once
-  it is in the original mouth, the item leaves the floor. The original swallow
+- **Inhale and swallow.** While Kirby is in base form, the only form that can
+  inhale, ability items pair with the same 31 original proxies as enemies
+  (`KirbyEnemies`), with the item's copy byte, full HP, no body contact and a
+  hurtbox of at least 16×16. They take no damage. The item follows its proxy only
+  while the original inhale pulls it (proxy flags 2 and 32), and the host's own
+  float physics is held meanwhile; an original hit recoil (a spit star or a slide
+  striking the proxy) never moves it. Once it is in the original mouth, the item
+  leaves the floor. The original swallow
   then copies its ability, exactly as for an enemy carrying the same copy byte;
   in a mouthful of several objects the original roulette decides, and only the
   item of the chosen ability is taken. When the original mouth empties in base
@@ -689,7 +692,12 @@ addition built from host items and the original inhale and swallow.
   the dropped star for 7 seconds. The HUD overlay of the original icon (#18)
   still draws over the slot.
 
-Limits: items in Kirby's mouth when the game is saved are not kept; after a
+Limits: an ability item's proxy is an ordinary original enemy object, so base
+Kirby's attacks can strike it. In lab run `20261006-223514` a spit star struck a
+spat item's proxy and, before the recoil rule above, pushed the item three cells.
+A single spit star is therefore expected to burst on an ability item as on an
+enemy (not checked visually). Making the proxy inhalable but not hittable needs a
+bridge change. Items in Kirby's mouth when the game is saved are not kept; after a
 reload, the original swallow gives a new base item of that ability. The forge
 and shops do not handle ability items yet (#58), and quality and affixes have
 no effect yet (#56, #57). Only the Prisoners' Quarters start level and items the

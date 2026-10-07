@@ -201,6 +201,8 @@ public struct NdsProxy
     public readonly bool Swallowed => (Flags & 4) != 0;
     public readonly bool Gone => (Flags & 8) != 0;
     public readonly bool Pending => (Flags & 16) != 0;
+    /// <summary>The original inhale is pulling it (not a hit recoil, which also sets <see cref="Controlled"/>).</summary>
+    public readonly bool Inhaling => (Flags & 32) != 0;
 }
 
 [StructLayout(LayoutKind.Sequential)]

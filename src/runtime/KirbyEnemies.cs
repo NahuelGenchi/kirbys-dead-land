@@ -124,6 +124,9 @@ public sealed class KirbyEnemies
             if (mob is null) continue;
             if (!Live(mob) || mob._level.HashlinkPointer != hero._level.HashlinkPointer)
             { Release(nds, i); continue; }
+            // Only base Kirby can inhale an ability item; copy attacks never meet it.
+            if (KirbyAbilityItems.IsAbilityDrop(mob) && !session.Rules.IsBaseForm && !controlled[i])
+            { Release(nds, i); continue; }
             var distance = Distance(mob, hx, hy);
             if (!controlled[i] && (distance.X > 320 || distance.Y > 120)) Release(nds, i);
         }
@@ -132,10 +135,10 @@ public sealed class KirbyEnemies
         for (int j = 0; j < entities.length; j++)
         {
             if (entities.getDyn(j) is not Entity mob || !Live(mob)) continue;
-            // A floor ability item is never hit; it is only there to be inhaled.
-            if (!KirbyAbilityItems.IsAbilityDrop(mob) &&
-                (IsHazard(mob) ? !MouthfulHazards.CanPair(mob.isOpponent(hero), live: true, mob is Bullet { disabled: true })
-                : !Eligible(mob) || !mob.canBeHitBy(hero))) continue;
+            // A floor ability item is never hit; it is only there for base Kirby to inhale.
+            if (KirbyAbilityItems.IsAbilityDrop(mob) ? !session.Rules.IsBaseForm :
+                IsHazard(mob) ? !MouthfulHazards.CanPair(mob.isOpponent(hero), live: true, mob is Bullet { disabled: true })
+                : !Eligible(mob) || !mob.canBeHitBy(hero)) continue;
             if (mobs.Any(m => m?.HashlinkPointer == mob.HashlinkPointer) || TestUnpaired?.Invoke(mob) == true) continue;
             var (x, y) = Distance(mob, hx, hy);
             if (x <= 300 && y <= 96) candidates.Add((mob, x * x + y * y));
@@ -320,10 +323,13 @@ public sealed class KirbyEnemies
             return copied;
         }
         if (proxy.Gone) { Release(nds, i); return null; }
-        controlled[i] = proxy.Controlled;
+        // It follows only the original suction. A hit (a spit star, a slide)
+        // gives its proxy an original recoil, which must not move the item.
+        bool inhaled = proxy.Controlled && proxy.Inhaling;
+        controlled[i] = inhaled;
         // Where it lies until the original suction takes hold of it.
-        if (!proxy.Controlled) itemOrigins[i] = (drop.cx, drop.cy);
-        if (proxy.Controlled)
+        if (!inhaled) itemOrigins[i] = (drop.cx, drop.cy);
+        if (inhaled)
         {
             drop.dx = drop.dy = 0;
             drop.setPosPixel(proxy.XRaw / 65536.0 + ox, proxy.YRaw / 65536.0 + oy + 17);
