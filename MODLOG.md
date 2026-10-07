@@ -1248,3 +1248,23 @@ the all-ability rendering tests as full gameplay acceptance.
   `Grenade` affix; `235012` resumed with the affix still on the slot item, and
   its pause card listed it. Saves unchanged, no fatal log.
 - Source: `python3 scripts/check.py` passes.
+## 2026-10-07 — Claiming a scroll no longer crashes (#80)
+
+- Owner report: claiming a green (Survival) scroll ended the game with
+  `NDS bridge returned -3` from `KirbyEnemies.Prepare` (play run
+  `20261007-114618`).
+- Cause: claiming a scroll is a host cinematic that walks the hero onto it, and
+  `StepCinematicWalk` advances the original with enemies still paired. An inhale
+  under way finished its swallow there. Only `KirbyEnemies.Complete`, after a
+  normal step, acknowledges an ended source object; the next normal step's
+  `Prepare` rebound the slot first, and the bridge refused.
+- Fix: `Prepare` skips a slot whose source object is already swallowed or gone;
+  `Complete` acknowledges it after that step as usual (host enemy removed, copy
+  kept).
+- New `--input-plan scroll` probe (`LabScrollProbe`, `KIRBY_LAB_SCROLL_INHALE`).
+  Live (`repros/scroll-claim-20261007`): the inhale variant reproduced the crash
+  before the fix (`115757`) and passed after it (`115950`); the walk variant
+  passed (`120114`). Saves unchanged.
+- Source: `python3 scripts/check.py` passes. `tools/nds_tests.py` not run
+  (`src/nds` unchanged).
+
