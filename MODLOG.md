@@ -1248,3 +1248,19 @@ the all-ability rendering tests as full gameplay acceptance.
   `Grenade` affix; `235012` resumed with the affix still on the slot item, and
   its pause card listed it. Saves unchanged, no fatal log.
 - Source: `python3 scripts/check.py` passes.
+## 2026-10-07 — Stomp from the top of a vine lands (#74)
+
+- Owner recording 01:24: S then Space on the ledge at a vine's top started the
+  stomp, but Kirby slid down the vine in the climb pose and hung at its foot
+  until the 3 s safety cancel.
+- Cause (bridge, ready2 seed): Down on a ladder top starts the original climb
+  inside the top cell, which ignores A for its first frames. The stomp's single
+  kick-off press was lost and the host descent carried the still-climbing Kirby
+  to 4.5 px above the floor, short of any landing.
+- The stomp now passes the ladder top in the row Kirby's feet climb in, so the
+  original lets go at once; while it still climbs, A is pressed every other
+  frame and no host descent is added. New bridge case `ladder_top_stomp`.
+- Live (separate data root `repros/vine-stomp-20261007`, `vine` setup):
+  pre-fix `20261007-013859` reproduced the hang twice; fixed `014012` landed
+  both vine-top stomps (12.6 and 10.2 cells). Saves unchanged, no fatal log.
+- Not run: stomps from ordinary ladder or chain tops live, hanging vines.

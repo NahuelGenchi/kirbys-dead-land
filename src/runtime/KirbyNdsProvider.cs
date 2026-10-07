@@ -555,7 +555,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
             BeginStomp(hero, action, centerY + 14.5);
         previousInput = raw;
         previousDiveButton = diveButton;
-        if (stomp.Active) centerY += stomp.Descent(FreeBelow(map, hostX, centerY + 14.5));
+        if (stomp.Active) centerY += stomp.Descent(FreeBelow(map, hostX, centerY + 14.5), action);
         // The stomp moves at the Beheaded's dive speed on its own.
         bool matched = config.MatchHostSpeed && !stomp.Active;
         // Down + jump on the ground starts the original slide during this
@@ -596,7 +596,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         NdsAudio.PrepareSource(nds);
         if (stomp.Active)
         {
-            mask = stomp.Mask(mask);
+            mask = stomp.Mask(mask, action);
             // Straight down at the original fall cap; the original clamps the
             // speed to its current state (falling, or exhaling while it lasts).
             Span<byte> velocity = stackalloc byte[4];
@@ -973,6 +973,10 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         activeDive = dive;
         dive.start();
         stompIgnoreRow = hero.ignoreGround is { } ignore ? ignore.untilY : int.MinValue;
+        // From a ladder, chain or vine the dive also passes the row Kirby's feet
+        // climb in: climbing down from the top, that is the ladder top itself,
+        // which would hold him when the original lets go of the ladder.
+        if (action == KirbyActions.Climb) stompIgnoreRow = Math.Max(stompIgnoreRow, (int)Math.Floor(feetY / 24));
         Diagnostic?.Invoke("stomp-start", new { action, feetY, dive.duration, dive.cooldown, dive.hold,
             ignoreRow = stompIgnoreRow, ground = hero.distToGroundCase(), active = dive.isActive() });
     }
