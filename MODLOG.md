@@ -1194,3 +1194,35 @@ the all-ability rendering tests as full gameplay acceptance.
   merges; they are now one.
 - Not run: chains live, hanging vines, the climb animation's pace (its
   hand-over-hand cycle keeps the original tempo, now slower than the motion).
+
+## 2026-10-07 — Far shots stay drawn past the DS screen edge (#63)
+
+- Owner screencasts (2026-10-06 23:33 and 23:36): how Plasma charges, then
+  "why does the firing cut abruptly?" The charged ball burst into sparks a
+  short way from Kirby in open air.
+- Native bridge: the ball is not removed. On an open source floor it kept
+  flying (still moving 336 px out), but the original OAM builder `0x020100A0`
+  drops OBJ pieces outside screen x −63…256, the DS's own screen, and the
+  renderer draws only OAM. Uncharged Plasma shots end at 76 px on the ROM's
+  own stage too (original). The charged ball passes through walls in the ROM.
+- `widen_obj_cull` in `src/nds/lib.rs` patches the builder's two horizontal
+  compares in emulated RAM to keep screen x −127…380, and `NdsObjRenderer`
+  decodes OAM x 384–511 as the left side. Survey of all 24 copy abilities
+  (tap, hold, dash attack, left; charged Plasma): cut before and now drawn
+  further were charged Plasma (128 → 252 px), Ninja's star (128 → 248),
+  Beam's wave (126 → 171) and Sword's beam (125 → 146).
+- Source: `python3 scripts/check.py` passes (278 core assertions, two new for
+  the renderer's x decoding; Release build 0 warnings/errors).
+  `python3 tools/nds_tests.py`: 75/75, with new `far_shot_draw` (pieces to
+  252 px; fails at 128 px on the previous bridge). `python3 tools/verify_renderer.py`:
+  29 sequences, 3,046,706 pixels, 0 mismatches, 0 unsupported. A/B of the old
+  and new bridge over 12,954 frames of all 24 abilities: game state, actors,
+  sub OAM and in-screen OBJ pieces identical. All 31 proxies spread across
+  ±250 px used at most 57 of 128 OAM entries.
+- Live (separate data root `repros/far-shots-20261006`): run `20261006-235639`
+  drew a charged Plasma ball 246 px left of Kirby. Fired right, the ball sparked
+  at a level wall about 190 px away and went on hidden behind its tiles. Saves
+  unchanged, no fatal log.
+- Not run: Ninja, Beam and Sword far shots live, spit stars, an enemy hit beyond
+  128 px. Limit: about 252 px of reach; a wider host view still loses a shot
+  near its edge.

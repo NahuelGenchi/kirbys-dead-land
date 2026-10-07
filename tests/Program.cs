@@ -632,6 +632,29 @@ Check(SpeedMatch.RiseVelocity(KirbyActions.Jump, -2682) == -2682 && SpeedMatch.R
           icon.AsSpan(Pixel(16, 23), 4).SequenceEqual(new byte[] { 0, 255, 0, 255 }), "Apply both OBJ flips");
 }
 {
+    // The bridge keeps OBJ pieces from screen x -127 to 380 (#63): OAM x up to
+    // 383 is to the right, 384..511 to the left. Kirby at screen (128, 100).
+    byte[] oam = new byte[1024], vram = new byte[256 * 1024], palette = new byte[512];
+    byte[] rgba = new byte[Kirby.Runtime.NdsObjRenderer.Canvas * Kirby.Runtime.NdsObjRenderer.Canvas * 4];
+    void Obj(int index, ushort a0, ushort a1, ushort a2)
+    {
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(oam.AsSpan(index * 8), a0);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(oam.AsSpan(index * 8 + 2), a1);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(oam.AsSpan(index * 8 + 4), a2);
+    }
+    for (int index = 0; index < 128; index++) Obj(index, 0x0200, 0, 0);
+    vram.AsSpan(0, 32).Fill(0x11); // Tile 0: colour 1 everywhere.
+    System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(palette.AsSpan(32 + 2), 0x001F);
+    // Canvas row 256 is screen y 100; canvas column 256 is screen x 128.
+    bool Drawn(int screenX) => rgba[(256 * 512 + 128 + screenX) * 4 + 3] == 255;
+    Obj(0, 100, 300, 1 << 12);
+    Kirby.Runtime.NdsObjRenderer.Render(0x10, oam, vram, palette, rgba, 128, 100);
+    Check(Drawn(300) && Drawn(307), "OAM x 300 is drawn 172 px right of Kirby, not wrapped off the canvas");
+    Obj(0, 100, 400, 1 << 12);
+    Kirby.Runtime.NdsObjRenderer.Render(0x10, oam, vram, palette, rgba, 128, 100);
+    Check(Drawn(400 - 512) && Drawn(400 - 512 + 7), "OAM x 400 is screen x -112, left of the DS screen");
+}
+{
     // Same IDs and order as KirbyNdsProvider.Abilities (original abilities 2..25).
     string[] abilityIds = ["Cutter", "Mirror", "Beam", "Fighter", "Suplex", "YoYo", "Wheel", "Bomb", "Ice", "Fire", "Plasma", "Ninja",
         "Stone", "Wing", "Jet", "Copy", "Sword", "Hammer", "Parasol", "Paint", "Mike", "Crash", "Cook", "Sleep"];

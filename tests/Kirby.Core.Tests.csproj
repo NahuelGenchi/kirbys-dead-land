@@ -7,4 +7,5 @@
   </PropertyGroup>
   <ItemGroup><Compile Remove="pak/**/*.cs;nds/**/*.cs;render/**/*.cs;audio/**/*.cs;background/**/*.cs;speed/**/*.cs" /></ItemGroup>
   <ItemGroup><ProjectReference Include="../src/core/Kirby.Core.csproj" /></ItemGroup>
+  <ItemGroup><Compile Include="../src/runtime/NdsObjRenderer.cs" Link="NdsObjRenderer.cs" /></ItemGroup>
 </Project>

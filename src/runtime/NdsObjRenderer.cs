@@ -7,6 +7,8 @@ public static class NdsObjRenderer
 {
     public const int Canvas = 512;
     private const int Center = Canvas / 2;
+    /// <summary>OAM x values from here to 511 are left of the screen (x - 512).</summary>
+    public const int FarRightLimit = 384;
     /// <summary>Pixels drawn from palette bank 0 (Kirby's body) by the last call.</summary>
     [ThreadStatic] public static int LastBodyPixels;
     /// <summary>Canvas bounds of those pixels relative to the canvas centre (empty when none were drawn).</summary>
@@ -35,10 +37,12 @@ public static class NdsObjRenderer
             int width = Width[shape, size], height = Height[shape, size];
             int boxWidth = affine && (a0 & 0x200) != 0 ? width * 2 : width;
             int boxHeight = affine && (a0 & 0x200) != 0 ? height * 2 : height;
+            // The bridge widens the original OBJ cull to screen x -127..380
+            // (widen_obj_cull), so far shots reach OAM; 384..511 are the left side.
             int x = a1 & 511, y = a0 & 255;
-            if (x >= 256) x -= 512;
+            if (x >= FarRightLimit) x -= 512;
             if (y >= 192) y -= 256;
-            if (x + boxWidth <= 0 || y + boxHeight <= 0 || x >= 256 || y >= 192) continue;
+            if (y + boxHeight <= 0 || y >= 192) continue;
             int mode = (a0 >> 10) & 3;
             if ((a0 & 0x2000) != 0 || mode >= 2)
             {
