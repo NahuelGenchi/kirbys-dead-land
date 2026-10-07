@@ -19,15 +19,16 @@ namespace Kirby.Runtime;
 /// </summary>
 public sealed unsafe class KirbySpriteRenderer : IDisposable
 {
-    private const int Canvas = 512;
-    private const int Center = Canvas / 2;
+    private const int CanvasWidth = NdsObjRenderer.CanvasWidth, CanvasHeight = NdsObjRenderer.CanvasHeight;
     private readonly Hero hero;
     private readonly NdsBackgroundEffects backgroundEffects;
     private readonly byte[] oam = new byte[1024];
     private readonly byte[] vram = new byte[256 * 1024];
     private readonly byte[] palette = new byte[512];
     private readonly byte[] registers = new byte[4];
-    private readonly byte[] rgba = new byte[Canvas * Canvas * 4];
+    private readonly byte[] rgba = new byte[CanvasWidth * CanvasHeight * 4];
+    // The bridge keeps at most 256 culled pieces per frame.
+    private readonly FarObject[] farBuffer = new FarObject[256];
     private Pixels? pixels;
     private Texture? texture;
     private Bitmap? bitmap;
@@ -158,7 +159,10 @@ public sealed unsafe class KirbySpriteRenderer : IDisposable
             // position of Kirby. The bitmap itself follows the current host
             // position, so only the one-frame-old pose differs, as on the DS.
             (int originX, int originY) = nds.DisplayedOrigin;
-            (int rendered, int unsupported) = NdsObjRenderer.Render(display, oam, vram, palette, rgba, originX, originY);
+            // Pieces the original culled outside its screen, for the same OAM (#67).
+            int farCount = nds.ReadFarObjects(farBuffer);
+            (int rendered, int unsupported) = NdsObjRenderer.Render(display, oam, vram, palette, rgba, originX, originY,
+                far: farBuffer.AsSpan(0, farCount));
             RenderedObjects = rendered;
             UnsupportedObjects = unsupported;
             BodyPixels = NdsObjRenderer.LastBodyPixels;
@@ -277,12 +281,13 @@ public sealed unsafe class KirbySpriteRenderer : IDisposable
     private void EnsureTexture()
     {
         if (bitmap is not null) return;
-        pixels = Pixels.Class.alloc(Canvas, Canvas, new PixelFormat.RGBA());
+        pixels = Pixels.Class.alloc(CanvasWidth, CanvasHeight, new PixelFormat.RGBA());
         texture = Texture.Class.fromPixels(pixels, null!);
         texture.name = "kirby-original-nds-obj".AsHaxeString();
         texture.set_filter(new dc.h3d.mat.Filter.Nearest());
         texture.preventAutoDispose();
-        Tile tile = new(texture, 0, 0, Canvas, Canvas, Ref<int>.In(-Center), Ref<int>.In(-Center));
+        Tile tile = new(texture, 0, 0, CanvasWidth, CanvasHeight,
+            Ref<int>.In(-NdsObjRenderer.CenterX), Ref<int>.In(-NdsObjRenderer.CenterY));
         bitmap = new Bitmap(tile, null!) { smooth = false, scaleX = 1, scaleY = 1 };
         AttachSibling(bitmap, hero.spr, ref bitmapLayer, false);
     }

@@ -632,10 +632,10 @@ Check(SpeedMatch.RiseVelocity(KirbyActions.Jump, -2682) == -2682 && SpeedMatch.R
           icon.AsSpan(Pixel(16, 23), 4).SequenceEqual(new byte[] { 0, 255, 0, 255 }), "Apply both OBJ flips");
 }
 {
-    // The bridge keeps OBJ pieces from screen x -127 to 380 (#63): OAM x up to
-    // 383 is to the right, 384..511 to the left. Kirby at screen (128, 100).
+    // OAM is read over the original builder's range, screen x -63..256 and
+    // y -63..192, and culled pieces come from the bridge (#67). Kirby at (128, 100).
     byte[] oam = new byte[1024], vram = new byte[256 * 1024], palette = new byte[512];
-    byte[] rgba = new byte[Kirby.Runtime.NdsObjRenderer.Canvas * Kirby.Runtime.NdsObjRenderer.Canvas * 4];
+    byte[] rgba = new byte[Kirby.Runtime.NdsObjRenderer.CanvasWidth * Kirby.Runtime.NdsObjRenderer.CanvasHeight * 4];
     void Obj(int index, ushort a0, ushort a1, ushort a2)
     {
         System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(oam.AsSpan(index * 8), a0);
@@ -644,15 +644,29 @@ Check(SpeedMatch.RiseVelocity(KirbyActions.Jump, -2682) == -2682 && SpeedMatch.R
     }
     for (int index = 0; index < 128; index++) Obj(index, 0x0200, 0, 0);
     vram.AsSpan(0, 32).Fill(0x11); // Tile 0: colour 1 everywhere.
-    System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(palette.AsSpan(32 + 2), 0x001F);
-    // Canvas row 256 is screen y 100; canvas column 256 is screen x 128.
-    bool Drawn(int screenX) => rgba[(256 * 512 + 128 + screenX) * 4 + 3] == 255;
-    Obj(0, 100, 300, 1 << 12);
-    Kirby.Runtime.NdsObjRenderer.Render(0x10, oam, vram, palette, rgba, 128, 100);
-    Check(Drawn(300) && Drawn(307), "OAM x 300 is drawn 172 px right of Kirby, not wrapped off the canvas");
-    Obj(0, 100, 400, 1 << 12);
-    Kirby.Runtime.NdsObjRenderer.Render(0x10, oam, vram, palette, rgba, 128, 100);
-    Check(Drawn(400 - 512) && Drawn(400 - 512 + 7), "OAM x 400 is screen x -112, left of the DS screen");
+    System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(palette.AsSpan(32 + 2), 0x001F); // Bank 1: red.
+    System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(palette.AsSpan(64 + 2), 0x7C00); // Bank 2: blue.
+    int At(int screenX, int screenY) =>
+        ((Kirby.Runtime.NdsObjRenderer.CenterY + screenY - 100) * Kirby.Runtime.NdsObjRenderer.CanvasWidth +
+         Kirby.Runtime.NdsObjRenderer.CenterX + screenX - 128) * 4;
+    bool Drawn(int screenX, int screenY = 100) => rgba[At(screenX, screenY) + 3] == 255;
+    void Draw(params Kirby.Runtime.FarObject[] far) => Kirby.Runtime.NdsObjRenderer.Render(0x10, oam, vram, palette, rgba, 128, 100, far: far);
+    Obj(0, 100, 256, 1 << 12);
+    Draw();
+    Check(Drawn(256) && Drawn(263), "OAM x 256, the builder's right limit, is drawn right of the DS screen, not wrapped");
+    Obj(0, 100, 460, 1 << 12);
+    Draw();
+    Check(Drawn(-52) && Drawn(-45), "OAM x 460 is screen x -52");
+    Obj(0, 0xF8, 0, 1 << 12);
+    Draw();
+    Check(!Drawn(0, -8), "An unused OAM entry (y 0xF8, attr1 0) is not drawn");
+    Obj(0, 100, 200, 1 << 12);
+    Draw(new Kirby.Runtime.FarObject { X = 600, Y = 100, Attr0 = 100, Attr1 = 600 & 511, Attr2 = 1 << 12, Order = 1 });
+    Check(Drawn(600) && Drawn(607) && Drawn(200), "A culled piece at screen x 600 is drawn 472 px right of Kirby");
+    Draw(new Kirby.Runtime.FarObject { X = 200, Y = 100, Attr0 = 100, Attr1 = 200, Attr2 = 2 << 12, Order = 0 });
+    Check(rgba[At(200, 100) + 2] == 255 && rgba[At(200, 100)] == 0, "A culled piece written before OAM entry 0 draws in front of it");
+    Draw(new Kirby.Runtime.FarObject { X = 200, Y = 100, Attr0 = 100, Attr1 = 200, Attr2 = 2 << 12, Order = 1 });
+    Check(rgba[At(200, 100)] == 255 && rgba[At(200, 100) + 2] == 0, "A culled piece written after OAM entry 0 draws behind it");
 }
 {
     // Same IDs and order as KirbyNdsProvider.Abilities (original abilities 2..25).
