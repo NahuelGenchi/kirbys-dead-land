@@ -1248,3 +1248,19 @@ the all-ability rendering tests as full gameplay acceptance.
   `Grenade` affix; `235012` resumed with the affix still on the slot item, and
   its pause card listed it. Saves unchanged, no fatal log.
 - Source: `python3 scripts/check.py` passes.
+## 2026-10-07 — Crash hits every enemy on the Dead Cells screen (#69)
+
+- Owner recording 00-25-03: Crash left a Zombie and an archer lower on screen
+  untouched. Only enemies with a source object near Kirby could be hit, and the
+  original only collides objects within 32 px of its 256×192 screen.
+- Measured on the bridge: Crash, Paint and Mike each make one Kirby-owned
+  slot-2 record, 512×512 around him, for one frame (160, 70, 40/60 damage).
+- `ScreenAttacks` (core) and `KirbyScreenAttacks` (runtime): the host strikes
+  every enemy in its viewport that the original cannot reach, with the record's
+  own damage converted as usual. New `screen` lab plan.
+- Live (`repros/screen-attack-20261007`): Crash `005031`, Paint `004842`,
+  Mike `004639` killed all four Zombies in view; the off-screen one was
+  untouched. Saves unchanged, no fatal log. A Zombie spawned just outside the
+  view died ~90 frames later from a sourceless host hit in every run (Mike
+  too); not caused by this change, not investigated.
+- Source: `python3 scripts/check.py` passes (286 assertions).

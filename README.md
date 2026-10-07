@@ -188,6 +188,10 @@ while playing Kirby; healing, equipment and interaction tutorials remain availab
   Lethal source damage ends the host run; New Game resets Kirby's full original state.
 - Original Crash, Paint and Mike effects were verified in the running host game,
   with the HUD outside the background tint.
+- Crash, Paint and Mike struck every Zombie in the Dead Cells view, including
+  ones the original could not reach, and left one off screen untouched (runs
+  `20261007-005031`, `004842`, `004639`; see
+  [Screen-wide attacks](docs/GAMEPLAY_FIDELITY.md#screen-wide-attacks-69)).
 - Original ladder, Suplex, Cook, helper and Wheel helper riding have source tests.
 - Kirby rides a real host `SimpleElevator` up and down in isolated live runs,
   standing on its surface at full speed both ways, and can jump on a rising one
