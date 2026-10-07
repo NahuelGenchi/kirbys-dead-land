@@ -4,8 +4,8 @@ namespace Kirby.Core;
 /// Matches Kirby's movement to the Beheaded's, as measured in the host. The
 /// original controller still runs every frame with its own states, animation
 /// and collision; Kirby then moves on through free space along the motion it
-/// made, so he runs, rolls, falls and flies at the Beheaded's speeds. He
-/// climbs at the original's own speed, faster than the Beheaded's ladders.
+/// made, so he runs, rolls, falls and flies at the Beheaded's speeds. His
+/// climb speeds up as his run does, faster than the Beheaded's ladders.
 /// Added motion stops a pixel short of walls, floors and ceilings, so every
 /// contact is still made by the original collision.
 /// </summary>
@@ -29,6 +29,11 @@ public static class SpeedMatch
     public const double FallScale = 403.0 / 60 / (896 / 256.0);
     /// <summary>Floating rises and sinks at the Beheaded's tempo, as it moves across.</summary>
     public const double FlightScale = GroundScale;
+    /// <summary>
+    /// The climb keeps its original lead over the dash (139 px/s up, 165 down,
+    /// against 124): it speeds up as the run does, to 265 and 315 px/s.
+    /// </summary>
+    public const double ClimbScale = GroundScale;
     /// <summary>Vertical velocity of the original's last take-off frame; the burst before it is kept.</summary>
     public const int JumpBurstEnd = -744;
     /// <summary>
@@ -54,7 +59,7 @@ public static class SpeedMatch
     public const ushort Free = 0, Solid = 3, Water = 130, OneWay = 131, SlopeUpRight = 132, SlopeUpLeft = 133, Ladder = 134;
     public delegate ushort Terrain(int cx, int cy);
 
-    public enum Motion { None, Ground, Air, Float, Slide, Carry }
+    public enum Motion { None, Ground, Air, Float, Slide, Carry, Climb }
 
     /// <summary>
     /// An ability move that carries Kirby: a dash attack, or any move faster
@@ -107,6 +112,7 @@ public static class SpeedMatch
         KirbyActions.Jump or KirbyActions.Fall => Motion.Air,
         KirbyActions.Float => Motion.Float,
         KirbyActions.Slide => Motion.Slide,
+        KirbyActions.Climb => Motion.Climb,
         Carry => Motion.Carry,
         _ => Motion.None,
     };
@@ -145,6 +151,7 @@ public static class SpeedMatch
     {
         Motion.Air when dy > 0 => dy * FallScale,
         Motion.Float => dy * FlightScale,
+        Motion.Climb => dy * ClimbScale,
         _ => dy,
     };
 
@@ -162,6 +169,7 @@ public static class SpeedMatch
         double ex = Horizontal(motion, direction, dx, vx) - dx;
         double ey = Vertical(motion, dy) - dy;
         double x = x1, feet = feet1;
+        if (motion == Motion.Climb) return (x, feet + Climbed(tile, x, feet, ey));
         // A carrying ability move follows the floor while the original keeps Kirby on it; hops leave it to the air.
         if (motion is Motion.Ground or Motion.Slide || (motion == Motion.Carry && Surface(tile, x1, feet1, Edge) is not null))
         {
@@ -177,6 +185,36 @@ public static class SpeedMatch
         if (ey > 0) feet += Math.Min(ey, Math.Max(0, FreeBelow(tile, x, feet) - LandingMargin));
         else if (ey < 0) feet -= Math.Min(-ey, Math.Max(0, FreeAbove(tile, x, feet) - Margin));
         return (x, feet);
+    }
+
+    /// <summary>
+    /// Added climbing, limited to the ladder Kirby is on. It stops a full
+    /// step short of the ladder's ends (the one-way top it leads onto counts
+    /// as ladder) and of ceilings and floors, so the original makes its own
+    /// last steps onto the top, off the bottom and into every contact. Like the
+    /// other terrain tests it looks four cells ahead, more than a frame's climb.
+    /// </summary>
+    private static double Climbed(Terrain tile, double x, double feet, double ey)
+    {
+        int cx = Cell(x);
+        static bool Climbable(ushort t) => t is Ladder or OneWay;
+        if (ey < 0)
+        {
+            int cy = Cell(feet - Edge), last = cy - 4;
+            if (!Climbable(tile(cx, cy))) return 0;
+            while (cy > last && Climbable(tile(cx, cy - 1))) cy--;
+            double room = Math.Min(feet - cy * 24 - LandingMargin, FreeAbove(tile, x, feet) - Margin);
+            return -Math.Min(-ey, Math.Max(0, room));
+        }
+        if (ey > 0)
+        {
+            int cy = Cell(feet + Edge), last = cy + 4;
+            if (!Climbable(tile(cx, cy))) return 0;
+            while (cy < last && Climbable(tile(cx, cy + 1))) cy++;
+            double room = Math.Min((cy + 1) * 24 - feet, FreeBelow(tile, x, feet)) - LandingMargin;
+            return Math.Min(ey, Math.Max(0, room));
+        }
+        return 0;
     }
 
     /// <summary>Kirby moved along the floor or slope under him, or null when his body would meet a wall there.</summary>

@@ -36,6 +36,14 @@ preserved; generated assets and native dependencies remain in the private data r
 - Items Kirby cannot use (every weapon other than a shield, and skills) get
   Dead Cells' own "Can't use that right now" message and stay on the ground; a
   long press still recycles them.
+- In a Kirby run, every new floor weapon other than a shield, and every skill,
+  becomes a colorless **ability item**: one of the 24 copy abilities, shown with
+  its original icon. Walking near one shows its name, description and colorless
+  rarity. It cannot be picked up: inhale it and swallow it to copy that ability;
+  spitting it out puts it back. While copied, the ability's item fills a weapon
+  slot and the HUD; the forge and shops are not adapted yet, and quality and
+  affixes have no effect yet (#56–#58). See
+  [ability items](docs/GAMEPLAY_FIDELITY.md#ability-items-intentional-addition).
 - Original inhale, mouthful, Down-to-swallow, spit, flight, guard, slide and copy
   discard are executed by the ROM. All 24 original copy forms load through the
   original transformation code, rather than replacing them with host weapons.
@@ -87,7 +95,8 @@ direction dashes, and copy abilities deal damage on the host's scale. The
 original game's hurt and guard palette flash is kept but softened to a tint,
 because the whitened frames vanished against light scenery on a large monitor.
 Kirby no longer jumps a terrain cell for a frame as he moves. His slide (Down +
-jump) is his roll: it passes Dead Cells roll-zone tunnels and bursts doors. In
+jump) is his roll: it passes Dead Cells roll-zone tunnels and bursts doors.
+Suplex's grab lunge, which doors resist, bursts them the same way. In
 the air, the Dead Cells dive binding (Down + jump by default) makes him stomp
 with the host's own dive attack: it hits and stuns enemies and breaks
 breakable floors once the Ram rune is unlocked.
@@ -95,8 +104,8 @@ breakable floors once the Ram rune is unlocked.
 Kirby moves at the Beheaded's speeds, measured in the game: he runs and steers
 in the air at 236.5 px/s, slides as far and as fast as the Beheaded rolls,
 falls at 403 px/s, stomps at the dive's 900 px/s and floats across at running
-speed. He climbs at his own original speed (139 px/s up, 165 px/s down), faster
-than the Beheaded's 97.5 px/s. He climbs ladders, chains and vines grown with
+speed. His climb speeds up as his run does, to 265 px/s up and 315 px/s down,
+faster than the Beheaded's 97.5 px/s. He climbs ladders, chains and vines grown with
 the Vine rune, and climbs from a vine onto the ledge it leads to. He stops when the direction is released and
 turns at once, and his jump keeps its height but peaks as fast as the
 Beheaded's. Dash attacks, Wheel's roll and other copy-ability moves faster
@@ -171,6 +180,8 @@ while playing Kirby; healing, equipment and interaction tutorials remain availab
 - Standing 12×12 and crouching 12×6 source hurtboxes passed actual host collision
   queries: interior attacks hit and attacks just outside miss. Every temporary
   projection restored the host physical body afterward.
+- A generated Dead Cells door breaks from Suplex's dash grab lunge, through the
+  host's roll check (run `20261006-211833`; the control without it left the door shut).
 - A generated Dead Cells door breaks from original Sword damage. Actual biome
   transitions preserve copy and shield, and changing outfits preserves health.
   Lethal source damage ends the host run; New Game resets Kirby's full original state.
@@ -220,6 +231,11 @@ while playing Kirby; healing, equipment and interaction tutorials remain availab
   muted, retaining Dead Cells music. Jump/landing audio and the SDL queue passed
   tests, including coexistence with the host's SDL3 and successful queuing to the
   default desktop audio device.
+- In live Kirby runs the start level's starting bow, weapons and skills became
+  ability items while shields and gold stayed. An ability item was inhaled, spat
+  back to its cell, inhaled again and swallowed into its ability, which then
+  filled the weapon slot and the HUD; discarding cleared both. See
+  [ability items](docs/RUNTIME_LAUNCH.md#ability-items-55).
 - Actual lab launches have preserved the hashes of the user's original local
   and Steam saves. DCCM disables achievements.
 
@@ -232,6 +248,7 @@ beneath `~/.local/share/kirby-dead-cells/`, not into system directories.
 ```sh
 python3 scripts/setup_runtime.py --build
 python3 tools/nds_build.py
+python3 tools/capture_ability_icons.py
 python3 tools/build_outfit.py --help
 python3 scripts/stage_runtime.py --original-runtime \
   --outfit-pack "$HOME/.local/share/kirby-dead-cells/outfit-build/res.pak"

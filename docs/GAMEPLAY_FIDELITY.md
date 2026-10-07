@@ -15,13 +15,12 @@ in [NDS_BRIDGE.md](NDS_BRIDGE.md). The original bootstrap experiment remains in
 | System | Original code and host adapter |
 |---|---|
 | Clock | 33,513,982 / 560,190 source ticks per second. A display within 3% of that rate presents one original frame per host frame, like an emulator synchronized to vblank; other rates accumulate real time |
-| Movement | The ROM updates fixed-point position, velocity and action state; the host follows its physical foot. With `MatchHostSpeed` (default) Kirby moves at the Beheaded's measured speeds: each original frame's own motion is carried on through free space (run and air control 236.5 px/s, float across at the same speed, fall 403 px/s, floating up and down at the run's tempo), the original horizontal velocity is cleared when the direction is released or reversed, and the jump keeps its 50 px but peaks after 0.25 s, as the Beheaded's does. Added motion stops short of walls and ceilings, leaves the original a full fall step above floors, follows slopes at the original's whole-pixel surface, and never applies to hits, swimming, climbing or ability moves. Ladders, chains and vines keep the original climb, 139 px/s up and 165 px/s down, faster than the Beheaded's 97.5 px/s average: matched to that average, the owner found climbing too slow (#48). The original walk and dash cycles play faster with the run (up to 1.67 times, one frame a pose), so his feet cover about the ground they did natively. `false` keeps the original DS speeds (the stomp keeps the dive's) |
-| Movement | The ROM updates fixed-point position, velocity and action state; the host follows its physical foot. With `MatchHostSpeed` (default) Kirby moves at the Beheaded's measured speeds: each original frame's own motion is carried on through free space (run and air control 236.5 px/s, float across at the same speed, fall 403 px/s, ladders 97.5 px/s both ways, floating up and down at the run's tempo), the original horizontal velocity is cleared when the direction is released or reversed, and the jump keeps its 50 px but peaks after 0.25 s, as the Beheaded's does. Added motion stops short of walls and ceilings, leaves the original a full fall step above floors, follows slopes at the original's whole-pixel surface, and never applies to hits or swimming. Ability moves keep their original motion unless they carry Kirby: a dash attack, or any move faster than the original dash, moves at the run's scale (see [Carrying ability moves](#carrying-ability-moves-40)). The original walk and dash cycles play faster with the run (up to 1.67 times, one frame a pose), so his feet cover about the ground they did natively. `false` keeps the original DS speeds (the stomp keeps the dive's) |
+| Movement | The ROM updates fixed-point position, velocity and action state; the host follows its physical foot. With `MatchHostSpeed` (default) Kirby moves at the Beheaded's measured speeds: each original frame's own motion is carried on through free space (run and air control 236.5 px/s, float across at the same speed, fall 403 px/s, floating up and down at the run's tempo), the original horizontal velocity is cleared when the direction is released or reversed, and the jump keeps its 50 px but peaks after 0.25 s, as the Beheaded's does. Added motion stops short of walls and ceilings, leaves the original a full fall step above floors, follows slopes at the original's whole-pixel surface, and never applies to hits or swimming. Ladders, chains and vines climb as much faster than the original as the run, 265 px/s up and 315 px/s down (original 139 and 165, the Beheaded's average 97.5): at the original's speed the owner still found climbing too slow (#48, #51). The added climb stops a full step short of a ladder's ends, the one-way top it leads onto, ceilings and floors, so the original makes its own last steps onto and off the ladder. Ability moves keep their original motion unless they carry Kirby: a dash attack, or any move faster than the original dash, moves at the run's scale (see [Carrying ability moves](#carrying-ability-moves-40)). The original walk and dash cycles play faster with the run (up to 1.67 times, one frame a pose), so his feet cover about the ground they did natively. `false` keeps the original DS speeds (the stomp keeps the dive's) |
 | Terrain | Nearby host solids, one-way floors, slopes, ladders and water become source collision cells; all linked source objects and cached terrain probes move together when the window rebases by whole cells, while effects attached to a parent (Fire's head flame, Plasma's spark, attack effects) keep their offsets from it. Host movement of Kirby (speed match, stomp) moves only him and his terrain probes, so thrown bombs, cutters, effects and the helper keep their original paths. Over a moving host elevator the window is lifted to its surface and original objects ride with him (see [Host elevators](#host-elevators-deviation)) |
 | Input | Existing host bindings become original digital buttons; ordinary source directional combinations still apply. A held direction dashes through the original double tap (`AlwaysDash`); a light analog tilt walks. A key bound to both Up and jump (W and the Up arrow by default) climbs at a ladder or chain, as in the host, instead of jumping first |
 | Terrain | Nearby host solids, one-way floors, slopes, ladders and water become source collision cells. Vines grown with the Vine rune (`en.inter.VineLadder`) have no collision bits, only level spots (0, where the Beheaded climbs, and 18); their cells become source ladders, and the solid blocks a vine passes through or ends under become one-way ladder tops in that column. A ladder under a solid block stops the original below it, so this deviation lets Kirby climb onto the ledge, as the Beheaded's `exitLadderTop` does; all linked source objects and cached terrain probes move together when the window rebases by whole cells, while effects attached to a parent (Fire's head flame, Plasma's spark, attack effects) keep their offsets from it. Host movement of Kirby (speed match, stomp) moves only him and his terrain probes, so thrown bombs, cutters, effects and the helper keep their original paths |
 | Input | Existing host bindings become original digital buttons; ordinary source directional combinations still apply. A held direction dashes through the original double tap (`AlwaysDash`); a light analog tilt walks. A key bound to both Up and jump (W and the Up arrow by default) climbs at a ladder, chain or vine, as in the host, instead of jumping first |
-| Roll | Kirby's original slide is his roll and covers the Beheaded's roll: 131 px at up to 339 px/s. Host roll-zone tunnels (collision 65) open while he slides and stay open until he leaves one entered by sliding; walking cannot enter. The slide's fast part counts as a roll for the host's door and breakable-tile checks |
+| Roll | Kirby's original slide is his roll and covers the Beheaded's roll: 131 px at up to 339 px/s. Host roll-zone tunnels (collision 65) open while he slides and stay open until he leaves one entered by sliding; walking cannot enter. The slide's fast part counts as a roll for the host's door and breakable-tile checks, and Suplex's grab lunge for its door check (see [Suplex's lunge bursts doors](#suplexs-lunge-bursts-doors-50)) |
 | Dive attack | The player's host dive binding in the air or on a ladder or chain (original jump, fall, float or climb) starts the host `DiveAttack` under its own rules. The original controller keeps its falling or exhaling animation and physics (3.5 px/frame cap) and drops straight down; the host adds 11.5 px/frame of descent through free space, 15 px a frame in all like the Beheaded's dive (about 900 px/s), and leaves the original a full fall step to make the floor contact; the host skill resolves the landing (shockwave, stun, damage, breakable floors with the Ram rune). Only what stops the original fall counts as floor: solids, slopes and one-way platforms from above, never ladders or chains. Enemy touch damage is off while stomping and for 30 frames after landing |
 | Camera | `CameraZoom` (default 1, the host camera) can zoom the host viewport; 2 shows about 200 host pixels of height, close to the DS screen's 192. Host cinematics and host zoom changes keep their framing |
 | Palette flashes | The original hurt and guard flashes of Kirby's first two palette banks are shown at `FlashStrength` (0.35) of their colour change, with original timing; lasting palette changes are adopted after four frames |
@@ -64,7 +63,8 @@ Its source collision metadata carries that ability before absorption; the adapte
 does not overwrite the mouthful aggregate afterward. Thus multiple captures use
 the original Mix machinery. Each actual captured host enemy is removed once, and
 Kirby's form changes when the ROM performs the swallow/transformation. Spitting
-keeps the original source behavior.
+keeps the original source behavior. Floor ability items carry their own ability
+the same way; see [ability items](#ability-items-intentional-addition).
 
 ### Projectiles in the mouthful
 
@@ -472,6 +472,14 @@ grown through the host's own `VineLadder.activate`:
   165.0 px/s per original frame; Kirby stood on the ledge (feet 2712, the
   block's top, one frame after 2711.19 as before) and Down climbed back to the
   floor (2880). Life stayed 76.
+- `20261006-211757` (#51, the climb sped up as the run, same data root): two
+  climbs up at 265.2 px/s and one down at 315.3 px/s per original frame;
+  Kirby stood on the ledge (1344, the block's top) and climbed back to the
+  floor (1656). A natural Grenader on the ledge hit him at 9.6 s, and its
+  recoil overlapped the second Down, which did not start a descent.
+- `20261006-211905` (#51, `ladder` setup, an ordinary ten-cell ladder): two
+  climbs each way at 265.2 and 315.3 px/s; Kirby stood on the ladder top (600)
+  each time and climbed down to the floor (864). Life stayed 76.
 
 Not run: hanging vines (`goingUp` false), a stomp from a vine, and a vine in a
 saved run after loading.
@@ -538,6 +546,33 @@ ability probe replaying original buttons (`KIRBY_LAB_ABILITY_PLAN`):
 
 Both runs ended at their time limit without fatal log lines. Not run live:
 other abilities, slopes and ledges during a carrying move, Wheel turning.
+### Suplex's lunge bursts doors (#50)
+
+Owner recording 2026-10-06 21:05: Suplex Kirby's dash attack ran into a closed
+door, bounced off it and left it intact. A copy attack reaches a host door only
+through the original object `KirbyEnemies` pairs with it, and every non-mob
+pairing (doors, props, gold, breakable tiles) takes the boss option: original
+hit-node mask `0x53` rejects grab, Cook and inhale and keeps damage. Suplex's
+grab only captures, so it never connected with a door. Every other copy dash
+attack damages the door's object.
+
+Doors keep that resistance; grabbing the door's Waddle Dee stand-in would draw
+it in Kirby's hands. Instead `HostStrikes.Grab` (`src/core/`) reports Suplex's
+lunge to the host's own `Hero.canBreakDoors`, as the slide's fast part already
+does, so the host bursts the door as it does for the Beheaded's roll. It holds
+while Suplex (ability 6) carries Kirby (`SpeedMatch.Carry`) at 2 px a frame or
+more: the 24-frame lunge of the dash grab (1760 falling to 1024), and the
+standing, Down+B and mid-air lunges that carry him. The whiff stumble after the
+lunge (32 frames at 384) does not count. Headless (`tests/speed`): a wall within
+the lunge ends the grab on the frame Kirby meets it (action `0509`, velocity
+0); the strike holds until he is a pixel from it. Breakable tiles are unchanged:
+`canBreakTiles` still reports only the slide.
+
+Live in `repros/suplex-door-20261006` (see `docs/RUNTIME_LAUNCH.md`, "Suplex
+lunge into doors"): with the change, the lunge broke a real generated door on
+its sixth frame; the control without the door hook bounced off a door the same
+way and left it closed.
+
 ### Cinematic walks (intentional deviation)
 
 Issue #17. Before this change, the source machine stopped during every host
@@ -629,6 +664,83 @@ Limits: the stand-in's own data (Brutality starting sword) is only drawn, never
 equipped. A host weapon that changes its own HUD icon (Shovel, via
 `HUD.updateIcon`) could briefly replace the ability icon until the next refresh;
 this was not exercised. Live checks used a 1024×768 HUD (`pixelScale` 1.5).
+
+### Ability items (intentional addition)
+
+Issue #55, step 1 of #54. Kirby fights only with his own moves, copy abilities
+and a Dead Cells shield, so host weapons and skills on the floor are useless to
+him. While Kirby plays, they become **ability items**: one Dead Cells item per
+original copy ability. The original game has no such items; this is a mod
+addition built from host items and the original inhale and swallow.
+
+- **Items.** `tools/build_outfit.py` adds 24 `KirbyAbility<Name>` rows to the
+  private outfit pack (host item group Melee, not droppable by the host's own
+  pools) with matching `weapon` rows copied from the starting sword's. The host
+  needs a weapon row and weapon object for any item in a weapon slot;
+  `Hook__Weapon.create` builds the starting sword's class for an ability item
+  (the host throws for an item ID it does not know), and `KirbyMod` never lets
+  it attack. Icons are the original bottom-screen ability icons that the HUD
+  shows, captured headlessly by `tools/capture_ability_icons.py` and reduced from
+  32×32 to the host's 24×24 item cells (area average, then snapped to the icon's
+  own colors). Each item is created with the host's `Colorless` affix, so the
+  highest scroll stat applies, at the item level of the item it replaces; it has
+  no other rolls yet (#56, #57).
+- **Replacement.** `ItemDrop`'s constructor passes its item through `initItem`
+  before anything else, and every floor item is built that way: level loot,
+  chests, enemy drops and the run's starting items. When the run's outfit is
+  Kirby, a host weapon other than a shield, or a skill (host kind `Active`),
+  becomes a random ability item, chosen uniformly among the 24 like an enemy's
+  copy and not from the level seed. Shields, amulets, food, gold, blueprints and
+  keys stay. Saved levels are unserialized without `initItem` and keep their
+  items. Shop booths are a separate entity and still sell host weapons and
+  skills (#58). The run's starting Rusty Sword is equipped by the host, not
+  dropped; it stays in its slot until the first copy replaces it (#39 owns the
+  rule that it never attacks).
+- **Taking one.** `InventItem.isUsefulFor` is false for an ability item for every
+  hero. A short press shows "Inhale and swallow it to copy"; a long press still
+  recycles it for gold. Walking near one shows the host's own item tip: its name
+  (`Yo-Yo` with a hyphen) and item level, "Copy ability" in place of the weapon
+  row's DPS, the ability's description from `AbilityDescriptions`, and the host's
+  "Colorless (the highest level applies)" line. The prompt keeps the host's
+  "Take" label.
+- **Inhale and swallow.** While Kirby is in base form, the only form that can
+  inhale, ability items pair with the same 31 original proxies as enemies
+  (`KirbyEnemies`), with the item's copy byte, full HP, no body contact and a
+  hurtbox of at least 16×16. They take no damage. The item follows its proxy only
+  while the original inhale pulls it (proxy flags 2 and 32), and the host's own
+  float physics is held meanwhile; an original hit recoil (a spit star or a slide
+  striking the proxy) never moves it. Once it is in the original mouth, the item
+  leaves the floor. The original swallow
+  then copies its ability, exactly as for an enemy carrying the same copy byte;
+  in a mouthful of several objects the original roulette decides, and only the
+  item of the chosen ability is taken. When the original mouth empties in base
+  form (a spit, or a mouthful lost), the items go back where they lay before the
+  suction, without the host loot bounce. A mouthful carried into another level
+  returns under Kirby there. Copied Kirby cannot inhale, as in the original, so
+  he discards his copy first.
+- **Weapon slot.** Once per host frame `KirbyAbilityItems.Sync` keeps the slots in
+  step with the copy: the copy's item sits in one non-shield slot, and base form
+  has none. The swallowed floor item itself goes into the slot; a copy from an
+  enemy gets a new base item of its ability at the level's loot level. The slot
+  is the one already holding that item, else a slot holding another non-shield
+  weapon (removed: it is unusable to Kirby), else an empty slot, else a shield
+  other than the retained one (dropped to the floor). The host HUD is then
+  reassigned with `Hero.hudInitItems` (`HUD.refreshItems` only redraws each
+  slot's current item). Losing the copy removes its item; #56 will keep it with
+  the dropped star for 7 seconds. The HUD overlay of the original icon (#18)
+  still draws over the slot.
+
+Limits: an ability item's proxy is an ordinary original enemy object, so base
+Kirby's attacks can strike it. In lab run `20261006-223514` a spit star struck a
+spat item's proxy and, before the recoil rule above, pushed the item three cells.
+A single spit star is therefore expected to burst on an ability item as on an
+enemy (not checked visually). Making the proxy inhalable but not hittable needs a
+bridge change. Items in Kirby's mouth when the game is saved are not kept; after a
+reload, the original swallow gives a new base item of that ability. The forge
+and shops do not handle ability items yet (#58), and quality and affixes have
+no effect yet (#56, #57). Only the Prisoners' Quarters start level and items the
+probe created were checked live; other biomes' loot, chests, timed doors, Boss
+Rush and the Collector's armory were not exercised.
 
 ## Evidence and current limits
 

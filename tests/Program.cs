@@ -425,6 +425,11 @@ Check(KirbyActions.CanStomp(KirbyActions.Jump) && KirbyActions.CanStomp(KirbyAct
 Check(!KirbyActions.CanStomp(KirbyActions.Standing) && !KirbyActions.CanStomp(KirbyActions.Slide) && !KirbyActions.CanStomp(KirbyActions.Ability),
     "No stomp on the ground, while sliding or during an exhale or inhale");
 Check(KirbyActions.CanSlide(KirbyActions.Walk) && !KirbyActions.CanSlide(KirbyActions.Fall), "Slides start on the ground only");
+Check(HostStrikes.Slide(KirbyActions.Slide, -704) && !HostStrikes.Slide(KirbyActions.Slide, 384) && !HostStrikes.Slide(KirbyActions.Dash, 704),
+    "Only the slide's fast part strikes like a roll");
+Check(HostStrikes.Grab(HostStrikes.Suplex, SpeedMatch.Carry, -1766) && !HostStrikes.Grab(HostStrikes.Suplex, SpeedMatch.Carry, 300) &&
+      !HostStrikes.Grab(HostStrikes.Suplex, KirbyActions.Dash, 528) && !HostStrikes.Grab(18, SpeedMatch.Carry, 1766),
+    "Only Suplex's fast grab lunge bursts doors");
 var stompRun = new StompController();
 Check(!stompRun.TryStart(KirbyActions.Standing, 480), "A grounded Kirby cannot stomp");
 Check(stompRun.TryStart(KirbyActions.Fall, 400) && stompRun.Active, "A falling Kirby stomps");
@@ -478,7 +483,18 @@ Check(MNear(16 * 2.75 * SpeedMatch.SlideFastScale + 27 * SpeedMatch.SlideSlowSca
 ushort MLadder(int cx, int cy) => cy >= 30 ? SpeedMatch.Solid : cx == 12 ? SpeedMatch.Ladder : SpeedMatch.Free;
 var mUp = SpeedMatch.Move(KirbyActions.Climb, 0, 0, 300, 600, 300, 600 - 592 / 256.0, MLadder);
 var mDown = SpeedMatch.Move(KirbyActions.Climb, 0, 0, 300, 600, 300, 600 + 704 / 256.0, MLadder);
-Check(mUp == (300, 600 - 592 / 256.0) && mDown == (300, 600 + 704 / 256.0), "Ladders keep the original climb, faster than the Beheaded's");
+Check(MNear((600 - mUp.Feet) * 60, 592 / 256.0 * 60 * SpeedMatch.GroundScale) && MNear((mDown.Feet - 600) * 60, 704 / 256.0 * 60 * SpeedMatch.GroundScale) && mUp.X == 300,
+    "Ladders climb as much faster than the original as the run");
+// The added climb stops a full step short of a ladder's ends, its one-way top and ceilings.
+ushort MTopped(int cx, int cy) => cy >= 30 ? SpeedMatch.Solid : cx != 12 || cy < 20 ? SpeedMatch.Free : cy == 20 ? SpeedMatch.OneWay : SpeedMatch.Ladder;
+Check(SpeedMatch.Move(KirbyActions.Climb, 0, 0, 300, 487, 300, 487 - 592 / 256.0, MTopped).Feet == 484 && SpeedMatch.Move(KirbyActions.Climb, 0, 0, 300, 483, 300, 483 - 592 / 256.0, MTopped).Feet == 483 - 592 / 256.0,
+    "Climbing up stops a step short of the one-way top; the original climbs onto it");
+Check(SpeedMatch.Move(KirbyActions.Climb, 0, 0, 300, 712, 300, 712 + 704 / 256.0, MTopped).Feet == 720 - SpeedMatch.LandingMargin &&
+    MNear(SpeedMatch.Move(KirbyActions.Climb, 0, 0, 300, 480, 300, 480 + 704 / 256.0, MTopped).Feet, 480 + 704 / 256.0 * SpeedMatch.GroundScale),
+    "Climbing down from the one-way top speeds up and stops a step above the floor");
+ushort MCapped(int cx, int cy) => cy >= 30 ? SpeedMatch.Solid : cx == 12 && cy >= 20 ? SpeedMatch.Ladder : cy == 19 ? SpeedMatch.Solid : SpeedMatch.Free;
+Check(SpeedMatch.Move(KirbyActions.Climb, 0, 0, 300, 502, 300, 502 - 592 / 256.0, MCapped).Feet == 480 + SpeedMatch.Height + SpeedMatch.Margin,
+    "Climbing up stops short of a solid block above the ladder");
 Check(SpeedMatch.Move(0x0B1A, 1, 512, 300, 700, 302, 690, MFlat) == (302, 690), "Other actions (hits, abilities, swimming) keep their original motion");
 // Contacts stay with the original collision.
 ushort MWall(int cx, int cy) => cy >= 30 || cx == 18 ? SpeedMatch.Solid : SpeedMatch.Free;
@@ -619,6 +635,7 @@ Check(SpeedMatch.RiseVelocity(KirbyActions.Jump, -2682) == -2682 && SpeedMatch.R
     // Same IDs and order as KirbyNdsProvider.Abilities (original abilities 2..25).
     string[] abilityIds = ["Cutter", "Mirror", "Beam", "Fighter", "Suplex", "YoYo", "Wheel", "Bomb", "Ice", "Fire", "Plasma", "Ninja",
         "Stone", "Wing", "Jet", "Copy", "Sword", "Hammer", "Parasol", "Paint", "Mike", "Crash", "Cook", "Sleep"];
+    Check(abilityIds[HostStrikes.Suplex - 2] == "Suplex", "HostStrikes uses Suplex's original ability ID");
     Check(abilityIds.All(AbilityDescriptions.Summaries.ContainsKey) && AbilityDescriptions.Summaries.Count == abilityIds.Length,
         "Every copy ability has exactly one description");
     Check(AbilityDescriptions.Summaries.Values.All(text => text.Length is > 20 and <= 110),
@@ -629,5 +646,53 @@ Check(SpeedMatch.RiseVelocity(KirbyActions.Jump, -2682) == -2682 && SpeedMatch.R
     Check(AbilityDescriptions.Describe("Fire") == AbilityDescriptions.Summaries["Fire"] + "\n" + AbilityDescriptions.Controls,
         "A description ends with the shared controls line");
     Check(AbilityDescriptions.Describe("Unknown") == AbilityDescriptions.Controls, "An unknown ability still shows the controls");
+}
+{
+    // Kirby ability items (#55).
+    Check(AbilityItems.ItemId("Fire") == "KirbyAbilityFire" && AbilityItems.AbilityOf("KirbyAbilityFire") == "Fire",
+        "Ability item IDs map to their ability and back");
+    Check(AbilityItems.AbilityOf("StartSword") is null && AbilityItems.AbilityOf("KirbyAbility") is null &&
+          AbilityItems.AbilityOf(null) is null, "Other item IDs are not ability items");
+    Check(AbilityItems.DisplayName("YoYo") == "Yo-Yo" && AbilityItems.DisplayName("Fire") == "Fire", "Yo-Yo keeps its hyphen");
+    Check(AbilityItems.Replaces(weapon: true, skill: false, shield: false, abilityItem: false), "A floor sword or bow becomes an ability item");
+    Check(AbilityItems.Replaces(weapon: false, skill: true, shield: false, abilityItem: false), "A floor skill becomes an ability item");
+    Check(!AbilityItems.Replaces(weapon: true, skill: false, shield: true, abilityItem: false), "A floor shield stays");
+    Check(!AbilityItems.Replaces(weapon: false, skill: false, shield: false, abilityItem: false), "Amulets, food and other items stay");
+    Check(!AbilityItems.Replaces(weapon: true, skill: false, shield: false, abilityItem: true), "An ability item is never replaced again");
+
+    Check(AbilityItems.Slot([SlotContent.Other, SlotContent.Empty]) == 0, "The copy replaces an unusable host weapon first");
+    Check(AbilityItems.Slot([SlotContent.Empty, SlotContent.Other]) == 1, "An unusable weapon is replaced before an empty slot is used");
+    Check(AbilityItems.Slot([SlotContent.Shield, SlotContent.Empty], retainedShieldSlot: 0) == 1, "The copy takes the empty slot beside a shield");
+    Check(AbilityItems.Slot([SlotContent.Empty, SlotContent.Ability]) == 1, "The slot already holding the copy's item is kept");
+    Check(AbilityItems.Slot([SlotContent.Shield, SlotContent.Shield], retainedShieldSlot: 1) == 0, "A second shield yields its slot");
+    Check(AbilityItems.Slot([SlotContent.Shield], retainedShieldSlot: 0) == -1, "The retained shield is never replaced");
+
+    object first = new(), second = new(), third = new();
+    var mouth = new MouthfulItems<object>();
+    mouth.Add(first, "Fire");
+    mouth.Add(first, "Fire");
+    mouth.Add(second, "Ice");
+    Check(mouth.Count == 2, "An item enters the mouth once");
+    var (taken, returned) = mouth.Resolve("Ice");
+    Check(ReferenceEquals(taken, second) && returned.Count == 1 && ReferenceEquals(returned[0], first) && mouth.Count == 0,
+        "The swallow takes the item of the copied ability; the others go back");
+    mouth.Add(first, "Fire");
+    mouth.Add(third, "Fire");
+    (taken, returned) = mouth.Resolve("Fire");
+    Check(ReferenceEquals(taken, first) && returned.Count == 1 && ReferenceEquals(returned[0], third), "Of two equal items the first is taken");
+    mouth.Add(first, "Fire");
+    (taken, returned) = mouth.Resolve(null);
+    Check(taken is null && returned.Count == 1, "A mouthful lost without a copy returns every item");
+    mouth.Add(first, "Fire");
+    mouth.Observe(mouthFull: false, baseForm: true);
+    Check(!mouth.Emptied, "The mouth is not empty before the original mouthful is seen");
+    mouth.Observe(mouthFull: true, baseForm: true);
+    mouth.Observe(mouthFull: false, baseForm: false);
+    Check(!mouth.Emptied, "A copied Kirby has swallowed, not spat");
+    mouth.Observe(mouthFull: false, baseForm: true);
+    Check(mouth.Emptied, "The mouth emptying in base form is a spit");
+    mouth.Resolve(null);
+    mouth.Observe(mouthFull: false, baseForm: true);
+    Check(!mouth.Emptied && mouth.Count == 0, "Settling clears the spit state");
 }
 Console.WriteLine($"PASS: {assertions} user-rule assertions. No claim of NDS physics or in-game verification.");

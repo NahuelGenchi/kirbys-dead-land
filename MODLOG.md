@@ -1119,3 +1119,78 @@ the all-ability rendering tests as full gameplay acceptance.
   - `013806` (tiers 1/1/5): Survival green `17ce75` + gray `b2c0dd`.
   - `013956` (tiers 1/5/1): Tactics purple `a051ff` + gray.
   - In both, discard restored the sword's red. Real saves were unchanged.
+## 2026-10-06 — Ability items replace weapon and skill loot (#55)
+
+- Owner request (#54): Kirby uses only his own moves, copy abilities and a
+  shield, so host weapons and skills on the floor are useless to him. Step 1 of
+  four: they become colorless Kirby ability items, taken only by the original
+  inhale and swallow. Owner decisions for later steps: enemy copies are base
+  items, Elites give high quality, a dropped star keeps its item for 7 s (#56).
+- Host findings (crashlink on the lab `hlboot.dat`): `ItemDrop`'s constructor
+  calls `initItem` before `super`; `Weapon.create` throws for an unknown item ID;
+  `HUD.refreshItems` only redraws each slot's current item, while
+  `Hero.hudInitItems` re-reads the inventory; Dead Cells rarity is affix-based
+  (`Colorless`, `QualityUp`, `Legendary`, rolled by `LootGen.finalizeItem`);
+  shops are `ShopBooth` entities; `Assets.getItem` honors the CDB icon size.
+- Build: `tools/capture_ability_icons.py` captures the 24 original bottom-screen
+  ability icons headlessly; `tools/build_outfit.py` adds 24 `KirbyAbility<Name>`
+  item rows, starting-sword `weapon` rows and 24×24 icons to the private outfit
+  pack.
+- Runtime: `KirbyAbilityItems` (replacement in `ItemDrop.initItem`, the weapon
+  object, no pickup, the item card's text, slot sync); `KirbyEnemies` pairs floor
+  ability items with proxies carrying their copy byte in base form and moves them
+  only with the original inhale (flag 32); `MouthfulItems` in `src/core` settles
+  the mouthful (the swallow takes the copied ability's item, a spit returns them
+  where they lay).
+- Source: `python3 scripts/check.py` passes (26 Python tests including 6 new for
+  the item rows, 267 core assertions, Release build). `tools/nds_tests.py` was
+  not run (no native change).
+- Live (separate data root `repros/ability-items-20261006`, `--input-plan items`):
+  final runs `223826` (Paint), `223958` (Beam) and `224129` (Ice) passed every
+  check; saves unchanged, no fatal log. Iterations fixed the HUD refresh
+  (`215522`), the spat item's bounce (`221819`) and a spit star's recoil pushing
+  a returned item (`223514`). `221525` captured the floor item tip.
+- Not run: the short-press hint, long-press recycle, an enemy copy filling the
+  slot, mixed item and enemy mouthfuls, save/resume with an ability item, other
+  biomes, chests, timed doors, shops and the forge.
+## 2026-10-06 — Suplex's dash attack bursts doors (#50)
+
+- Owner recording 21:05: Suplex Kirby's dash grab bounced off a closed door and
+  left it intact.
+- Cause: doors pair with original objects that take the boss resistance (mask
+  `0x53`: no grab, Cook or inhale). Suplex's grab only captures, so it never hit.
+- Fix: `HostStrikes.Grab` reports Suplex's grab lunge (carrying Kirby at 2 px a
+  frame or more) to the host's `Hero.canBreakDoors`, as the slide already does.
+  Doors keep their grab resistance. `HostStrikes.Slide` now holds the slide rule.
+- `python3 scripts/check.py` passes (248 core assertions; Release build 0
+  warnings/errors). `tests/speed` passes, with two new checks: the strike covers
+  the dash grab's 24 lunge frames only, and holds until the lunge is a pixel from
+  a wall.
+- Live (`repros/suplex-door-20261006`): `211833` broke a real door on the lunge's
+  sixth frame; control `211959` without the hook bounced off a door and left it
+  shut. Not run live: other Suplex lunges, doors on Kirby's left.
+## 2026-10-06 — Kirby climbs as much faster as he runs (#51)
+
+- Owner recording (21:07, base Kirby on a chain): still too slow after #48. Its
+  camera scroll put Kirby at about 137 px/s up, the original speed.
+- `SpeedMatch` now speeds the climb (`0x916`) up by the run's factor
+  (`ClimbScale` = `GroundScale`, 1.91×): 265 px/s up and 315 px/s down. The
+  original climbs up a little faster than it dashes; the matched climb keeps
+  that ratio to the matched run. The added climb stops a full step short of
+  the ladder's ends (a one-way top counts as ladder), ceilings and floors,
+  looking four cells ahead, so the original makes its last steps itself.
+- Source: `python3 scripts/check.py` passes (248 core assertions, Release build
+  0 warnings/errors). `tests/speed` passes all 36 checks. The new ones compare
+  the matched climb with the original controller at a one-way top, a ladder
+  under a solid block, a ladder ending in open air (the original stands for a
+  frame and falls off) and a hanging ladder's bottom; each lets go within one
+  original step of where the original does and ends in the same place.
+- Live (separate data root `repros/climb-20261006`): vine run
+  `20261006-211757` and ordinary ladder run `20261006-211905` climbed at
+  265.2 px/s up and 315.3 px/s down per original frame, stood on the top and
+  climbed down to the floor. In the vine run a natural Grenader's grenade
+  (9.6 s) and its recoil overlapped the second Down. Saves unchanged, no fatal
+  log. The movement row in `docs/GAMEPLAY_FIDELITY.md` had two copies after
+  merges; they are now one.
+- Not run: chains live, hanging vines, the climb animation's pace (its
+  hand-over-hand cycle keeps the original tempo, now slower than the motion).

@@ -3,10 +3,10 @@ using dc.en;
 
 namespace Kirby.Runtime;
 
-/// <summary>Keeps host AI and physics from moving an enemy or projectile held by the original engine.</summary>
+/// <summary>Keeps host AI and physics from moving an enemy, projectile or ability item held by the original engine.</summary>
 internal static class KirbyEnemyHooks
 {
-    private static bool Controls(Entity entity) => entity is Mob or Bullet or Grenade &&
+    private static bool Controls(Entity entity) => entity is Mob or Bullet or Grenade or dc.en.inter.ItemDrop &&
         !entity.destroyed && (entity.life > 0 || entity is not Mob) &&
         KirbyMod.Instance?.NativeProvider?.ControlsEnemy(entity) == true;
 

@@ -49,6 +49,7 @@ public sealed class KirbyMod(ModInfo info) : ModBase(info), IOnHeroUpdate,
             KirbyHostVisuals.Install(config.OutfitId);
             KirbyHostSkills.Install();
             KirbyHud.Install();
+            KirbyAbilityItems.Install(config.OutfitId);
             camera = new KirbyCamera(config.CameraZoom);
             RegisterProvider(new KirbyNdsProvider(config, Info.ModRoot.GetFilePath(".")));
         }
@@ -212,6 +213,8 @@ public sealed class KirbyMod(ModInfo info) : ModBase(info), IOnHeroUpdate,
     /// </summary>
     private bool IsUsefulFor(Hook_InventItem.orig_isUsefulFor orig, InventItem item, Hero hero)
     {
+        // An ability item is only taken by the original inhale and swallow.
+        if (KirbyAbilityItems.IsAbilityItem(item)) return false;
         KirbySession? state = Synchronize(hero);
         // Non-combat progression items, outfits, consumables and mutations remain host-owned.
         if (state is null || (item.kind is not InventItemKind.Weapon && item.kind is not InventItemKind.Active))

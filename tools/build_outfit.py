@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Build the separate Kirby outfit from the user's ROM and installed game assets.
 
-Writes only to a private output directory. The CDB changes contain two new rows;
-shared UI sheets retain every existing pixel/entry. Live animation is supplied by
+Writes only to a private output directory. The CDB changes add the outfit's two
+rows plus one item row and one weapon row per Kirby ability item (#55); shared UI
+sheets retain every existing pixel/entry. Live animation is supplied by
 KirbySpriteRenderer from the running original ROM, not these neutral fallbacks.
+Ability item icons come from tools/capture_ability_icons.py.
 """
 from __future__ import annotations
 import argparse
@@ -28,6 +30,12 @@ ROOT = Path.home() / '.local/share/kirby-dead-cells'
 MODEL = 'kirbySuperStarUltra'
 OUTFIT = 'KirbySuperStarUltra'
 BUILDER = 'kirby-original-runtime-outfit-v1'
+ABILITY_PREFIX = 'KirbyAbility'
+# Same IDs and order as KirbyNdsProvider.Abilities.
+ABILITIES = ['Cutter', 'Mirror', 'Beam', 'Fighter', 'Suplex', 'YoYo', 'Wheel', 'Bomb', 'Ice', 'Fire', 'Plasma', 'Ninja',
+             'Stone', 'Wing', 'Jet', 'Copy', 'Sword', 'Hammer', 'Parasol', 'Paint', 'Mike', 'Crash', 'Cook', 'Sleep']
+# Host item separator 4; the Colorless affix is added when the runtime creates each item.
+MELEE_GROUP = 4
 
 
 class Pak:
@@ -114,7 +122,35 @@ def used_icons(value):
     return found
 
 
-def build(pak, decoded, out):
+def ability_items(db, icons, cells, icon_dir):
+    """One colorless Melee item and one weapon row per original copy ability.
+
+    The weapon row repeats the starting sword's, so the host's weapon object and
+    weapon-data lookups work; KirbyMod never lets that weapon attack. Names and
+    descriptions are overridden at runtime from AbilityDescriptions.
+    """
+    sheets = {s['name']: s for s in db['sheets']}
+    if any(str(x.get('id', '')).startswith(ABILITY_PREFIX) for x in sheets['item']['lines']):
+        raise ValueError('Source PAK already contains Kirby ability items; use an unmodified source')
+    sword = next(x for x in sheets['weapon']['lines'] if x.get('item') == 'StartSword')
+    items, weapons, placed = {}, {}, {}
+    for name, cell in zip(ABILITIES, cells, strict=True):
+        icon = Image.open(icon_dir / f'{name}.png').convert('RGBA')
+        if icon.size != (24, 24):
+            raise ValueError(f'Ability icon {name} is not 24x24')
+        icons.alpha_composite(icon, (cell[0] * 24, cell[1] * 24))
+        item_id = ABILITY_PREFIX + name
+        items[item_id] = dict(id=item_id, name='Yo-Yo' if name == 'YoYo' else name,
+                              gameplayDesc='Kirby copy ability.', icon=dict(file='cardIcons.png', size=24, x=cell[0], y=cell[1]),
+                              tier1='Brutality', moneyCost=1500, cellCost=0, droppable=False, castCD=0, legendAffixes=[],
+                              tags=[{'tag': 'NoCritical'}], synergy=[], commonProps={}, props={},
+                              group=MELEE_GROUP, __separator_group_Name='Melee')
+        weapons[item_id] = dict(copy.deepcopy(sword), item=item_id)
+        placed[name] = list(cell)
+    return items, weapons, placed
+
+
+def build(pak, decoded, out, icon_dir):
     atlas = out / 'atlas'
     atlas.mkdir(parents=True)
     db = json.loads(pak.read('data.cdb'))
@@ -178,14 +214,16 @@ def build(pak, decoded, out):
     # Item rendering uses the shared cardIcons texture, regardless of icon.file.
     icons = image_read(pak, 'cardIcons.png')
     occupied = used_icons(db)
-    cell = next(((x, y) for y in reversed(range(icons.height // 24))
-                 for x in reversed(range(icons.width // 24)) if (x, y) not in occupied
-                 and icons.crop((x * 24, y * 24, x * 24 + 24, y * 24 + 24)).getbbox() is None), None)
-    if cell is None:
-        raise ValueError('No free icon cell')
+    free = [(x, y) for y in reversed(range(icons.height // 24))
+            for x in reversed(range(icons.width // 24)) if (x, y) not in occupied
+            and icons.crop((x * 24, y * 24, x * 24 + 24, y * 24 + 24)).getbbox() is None]
+    if len(free) < 1 + len(ABILITIES):
+        raise ValueError('Not enough free icon cells')
+    cell = free[0]
     icon = image.copy()
     icon.thumbnail((24, 24), Image.Resampling.NEAREST)
     icons.alpha_composite(icon, (cell[0] * 24 + (24 - icon.width) // 2, cell[1] * 24 + 24 - icon.height))
+    ability_rows, weapon_rows, ability_cells = ability_items(db, icons, free[1:1 + len(ABILITIES)], icon_dir)
     icons.save(out / 'cardIcons.png')
     item = dict(id=OUTFIT, name='Kirby', gameplayDesc='Kirby Super Star Ultra — original Nintendo DS gameplay.',
                 icon=dict(file='cardIcons.png', size=24, x=cell[0], y=cell[1]), moneyCost=0, cellCost=0,
@@ -196,14 +234,18 @@ def build(pak, decoded, out):
                 group=1, __separator_group_Name='PlayableCharacters')
     json_write(out / f'data.cdb_/item/{OUTFIT}.json', item)
     json_write(out / f'data.cdb_/skin/{OUTFIT}.json', skin)
+    for item_id, row in ability_rows.items():
+        json_write(out / f'data.cdb_/item/{item_id}.json', row)
+    for item_id, row in weapon_rows.items():
+        json_write(out / f'data.cdb_/weapon/{item_id}.json', row)
     equipment = build_equipment(pak, source_rows, tracks, atlas)
     # Ensure every native name remains available during host animation/equipment handling.
     if {(r['name'], r['index']) for r in rows} != {(r['name'], r['index']) for r in source_rows}:
         raise ValueError('Fallback host animation coverage differs')
     return dict(outfit=OUTFIT, model=MODEL, fallback_pose='bkir group 0 pose 184',
                 fallback_origin=origin, fallback_frames=len(rows), preview_frames=len(additions),
-                icon_cell=cell, equipment=equipment,
-                shared_resources='Existing cardIcons pixels and heroSkins rows preserved; one new icon and preview appended.',
+                icon_cell=cell, equipment=equipment, ability_item_cells=ability_cells,
+                shared_resources='Existing cardIcons pixels and heroSkins rows preserved; the outfit icon and preview and 24 ability item icons appended.',
                 live_rendering='Original ROM OAM through KirbySpriteRenderer; fallback atlas has no source timing.')
 
 
@@ -329,7 +371,11 @@ def main():
     parser.add_argument('--game-pak', type=Path, default=Path.home() / '.local/share/Steam/steamapps/common/Dead Cells/res.pak')
     parser.add_argument('--decoded', type=Path, default=ROOT / 'rom/decoded')
     parser.add_argument('--output', type=Path, default=ROOT / 'outfit-build')
+    parser.add_argument('--ability-icons', type=Path, default=ROOT / 'ability-icons',
+                        help='Output of tools/capture_ability_icons.py.')
     args = parser.parse_args()
+    if not all((args.ability_icons / f'{name}.png').is_file() for name in ABILITIES):
+        raise SystemExit('Run tools/capture_ability_icons.py first (missing ability item icons)')
     output, source, decoded = args.output.resolve(), args.game_pak.resolve(), args.decoded.resolve()
     project = Path(__file__).resolve().parents[1]
     if output == project or project in output.parents or output == source.parent or source.parent in output.parents:
@@ -344,7 +390,7 @@ def main():
     previous = None
     try:
         pak = Pak(source)
-        report = build(pak, decoded, staging / 'assets')
+        report = build(pak, decoded, staging / 'assets', args.ability_icons.resolve())
         pak.file.close()
         hashes = write_pak(staging / 'assets', staging / 'res.pak')
         result = Pak(staging / 'res.pak')

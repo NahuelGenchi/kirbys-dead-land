@@ -30,8 +30,7 @@ Relevant environment variables are used only by the lab helper:
 - `KIRBY_LAB_RESUME_GAME=1`: call the game's normal saved-run launch action once.
 - `KIRBY_LAB_SAVE_AFTER`: request a normal host save after this many original engine frames.
 - `KIRBY_LAB_OUTFIT`: outfit ID assigned before starting that private run.
-- `KIRBY_LAB_INPUT_PLAN`: `movement`, `combat`, `ability`, `visual`, `breakable`, `boss`, `crowd`, `aim`, `repro`, `hazard`, or `water`, for a reproducible offscreen test. `repro` tests normal keyboard/controller bindings and keeps the normal tutorials.
-- `KIRBY_LAB_INPUT_PLAN`: `movement`, `combat`, `ability`, `visual`, `breakable`, `boss`, `crowd`, `aim`, `repro`, `hazard`, or `stars`, for a reproducible offscreen test. `repro` tests normal keyboard/controller bindings and keeps the normal tutorials.
+- `KIRBY_LAB_INPUT_PLAN`: `movement`, `combat`, `ability`, `visual`, `breakable`, `boss`, `crowd`, `aim`, `repro`, `hazard`, `stars`, `water`, or `items`, for a reproducible offscreen test. `repro` tests normal keyboard/controller bindings and keeps the normal tutorials. `items` is the ability item check (see [ability items](#ability-items-55)).
 - `KIRBY_LAB_TEST_ABILITY`: optional source ability ID for the ability probe, exposed as `--probe-ability 2..25`. The probe prepares it through original inhale, supplied swallowed content, and Down before measuring combat. The separate `combat` probe uses a real enemy's random copy result.
 - `KIRBY_LAB_TEST_SCROLLS`: optional `B,T,S` scroll counts for the ability probe, exposed as `--probe-scrolls`. Before measuring, the probe adds that many real `BrutalityUp`, `TacticUp` and `SurvivalUp` items (`InventItem.fromItem`) through the normal inventory and calls the host's `Hero.computeTiers`. `ability-damage.json` then records the tiers, the host and core colorless multipliers, and each copy hit's source HP drop and host damage.
 - `KIRBY_LAB_TEST_HUD=1`: with the ability probe, exposed as `--probe-hud`. After the new run settles, it adds a real `StartShield` beside the starting sword through the normal inventory. It later discards the copy with the original Select button, and writes `hud.jsonl` whenever a HUD weapon slot changes: real item, slot item, icon texture, frame group, icon size and scale, and ammo flag. Each distinct decoded icon is saved as private `hud-icon-<hash>.rgba`.
@@ -330,6 +329,37 @@ KIRBY_LAB_BREAKABLE_TARGET=gold python3 scripts/launch_runtime.py \
 Each run reached its time limit without fatal errors, and real saves were unchanged.
 `GoldNugget` and copy forms other than Sword were not run.
 
+## Suplex lunge into doors
+
+Issue #50. The ability probe copies Suplex (`--probe-ability 6`) and replays
+original buttons from `KIRBY_LAB_ABILITY_PLAN`, counted from when the copy is
+ready: Left over frames 90–120, then Right from 130 to 200 with B at 150–152 (a
+dash, then the dash grab). `KIRBY_LAB_MOVES_SETUP=door@1` places Kirby 2.5 cells
+left of the first breakable, unlocked generated door, facing it. `LabMovesProbe`
+logs `door-hit` (`Door.onDamage`), `door-broken` (`Door.onDie`) and `GrabStrike`
+on every source frame. Separate data root `repros/suplex-door-20261006`; bridge
+unchanged (`libkssu_bridge.so` SHA-256
+`ef72fc725634bc14784498b66150ae29743754105073f84aec227ce26768d13c`, built from this
+`src/nds/lib.rs`).
+
+```sh
+python3 scripts/stage_runtime.py --data-root ~/.local/share/kirby-dead-cells/repros/suplex-door-20261006 \
+  --original-runtime --outfit-pack "$HOME/.local/share/kirby-dead-cells/outfit-build/res.pak"
+KIRBY_LAB_ABILITY_PLAN=<plan> KIRBY_LAB_MOVES_SETUP=door@1 \
+python3 scripts/launch_runtime.py --data-root ~/.local/share/kirby-dead-cells/repros/suplex-door-20261006 \
+  --seconds 45 --start-game --outfit KirbySuperStarUltra --input-plan ability --probe-ability 6 --capture-fps 10
+```
+
+| Run | Build | Result |
+| :--- | :--- | :--- |
+| `20261006-211833` | #50 | Dash grab lunge from source frame 4385 at 1728; door (97, 85) hit for 1 and broken on frame 4390 with `GrabStrike` set; Kirby recoiled (action `1228`). Frame `007094` shows the door bursting, `007344` the open doorway |
+| `211959` | control: `canBreakDoors` hook for the lunge removed | Same lunge from frame 4383 into door (317, 177); Kirby recoiled at frame 4390 from x 7595.5, 12.5 px left of the door's cell; no door hit or break event |
+
+The two runs generated different levels, so the doors differ. Both reached their
+time limit without a fatal log, and real saves were unchanged. Not run live: the
+standing, Down+B and mid-air lunges, a door approached from the right, and a
+lunge that grabs an enemy just before a door.
+
 ## Host elevators
 
 `LabMovesProbe` has three elevator scenarios for `KIRBY_LAB_MOVES_SETUP`: `elevator-spawn` builds a real `SimpleElevator` in the tallest open three-cell shaft and initializes it as `Level.spawnEntitiesFromMarkers` does (the first Prisoners' Quarters level has none), `elevator` stands Kirby on the first elevator, and `elevator-use` activates it through `canBeActivated`/`onActivate`. `moves-trace.jsonl` then records the elevator surface beside Kirby's feet on every source frame. The runs used a separate data root, `repros/elevator-20261006`, and a bridge rebuilt from this branch (`libkssu_bridge.so` SHA-256 `b2545e79b5fcbfd9670e252e369255be571122d169d05166ee2ef942fd40f8a8`).
@@ -545,3 +575,56 @@ With the fix (runtime SHA-256 `15b0b560908f0627bb0131a3464690f047ed055704ba7f1ea
 | `20261005-215401` | Right | Hit `Normal`; the attack entered the next original collision tick |
 
 All three runs reached their time limit without fatal errors, and the real saves were unchanged. Holding the opposite direction while raising the shield was traced but not resolved (see [GAMEPLAY_FIDELITY.md](GAMEPLAY_FIDELITY.md)).
+
+## Ability items (#55)
+
+`--input-plan items` (`LabAbilityItemProbe`) checks the
+[ability items](GAMEPLAY_FIDELITY.md#ability-items-intentional-addition) on a new
+run. It lists the start level's floor items and places Kirby on a dry floor with
+no other interactive object within eight cells and no enemy within sixteen. It
+then creates a Broadsword in front of him, an explosive grenade three cells
+behind him and a starting shield, through the normal `ItemDrop` constructor.
+Kirby holds the original inhale on the sword's ability item and spits it out with
+B, pressed until the item is back. He inhales it again, swallows it with Down,
+then discards the copy with Select. `ability-items.json` records each step;
+`ability-items.jsonl` records every replacement, slot change and returned item.
+
+All runs used the separate data root `repros/ability-items-20261006` (a copy of
+the private lab), the outfit pack built from this branch (SHA-256
+`8e44122d86f4d8b509bfdd08ee4acde4bf9f4b4cc21fd3e9a7d0e30d3b5be7af`) and the
+shared private bridge build (`ef72fc725634bc14784498b66150ae29743754105073f84aec227ce26768d13c`;
+this branch does not change `src/nds`):
+
+```sh
+python3 scripts/launch_runtime.py --data-root "$HOME/.local/share/kirby-dead-cells/repros/ability-items-20261006" \
+  --seconds 90 --start-game --outfit KirbySuperStarUltra --input-plan items
+```
+
+Final runtime DLL `d769b054bc53811d209f3e1ec91946c6c0344260ad2d28f21b740513f7440c75`,
+three runs, all `passed: true`, each ended by its time limit without fatal log
+lines and with the real saves unchanged:
+
+| Run | Start level replacements (item ID → ability) | Probe item | Result |
+| :--- | :--- | :--- | :--- |
+| `20261006-223826` | `StartBow` → Jet, `FastGrenade` → Cook, `LightningWhip` → Plasma | Paint | Spat back to its cell; swallowed into Paint; slot and HUD held that item; discard cleared both |
+| `20261006-223958` | `StartBow` → Sleep, `StunMace` → Stone, `ExtraHeal` → Cutter, `FastGrenade` → Plasma, `StandardTurret` → Mike | Beam | Same |
+| `20261006-224129` | `StartBow` → Stone, `StandardTurret` → Sleep, `DualDaggers` → Mike | Ice | Same |
+
+In each run the starting shield and the gold bag stayed, the shield the probe
+created stayed a shield, the Broadsword and grenade became ability items with the
+`Colorless` affix at item level 1, `isUsefulFor` was false, and the item followed
+the original suction (proxy flags 2 and 32) into the mouth.
+
+Earlier iterations of the same probe found and fixed three problems before the
+final build. `HUD.refreshItems` did not show the new slot item (`215522`), so
+`Hero.hudInitItems` is used. A spat item returned with the host's loot bounce
+(`221819`). A spit star's original recoil on a returned item's proxy pushed the
+item three cells (`223514`): the item now follows only the original inhale, and
+pairs only in base form. `221525` captured the host item tip on the floor: "Bomb I",
+"Copy ability", the Bomb description and controls line, and "Colorless (the
+highest level applies)" with the host's "Take" prompt.
+
+Not run live: the short-press hint, a long-press recycle, a copy from an enemy
+filling the slot, a mouthful of an item and an enemy together, a shield
+displaced from a full slot, save and resume with an ability item in the slot,
+other biomes, chests, timed doors and Boss Rush.

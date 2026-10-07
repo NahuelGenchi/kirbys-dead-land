@@ -57,6 +57,22 @@ public sealed class KirbySession
         return ability;
     }
 
+    /// <summary>
+    /// Invoke only when original suction has placed a floor ability item in
+    /// Kirby's mouth. The item leaves the floor; the original swallow then
+    /// copies its ability, as for an enemy that carries the same copy byte.
+    /// </summary>
+    public string? CompleteItemAbsorption(dc.en.inter.ItemDrop drop, string abilityId)
+    {
+        ArgumentNullException.ThrowIfNull(drop);
+        if (!Rules.IsBaseForm || drop.destroyed || drop._level.HashlinkPointer != Hero._level.HashlinkPointer)
+            return null;
+        string? ability = Rules.ConfirmAbsorption(drop.__uid, abilityId);
+        if (ability is not null)
+            provider.OnAbilityChanged(this, ability);
+        return ability;
+    }
+
     public void DropAbility()
     {
         Rules.DropAbility();
