@@ -23,7 +23,8 @@ preserved; generated assets and native dependencies remain in the private data r
   While copied, the pause screen (Escape) describes the ability and its main
   moves in the mod's controls; see
   [ability descriptions](docs/GAMEPLAY_FIDELITY.md#ability-descriptions).
-- Absorbing an Elite always gives original Sword, which deals double damage
+- Absorbing an Elite always gives original Sword as a Legendary ability item,
+  which deals more damage (×2.25 at item level I)
   until the ability is lost (hit off, discarded, made into a helper, or a new run).
   This is a deliberate deviation; see `docs/GAMEPLAY_FIDELITY.md`.
 - Kirby fights only with original inhale and copy abilities plus a Dead Cells

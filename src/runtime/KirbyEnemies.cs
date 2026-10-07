@@ -24,7 +24,7 @@ public sealed class KirbyEnemies
     private readonly (int Cx, int Cy)[] itemOrigins = new (int, int)[Capacity + 1];
     /// <summary>Swallowing an Elite always yields original Sword.</summary>
     private static readonly byte EliteAbility = checked((byte)(Array.IndexOf(KirbyNdsProvider.Abilities, "Sword") + 2));
-    // Sampled when source HP is assigned so the matching delta scales identically.
+    // The copy's ability item bonus, sampled when source HP is assigned so the matching delta scales identically.
     private double damageMultiplier = 1;
     private EnemyBinding[]? restoring;
     private readonly KirbyStars stars = new();
@@ -39,8 +39,8 @@ public sealed class KirbyEnemies
     /// <summary>Lab-only: host entities kept without a source object, as if out of range.</summary>
     internal static Func<Entity, bool>? TestUnpaired;
     /// <summary>
-    /// Host life per source damage point: the original-unit scale, times the Elite
-    /// empowerment, times the colorless scroll multiplier, all sampled in Prepare.
+    /// Host life per source damage point: the original-unit scale, times the copy's
+    /// ability item bonus, times the colorless scroll multiplier, all sampled in Prepare.
     /// </summary>
     internal double HostMultiplier(Func<Entity, double> scale, Entity mob) =>
         scale(mob) * damageMultiplier * ColorlessMultiplier;
@@ -110,7 +110,9 @@ public sealed class KirbyEnemies
         // passed through the host's own Const.scaleHeroValueToTier.
         ColorlessTier = ColorlessDamage.Tier(hero.brutalityTier, hero.tacticTier, hero.survivalTier);
         ColorlessMultiplier = dc.Const.Class.scaleHeroValueToTier(1.0, ColorlessTier);
-        damageMultiplier = session.Rules.DamageMultiplier;
+        // The copy's ability item: Dead Cells' own weapon bonus for its level,
+        // "+" and Legendary (an Elite's copy), as for any weapon (#56).
+        damageMultiplier = 1 + (KirbyAbilityItems.SlotItem(hero, session.Rules.AbilityId)?.getDamageBonus() ?? 0);
         double hx = (hero.cx + hero.xr) * 24, hy = (hero.cy + hero.yr) * 24;
         for (uint i = 1; i <= Capacity; i++)
         {
@@ -162,7 +164,7 @@ public sealed class KirbyEnemies
             // A projectile's source object has one HP: any original attack that
             // strikes it is lethal and removes the host projectile. Enemies hold
             // the host life in original damage units, so both games agree on
-            // which hit is lethal (death reactions); the Elite empowerment and
+            // which hit is lethal (death reactions); the ability item bonus and
             // the colorless scroll multiplier apply on top.
             // A floor ability item takes no damage: its proxy keeps full HP.
             bool item = KirbyAbilityItems.IsAbilityDrop(mob);

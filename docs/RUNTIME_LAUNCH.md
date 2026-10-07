@@ -698,3 +698,16 @@ each equipment card's texts to `pause-cards.jsonl`.
 
 The owner's missing passive was the stand-in card hiding the real item. Affixes
 do not act on copy attacks until #57.
+
+### Ability item quality (#56)
+
+- `KIRBY_LAB_ITEMS_QUALITY=2 … --input-plan items` run `20261007-003043`: a "++"
+  Broadsword became a Hammer ability item with two `QualityUp`, host damage bonus
+  0.667 and the info line "+67% copy damage"; the probe passed (spit, re-inhale,
+  swallow, slot, HUD, discard).
+- `KIRBY_LAB_COMBAT_ELITE=1 … --input-plan combat` run `20261007-003221`: the
+  swallowed Elite Zombie gave Sword (ability 18), empowered, with copy damage
+  multiplier 2.25 from the Legendary item; the shield parry and counter passed.
+- Both: saves unchanged, no fatal log. Not run: a host-rolled "+" or legendary
+  floor drop, the card text on screen, the Elite hit damage against a second
+  enemy (the combat probe's second Zombie was not struck in this run).

@@ -211,18 +211,17 @@ for (int hostLife = 1; hostLife <= 400; hostLife++)
         if ((hit >= sourceHp) != (ColorlessDamage.HostDamage(hit, sourceHp, hostLife, m) >= hostLife))
             throw new Exception($"Combined lethality differs at x{m}, life {hostLife}, hit {hit}");
 }
-Check(true, "Lethality agrees with unit scale, Elite bonus and colorless tier combined");
+Check(true, "Lethality agrees with unit scale, item bonus and colorless tier combined");
 
 var elite = new KirbyRules(["fire", "sword"], _ => 0);
 Check(elite.ConfirmAbsorption(1, "sword", elite: true) == "sword" && elite.PendingEmpowerment == "sword" &&
-      !elite.AbilityEmpowered && elite.DamageMultiplier == 1, "Elite in mouth is pending, not yet empowered");
+      !elite.AbilityEmpowered, "Elite in mouth is pending, not yet empowered");
 elite.SetSourceAbility("sword");
-Check(elite.AbilityEmpowered && elite.PendingEmpowerment is null &&
-      elite.DamageMultiplier == KirbyRules.EmpoweredDamageMultiplier, "Elite swallow empowers its Sword");
+Check(elite.AbilityEmpowered && elite.PendingEmpowerment is null, "Elite swallow empowers its Sword");
 elite.SetSourceAbility("sword");
 Check(elite.AbilityEmpowered, "Repeated source report keeps the empowerment");
 elite.DropAbility();
-Check(!elite.AbilityEmpowered && elite.DamageMultiplier == 1, "Losing the copy ends the empowerment");
+Check(!elite.AbilityEmpowered, "Losing the copy ends the empowerment");
 elite.SetSourceAbility("sword");
 Check(!elite.AbilityEmpowered, "A re-caught discarded star is an ordinary Sword");
 elite.DropAbility();
@@ -683,6 +682,15 @@ Check(SpeedMatch.RiseVelocity(KirbyActions.Jump, -2682) == -2682 && SpeedMatch.R
     Check(!AbilityItems.Replaces(weapon: false, skill: false, shield: false, abilityItem: false), "Amulets, food and other items stay");
     Check(!AbilityItems.Replaces(weapon: true, skill: false, shield: false, abilityItem: true), "An ability item is never replaced again");
 
+    // Host rule, checked against host cards: "Rusty Sword I+" shows "+33% damage".
+    Check(AbilityItems.InfoLine(AbilityItems.HostDamageBonus(1, 1, false)) == "+33% copy damage", "Level I+ gives +33%");
+    Check(AbilityItems.HostDamageBonus(1, 0, false) == 0 && AbilityItems.InfoLine(0) == "Copy ability", "A level I base item adds nothing");
+    Check(AbilityItems.InfoLine(AbilityItems.HostDamageBonus(2, 0, false)) == "+4% copy damage", "Level II adds a little");
+    Check(AbilityItems.InfoLine(AbilityItems.HostDamageBonus(3, 0, false)) == "+33% copy damage", "Level III adds a stat bonus");
+    Check(AbilityItems.HostDamageBonus(2, 2, false) > AbilityItems.HostDamageBonus(2, 1, false) &&
+          AbilityItems.HostDamageBonus(2, 1, false) > AbilityItems.HostDamageBonus(2, 0, false), "Each + raises the bonus");
+    Check(Math.Abs(AbilityItems.HostDamageBonus(1, 0, true) - 1.25) < 1e-9 && AbilityItems.HostDamageBonus(1, 3, true) == AbilityItems.HostDamageBonus(1, 0, true),
+        "Legendary is level + 6 regardless of quality");
     Check(AbilityItems.Slot([SlotContent.Other, SlotContent.Empty]) == 0, "The copy replaces an unusable host weapon first");
     Check(AbilityItems.Slot([SlotContent.Empty, SlotContent.Other]) == 1, "An unusable weapon is replaced before an empty slot is used");
     Check(AbilityItems.Slot([SlotContent.Shield, SlotContent.Empty], retainedShieldSlot: 0) == 1, "The copy takes the empty slot beside a shield");

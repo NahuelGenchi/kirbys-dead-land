@@ -1248,3 +1248,16 @@ the all-ability rendering tests as full gameplay acceptance.
   `Grenade` affix; `235012` resumed with the affix still on the slot item, and
   its pause card listed it. Saves unchanged, no fatal log.
 - Source: `python3 scripts/check.py` passes.
+## 2026-10-07 — Ability item quality scales copy damage (#56)
+
+- Owner report: "Beam II" and "Suplex III" showed no stat. Host research: an
+  item's name is its level as a numeral plus one "+" per `QualityUp`;
+  `InventItem.getDamageBonus` turns level, "+" and `Legendary` into the weapon
+  damage bonus (checked against the owner's "Rusty Sword I+ / +33% damage").
+- Floor ability items now keep the replaced item's "+" and `Legendary`; copy
+  damage is multiplied by 1 + the slot item's host bonus; the card shows
+  "+N% copy damage". An Elite's copy is Legendary (×2.25 at level I), replacing
+  the separate ×2 (`KirbyRules.EmpoweredDamageMultiplier` removed).
+- The 7-second dropped star moved to #68 (needs ROM work).
+- Source: `python3 scripts/check.py` passes (284 core assertions).
+- Live: `20261007-003043` (++ item, +67%), `20261007-003221` (Elite, ×2.25).

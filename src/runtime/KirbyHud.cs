@@ -196,16 +196,16 @@ internal static class KirbyHud
 
     /// <summary>
     /// Replace a card's main info line (the second direct text child, a weapon's
-    /// DPS) with "Copy ability": an ability item's weapon row is the starting
-    /// sword's, whose DPS does not describe copy damage.
+    /// DPS) with the ability item's copy-damage bonus: its weapon row is the
+    /// starting sword's, whose DPS does not describe copy damage.
     /// </summary>
-    internal static void ReplaceInfoLine(dc.ui.NewItemDesc card)
+    internal static void ReplaceInfoLine(dc.ui.NewItemDesc card, string line)
     {
         var children = card.children;
         for (int i = 0, texts = 0; i < children.length; i++)
         {
             if (children.getDyn(i) is not dc.ui.Text text || texts++ == 0) continue;
-            text.set_text("Copy ability".AsHaxeString());
+            text.set_text(line.AsHaxeString());
             return;
         }
     }
