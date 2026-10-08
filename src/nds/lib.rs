@@ -49,6 +49,24 @@ struct Bridge {
     audio: VecDeque<i16>,
     /// Every actor's anchor points as the last source frame began.
     anchors: HashMap<u32, [(i32, i32); 2]>,
+    /// Off-screen OBJ pieces built with the last frame's shadow OAM, kept
+    /// until the hardware shows that OAM (see `far_objects`).
+    far_pending: Option<(Vec<FarObj>, Vec<u8>)>,
+    /// Off-screen OBJ pieces of the OAM the hardware shows now.
+    far_shown: Vec<FarObj>,
+}
+/// One OBJ piece the original OAM builder culled: full screen position, its
+/// original attributes (x and y bits as the builder would write them) and the
+/// number of on-screen OAM entries written before it.
+#[repr(C)]
+#[derive(Copy, Clone, Default)]
+pub struct FarObj {
+    x: i16,
+    y: i16,
+    attr0: u16,
+    attr1: u16,
+    attr2: u16,
+    order: u16,
 }
 fn u16at(r: &[u8], p: usize) -> u16 {
     u16::from_le_bytes(r[p..p + 2].try_into().unwrap())
@@ -143,6 +161,8 @@ pub unsafe extern "C" fn kssu_open(
             proxies: metadata.unwrap_or([Proxy::default(); PROXY_COUNT]),
             audio: VecDeque::new(),
             anchors: HashMap::new(),
+            far_pending: None,
+            far_shown: Vec::new(),
         })) as *mut std::ffi::c_void)
     });
     run.ok().flatten().unwrap_or(ptr::null_mut())
@@ -162,7 +182,6 @@ pub unsafe extern "C" fn kssu_step(handle: *mut std::ffi::c_void, mask: u16, fra
     let b = &mut *(handle as *mut Bridge);
     if !mute_proxy_footsteps(b.nds.main_ram_mut())
         || !keep_proxies_alive_in_water(b.nds.main_ram_mut())
-        || !widen_obj_cull(b.nds.main_ram_mut())
     {
         return -6;
     }
@@ -176,6 +195,8 @@ pub unsafe extern "C" fn kssu_step(handle: *mut std::ffi::c_void, mask: u16, fra
         native_trace_once(3, "step: executing source frame");
         b.anchors = actor_anchors(b.nds.main_ram_mut());
         b.nds.run_frame();
+        native_trace_once(20, "step: source frame returned; building off-screen OBJ");
+        update_far_objects(b);
         native_trace_once(4, "step: source frame returned; reading PCM");
         for pair in b.nds.read_audio_output() {
             b.audio.extend(pair);
@@ -917,6 +938,8 @@ pub unsafe extern "C" fn kssu_load_state(
         b.proxies = metadata.unwrap_or([Proxy::default(); PROXY_COUNT]);
         b.audio.clear();
         b.anchors.clear();
+        b.far_pending = None;
+        b.far_shown.clear();
         0
     } else {
         -5
@@ -1617,29 +1640,150 @@ fn keep_proxies_alive_in_water(r: &mut [u8]) -> bool {
     true
 }
 
-// The original OAM builder0x020100A0 drops every OBJ piece whose screen x is
-// <= -64 (`cmp r8,fp` with fp=-64) or > 256 (`cmp r8,#0x100`): its own DS
-// screen. The host view is wider, so a shot more than about 128 px from Kirby
-// kept flying and hitting but was not drawn (charged Plasma, Ninja's star, the
-// Beam wave, Sword's beam, spit stars). Keep pieces from -127 to 380 instead:
-// the 512 values a 9-bit OAM x can tell apart, around Kirby at x 128, which
-// NdsObjRenderer decodes on its 512-pixel canvas. Only these two compares
-// change; the vertical cull, the 128-entry limit and every object's own
-// update and removal stay original. The DS hardware still hides the added
-// pieces unless they are double-size affine. The user's ROM file is never changed.
-fn widen_obj_cull(r: &mut [u8]) -> bool {
-    const PATCHES: [(u32, u32, u32); 2] = [
-        (0x02010238, 0xe158000b, 0xe3780080), // cmp r8,fp -> cmn r8,#0x80
-        (0x02010258, 0xe3580c01, 0xe3580f5f), // cmp r8,#0x100 -> cmp r8,#0x17c
-    ];
-    for (address, original, wide) in PATCHES {
-        let instruction = u32at(r, (address - BASE) as usize);
-        if instruction != original && instruction != wide {
-            return false;
+// The original OAM builder0x020100A0 turns the main screen's sprite records
+// (manager0x020598E0: sixteen priority lists of 0x1C-byte records, each with a
+// list of 8-byte pieces) into the shadow OAM at *manager, and drops every piece
+// outside its own screen (x <= -64 or > 256, y <= -64 or > 192). The host view
+// is wider than the DS screen, so shots more than about 128 px from Kirby kept
+// flying and hitting without being drawn. After each frame the bridge runs the
+// same assembly over the same records. It accepts the result only when its
+// on-screen entries equal the shadow OAM the ROM just wrote, and keeps the
+// pieces the ROM culled, with full positions. They are reported once the
+// hardware OAM equals that shadow OAM (one frame later), so they pair with the
+// OAM, VRAM and palettes the host reads. Nothing in the machine is changed.
+const OBJ_MANAGER: u32 = 0x020598e0;
+const FAR_LIMIT: usize = 256;
+fn build_far_objects(r: &[u8]) -> Option<(Vec<FarObj>, Vec<u8>)> {
+    let m = off(OBJ_MANAGER, 0x98)?;
+    let shadow = off(u32at(r, m), 1024)?;
+    let base_attr = u16at(r, m + 0x12);
+    let mut far = Vec::new();
+    let mut matrices: Vec<[u16; 4]> = Vec::new();
+    let mut count = 0usize;
+    'lists: for list in 0..16 {
+        let mut record = u32at(r, m + 0x18 + list * 4);
+        let mut records = 0;
+        while record != 0 {
+            records += 1;
+            let l = off(record, 0x1c)?;
+            if records > 256 {
+                return None;
+            }
+            let flags = u16at(r, l + 4);
+            let attr = u16at(r, l + 6);
+            let (rx, ry) = (u16at(r, l + 8) as i16 as i32, u16at(r, l + 10) as i16 as i32);
+            let affine = flags & 0x100 != 0;
+            // Affine records share matrices by value, at most 32; a record
+            // that finds no free matrix is skipped whole.
+            let mut matrix = 0u16;
+            let mut skip = false;
+            if affine {
+                let value = [0x14, 0x16, 0x18, 0x1a].map(|at| u16at(r, l + at));
+                if let Some(i) = matrices.iter().position(|&v| v == value) {
+                    matrix = i as u16;
+                } else if matrices.len() < 32 {
+                    matrices.push(value);
+                    matrix = matrices.len() as u16 - 1;
+                } else {
+                    skip = true;
+                }
+            }
+            let mut piece = u32at(r, l + 0x10);
+            for pieces in 0.. {
+                if skip {
+                    break;
+                }
+                let p = off(piece, 8)?;
+                if pieces > 128 {
+                    return None;
+                }
+                let w0 = u16at(r, p);
+                // A hidden (non-affine) record keeps no pieces.
+                if flags & 0x200 == 0 || affine {
+                    let y = ry + (w0 as u8 as i8) as i32;
+                    let w1 = u16at(r, p + if flags & 0x8000 != 0 { 4 } else { 2 });
+                    let x = rx + (((w1 << 7) as i16) >> 7) as i32;
+                    let w3 = u16at(r, p + 6);
+                    let attr0 = (y as u16 & 0xff) | (w0 & 0xe000) | (flags & 0x1f00);
+                    let mut attr1 = (x as u16 & 0x1ff) | (w1 & 0xf000);
+                    if affine {
+                        attr1 = (attr1 & !0x3e00) | (matrix << 9);
+                    }
+                    let palette = if w0 & 0x800 != 0 {
+                        w3 >> 12
+                    } else if flags & 4 != 0 {
+                        attr >> 12
+                    } else {
+                        ((w3 >> 12) + (attr >> 12)) & 15
+                    };
+                    let level = |v: u16| (v >> 10) & 3;
+                    let priority = match (flags & 0x4000 != 0, flags & 2 != 0) {
+                        (true, true) => level(attr),
+                        (true, false) => level(w3) + level(attr),
+                        (false, true) => level(base_attr) + level(attr),
+                        (false, false) => level(attr) + level(base_attr) + level(w3),
+                    } & 3;
+                    let tile = if w0 & 0x400 != 0 {
+                        w3 & 1023
+                    } else if flags & 1 != 0 {
+                        attr & 1023
+                    } else {
+                        ((w3 & 1023) + (attr & 1023)) & 1023
+                    };
+                    let attr2 = tile | (priority << 10) | (palette << 12);
+                    if x > -64 && x <= 256 && y > -64 && y <= 192 {
+                        // attr1 bits 9-11 of a non-affine piece are left over in the ROM.
+                        let q = shadow + count * 8;
+                        let keep = if affine { 0xffff } else { 0xf1ff };
+                        if u16at(r, q) != attr0 || u16at(r, q + 2) & keep != attr1 & keep || u16at(r, q + 4) != attr2 {
+                            return None;
+                        }
+                        count += 1;
+                        if count == 128 {
+                            break 'lists;
+                        }
+                    } else if far.len() < FAR_LIMIT {
+                        far.push(FarObj {
+                            x: x.clamp(-32768, 32767) as i16,
+                            y: y.clamp(-32768, 32767) as i16,
+                            attr0,
+                            attr1,
+                            attr2,
+                            order: count as u16,
+                        });
+                    }
+                }
+                if w0 & 0x1000 != 0 {
+                    break;
+                }
+                piece = piece.wrapping_add(8);
+            }
+            record = u32at(r, l);
         }
     }
-    for (address, _, wide) in PATCHES {
-        put32(r, (address - BASE) as usize, wide);
+    // The ROM hides the unused entries with y 0xF8 (attr1 0).
+    if (count..128).any(|k| u16at(r, shadow + k * 8) != 0xf8 || u16at(r, shadow + k * 8 + 2) != 0) {
+        return None;
     }
-    true
+    Some((far, r[shadow..shadow + 1024].to_vec()))
+}
+fn update_far_objects(b: &mut Bridge) {
+    let oam: Vec<u8> = (0..1024).map(|i| b.nds.bus_read8(0x07000000 + i)).collect();
+    b.far_shown = match b.far_pending.take() {
+        Some((far, shadow)) if shadow == oam => far,
+        _ => Vec::new(),
+    };
+    b.far_pending = build_far_objects(b.nds.main_ram_mut());
+}
+/// Copy the off-screen OBJ pieces of the OAM the hardware shows now: 12-byte
+/// `FarObj` records in original OAM order. Returns the count copied.
+#[no_mangle]
+pub unsafe extern "C" fn kssu_far_objs(handle: *mut std::ffi::c_void, dest: *mut FarObj, capacity: usize) -> i32 {
+    if handle.is_null() || (dest.is_null() && capacity != 0) {
+        return -1;
+    }
+    let b = &*(handle as *mut Bridge);
+    let count = b.far_shown.len().min(capacity);
+    ptr::copy_nonoverlapping(b.far_shown.as_ptr(), dest, count);
+    count as i32
 }
