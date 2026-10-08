@@ -70,6 +70,17 @@ preserved; generated assets and native dependencies remain in the private data r
   1.15^(tier − 1), where tier is 1 + your highest scroll count (Brutality,
   Tactics or Survival). With no scrolls this factor is ×1. See
   [colorless copy damage](docs/GAMEPLAY_FIDELITY.md#colorless-copy-damage).
+- Copy attacks can crit (×1.5, drawn as a Dead Cells crit). Kirby has no crit
+  chance of his own: mutations will add it (#89). See
+  [copy-attack critical hits](docs/GAMEPLAY_FIDELITY.md#copy-attack-critical-hits-intentional-addition).
+- The five skill-cooldown mutations (Killer Instinct, Blind Faith, Heart of Ice,
+  Hunter's Instinct, Instinct of the Master of Arms) give timed crit chance or damage
+  in a Kirby run, with new text in the mutation menu (#89). See
+  [cooldown mutations](docs/GAMEPLAY_FIDELITY.md#cooldown-mutations-intentional-deviation).
+- Every copy attack counts as a melee attack for mutations: the damage mutations
+  (Tranquility, Combo, Vengeance, Point Blank and others) now change copy-attack
+  damage, and mutation text says "copy attack" (#91). See
+  [mutations on copy attacks](docs/GAMEPLAY_FIDELITY.md#mutations-on-copy-attacks).
 - While copied, each non-shield weapon slot in the HUD (normally Left-Click)
   shows the current ability's original icon in a colorless slot. See the
   [HUD ability slot](docs/GAMEPLAY_FIDELITY.md#hud-ability-slot). The pause
@@ -222,6 +233,10 @@ while playing Kirby; healing, equipment and interaction tutorials remain availab
   31-Zombie fixture kept all 31 paired objects active and delivered exact Sword
   damage to 21 targets. These controlled checks are scoped in
   [the host boundary report](docs/HOST_BOUNDARY_TESTS.md).
+- In the real Conjunctivius arena, a wave of three tentacles from the boss's own
+  `createTentacles` died to original Sword hits. A burrowed tentacle, which Dead
+  Cells makes unhittable, is no longer paired with an original object (#86). See
+  [Conjunctivius tentacles](docs/RUNTIME_LAUNCH.md#conjunctivius-tentacles-86).
 - Live natural Grenader grenades and an Archer arrow (caught mid-jump; arrows
   fly above the original inhale box on flat ground) entered the original
   mouthful without hurting Kirby. Each spat star hit its shooter for 52 damage;

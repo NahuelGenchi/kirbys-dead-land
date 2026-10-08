@@ -26,6 +26,12 @@ internal static class LabAbilityProbe
     private static bool savedAttackState;
     private static int[]? scrolls;
     private static bool scrollsGiven;
+    /// <summary>Mutation item IDs the probe gives the hero (<c>--probe-mutations</c>) and the text the host shows for each (#89).</summary>
+    private static string[]? mutations;
+    private static bool mutationsGiven;
+    private static (double, bool, double) lastCriticalState;
+    private static readonly List<object> critEvents = [];
+    private static readonly Dictionary<string, string> mutationTexts = [];
     private static bool menuChecked;
     private static readonly bool hudFixture = Environment.GetEnvironmentVariable("KIRBY_LAB_TEST_HUD") == "1";
     private static readonly bool pauseFixture = Environment.GetEnvironmentVariable("KIRBY_LAB_TEST_PAUSE") == "1";
@@ -46,6 +52,8 @@ internal static class LabAbilityProbe
     {
         run = output;
         string? requestedScrolls = Environment.GetEnvironmentVariable("KIRBY_LAB_TEST_SCROLLS");
+        if (Environment.GetEnvironmentVariable("KIRBY_LAB_TEST_MUTATIONS") is { Length: > 0 } requestedMutations)
+            mutations = requestedMutations.Split(',', StringSplitOptions.RemoveEmptyEntries);
         if (requestedScrolls is not null)
             scrolls = requestedScrolls.Split(',').Select(c => int.Parse(c, System.Globalization.CultureInfo.InvariantCulture)).ToArray();
         if (pauseFixture)
@@ -70,6 +78,8 @@ internal static class LabAbilityProbe
                 hostDamage,
                 colorlessTier = enemies.ColorlessTier,
                 hostMultiplier = enemies.ColorlessMultiplier,
+                critChance = KirbyMod.Instance?.ActiveSession?.Rules.Critical.Chance,
+                bonusFactor = enemies.BonusFor(mob),
                 // What the host itself computes for colorless gear with this base damage.
                 hostColorlessDamage = (int)dc.Const.Class.scaleHeroValueToTier((double)sourceDamage, enemies.ColorlessTier),
             });
@@ -101,6 +111,7 @@ internal static class LabAbilityProbe
                     source = attack.source?.GetType().FullName,
                     x = (mob.cx + mob.xr) * 24, y = (mob.cy + mob.yr) * 24,
                     baseDmg = Convert.ToString(attack.baseDmg, System.Globalization.CultureInfo.InvariantCulture),
+                    hitResult = attack.hitResult?.GetType().Name,
                     attack.rawFinalDmg,
                     attack.finalDmg,
                     attack.inflictedDmg,
@@ -198,6 +209,27 @@ internal static class LabAbilityProbe
             }
             if (legendaryGiven) session.Hero.hudInitItems();
         }
+        if (mutations is not null && !mutationsGiven)
+        {
+            foreach (var id in mutations)
+            {
+                var item = InventItem.Class.fromItem(id.AsHaxeString(), null);
+                session.Hero.inventory.add(item);
+                mutationTexts[id] = item.getGameplayDesc(null)?.ToString() ?? "";
+            }
+            // Host status effects the mutations read (for example 57 Vengeance, 54 Tranquility): "index:seconds[:value],...".
+            if (Environment.GetEnvironmentVariable("KIRBY_LAB_TEST_AFFECTS") is { Length: > 0 } affects)
+                foreach (var entry in affects.Split(',', StringSplitOptions.RemoveEmptyEntries))
+                {
+                    var parts = entry.Split(':');
+                    // An optional third number is the effect's value (Counterattack's flat damage in effect 108).
+                    session.Hero.setAffectS(int.Parse(parts[0], System.Globalization.CultureInfo.InvariantCulture),
+                        double.Parse(parts[1], System.Globalization.CultureInfo.InvariantCulture),
+                        parts.Length > 2 ? HaxeProxy.Runtime.Ref<double>.In(double.Parse(parts[2], System.Globalization.CultureInfo.InvariantCulture))
+                            : HaxeProxy.Runtime.Ref<double>.Null, null);
+                }
+            mutationsGiven = true;
+        }
         if (Environment.GetEnvironmentVariable("KIRBY_LAB_TEST_MENU") is "1" or "2" && !menuChecked)
         {
             menuChecked = true;
@@ -237,6 +269,14 @@ internal static class LabAbilityProbe
             session.Hero.computeTiers();
             tiers = [session.Hero.brutalityTier, session.Hero.tacticTier, session.Hero.survivalTier];
             scrollsGiven = true;
+        }
+        var critical = session.Rules.Critical;
+        var criticalState = (critical.Chance, critical.Guaranteed, critical.DamageMultiplier);
+        if (criticalState != lastCriticalState)
+        {
+            critEvents.Add(new { frame = machine.State.Frame, ability = session.Rules.AbilityId, chance = criticalState.Chance,
+                guaranteed = criticalState.Guaranteed, damage = criticalState.DamageMultiplier });
+            lastCriticalState = criticalState;
         }
         start ??= machine.State.Frame;
         uint elapsed = machine.State.Frame - start.Value;
@@ -443,6 +483,13 @@ internal static class LabAbilityProbe
             hostMultiplier = KirbyMod.Instance?.NativeProvider?.Enemies.ColorlessMultiplier,
             coreMultiplier = KirbyMod.Instance?.NativeProvider?.Enemies is { } e ? ColorlessDamage.Multiplier(e.ColorlessTier) : (double?)null,
             copyHits,
+            mutations,
+            mutationTexts,
+            critEvents,
+            ownedMutations = session.Rules.Mutations.Owned.ToString(),
+            critChance = session.Rules.Critical.Chance,
+            critGuaranteed = session.Rules.Critical.Guaranteed,
+            critDamage = session.Rules.Critical.DamageMultiplier,
         }, new JsonSerializerOptions { WriteIndented = true }));
     }
 }

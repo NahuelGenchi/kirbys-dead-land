@@ -24,9 +24,15 @@ public sealed class KirbyRules
             this.abilityIds.Distinct(StringComparer.Ordinal).Count() != this.abilityIds.Length)
             throw new ArgumentException("A nonempty set of unique ability IDs is required.", nameof(abilityIds));
         this.chooseIndex = chooseIndex ?? Random.Shared.Next;
+        Critical = new CopyCritical();
+        Mutations = new CriticalMutations(Critical);
     }
 
     public string? AbilityId { get; private set; }
+    /// <summary>Critical hits of Kirby's copy attacks (#88).</summary>
+    public CopyCritical Critical { get; }
+    /// <summary>The Kirby versions of the cooldown mutations (#89).</summary>
+    public CriticalMutations Mutations { get; }
     public bool IsBaseForm => AbilityId is null;
     /// <summary>
     /// The current copy came from swallowing an Elite and has not been lost since.
@@ -148,6 +154,7 @@ public sealed class KirbyRules
     {
         if (abilityId is not null && !abilityIds.Contains(abilityId, StringComparer.Ordinal))
             throw new ArgumentException("Source copy ability is not in the original catalog.", nameof(abilityId));
+        if (abilityId is not null && !StringComparer.Ordinal.Equals(abilityId, AbilityId)) Mutations.Copied();
         AbilityEmpowered = abilityId is not null && (PendingEmpowerment is not null
             ? StringComparer.Ordinal.Equals(PendingEmpowerment, abilityId)
             : AbilityEmpowered && StringComparer.Ordinal.Equals(AbilityId, abilityId));
@@ -188,6 +195,8 @@ public sealed class KirbyRules
         AbilityEmpowered = false;
         PendingEmpowerment = null;
         RetainedShieldId = null;
+        Critical.Reset();
+        Mutations.SetOwned(KirbyMutation.None);
         consumedEnemies.Clear();
         cookedEnemies.Clear();
     }

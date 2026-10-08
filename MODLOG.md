@@ -1411,6 +1411,108 @@ the all-ability rendering tests as full gameplay acceptance.
 - Not run: a non-Legendary ability item after this change (the code path is the
   same `useItem` call), the owner's Parasol, resolutions other than 1024×768.
 
+## 2026-10-08 — Copy attacks open the Scratch the wall secret (#84)
+
+- Owner report: a copied ability's attack on the "Scratch the wall" reward did
+  nothing; only R opened it.
+- Cause: the wall is Dead Cells `en.inter.HiddenBlock` (`hlboot.dat` string
+  table: "Gratter le mur", `wallSecretBroken`, `wallSecretRune`). Copied attacks
+  paired only with the gold-deposit objects (`KirbyEnemies.Eligible`), so the
+  wall never got a proxy and no attack reached it.
+- Fix: `HiddenBlock` joins `Eligible`. A copy attack that reaches it calls the
+  host's `canBeActivated` and `onActivate` with Kirby, the R key's path, and the
+  wall drops its reward. Base-form contact does nothing. Live probe:
+  `KIRBY_LAB_BREAKABLE_TARGET=hidden` (and `hidden-base`) in `LabBreakableProbe`.
+- Source: `python3 scripts/check.py` passes (302 core assertions; runtime Release
+  build 0 warnings, 0 errors). `tools/nds_tests.py` not run (`src/nds` unchanged).
+- Live (separate root `repros/hidden-block-20261008`, staged with
+  `outfit-build-55` and `assets-final`): control with no pairing change, copy
+  Sword beside a real wall, no hits and no activation; final code, one
+  activation and a `SmallMeat` dropped beside the wall; base form, no activation,
+  wall at 3 life. Saves unchanged, no fatal log. See `docs/RUNTIME_LAUNCH.md`
+  "Secret walls (#84)".
+- Not run: an R-key press beside a wall as a parity control, copy forms other
+  than Sword, rewards other than food, and the owner's own play session.
+
+## 2026-10-08 — Conjunctivius tentacles unpair while burrowed (#86)
+
+- Owner report (recording and play log `20261008-000039`): Conjunctivius kept
+  its shield; tentacle `BeholderTtcl#599447` never died, and Sword sparks hit an
+  invisible spot by the wall.
+- Cause (crashlink, `hlboot.dat`): a burrowed `BeholderTtcl` is unhittable
+  (`_isInGround`, affect 5, zero size), but `KirbyEnemies.Prepare` checked
+  `canBeHitBy` only when pairing. The burrowed tentacle stayed a 1×1 original
+  enemy; copy hits were rejected by the host, and the original recoil could hold
+  its AI, which is what makes it surface.
+- Fix: `Prepare` releases a paired enemy once the host stops letting the hero
+  hit it (not projectiles, floor ability items or swallowed objects); it pairs
+  again when hittable.
+- New `--input-plan tentacle` probe (`LabTentacleProbe`). Live
+  (`repros/conjunctivius-20261008`, empty save): before the fix `004843` showed
+  317 paired-while-burrowed tentacle-frames, 47 of them under original control;
+  fixed `004529` killed all three with none. The permanent stall itself was not
+  reproduced. Saves unchanged.
+- Found while staging: the default `outfit-build/res.pak` (Oct 4) predates the
+  ability items and fails new runs; the play build uses `8e44122d…`.
+- Source: `python3 scripts/check.py` passes (302 core assertions; Release build
+  0 warnings/errors). `tools/nds_tests.py` not run (`src/nds` unchanged).
+## 2026-10-08 — critical hits for copy attacks (#88)
+
+- Design (owner): the cooldown mutations do nothing in a Kirby run, so they become
+  timed crit bonuses (#89); every copy attack counts as melee (#91); weapon
+  mutations leave the choice list (#90). All need Kirby to crit first.
+- `CopyCritical` (`src/core/`) holds chance, factor, timed bonuses and a sure
+  crit. `KirbyEnemies.Prepare` rolls per paired enemy each source frame and folds
+  the factor into the source-HP pairing, so lethality stays in agreement without
+  native changes. `KirbyDamage` upgrades a surviving `Normal` hit to the host's
+  `Critical` through `AttackTargetImpl.updateHitResult`: `AttackUtils.hitInit`
+  resets `hitResult` to `Normal`, so it cannot be set beforehand. Host bytecode
+  read with crashlink (`updateDamages` applies `critMul` only on `Critical`; the
+  mod's `applyAttackResult` hook already replaces the damage, so ×1.5 lives only in
+  the mod multiplier). Decompiled output stayed in the session scratchpad.
+- Config: `CopyCriticalChance` (0) and `CopyCriticalDamage` (1.5).
+- Source: `python3 scripts/check.py` passes (core assertions incl. the new crit
+  pairing; Release build 0 warnings/errors).
+- Live (separate root `repros/crit-88-20261008`): chance 1 gave host `Critical`
+  hits of 94 and 26; chance 0 gave the old `Normal` 63 and 52.
+- Not run: partial chance, sure crit, bosses, Ice, stars, screen attacks.
+
+## 2026-10-08 — cooldown mutations become crit bonuses (#89)
+
+- Read the host's mutation code (crashlink, outputs kept in the scratchpad): the
+  five cooldown mutations act in `HeroAttackSource.postHitResultUpdate` (parry, crit,
+  Heart of Ice: affects 15/8/23/133 within 4 cells) and `Mob.onDie` (kills).
+  `PerkSelect.addPerk` and the pause screen read `InventItem.getGameplayDesc`.
+- `CriticalMutations` and `MutationDescriptions` (`src/core/`) hold the rules and
+  texts; `CopyCritical` gained keyed stacks, an owned chance, a timed sure crit
+  and a per-target extra chance. `KirbyMutations` reads the host inventory, hooks
+  `getGameplayDesc` and `Hero.onPerfectParry`, and tests Heart of Ice's target.
+  Numbers are in `config.json` (`CriticalMutations`).
+- Source: `python3 scripts/check.py` passes (340 core assertions; Release build 0
+  warnings/errors).
+- Live (`repros/crit-88-20261008`): texts, ownership and Killer Instinct's +5% and
+  6 s ending verified; Blind Faith, Heart of Ice, Hunter's Instinct and the menu not run.
+
+## 2026-10-08 — mutations on copy attacks (#91)
+
+- Host reading (crashlink): `Mob.onDamage` calls `onDirectHitFromHero` for a hero
+  hit with no carrier and no ranged tag, so a copy hit is already a melee hit for
+  Combo, kill rewards and heals; Initiative and Counterattack run in
+  `HeroAttackSource.extraDamageEffects` as separate extra hits (Counterattack reads
+  effect 108). What was lost is the multiplier: `KirbyDamage` replaces `finalDmg`.
+  `computePerksBonusMul` and `computeAspectsBonusMul` are pure; `computeBonusMul` is
+  not (it removes effects 50 and 83), so it is left alone.
+- Plan change: the earlier idea of hand-written Support/Parting Gift/Networking
+  rules was dropped. Support, Parting Gift and Networking are hidden in #90.
+- `KirbyHostBonuses` reads `computeExtraBonusMul` for a throwaway attack with the
+  close-range tag, folded into the source-HP pairing. `CopyAttackWording` rewrites
+  the host's melee/ranged text.
+- Source: `python3 scripts/check.py` passes (348 core assertions; Release build 0
+  warnings/errors).
+- Live (`repros/crit-88-20261008`): `20261008-022631`, `-022811`, `-023052` as in
+  RUNTIME_LAUNCH.md. Effects were set by the fixture, not earned.
+- Not run: Gastronomy, Extended Healing, Tainted Flask, Demon Strength, bosses, the
+  menu, effects earned in play.
 ## 2026-10-08 — mutations Kirby cannot use leave the menu (#90)
 
 - Host: both `PerkSelect.isVisible` and `PerkMaster.isVisible` call

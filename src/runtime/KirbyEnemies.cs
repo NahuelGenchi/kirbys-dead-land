@@ -19,6 +19,13 @@ public sealed class KirbyEnemies
     private readonly int[] assignedHp = new int[Capacity + 1];
     private readonly bool[] detached = new bool[Capacity + 1];
     private readonly bool[] controlled = new bool[Capacity + 1];
+    /// <summary>This source tick's crit roll for each paired enemy (#88), folded into its source HP.</summary>
+    private readonly bool[] critical = new bool[Capacity + 1];
+    /// <summary>The host's mutation damage factor for each paired enemy this tick (#91).</summary>
+    private readonly double[] bonus = new double[Capacity + 1];
+    private double criticalFactor = 1;
+    /// <summary>A sure crit was in force for this source tick's rolls.</summary>
+    private bool criticalGuaranteed;
     private readonly byte[] abilities = new byte[Capacity + 1];
     /// <summary>Where each paired floor ability item lay before the original suction moved it.</summary>
     private readonly (int Cx, int Cy)[] itemOrigins = new (int, int)[Capacity + 1];
@@ -47,6 +54,20 @@ public sealed class KirbyEnemies
     /// </summary>
     internal double HostMultiplier(Func<Entity, double> scale, Entity mob) =>
         scale(mob) * damageMultiplier * ColorlessMultiplier;
+    /// <summary>
+    /// <see cref="HostMultiplier"/> with this tick's crit roll and host mutation factor for slot
+    /// <paramref name="slot"/>. A spit star shares the slot but gets neither, so it passes
+    /// <paramref name="copyHit"/> false.
+    /// </summary>
+    private double CopyMultiplier(uint slot, Func<Entity, double> scale, Entity mob, bool copyHit) =>
+        HostMultiplier(scale, mob) * (copyHit ? bonus[slot] * (critical[slot] ? criticalFactor : 1) : 1);
+    /// <summary>Lab-only: the mutation factor of the slot holding <paramref name="mob"/> this tick.</summary>
+    internal double BonusFor(Entity mob)
+    {
+        for (int i = 1; i <= Capacity; i++)
+            if (mobs[i]?.HashlinkPointer == mob.HashlinkPointer) return bonus[i];
+        return 1;
+    }
     /// <summary>The host enemy has a live source object (not a detached corpse).</summary>
     internal bool Pairs(Entity mob)
     {
@@ -86,7 +107,7 @@ public sealed class KirbyEnemies
     private void Release(NdsRuntime nds, uint i)
     {
         nds.SetProxy(i, 0, 0, 1, false);
-        mobs[i] = null; controlled[i] = false; abilities[i] = 0; assignedHp[i] = 0; detached[i] = false;
+        mobs[i] = null; controlled[i] = false; abilities[i] = 0; assignedHp[i] = 0; detached[i] = false; critical[i] = false; bonus[i] = 1;
     }
     /// <param name="scale">Host life per original damage point for a target.</param>
     /// <param name="bodyContact">The original touch damage between Kirby and enemies: off by default
@@ -129,6 +150,16 @@ public sealed class KirbyEnemies
         // The copy's ability item: Dead Cells' own weapon bonus for its level,
         // "+" and Legendary (an Elite's copy), as for any weapon (#56).
         damageMultiplier = 1 + (KirbyAbilityItems.SlotItem(hero, session.Rules.AbilityId)?.getDamageBonus() ?? 0);
+        // Copy-attack crits (#88). The roll is made now, before the source step, so
+        // the paired source HP already includes the crit factor and a lethal source
+        // hit is lethal in the host too. One source frame is 1/60 s.
+        var crit = session.Rules.Critical;
+        var mutations = session.Rules.Mutations;
+        var hostBonuses = KirbyHostBonuses.Begin(hero);
+        mutations.SetOwned(KirbyMutations.Owned(hero));
+        crit.Advance(1.0 / 60);
+        criticalFactor = crit.DamageMultiplier;
+        criticalGuaranteed = crit.Guaranteed;
         double hx = (hero.cx + hero.xr) * 24, hy = (hero.cy + hero.yr) * 24;
         for (uint i = 1; i <= Capacity; i++)
         {
@@ -141,6 +172,14 @@ public sealed class KirbyEnemies
             var mob = mobs[i];
             if (mob is null) continue;
             if (!Live(mob) || mob._level.HashlinkPointer != hero._level.HashlinkPointer)
+            { Release(nds, i); continue; }
+            // The host can stop letting the hero hit an enemy after it was paired:
+            // a Conjunctivius tentacle burrows (BeholderTtcl._isInGround, invulnerable,
+            // zero size), a mob hides. Its original object would keep taking copy hits
+            // the host rejects, and the original recoil would hold the host AI, so the
+            // tentacle could never surface and the boss shield stayed up (#86). It
+            // pairs again once hittable. A swallowed object is left to Complete.
+            if (!IsHazard(mob) && !KirbyAbilityItems.IsAbilityDrop(mob) && !mob.canBeHitBy(hero) && !nds.Proxy(i).Swallowed)
             { Release(nds, i); continue; }
             // Only base Kirby can inhale an ability item; copy attacks never meet it.
             if (KirbyAbilityItems.IsAbilityDrop(mob) && !session.Rules.IsBaseForm && !controlled[i])
@@ -189,8 +228,11 @@ public sealed class KirbyEnemies
             // the colorless scroll multiplier apply on top.
             // A floor ability item takes no damage: its proxy keeps full HP.
             bool item = KirbyAbilityItems.IsAbilityDrop(mob);
+            bonus[i] = mob is Mob && !item && !IsHazard(mob) ? hostBonuses.Factor(mob) : 1;
+            critical[i] = mob is Mob && !item && !IsHazard(mob) &&
+                crit.Roll(Random.Shared.NextDouble, mutations.TargetChance(KirbyMutations.HeartOfIceTarget(hero, mob)));
             assignedHp[i] = IsHazard(mob) ? 1 : item ? MaxSourceHp :
-                ColorlessDamage.SourceHp(mob.life, HostMultiplier(scale, mob), MaxSourceHp);
+                ColorlessDamage.SourceHp(mob.life, CopyMultiplier(i, scale, mob, true), MaxSourceHp);
             nds.SetProxy(i, x, y, assignedHp[i]);
             // Projectiles stay inhalable; their zero copy byte leaves the original
             // copyless mouthful, which spits a star and swallows into nothing.
@@ -204,6 +246,7 @@ public sealed class KirbyEnemies
     public string? Complete(KirbySession session, NdsRuntime nds, int ox, double oy, Func<Entity, double> scale)
     {
         string? copied = null;
+        bool criticalLanded = false;
         // Kirby's ability in the source step just run: Ice hits use the host freeze.
         byte sourceAbility = nds.State.Ability;
         stars.Scan(nds);
@@ -244,18 +287,33 @@ public sealed class KirbyEnemies
             if (damage > 0 && !mob.destroyed && mob.life > 0)
             {
                 sourceHit.Add(mob.HashlinkPointer);
-                int hostDamage = Math.Max(1, ColorlessDamage.HostDamage(damage, assignedHp[i], mob.life, HostMultiplier(scale, mob)));
+                int direction = 0;
+                var star = mob is Mob ? stars.SourceStrike(proxy.Entity, mob, ox, oy, out direction) : StarKind.None;
+                // A spit star never crits; only the copy attack's own hits do.
+                bool crit = star == StarKind.None && critical[i];
+                int hostDamage = Math.Max(1, ColorlessDamage.HostDamage(damage, assignedHp[i], mob.life, CopyMultiplier(i, scale, mob, star == StarKind.None)));
                 TestObserver?.Invoke(mob, damage, hostDamage);
+                // A copy attack that reaches a secret wall opens it as the R key does: the host activation drops its reward.
+                // Base-form contact leaves the wall alone, as the original game does.
+                if (mob is HiddenBlock secret)
+                {
+                    if (!session.Rules.IsBaseForm && secret.canBeActivated(session.Hero)) secret.onActivate(session.Hero, false);
+                }
                 // A spit star's original hit (and burst) on its source object also staggers the host enemy.
-                if (mob is Mob struck && stars.SourceStrike(proxy.Entity, mob, ox, oy, out int direction) is var star and not StarKind.None)
+                else if (mob is Mob struck && star != StarKind.None)
                 {
                     KirbyStars.TestObserver?.Invoke(star, mob, hostDamage, true);
                     KirbyStars.Stagger(struck, direction, () => KirbyDamage.Hit(session.Hero, mob, hostDamage));
                 }
-                // Only a hit the host resolved (not blocked or parried) freezes.
-                else if (KirbyDamage.Hit(session.Hero, mob, hostDamage, frozenSafe: IceFreeze.Applies(sourceAbility)) &&
-                    mob is Mob chilled && IceFreeze.Freezes(sourceAbility, damage, !mob.destroyed && mob.life > 0,
-                    mob.hasAffect(IceFreeze.FreezeAffect))) Freeze(chilled);
+                else
+                {
+                    // Only a hit the host resolved (not blocked or parried) crits or freezes.
+                    bool landed = KirbyDamage.Hit(session.Hero, mob, hostDamage, frozenSafe: IceFreeze.Applies(sourceAbility), critical: crit);
+                    if (landed && crit) criticalLanded = true;
+                    if (landed && (mob.destroyed || mob.life <= 0)) session.Rules.Mutations.CopyKill();
+                    if (landed && mob is Mob chilled && IceFreeze.Freezes(sourceAbility, damage, !mob.destroyed && mob.life > 0,
+                        mob.hasAffect(IceFreeze.FreezeAffect))) Freeze(chilled);
+                }
             }
             if (mob.destroyed || mob.life <= 0)
             {
@@ -287,6 +345,8 @@ public sealed class KirbyEnemies
             }
             controlled[i] = sourceControls;
         }
+        if (criticalLanded && criticalGuaranteed) session.Rules.Critical.Spend();
+        if (criticalLanded) session.Rules.Mutations.CriticalLanded();
         stars.StrikeHost(session.Hero, this, ox, oy, scale);
         screen.Strike(session.Hero, nds, this, stars.Records, sourceHit, scale);
         return copied;
@@ -396,8 +456,9 @@ public sealed class KirbyEnemies
         mob.addToLoot(new dc.LootType.InvItem(food), Ref<bool>.In(false));
     }
     // Gold deposits (PileOfGold, GoldNugget) have host life and drop gold in onDamage, like breakable props.
+    // A secret wall (HiddenBlock, "Scratch the wall") is hit the same way, so a copy attack opens it as R does.
     private static bool Eligible(Entity entity) =>
-        entity is Mob or Door or BreakableProp or ExplosiveBarrel or PileOfGold or GoldNugget || entity.isBreakableByHero();
+        entity is Mob or Door or BreakableProp or ExplosiveBarrel or PileOfGold or GoldNugget or HiddenBlock || entity.isBreakableByHero();
     private static (double X, double Y) Distance(Entity entity, double heroX, double heroY) =>
         (Math.Max(0, Math.Abs((entity.cx + entity.xr) * 24 - heroX) - entity.radius),
          Math.Max(0, Math.Abs((entity.cy + entity.yr) * 24 - entity.hei / 2 - (heroY - 14.5)) - (entity.hei + 29) / 2));

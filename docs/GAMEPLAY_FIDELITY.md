@@ -139,7 +139,27 @@ from their own `onDamage`/`onDie`, so the host still decides every gold drop.
 Live (`docs/RUNTIME_LAUNCH.md`, "Gold deposits"): Sword Kirby broke a real
 `PileOfGold` in four hits (life 4 → 0, four host gold drops); the same fixture
 without the change did no damage. `GoldNugget` was not run live. Other host hittables outside the pairing list (`PiggyBank`,
-`Gift`, `BreakableWall`, `HiddenBlock`, `Flower`, …) are unchanged and unchecked.
+`Gift`, `BreakableWall`, `Flower`, …) are unchanged and unchecked.
+
+### Secret walls (#84)
+
+`en.inter.HiddenBlock` ("Scratch the wall") was reachable only with the R key:
+copied attacks paired only with the objects listed for gold deposits, so an
+attack passed through the wall. It now pairs like the gold deposits
+(`KirbyEnemies.Eligible`). A copy attack that reaches it activates it through the
+host's own `canBeActivated` and `onActivate`, the path R uses, and the wall drops
+its reward. Ordinary copy damage is not applied to the wall: the activation
+replaces it, so the host life falls to 0 without a host `onDamage`. Base-form
+contact does nothing to the wall (no activation, no damage), as before this
+change.
+
+Live (`docs/RUNTIME_LAUNCH.md`, "Secret walls (#84)"): a copy Sword beside a
+real wall with `canBeHit` true opened it once and dropped a `SmallMeat` beside it.
+Before the change the same setup took no hits and dropped nothing. Base-form
+contact left the wall at 3 life, unopened.
+
+Not run: a live R-key press beside a wall as a parity control, copy forms other
+than Sword, and rewards other than food.
 
 ### Star projectiles
 
@@ -386,6 +406,41 @@ source, the runtime now logs every way Kirby loses health, with a
 - `kill`: each enemy a copy hit killed. Each hit line also gives the time since
   the last kill and that kill's position relative to Kirby.
 
+### Enemies the host stops letting Kirby hit (#86)
+
+Owner report (2026-10-08, recording and play log): in the Conjunctivius fight
+(`en.mob.boss.Beholder`) the boss stayed in its shield for good during the second
+tentacle phase. Kirby's Sword sparked on an invisible spot by the arena wall and
+the boss HP bar never moved. One of the three `BeholderTtcl` of that wave never
+died. The shield waits for every tentacle (`Beholder.onTtclDeath`).
+
+From `hlboot.dat` (SHA-256 `59350cad…07ce7e`, read with crashlink):
+
+- `BeholderTtcl.canBeHitBy` is false while `_isInGround`. When it burrows
+  (`onCooldownEnd` "offGround" or "endSweeping") it also takes invulnerable
+  affect 5 and sets `radius = hei = 0` and `sprScaleY = 0`.
+- `Mob.canBeHitBy` is false while the mob is `hidden`, during the reveal
+  cooldown (`260046848`, set by `Mob.reveal`), or with affect 5
+  (`Entity.canBeHit`). Ordinary hits set none of these.
+- The tentacle surfaces only through its stroke skill, which `behaviourAi`
+  starts when the hero is in its touching area.
+
+`KirbyEnemies.Prepare` checked `canBeHitBy(hero)` only when it first paired an
+enemy. A tentacle that burrowed stayed paired as a 1×1 original enemy. Copy
+attacks hit it, and the host rejected that damage. `BeholderTtcl` is a plain
+`Mob`, so the original hit recoil also took control of it: `interruptSkills`,
+`lockAiS` and its position follow the source object. That is the only state in
+which it can begin to surface.
+
+`Prepare` now releases a paired enemy (other than projectiles and floor ability
+items) as soon as the host stops letting the hero hit it, unless its source
+object was already swallowed. It is paired again, with a new random copy
+ability, once the host allows hits, as for an enemy that leaves and re-enters
+range. The same applies to other enemies that burrow, hide or become
+invulnerable (for example `SewerTtcl`). If one is caught in the original
+suction at that moment, the suction lets it go. Live result: [Conjunctivius
+tentacles](RUNTIME_LAUNCH.md#conjunctivius-tentacles-86).
+
 ### Elite Sword (intentional deviation)
 
 Elite host mobs do not roll a random ability: their source collision metadata
@@ -477,8 +532,9 @@ kill at that cap kills the host enemy.
 
 Unchanged: incoming damage, retained-shield parries, boss
 capture resistance, source attack cadence and repeat-hit debounce. Only the scroll
-multiplier is applied. Host weapon quality, affixes, mutations/perks, critical hits
-and other hero bonuses still do not alter copy attacks.
+multiplier is applied. Host weapon quality and other hero bonuses still do not alter
+copy attacks; host mutations (see [Mutations on copy attacks](#mutations-on-copy-attacks))
+and critical hits (a mod addition, below) do.
 
 This replaces the per-Boss-Cell curve proposed in #7 / PR #8, which was not merged.
 At 0 scrolls the colorless factor is ×1, leaving the unit-scale and Elite behavior
@@ -494,6 +550,135 @@ Those runs predate the original-unit scale from #3, so they show the colorless
 factor, not today's absolute numbers.
 Other copy forms, bosses and breakables have not been run live with scrolls.
 
+### Copy-attack critical hits (intentional addition)
+
+Issue #88. The original game has no crits and Dead Cells gives ability items the
+`NoCritical` tag, so Kirby could not crit. This is a mod addition, the base for
+the mutation work that replaces the skill-cooldown mutations (#89).
+
+- **Chance and damage.** `CopyCritical` in `src/core/` holds Kirby's crit chance
+  and crit factor. The base chance is `CopyCriticalChance` in `config.json` (0 by
+  default: Kirby does not crit until a mutation says so) and the factor is
+  `CopyCriticalDamage` (×1.5). Timed bonuses to chance or factor add to them, and
+  a "sure crit" makes the next hit that lands a crit. Nothing grants those bonuses
+  yet; #89 does.
+- **Roll before the hit.** `KirbyEnemies.Prepare` rolls once per paired enemy on
+  every source frame and folds the factor into the multiplier that sets that
+  enemy's source HP, so a hit on a rolled frame is lethal in the source exactly
+  when its scaled damage is lethal in the host. The original death reaction
+  therefore still happens in the same tick as the host kill, with no native
+  change. A roll does not depend on whether a hit lands, so one roll per frame is
+  the same as one roll per hit. A rolled frame without a hit changes only the
+  source enemy's HP, which is reset every frame anyway.
+- **Host crit.** `KirbyDamage` marks the hit and, once the host has resolved the
+  target's blocks and parries, upgrades a `Normal` result to the host's own
+  `Critical` (`AttackTargetImpl.updateHitResult`), so Dead Cells draws its crit
+  number. A blocked or parried hit stays blocked, and a sure crit is spent only by
+  a hit that lands.
+- **What does not crit.** Spit stars and the ability star share their slot's
+  roll but are hit with the ordinary multiplier. Their lethality still follows the
+  rolled source HP, so a star can kill slightly earlier than its plain damage on a
+  rolled frame (a known edge). Screen-wide attacks (Crash, Mike and the like) and
+  the host-side star strike do not crit yet. Floor ability items, projectiles and
+  non-enemy targets never crit.
+- **Time.** Timed bonuses age by 1/60 s per source frame.
+
+Evidence: core tests (`tests/Program.cs`) cover the chance, timed bonuses, sure
+crit and the lethality pairing for crit factors ×1, ×1.5 and ×2 at three scroll
+tiers. Live runs `20261008-020113` (chance forced to 1) and `20261008-020259` (chance
+0), both `--input-plan ability --probe-ability 18` in the separate root
+`repros/crit-88-20261008`, are recorded in
+[RUNTIME_LAUNCH.md](RUNTIME_LAUNCH.md#copy-attack-critical-hits-2026-10-08). The
+effect of a partial chance, of bosses, and the Ice/star edge cases were not run.
+
+### Cooldown mutations (intentional deviation)
+
+Issue #89. Skill cooldowns do nothing in a Kirby run (skills are ability items, and
+the skill buttons inhale and discard), so the five mutations that only shorten
+cooldowns would be dead picks. Each keeps its Dead Cells trigger and, while the
+hero is Kirby, gives timed crit chance or damage to the copy-attack crits (#88).
+Their IDs stay the host's; `KirbyMutations` rewrites their text
+(`InventItem.getGameplayDesc`, which the mutation menu and pause screen read) with
+the live numbers from `MutationDescriptions` in `src/core/`. The numbers are the
+owner's to tune: `CriticalMutations` in `config.json` (`MutationTuning`).
+
+| Mutation (host ID) | Host effect | In a Kirby run (default numbers) |
+| :--- | :--- | :--- |
+| Killer Instinct (`P_CDR_Kill`) | Melee kills cut cooldowns | Copy-attack kills give +5% crit chance for 6 s, up to 5 stacks |
+| Blind Faith (`P_CDR_Parry`) | Parries cut cooldowns | A parry makes the next copy attack within 8 s a sure crit |
+| Heart of Ice (`P_CDR_locked`) | Hits on slowed, stunned, frozen or rooted enemies up close cut cooldowns | +25% crit chance against such enemies within 4 cells |
+| Hunter's Instinct (`P_CDR_Distance`) | Ranged kills cut cooldowns | Copying an ability gives +20% crit chance for 10 s |
+| Instinct of the Master of Arms (`P_CDR_Crit`) | Crits cut cooldowns | +10% crit chance while owned; each crit adds +25% crit damage for 5 s, up to 3 stacks |
+
+"Ranged" is gone from Kirby's rules (no host weapons appear in a Kirby run), so
+Hunter's Instinct got a Kirby trigger instead of a star-based one. Triggers:
+a copy kill is a copy hit that kills in `KirbyEnemies.Complete`; a parry is the
+host's `Hero.onPerfectParry`; a copy is `KirbyRules.SetSourceAbility` seeing a new
+ability. Heart of Ice's affect IDs (15, 8, 23 and 133) and distance test
+(`sqrt(dx² + dy²) ≤ 4`) are the ones `HeroAttackSource.postHitResultUpdate` reads
+(bytecode, crashlink); its roll uses the target's own chance, so it is not a
+global bonus. A sure crit is spent only by a hit that lands.
+
+Host behavior that stays: the host's own versions of these mutations still fire
+if the hero owns them (they reduce skill cooldowns, which Kirby has none of).
+
+Evidence: core tests cover each rule, stacking, expiry and the texts. Live run
+`20261008-020831` (`--probe-mutations` with all five, in `repros/crit-88-20261008`)
+showed `ownedMutations` of all five, the new texts from the host's
+`getGameplayDesc`, and +10% chance from Master of Arms at the first hit; run
+`20261008-021023` with Killer Instinct and Hunter's Instinct showed +5% after the
+copy kill and its end 361 source frames (6 s) later. Not run live: Blind Faith,
+Heart of Ice, Hunter's Instinct (the probe copies before it gives the mutation),
+Master of Arms damage stacks, and the menu itself.
+
+### Mutations on copy attacks
+
+Issue #91. In a Kirby run every copy attack counts as a melee attack: no Dead
+Cells weapon appears, so "ranged" has nothing to mean. Reading the host showed the
+copy hit already goes through the whole host hit pipeline as an ordinary hero
+melee hit (no tags, no carrier), so almost every damage mutation already acted on
+it. The one gap was the damage number itself: the mod replaces the host's final
+damage (`KirbyDamage`), which dropped every mutation *multiplier*.
+
+- **Multipliers, now applied.** `KirbyHostBonuses` asks the host's own
+  `HeroAttackSource.computeExtraBonusMul` (the perks and aspects product; it only
+  reads the hero's inventory and status effects) for a throwaway attack, with the
+  close-range tag so Point Blank counts, once per paired enemy per source frame.
+  The factor goes into that enemy's source-HP pairing next to the crit factor, so
+  lethality stays in agreement. It covers Tranquility, Combo, Vengeance, Tainted
+  Flask, Extended Healing, Gastronomy, Point Blank and Demon Strength, plus
+  aspects. Spit stars and screen attacks still get no bonus (and no crit), as noted
+  under the crit section.
+- **Already worked, now checked.** Flat extra damage and on-hit effects that the host
+  applies as part of the hit: Initiative (a separate extra hit), Counterattack
+  (the host's effect 108, a separate extra hit of its stored damage), Open Wounds
+  (an extra status effect), Combo stacking (the host's `onDirectHitFromHero`),
+  kill rewards (Predator, Berserker, Necromancy) and healing on hit.
+- **Not asked on purpose.** `computeBonusMul` also consumes one-shot status effects
+  whether or not a hit lands, so it is not called ahead of time. Its terms (the
+  full-life affix, the invisibility bonus, effect 112) therefore still do not
+  count for copy attacks, nor do target-side terms (vulnerable enemies, for
+  example).
+- **Text.** `CopyAttackWording` rewrites the host's own mutation text in a Kirby
+  run: "melee attacks/kills" become "copy attacks / copy-attack kills" and Point
+  Blank's "close-ranged ranged attacks" becomes "copy attacks at close range". The
+  host's numbers stay (they come from `getGameplayDesc`).
+- **Not offered.** Support, Parting Gift and Networking are hidden (see the
+  [mutation menu](#mutation-menu-intentional-deviation)).
+
+Evidence: core tests cover the wording and the pairing for factors 1.02 to 2.3 with
+and without a crit. Live runs in `repros/crit-88-20261008`: `20261008-022631`
+(`--probe-mutations P_DmgRevenge,P_NoMobAround,P_DmgKill --probe-affects 57:60,54:60`)
+gave a host factor of 1.87 (Revenge +60%, Tranquility +25%, one Combo step) and a
+hit of 117 where 63 was dealt without it; the next hit read 1.891 (Combo grew) and
+killed in the same tick. `20261008-022811` (`P_Bleed,P_DmgFirstHit,P_InvisibilityOnKill,P_DmgNearRanged,P_DeathShield`)
+showed the rewritten texts, Point Blank's factor of 1.31 (hit 82), Initiative's
+extra hit (93) and a new host status effect at the hit (index 89; that it is
+bleeding was not confirmed). `20261008-023052` (`P_DmgParry`, effect 108 set to
+368) showed Counterattack's extra hit of 368. Effects 57, 54 and 108 were set by
+the lab fixture, not earned in play. Not run live: earning those effects in play,
+Gastronomy, Extended Healing, Tainted Flask, Demon Strength, bosses, and the
+mutation menu itself.
 ### Mutation menu (intentional deviation)
 
 Issue #90. (Twelve mutations; the table lists them.) Dead Cells weapons never appear in a Kirby run (#54), so a mutation

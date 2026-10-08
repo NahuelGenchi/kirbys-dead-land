@@ -41,6 +41,7 @@ public sealed class KirbyMod(ModInfo info) : ModBase(info), IOnHeroUpdate,
         KirbyNdsProvider.Log = message => Logger.Information(message);
         KirbyEnemyHooks.Install();
         KirbyDamage.Install();
+        KirbyMutations.Install();
         KirbyMutationMenu.Install();
         KirbyVines.Install();
         dc.en.inter.Hook_Elevator.postUpdate += (orig, elevator) => { orig(elevator); NativeProvider?.AlignToElevator(elevator); };
@@ -322,4 +323,13 @@ public sealed class RuntimeConfig
     /// 16-18 HP enemy with one ability hit; 3.5 makes a 120-life Zombie take two.
     /// </summary>
     public double CopyDamageScale { get; set; } = 3.5;
+    /// <summary>
+    /// Critical hits of copy attacks (#88, a mod addition). Kirby has no base
+    /// crit chance; mutations add timed chance. A crit multiplies the hit by
+    /// <see cref="CopyCriticalDamage"/>.
+    /// </summary>
+    public double CopyCriticalChance { get; set; }
+    public double CopyCriticalDamage { get; set; } = 1.5;
+    /// <summary>Numbers of the Kirby cooldown mutations (#89).</summary>
+    public MutationTuning CriticalMutations { get; set; } = new();
 }

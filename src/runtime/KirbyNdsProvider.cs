@@ -589,6 +589,9 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
                 elevator = new { riding.Value.Tracked.Elevator.cy, riding.Value.Tracked.Elevator.yr, riding.Value.Tracked.Sunk } });
         }
         if (stompShield > 0 && !stomp.Active) stompShield--;
+        session.Rules.Critical.BaseChance = config.CopyCriticalChance;
+        session.Rules.Critical.BaseDamageMultiplier = config.CopyCriticalDamage;
+        session.Rules.Mutations.Tuning = config.CriticalMutations;
         enemies.Prepare(session, nds, originX * 24, originY * 24 + lift, SourceDamageScale,
             bodyContact: config.OriginalTouchDamage && !stomp.Active && stompShield == 0);
         int healthBefore = nds.Health;
