@@ -1305,3 +1305,15 @@ the all-ability rendering tests as full gameplay acceptance.
 - Not run: the other far attacks live, spit stars, an enemy hit beyond 128 px.
   Limit: 512 px horizontally and 256 px vertically from Kirby.
 
+## 2026-10-07 — Ability item affixes act on copy attacks (#57)
+
+- Owner report (screencast): an ability item's arrow passive never fired.
+- Host flow: `Weapon.prepare` clears `affixesDone` and throws the Grenade affix,
+  `Weapon.onExecute` runs `executeAffixes` (arrows, on-use shield); hits carry
+  their item's affixes through `AttackData.useItemAffixes`.
+- `KirbyDamage.Hit` makes the copy's ability item each hit's source item; each
+  copy attack press runs the item's weapon prepare/execute affix steps; floor
+  ability items keep the replaced item's affixes the host allows.
+- Live `004739`, `004958`, `005200`: arrows and bleed on copy attacks, affix
+  carry-over. Saves unchanged.
+- Source: `python3 scripts/check.py` passes.

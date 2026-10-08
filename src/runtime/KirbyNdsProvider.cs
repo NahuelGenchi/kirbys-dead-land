@@ -551,6 +551,10 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         int direction = (raw & 48) switch { 16 => 1, 32 => -1, _ => 0 };
         bool diveButton = KirbyInput.DiveButton;
         bool jumpPressed = (raw & 1) != 0 && (previousInput & 1) == 0;
+        // Each copy attack press (DS B while copied) uses the copy item's affixes (#57).
+        // A copied Kirby holds no mouthful (the original mouth-count bit stays stale after a swallow).
+        if ((raw & 2) != 0 && (previousInput & 2) == 0 && !session.Rules.IsBaseForm)
+            KirbyAbilityItems.UseAffixes(hero);
         if (!stomp.Active && KirbyActions.CanStomp(action) && DiveRequested(raw, diveButton))
             BeginStomp(hero, action, centerY + 14.5);
         previousInput = raw;

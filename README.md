@@ -43,8 +43,8 @@ preserved; generated assets and native dependencies remain in the private data r
   its original icon. Walking near one shows its name, description and colorless
   rarity. It cannot be picked up: inhale it and swallow it to copy that ability;
   spitting it out puts it back. While copied, the ability's item fills a weapon
-  slot and the HUD; the forge and shops are not adapted yet, and quality and
-  affixes have no effect yet (#56–#58). See
+  slot and the HUD. Its passives (affixes such as bleed or the arrow shot) act on
+  copy attacks like a weapon's (#57). See
   [ability items](docs/GAMEPLAY_FIDELITY.md#ability-items-intentional-addition).
 - Original inhale, mouthful, Down-to-swallow, spit, flight, guard, slide and copy
   discard are executed by the ROM. All 24 original copy forms load through the
