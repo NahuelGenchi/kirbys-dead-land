@@ -1410,3 +1410,19 @@ the all-ability rendering tests as full gameplay acceptance.
   unchanged, no fatal log.
 - Not run: a non-Legendary ability item after this change (the code path is the
   same `useItem` call), the owner's Parasol, resolutions other than 1024×768.
+
+## 2026-10-08 — mutations Kirby cannot use leave the menu (#90)
+
+- Host: both `PerkSelect.isVisible` and `PerkMaster.isVisible` call
+  `itemMeta.hasUnlockedItem` (plus the custom-game lock); `PerkMaster.getAvailablePerks`
+  counts with the NPC's call, so both are filtered.
+- `MutationMenu.Hidden` (`src/core/`) lists nine mutations with reasons;
+  `KirbyMutationMenu` filters them while a Kirby session is active.
+- Source: `python3 scripts/check.py` passes (302 core assertions; Release build 0
+  warnings/errors).
+- Live (`repros/crit-88-20261008`): `20261008-021537` unfiltered listed all nine,
+  `20261008-021638` filtered listed none; ordinary mutations stayed. Not run: the
+  NPC hook, the pause screen, a mutation already held.
+- Scope note: the ranged mutations that can be reworked (Point Blank, Networking,
+  Parting Gift) move to #91 with their effect, so no text promises more than the
+  code does.

@@ -494,6 +494,37 @@ Those runs predate the original-unit scale from #3, so they show the colorless
 factor, not today's absolute numbers.
 Other copy forms, bosses and breakables have not been run live with scrolls.
 
+### Mutation menu (intentional deviation)
+
+Issue #90. Dead Cells weapons never appear in a Kirby run (#54), so a mutation
+that needs a weapon type, ammo, planted arrows, the backpack weapon or two weapons
+to switch between has nothing to act on, and a skill-use trigger never fires
+because skills are ability items too. While a Kirby session is active,
+`KirbyMutationMenu` removes them from every mutation choice by filtering
+`PerkSelect.isVisible` (the menu) and `PerkMaster.isVisible` (the NPC, which counts
+its offer with the same call, so the two agree). The list is
+`MutationMenu.Hidden` in `src/core/`, each entry with its reason:
+
+| Hidden mutation | Reason |
+| :--- | :--- |
+| Barbed Tips, Ripper (`P_DmgPlantedArrow`, `P_AmmoOnHit`) | Need arrows stuck in enemies |
+| Porcupack, Acrobatipack, Armadillopack (`P_Backpack_*`) | Use a weapon or shield carried in the backpack |
+| Kill Rhythm (`P_AttackSpeed_Combo`) | Needs two different weapons; both buttons fire the same ability |
+| Ranger's Gear, Scheme (`P_DmgSkillRanged`, `P_DmgSkl`) | Follow a skill use |
+| Ammo (`P_Ammo`) | Multiplies weapon ammo; its Kirby version (a longer-lived ability star) waits for #68 |
+
+The mutations that name melee or ranged attacks but could work for copy attacks
+(Tranquility, Support, Counterattack, Point Blank, Networking, Parting Gift and
+others) are not hidden; #91 makes them work. A mutation the hero already holds
+keeps working. Base Beheaded runs are unchanged.
+
+Evidence: core tests pin the list. Live runs `20261008-021537` (filter off) and
+`20261008-021638` (filter on), `--probe-ability 18 --probe-menu`, in
+`repros/crit-88-20261008`, opened the real `ui.PerkSelect` in the private profile
+with all nine and three ordinary mutations unlocked: unfiltered it listed all
+nine hidden ones, filtered it listed none and still listed the three ordinary
+ones. The NPC's own `PerkMaster.isVisible` hook was not exercised live.
+
 ### Host elevators (deviation)
 
 Dead Cells elevators (`en.inter.Elevator` and its `SimpleElevator`,

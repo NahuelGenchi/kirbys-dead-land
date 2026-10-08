@@ -46,6 +46,10 @@ preserved; generated assets and native dependencies remain in the private data r
   slot and the HUD. Its passives (affixes such as bleed or the arrow shot) act on
   copy attacks like a weapon's (#57). See
   [ability items](docs/GAMEPLAY_FIDELITY.md#ability-items-intentional-addition).
+- Mutations that need Dead Cells weapons, ammo or skill use (Barbed Tips, Ripper,
+  the backpack mutations, Kill Rhythm, Ranger's Gear, Scheme and Ammo) are not
+  offered in a Kirby run (#90). See
+  [mutation menu](docs/GAMEPLAY_FIDELITY.md#mutation-menu-intentional-deviation).
 - Original inhale, mouthful, Down-to-swallow, spit, flight, guard, slide and copy
   discard are executed by the ROM. All 24 original copy forms load through the
   original transformation code, rather than replacing them with host weapons.

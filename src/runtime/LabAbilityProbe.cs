@@ -26,6 +26,7 @@ internal static class LabAbilityProbe
     private static bool savedAttackState;
     private static int[]? scrolls;
     private static bool scrollsGiven;
+    private static bool menuChecked;
     private static readonly bool hudFixture = Environment.GetEnvironmentVariable("KIRBY_LAB_TEST_HUD") == "1";
     private static readonly bool pauseFixture = Environment.GetEnvironmentVariable("KIRBY_LAB_TEST_PAUSE") == "1";
     private static readonly bool legendaryFixture = Environment.GetEnvironmentVariable("KIRBY_LAB_TEST_LEGENDARY") == "1";
@@ -196,6 +197,34 @@ internal static class LabAbilityProbe
                 }) + "\n");
             }
             if (legendaryGiven) session.Hero.hudInitItems();
+        }
+        if (Environment.GetEnvironmentVariable("KIRBY_LAB_TEST_MENU") is "1" or "2" && !menuChecked)
+        {
+            menuChecked = true;
+            KirbyMutationMenu.TestUnfiltered = Environment.GetEnvironmentVariable("KIRBY_LAB_TEST_MENU") == "2";
+            // The real mutation menu in the isolated profile, with the hidden mutations and
+            // two ordinary ones unlocked; it must list the ordinary ones and none of the hidden (#90).
+            var meta = session.Hero._level.game.user.itemMeta;
+            string[] controls = ["P_Bleed", "P_DmgParry", "P_NoMobAround"];
+            string[] probed = [.. Kirby.Core.MutationMenu.Hidden.Keys, .. controls];
+            foreach (var id in probed) meta.unlockItem(id.AsHaxeString());
+            var unlocked = probed.ToDictionary(id => id, id => meta.hasUnlockedItem(id.AsHaxeString()));
+            var listed = new List<string>();
+            dc.ui.Hook_PerkSelect.addPerk += (orig, menu, ii) =>
+            {
+                if (ii is not null) listed.Add(ii.getItemKind()?.ToString() ?? "");
+                return orig(menu, ii);
+            };
+            _ = new dc.ui.PerkSelect(session.Hero, session.Hero);
+            System.IO.File.WriteAllText(Path.Combine(run, "mutation-menu.json"), JsonSerializer.Serialize(new
+            {
+                unfiltered = KirbyMutationMenu.TestUnfiltered,
+                hidden = Kirby.Core.MutationMenu.Hidden.Keys,
+                unlocked,
+                listed,
+                hiddenListed = listed.Where(Kirby.Core.MutationMenu.IsHidden).ToArray(),
+                controlsListed = controls.Where(listed.Contains).ToArray(),
+            }, new JsonSerializerOptions { WriteIndented = true }));
         }
         if (scrolls is not null && !scrollsGiven)
         {

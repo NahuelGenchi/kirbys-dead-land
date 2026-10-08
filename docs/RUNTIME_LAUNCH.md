@@ -831,3 +831,12 @@ dying enemy ending during the cinematic, Brutality and Tactics scrolls, scrolls
 that offer a choice, the exit-door walk with paired enemies, and the owner's own
 Ramparts room.
 
+## Mutation menu filter (2026-10-08)
+
+Issue #90. `--probe-menu [filtered|unfiltered]` (`KIRBY_LAB_TEST_MENU`, with
+`--input-plan ability`) unlocks the nine hidden mutations and three ordinary ones
+in the private profile, opens the real `ui.PerkSelect` and writes the mutations it
+listed to `mutation-menu.json`. Run `20261008-021537` (unfiltered) listed all nine
+hidden mutations and the three ordinary ones. Run `20261008-021638` (filtered)
+listed none of the nine and all three ordinary ones. No fatal log. The mutation
+NPC's `PerkMaster.isVisible` hook was not exercised.
