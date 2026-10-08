@@ -352,6 +352,43 @@ KIRBY_LAB_BREAKABLE_TARGET=gold python3 scripts/launch_runtime.py \
 Each run reached its time limit without fatal errors, and real saves were unchanged.
 `GoldNugget` and copy forms other than Sword were not run.
 
+## Secret walls (#84)
+
+`KIRBY_LAB_BREAKABLE_TARGET=hidden` makes the `breakable` plan spawn a real
+`HiddenBlock` beside Kirby (constructor with direction 1 and a small food reward,
+then `init`) and copy Sword. The probe re-places Kirby beside the wall each frame
+of the attack, because the transform's Right press otherwise carries him past it.
+`breakable-hits.jsonl` records each host `onDamage`; `breakable.json` counts
+`HiddenBlock.onActivate` calls and lists the `ItemDrop`s within three cells of the
+wall. `hidden-base` presses attack in base form instead and passes only when the
+wall keeps its life and is not opened.
+
+```sh
+KIRBY_LAB_BREAKABLE_TARGET=hidden python3 scripts/launch_runtime.py \
+  --data-root ~/.local/share/kirby-dead-cells/repros/hidden-block-20261008 \
+  --seconds 60 --start-game --outfit KirbySuperStarUltra --input-plan breakable
+```
+
+Separate data root `repros/hidden-block-20261008`, staged with the ability-item
+outfit pack (`outfit-build-55`, SHA-256 `8e44122d…`) and the matching asset pack
+(`assets-final`, SHA-256 `3cdd1193…`). A lab staged with the older
+`outfit-build/res.pak` fails at startup with `Invalid ItemKind`.
+
+| Run | Build | Result |
+| :--- | :--- | :--- |
+| `20261008-002608` | control: no pairing change | Copy Sword active, wall `canBeHit` true 28 px away, no proxy for the wall, no hits, no activation, life 3 |
+| `20261008-002727` | pairing only (`Eligible`) | Three copy hits, life 3 → 0, not opened, no activation: the activation was missing |
+| `20261008-002858` | pairing and activation | One activation, life 0; drops not yet recorded |
+| `20261008-003014` | pairing and activation, drops recorded | One activation; `SmallMeat` dropped at the wall |
+| `20261008-003144` | base form (`hidden-base`), final code | Base form, no activation, no damage, life 3, wall `canBeHit` true 20–27 px away |
+| `20261008-003248` | final code, copy Sword | One activation; `SmallMeat` dropped beside the wall |
+
+Each run reached its 60-second limit (`exit_code` -15, expected) with
+`save_isolation_installed` true, `source_saves_unchanged` true and no fatal log.
+The owner's `--play` session on the main lab was not restaged or stopped.
+Not run: an R-key press beside a wall as a parity control, copy forms other than
+Sword, and rewards other than food.
+
 ## Suplex lunge into doors
 
 Issue #50. The ability probe copies Suplex (`--probe-ability 6`) and replays

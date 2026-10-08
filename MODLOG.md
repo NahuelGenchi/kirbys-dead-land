@@ -1410,3 +1410,27 @@ the all-ability rendering tests as full gameplay acceptance.
   unchanged, no fatal log.
 - Not run: a non-Legendary ability item after this change (the code path is the
   same `useItem` call), the owner's Parasol, resolutions other than 1024×768.
+
+## 2026-10-08 — Copy attacks open the Scratch the wall secret (#84)
+
+- Owner report: a copied ability's attack on the "Scratch the wall" reward did
+  nothing; only R opened it.
+- Cause: the wall is Dead Cells `en.inter.HiddenBlock` (`hlboot.dat` string
+  table: "Gratter le mur", `wallSecretBroken`, `wallSecretRune`). Copied attacks
+  paired only with the gold-deposit objects (`KirbyEnemies.Eligible`), so the
+  wall never got a proxy and no attack reached it.
+- Fix: `HiddenBlock` joins `Eligible`. A copy attack that reaches it calls the
+  host's `canBeActivated` and `onActivate` with Kirby, the R key's path, and the
+  wall drops its reward. Base-form contact does nothing. Live probe:
+  `KIRBY_LAB_BREAKABLE_TARGET=hidden` (and `hidden-base`) in `LabBreakableProbe`.
+- Source: `python3 scripts/check.py` passes (302 core assertions; runtime Release
+  build 0 warnings, 0 errors). `tools/nds_tests.py` not run (`src/nds` unchanged).
+- Live (separate root `repros/hidden-block-20261008`, staged with
+  `outfit-build-55` and `assets-final`): control with no pairing change, copy
+  Sword beside a real wall, no hits and no activation; final code, one
+  activation and a `SmallMeat` dropped beside the wall; base form, no activation,
+  wall at 3 life. Saves unchanged, no fatal log. See `docs/RUNTIME_LAUNCH.md`
+  "Secret walls (#84)".
+- Not run: an R-key press beside a wall as a parity control, copy forms other
+  than Sword, rewards other than food, and the owner's own play session.
+

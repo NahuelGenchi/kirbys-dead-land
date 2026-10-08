@@ -246,8 +246,14 @@ public sealed class KirbyEnemies
                 sourceHit.Add(mob.HashlinkPointer);
                 int hostDamage = Math.Max(1, ColorlessDamage.HostDamage(damage, assignedHp[i], mob.life, HostMultiplier(scale, mob)));
                 TestObserver?.Invoke(mob, damage, hostDamage);
+                // A copy attack that reaches a secret wall opens it as the R key does: the host activation drops its reward.
+                // Base-form contact leaves the wall alone, as the original game does.
+                if (mob is HiddenBlock secret)
+                {
+                    if (!session.Rules.IsBaseForm && secret.canBeActivated(session.Hero)) secret.onActivate(session.Hero, false);
+                }
                 // A spit star's original hit (and burst) on its source object also staggers the host enemy.
-                if (mob is Mob struck && stars.SourceStrike(proxy.Entity, mob, ox, oy, out int direction) is var star and not StarKind.None)
+                else if (mob is Mob struck && stars.SourceStrike(proxy.Entity, mob, ox, oy, out int direction) is var star and not StarKind.None)
                 {
                     KirbyStars.TestObserver?.Invoke(star, mob, hostDamage, true);
                     KirbyStars.Stagger(struck, direction, () => KirbyDamage.Hit(session.Hero, mob, hostDamage));
@@ -396,8 +402,9 @@ public sealed class KirbyEnemies
         mob.addToLoot(new dc.LootType.InvItem(food), Ref<bool>.In(false));
     }
     // Gold deposits (PileOfGold, GoldNugget) have host life and drop gold in onDamage, like breakable props.
+    // A secret wall (HiddenBlock, "Scratch the wall") is hit the same way, so a copy attack opens it as R does.
     private static bool Eligible(Entity entity) =>
-        entity is Mob or Door or BreakableProp or ExplosiveBarrel or PileOfGold or GoldNugget || entity.isBreakableByHero();
+        entity is Mob or Door or BreakableProp or ExplosiveBarrel or PileOfGold or GoldNugget or HiddenBlock || entity.isBreakableByHero();
     private static (double X, double Y) Distance(Entity entity, double heroX, double heroY) =>
         (Math.Max(0, Math.Abs((entity.cx + entity.xr) * 24 - heroX) - entity.radius),
          Math.Max(0, Math.Abs((entity.cy + entity.yr) * 24 - entity.hei / 2 - (heroY - 14.5)) - (entity.hei + 29) / 2));
