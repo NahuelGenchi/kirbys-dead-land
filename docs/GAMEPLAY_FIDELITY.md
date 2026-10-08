@@ -535,6 +535,46 @@ tiers. Live runs `20261008-020113` (chance forced to 1) and `20261008-020259` (c
 [RUNTIME_LAUNCH.md](RUNTIME_LAUNCH.md#copy-attack-critical-hits-2026-10-08). The
 effect of a partial chance, of bosses, and the Ice/star edge cases were not run.
 
+### Cooldown mutations (intentional deviation)
+
+Issue #89. Skill cooldowns do nothing in a Kirby run (skills are ability items, and
+the skill buttons inhale and discard), so the five mutations that only shorten
+cooldowns would be dead picks. Each keeps its Dead Cells trigger and, while the
+hero is Kirby, gives timed crit chance or damage to the copy-attack crits (#88).
+Their IDs stay the host's; `KirbyMutations` rewrites their text
+(`InventItem.getGameplayDesc`, which the mutation menu and pause screen read) with
+the live numbers from `MutationDescriptions` in `src/core/`. The numbers are the
+owner's to tune: `CriticalMutations` in `config.json` (`MutationTuning`).
+
+| Mutation (host ID) | Host effect | In a Kirby run (default numbers) |
+| :--- | :--- | :--- |
+| Killer Instinct (`P_CDR_Kill`) | Melee kills cut cooldowns | Copy-attack kills give +5% crit chance for 6 s, up to 5 stacks |
+| Blind Faith (`P_CDR_Parry`) | Parries cut cooldowns | A parry makes the next copy attack within 8 s a sure crit |
+| Heart of Ice (`P_CDR_locked`) | Hits on slowed, stunned, frozen or rooted enemies up close cut cooldowns | +25% crit chance against such enemies within 4 cells |
+| Hunter's Instinct (`P_CDR_Distance`) | Ranged kills cut cooldowns | Copying an ability gives +20% crit chance for 10 s |
+| Instinct of the Master of Arms (`P_CDR_Crit`) | Crits cut cooldowns | +10% crit chance while owned; each crit adds +25% crit damage for 5 s, up to 3 stacks |
+
+"Ranged" is gone from Kirby's rules (no host weapons appear in a Kirby run), so
+Hunter's Instinct got a Kirby trigger instead of a star-based one. Triggers:
+a copy kill is a copy hit that kills in `KirbyEnemies.Complete`; a parry is the
+host's `Hero.onPerfectParry`; a copy is `KirbyRules.SetSourceAbility` seeing a new
+ability. Heart of Ice's affect IDs (15, 8, 23 and 133) and distance test
+(`sqrt(dx² + dy²) ≤ 4`) are the ones `HeroAttackSource.postHitResultUpdate` reads
+(bytecode, crashlink); its roll uses the target's own chance, so it is not a
+global bonus. A sure crit is spent only by a hit that lands.
+
+Host behavior that stays: the host's own versions of these mutations still fire
+if the hero owns them (they reduce skill cooldowns, which Kirby has none of).
+
+Evidence: core tests cover each rule, stacking, expiry and the texts. Live run
+`20261008-020831` (`--probe-mutations` with all five, in `repros/crit-88-20261008`)
+showed `ownedMutations` of all five, the new texts from the host's
+`getGameplayDesc`, and +10% chance from Master of Arms at the first hit; run
+`20261008-021023` with Killer Instinct and Hunter's Instinct showed +5% after the
+copy kill and its end 361 source frames (6 s) later. Not run live: Blind Faith,
+Heart of Ice, Hunter's Instinct (the probe copies before it gives the mutation),
+Master of Arms damage stacks, and the menu itself.
+
 ### Host elevators (deviation)
 
 Dead Cells elevators (`en.inter.Elevator` and its `SimpleElevator`,

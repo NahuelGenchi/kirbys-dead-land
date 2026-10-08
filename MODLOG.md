@@ -1431,3 +1431,19 @@ the all-ability rendering tests as full gameplay acceptance.
 - Live (separate root `repros/crit-88-20261008`): chance 1 gave host `Critical`
   hits of 94 and 26; chance 0 gave the old `Normal` 63 and 52.
 - Not run: partial chance, sure crit, bosses, Ice, stars, screen attacks.
+
+## 2026-10-08 — cooldown mutations become crit bonuses (#89)
+
+- Read the host's mutation code (crashlink, outputs kept in the scratchpad): the
+  five cooldown mutations act in `HeroAttackSource.postHitResultUpdate` (parry, crit,
+  Heart of Ice: affects 15/8/23/133 within 4 cells) and `Mob.onDie` (kills).
+  `PerkSelect.addPerk` and the pause screen read `InventItem.getGameplayDesc`.
+- `CriticalMutations` and `MutationDescriptions` (`src/core/`) hold the rules and
+  texts; `CopyCritical` gained keyed stacks, an owned chance, a timed sure crit
+  and a per-target extra chance. `KirbyMutations` reads the host inventory, hooks
+  `getGameplayDesc` and `Hero.onPerfectParry`, and tests Heart of Ice's target.
+  Numbers are in `config.json` (`CriticalMutations`).
+- Source: `python3 scripts/check.py` passes (340 core assertions; Release build 0
+  warnings/errors).
+- Live (`repros/crit-88-20261008`): texts, ownership and Killer Instinct's +5% and
+  6 s ending verified; Blind Faith, Heart of Ice, Hunter's Instinct and the menu not run.

@@ -17,6 +17,8 @@ public sealed class CopyCritical
     public const double DefaultDamageMultiplier = 1.5;
     private readonly List<Timed> chance = [];
     private readonly List<Timed> damage = [];
+    private double guaranteeLeft;
+    private double ownedChance;
     private double baseChance;
     private double baseMultiplier = DefaultDamageMultiplier;
 
@@ -34,33 +36,55 @@ public sealed class CopyCritical
         set => baseMultiplier = double.IsFinite(value) ? Math.Max(1, value) : DefaultDamageMultiplier;
     }
 
-    /// <summary>The next copy hit that lands is a sure crit (used up by <see cref="Spend"/>).</summary>
-    public bool Guaranteed { get; private set; }
+    /// <summary>Crit chance a mutation gives while it is owned, not timed (#89).</summary>
+    public double OwnedChance
+    {
+        get => ownedChance;
+        set => ownedChance = Math.Clamp(double.IsFinite(value) ? value : 0, 0, 1);
+    }
 
-    /// <summary>Current crit chance: base plus the live timed bonuses, capped at 1.</summary>
-    public double Chance => Math.Min(1, baseChance + Sum(chance));
+    /// <summary>The next copy hit that lands is a sure crit (used up by <see cref="Spend"/>).</summary>
+    public bool Guaranteed => guaranteeLeft > 0;
+
+    /// <summary>Current crit chance: base, owned and live timed bonuses, capped at 1.</summary>
+    public double Chance => Math.Min(1, baseChance + ownedChance + Sum(chance));
 
     /// <summary>Damage factor of a crit now: base plus the live timed bonuses.</summary>
     public double DamageMultiplier => baseMultiplier + Sum(damage);
 
-    /// <summary>Add crit chance (for example 0.1 for +10%) that lasts <paramref name="seconds"/>.</summary>
-    public void AddChance(double amount, double seconds) => Add(chance, amount, seconds);
+    /// <summary>
+    /// Add crit chance (for example 0.1 for +10%) that lasts <paramref name="seconds"/>.
+    /// With a <paramref name="key"/> at most <paramref name="maxStacks"/> bonuses of that
+    /// key live at once; one more replaces the one with the least time left.
+    /// </summary>
+    public void AddChance(double amount, double seconds, string? key = null, int maxStacks = int.MaxValue) =>
+        Add(chance, amount, seconds, key, maxStacks);
 
     /// <summary>Add crit damage (for example 0.5 for +50% on top of the crit) that lasts <paramref name="seconds"/>.</summary>
-    public void AddDamage(double amount, double seconds) => Add(damage, amount, seconds);
+    public void AddDamage(double amount, double seconds, string? key = null, int maxStacks = int.MaxValue) =>
+        Add(damage, amount, seconds, key, maxStacks);
 
-    /// <summary>Make the next copy hit that lands a crit.</summary>
-    public void Guarantee() => Guaranteed = true;
+    /// <summary>Make the next copy hit that lands a crit, if it lands within <paramref name="seconds"/>.</summary>
+    public void Guarantee(double seconds = double.PositiveInfinity)
+    {
+        if (double.IsNaN(seconds) || seconds <= 0) return;
+        guaranteeLeft = Math.Max(guaranteeLeft, seconds);
+    }
 
-    /// <summary>Whether a hit on this tick is a crit. <paramref name="random"/> returns a value in [0, 1).</summary>
-    public bool Roll(Func<double> random)
+    /// <summary>
+    /// Whether a hit on this tick is a crit. <paramref name="random"/> returns a value in [0, 1).
+    /// <paramref name="extraChance"/> is a chance only this target gets (Heart of Ice).
+    /// </summary>
+    public bool Roll(Func<double> random, double extraChance = 0)
     {
         ArgumentNullException.ThrowIfNull(random);
-        return Guaranteed || Chance > 0 && random() < Chance;
+        if (Guaranteed) return true;
+        double total = Math.Min(1, Chance + Math.Max(0, double.IsFinite(extraChance) ? extraChance : 0));
+        return total > 0 && random() < total;
     }
 
     /// <summary>A sure crit was spent by a hit; ordinary chance is unchanged.</summary>
-    public void Spend() => Guaranteed = false;
+    public void Spend() => guaranteeLeft = 0;
 
     /// <summary>Let <paramref name="seconds"/> pass; expired bonuses end.</summary>
     public void Advance(double seconds)
@@ -68,6 +92,7 @@ public sealed class CopyCritical
         if (!double.IsFinite(seconds) || seconds <= 0) return;
         Age(chance, seconds);
         Age(damage, seconds);
+        if (guaranteeLeft > 0) guaranteeLeft = Math.Max(0, guaranteeLeft - seconds);
     }
 
     /// <summary>The multiplier a crit applies on top of the ordinary copy multiplier, or 1 when the tick is not a crit.</summary>
@@ -77,13 +102,25 @@ public sealed class CopyCritical
     {
         chance.Clear();
         damage.Clear();
-        Guaranteed = false;
+        guaranteeLeft = 0;
+        ownedChance = 0;
     }
 
-    private static void Add(List<Timed> list, double amount, double seconds)
+    private static void Add(List<Timed> list, double amount, double seconds, string? key, int maxStacks)
     {
-        if (!double.IsFinite(amount) || amount <= 0 || !double.IsFinite(seconds) || seconds <= 0) return;
-        list.Add(new Timed(amount, seconds));
+        if (!double.IsFinite(amount) || amount <= 0 || double.IsNaN(seconds) || seconds <= 0 || maxStacks < 1) return;
+        if (key is not null)
+        {
+            int count = 0, oldest = -1;
+            for (int i = 0; i < list.Count; i++)
+            {
+                if (list[i].Key != key) continue;
+                count++;
+                if (oldest < 0 || list[i].Seconds < list[oldest].Seconds) oldest = i;
+            }
+            if (count >= maxStacks) list.RemoveAt(oldest);
+        }
+        list.Add(new Timed(amount, seconds, key));
     }
 
     private static double Sum(List<Timed> list)
@@ -103,5 +140,5 @@ public sealed class CopyCritical
         }
     }
 
-    private readonly record struct Timed(double Amount, double Seconds);
+    private readonly record struct Timed(double Amount, double Seconds, string? Key);
 }

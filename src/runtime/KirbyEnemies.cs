@@ -144,6 +144,8 @@ public sealed class KirbyEnemies
         // the paired source HP already includes the crit factor and a lethal source
         // hit is lethal in the host too. One source frame is 1/60 s.
         var crit = session.Rules.Critical;
+        var mutations = session.Rules.Mutations;
+        mutations.SetOwned(KirbyMutations.Owned(hero));
         crit.Advance(1.0 / 60);
         criticalFactor = crit.DamageMultiplier;
         criticalGuaranteed = crit.Guaranteed;
@@ -207,7 +209,8 @@ public sealed class KirbyEnemies
             // the colorless scroll multiplier apply on top.
             // A floor ability item takes no damage: its proxy keeps full HP.
             bool item = KirbyAbilityItems.IsAbilityDrop(mob);
-            critical[i] = mob is Mob && !item && !IsHazard(mob) && crit.Roll(Random.Shared.NextDouble);
+            critical[i] = mob is Mob && !item && !IsHazard(mob) &&
+                crit.Roll(Random.Shared.NextDouble, mutations.TargetChance(KirbyMutations.HeartOfIceTarget(hero, mob)));
             assignedHp[i] = IsHazard(mob) ? 1 : item ? MaxSourceHp :
                 ColorlessDamage.SourceHp(mob.life, CopyMultiplier(i, scale, mob, true), MaxSourceHp);
             nds.SetProxy(i, x, y, assignedHp[i]);
@@ -281,6 +284,7 @@ public sealed class KirbyEnemies
                     // Only a hit the host resolved (not blocked or parried) crits or freezes.
                     bool landed = KirbyDamage.Hit(session.Hero, mob, hostDamage, frozenSafe: IceFreeze.Applies(sourceAbility), critical: crit);
                     if (landed && crit) criticalLanded = true;
+                    if (landed && (mob.destroyed || mob.life <= 0)) session.Rules.Mutations.CopyKill();
                     if (landed && mob is Mob chilled && IceFreeze.Freezes(sourceAbility, damage, !mob.destroyed && mob.life > 0,
                         mob.hasAffect(IceFreeze.FreezeAffect))) Freeze(chilled);
                 }
@@ -316,6 +320,7 @@ public sealed class KirbyEnemies
             controlled[i] = sourceControls;
         }
         if (criticalLanded && criticalGuaranteed) session.Rules.Critical.Spend();
+        if (criticalLanded) session.Rules.Mutations.CriticalLanded();
         stars.StrikeHost(session.Hero, this, ox, oy, scale);
         screen.Strike(session.Hero, nds, this, stars.Records, sourceHit, scale);
         return copied;

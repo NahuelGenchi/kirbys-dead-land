@@ -68,6 +68,10 @@ preserved; generated assets and native dependencies remain in the private data r
 - Copy attacks can crit (×1.5, drawn as a Dead Cells crit). Kirby has no crit
   chance of his own: mutations will add it (#89). See
   [copy-attack critical hits](docs/GAMEPLAY_FIDELITY.md#copy-attack-critical-hits-intentional-addition).
+- The five skill-cooldown mutations (Killer Instinct, Blind Faith, Heart of Ice,
+  Hunter's Instinct, Instinct of the Master of Arms) give timed crit chance or damage
+  in a Kirby run, with new text in the mutation menu (#89). See
+  [cooldown mutations](docs/GAMEPLAY_FIDELITY.md#cooldown-mutations-intentional-deviation).
 - While copied, each non-shield weapon slot in the HUD (normally Left-Click)
   shows the current ability's original icon in a colorless slot. See the
   [HUD ability slot](docs/GAMEPLAY_FIDELITY.md#hud-ability-slot). The pause

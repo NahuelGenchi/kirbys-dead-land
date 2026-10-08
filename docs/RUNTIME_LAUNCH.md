@@ -846,3 +846,17 @@ Sword on a real Zombie) with the staged `config.json` edited only in that root.
 - Run `20261008-020259`, `CopyCriticalChance` 0: hits were `Normal` at 63 and 52, the previous damage.
 
 Not run: a partial chance, a sure crit, bosses, Ice, spit stars, screen attacks.
+
+### Cooldown mutations (2026-10-08)
+
+Issue #89. `--probe-mutations ID,ID` (`KIRBY_LAB_TEST_MUTATIONS`, with `--input-plan
+ability`) gives the hero those mutation items through the normal inventory and
+writes the host's description of each, the owned set, and every change of the
+crit chance (`critEvents`) to `ability-damage.json`.
+
+- `20261008-020831`: all five cooldown mutations. `ownedMutations` listed all five;
+  the host showed the new texts; the hits ran with +10% chance (Master of Arms).
+- `20261008-021023`: Killer Instinct and Hunter's Instinct. The copy kill at source
+  frame 4376 gave +5% and it ended at 4737, 361 frames (6 s) later. Hunter's
+  Instinct gave nothing because the probe copies the ability before it gives the
+  mutation, so that trigger is not exercised live.
