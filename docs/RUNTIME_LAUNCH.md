@@ -971,3 +971,34 @@ and runs `20261008-022159` (unfiltered) and `20261008-022301` (filtered) were
 repeated. Unfiltered it listed all twelve hidden mutations and the three ordinary
 ones; filtered it listed none of the twelve and all three ordinary ones. No fatal log. The mutation
 NPC's `PerkMaster.isVisible` hook was not exercised.
+
+
+## Collector filter (2026-10-08)
+
+Issue #99. `--probe-collector [filtered|unfiltered]` (`KIRBY_LAB_TEST_COLLECTOR`,
+with `--input-plan ability`) starts the run in `T_Courtyard`, unlocks Health
+Flask I, reveals nine hidden entries (relocked) and five kept ones in the private
+profile, records the unlock count and the Random Starter Shield gate with and
+without the Kirby count, opens the level's own `CollectorPanelNpc` and writes
+`collector.json` when the panel has built its list. All runs used the separate
+data root `repros/collector-99-20261008` with the outfit pack
+`outfit-build-sync/res.pak`; final runtime DLL
+`43bf04ef2622871810ba5289e435251e9ff196b260db7ca749c3cce765f16886`:
+
+```sh
+python3 scripts/stage_runtime.py --data-root ~/.local/share/kirby-dead-cells/repros/collector-99-20261008 \
+  --original-runtime --outfit-pack "$HOME/.local/share/kirby-dead-cells/outfit-build-sync/res.pak"
+python3 scripts/launch_runtime.py --data-root ~/.local/share/kirby-dead-cells/repros/collector-99-20261008 \
+  --seconds 45 --start-game --outfit KirbySuperStarUltra --input-plan ability --probe-collector
+```
+
+`20261008-195344` (filtered): 43 entries tested, none of the nine hidden listed,
+all five kept listed; count 1 (host) and 10 (Kirby); the shield gate closed with
+the host count and open with the Kirby count. `20261008-195429` (unfiltered):
+all fourteen listed, same counts. Both ended at the time limit with no fatal log
+and real saves unchanged. Earlier runs: `20261008-194610` built a Collector NPC
+outside a level and failed (`Null access .lib`); `20261008-194731` opened the
+real panel but wrote no file because the panel pauses the level;
+`20261008-194902`/`194947` were the same pair before the gate check (count 0 and
+9, same lists), and `20261008-195058`/`195152` matched the final pair on a build
+that differed only in the probe's layout.
