@@ -622,7 +622,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         }
         else
         {
-            mask = dash.Filter(mask, config.AlwaysDash && !KirbyInput.AnalogWalk, lastVx, lastVy);
+            mask = dash.Filter(mask, config.AlwaysDash && !KirbyInput.AnalogWalk, lastVx, lastVy, action);
             // A recoil from a hit this frame keeps its original velocity.
             if (matched && !hurt) MatchVelocity(action, motionActions.Effective, direction);
         }
