@@ -51,6 +51,11 @@ preserved; generated assets and native dependencies remain in the private data r
   Parting Gift and Networking) are not
   offered in a Kirby run (#90). See
   [mutation menu](docs/GAMEPLAY_FIDELITY.md#mutation-menu-intentional-deviation).
+- The Collector does not list upgrades that do nothing for Kirby (#99): weapon
+  and skill blueprints, Random Starter Bow, Random Melee Weapon, the backpack and
+  the mutations above. A hidden blueprint you have found counts as unlocked for
+  the "unlock N more items" gates. See
+  [Collector](docs/GAMEPLAY_FIDELITY.md#collector-intentional-deviation).
 - Original inhale, mouthful, Down-to-swallow, spit, flight, guard, slide and copy
   discard are executed by the ROM. All 24 original copy forms load through the
   original transformation code, rather than replacing them with host weapons.

@@ -1562,3 +1562,20 @@ the all-ability rendering tests as full gameplay acceptance.
   after, 0x712 held for 100 frames. Source: `python3 scripts/check.py` passes
   with a new cling assertion. `tests/speed` does not build on main
   (`FarObject` missing), so it was not run. Not run live.
+## 2026-10-08 — the Collector hides upgrades Kirby cannot use (#99)
+
+- Owner request: the Collector offered weapon, bow and skill upgrades that do
+  nothing for Kirby. Decision: hide them and keep the unlock gates moving.
+- Host bytecode (build 23762174): the panel lists what `CollectorPanel.baseFilter`
+  accepts; gates read `ItemMetaManager.countUnlockedItems` (unlocked entries with a
+  cell cost) after requiring Health Flask I. `LootGen.generate` uses `RandomBow`
+  and `RandomCC` only to choose the first room's weapon, which Kirby's loot hook
+  already replaces, so both upgrades are hidden too, with `BackpackUnlock`.
+- `CollectorMenu` (`src/core/`) and `KirbyCollector` hide host groups 0–5 except
+  shields, those three upgrades and the mutations #90 hid, and count found hidden
+  entries as unlocked. No save writes.
+- Source: `python3 scripts/check.py` passes (375 core assertions).
+- Live (`repros/collector-99-20261008`, `--probe-collector`): `20261008-195344`
+  filtered listed none of nine hidden and all five kept; `20261008-195429`
+  unfiltered listed all. Count 1 → 10; the Random Starter Shield gate opened. Not
+  run: a real blueprint pickup, other transition levels, skin/head rewards.

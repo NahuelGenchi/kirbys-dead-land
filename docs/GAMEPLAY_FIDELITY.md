@@ -744,6 +744,42 @@ opened the real `ui.PerkSelect` in the private profile with every hidden and thr
 ordinary mutations unlocked: unfiltered it listed all of the hidden ones, filtered
 it listed none and still listed the three ordinary ones. The NPC's own `PerkMaster.isVisible` hook was not exercised live.
 
+
+### Collector (intentional deviation)
+
+Issue #99. Every host weapon other than a shield, and every skill, becomes a
+random ability item in a Kirby run (#55), so their Collector blueprints unlock
+nothing Kirby can notice. Random Starter Bow (`RandomBow`) and Random Melee
+Weapon (`RandomCC`) only choose which weapon `LootGen.generate` drops in the
+first room, and that weapon becomes a random ability item either way. The
+backpack (`BackpackUnlock`) holds a weapon Kirby never carries. While a Kirby
+session is active, `KirbyCollector` filters `CollectorPanel.baseFilter` so the
+Collector lists none of these, nor the mutations the mutation menu hides. The
+rules are `CollectorMenu` in `src/core/`: host item groups 0–5 except Shield
+(DeployedTrap, Grenade, Power, Melee, Ranged), the three upgrades above with
+their reasons, and `MutationMenu.Hidden`.
+
+The host gates upgrades such as Health Flask IV ("unlock N more items",
+`reqUnlocks`) on `ItemMetaManager.countUnlockedItems`, which counts unlocked
+entries with a cell cost. Hidden entries would never be bought, so in a Kirby run
+each hidden entry the player has found (revealed) and not unlocked counts as
+unlocked. A found weapon blueprint therefore moves the gates as buying it would.
+Nothing is written to the save. Kept: Random Starter Shield, shield blueprints,
+flasks, gold, recycling, shops, the forge upgrade, the armory (Recycling tubes),
+outfits and every other mutation. Base Beheaded runs are unchanged.
+
+Evidence: core tests pin the groups, the upgrades and the count. Live runs in
+`repros/collector-99-20261008` started in `T_Courtyard`, revealed nine hidden and
+five kept entries in the private profile and opened the level's own Collector (see
+[RUNTIME_LAUNCH.md](RUNTIME_LAUNCH.md#collector-filter-2026-10-08)). Filtered
+(`20261008-195344`) the panel listed none of the nine and all five kept; with the
+filter off (`20261008-195429`) it listed all fourteen. The unlock count was 1
+from the host and 10 with the Kirby count, and Random Starter Shield (2 unlocks
+needed) was locked with the first and buyable with the second, as the panel
+showed. Not run: a real run that finds a blueprint, the Collector in other
+transition levels, the "Show unlocked items" view, the skin and head rewards that
+also read `countUnlockedItems` (in a Kirby run they see the raised count too), and
+weapon blueprint drops, which still appear and count once found.
 ### Host elevators (deviation)
 
 Dead Cells elevators (`en.inter.Elevator` and its `SimpleElevator`,

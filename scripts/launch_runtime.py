@@ -54,6 +54,7 @@ def main() -> None:
     parser.add_argument('--probe-scrolls', metavar='B,T,S', help='Give the ability probe this many Brutality, Tactics and Survival scrolls before measuring damage.')
     parser.add_argument('--probe-mutations', metavar='ID,ID', help='Give the ability probe these mutation item IDs (for example P_CDR_Kill) and record the text the host shows for each.')
     parser.add_argument('--probe-affects', metavar='N:SEC[:VALUE],...', help='With --probe-mutations, set these host hero status effects (index:seconds[:value]), for example 57:30 for the effect Vengeance reads or 108:30:368 for Counterattack.')
+    parser.add_argument('--probe-collector', nargs='?', const='filtered', choices=['filtered', 'unfiltered'], help='With the ability probe, reveal Collector entries in the private profile, open the real Collector panel and record which it lists and the unlock count; unfiltered turns the Kirby filter off for comparison.')
     parser.add_argument('--probe-menu', nargs='?', const='filtered', choices=['filtered', 'unfiltered'], help='With the ability probe, open the real mutation menu in the private profile and record which mutations it lists; unfiltered turns the Kirby filter off for comparison.')
     parser.add_argument('--probe-hud', action='store_true', help='Add a shield beside the starting sword before the ability probe and record the HUD weapon slots.')
     parser.add_argument('--probe-pause', action='store_true', help='With --probe-hud, open the pause/equipment screen while copied and record its cards.')
@@ -96,6 +97,8 @@ def main() -> None:
                 parser.error('--probe-affects takes index:seconds pairs such as 57:30')
     if args.probe_menu is not None and args.input_plan != 'ability':
         parser.error('--probe-menu requires --input-plan ability')
+    if args.probe_collector is not None and args.input_plan != 'ability':
+        parser.error('--probe-collector requires --input-plan ability')
     if args.probe_scrolls is not None:
         if args.input_plan != 'ability':
             parser.error('--probe-scrolls requires --input-plan ability')
@@ -165,7 +168,7 @@ def main() -> None:
             if key.startswith('KIRBY_LAB_'):
                 env.pop(key)
     for key in ['KIRBY_LAB_PLAY', 'KIRBY_LAB_INPUT_PLAN', 'KIRBY_LAB_START_GAME', 'KIRBY_LAB_OUTFIT',
-                'KIRBY_LAB_RESUME_GAME', 'KIRBY_LAB_SAVE_AFTER', 'KIRBY_LAB_TEST_ABILITY', 'KIRBY_LAB_TEST_SCROLLS', 'KIRBY_LAB_TEST_MENU', 'KIRBY_LAB_TEST_MUTATIONS', 'KIRBY_LAB_TEST_AFFECTS', 'KIRBY_LAB_TEST_HUD', 'KIRBY_LAB_TEST_PAUSE', 'KIRBY_LAB_TEST_LEGENDARY',
+                'KIRBY_LAB_RESUME_GAME', 'KIRBY_LAB_SAVE_AFTER', 'KIRBY_LAB_TEST_ABILITY', 'KIRBY_LAB_TEST_SCROLLS', 'KIRBY_LAB_TEST_MENU', 'KIRBY_LAB_TEST_COLLECTOR', 'KIRBY_LAB_TEST_MUTATIONS', 'KIRBY_LAB_TEST_AFFECTS', 'KIRBY_LAB_TEST_HUD', 'KIRBY_LAB_TEST_PAUSE', 'KIRBY_LAB_TEST_LEGENDARY',
                 'KIRBY_LAB_CAPTURE_FPS']:
         env.pop(key, None)
     env.update({
@@ -213,6 +216,8 @@ def main() -> None:
         env['KIRBY_LAB_TEST_AFFECTS'] = args.probe_affects
     if args.probe_menu is not None:
         env['KIRBY_LAB_TEST_MENU'] = '2' if args.probe_menu == 'unfiltered' else '1'
+    if args.probe_collector is not None:
+        env['KIRBY_LAB_TEST_COLLECTOR'] = '2' if args.probe_collector == 'unfiltered' else '1'
     if args.probe_hud:
         env['KIRBY_LAB_TEST_HUD'] = '1'
     if args.probe_pause:

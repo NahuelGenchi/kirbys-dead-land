@@ -938,4 +938,27 @@ Check(SpeedMatch.RiseVelocity(KirbyActions.Jump, -2682) == -2682 && SpeedMatch.R
         !MutationMenu.IsHidden(null) && !MutationMenu.IsHidden(""), "Other mutations stay in the menu");
     Check(!MutationMenu.IsHidden("p_ammo"), "Mutation IDs are matched exactly");
 }
+// The Collector hides entries that do nothing for Kirby and still counts them for its gates (#99).
+{
+    foreach (var group in new[] { 0, 1, 3, 4, 5 })
+        Check(CollectorMenu.Hides("AnyBlueprint", group), $"Weapon and skill group {group} ({CollectorMenu.HiddenGroups[group]}) is hidden");
+    Check(!CollectorMenu.Hides("StartShield", 6) && !CollectorMenu.Hides("Flask4", 9) && !CollectorMenu.Hides("RandomShield", 9) &&
+        !CollectorMenu.Hides("ArmoryUnlock", 9) && !CollectorMenu.Hides("P_Bleed", 12), "Shields, flasks, the starter shield, the armory and usable mutations stay");
+    Check(CollectorMenu.Hides("RandomBow", 9) && CollectorMenu.Hides("RandomCC", 9) && CollectorMenu.Hides("BackpackUnlock", 9),
+        "Random Starter Bow, Random Melee Weapon and the backpack are hidden");
+    Check(CollectorMenu.HiddenUpgrades.Values.All(reason => reason.Length > 10), "Every hidden upgrade has a reason");
+    Check(CollectorMenu.Hides("P_Ammo", 12) && CollectorMenu.Hides("P_Backpack_Shield", 12), "Mutations the mutation menu hides are hidden here too");
+    Check(!CollectorMenu.Hides(null, 4) && !CollectorMenu.Hides("", 4) && !CollectorMenu.Hides("randombow", 9), "IDs are matched exactly and must be present");
+    var found = new[]
+    {
+        ("Bow1", 5, 25, false),          // hidden, locked: counts
+        ("Bow2", 5, 25, true),           // hidden, unlocked: the host already counts it
+        ("BaseBow", 5, 0, false),        // no cell cost: the host never counts these
+        ("RandomBow", 9, 65, false),     // hidden upgrade, locked: counts
+        ("Flask2", 9, 50, false),        // kept and locked: still needs buying
+        ("P_Bleed", 12, 30, false),
+    };
+    Check(CollectorMenu.CountUnlocked(7, found) == 9, "Found, locked, hidden entries with a cell cost count as unlocked");
+    Check(CollectorMenu.CountUnlocked(0, []) == 0, "Nothing found adds nothing");
+}
 Console.WriteLine($"PASS: {assertions} user-rule assertions. No claim of NDS physics or in-game verification.");

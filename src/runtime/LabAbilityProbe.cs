@@ -6,6 +6,7 @@ using dc.tool;
 using dc.tool.atk;
 using Kirby.Core;
 using ModCore.Utilities;
+using LevelInfo = Hashlink.Virtuals.virtual_baseLootLevel_biome_bonusTripleScrollAfterBC_cellBonus_dlc_doubleUps_eliteRoomChance_eliteWanderChance_flagsProps_group_icon_id_index_loreDescriptions_mapDepth_minGold_mobDensity_mobs_name_nextLevels_parallax_props_quarterUpsBC3_quarterUpsBC4_specificLoots_specificSubBiome_transitionTo_tripleUps_worldDepth_;
 
 namespace Kirby.Runtime;
 
@@ -33,6 +34,9 @@ internal static class LabAbilityProbe
     private static readonly List<object> critEvents = [];
     private static readonly Dictionary<string, string> mutationTexts = [];
     private static bool menuChecked;
+    private static bool collectorOpened;
+    private static readonly Dictionary<string, bool> collectorListed = new(StringComparer.Ordinal);
+    private static object? collectorBase;
     private static readonly bool hudFixture = Environment.GetEnvironmentVariable("KIRBY_LAB_TEST_HUD") == "1";
     private static readonly bool pauseFixture = Environment.GetEnvironmentVariable("KIRBY_LAB_TEST_PAUSE") == "1";
     private static readonly bool legendaryFixture = Environment.GetEnvironmentVariable("KIRBY_LAB_TEST_LEGENDARY") == "1";
@@ -51,6 +55,11 @@ internal static class LabAbilityProbe
     public static void Install(string output)
     {
         run = output;
+        // The Collector probe (#99) starts in the first transition level, which holds the host's own Collector.
+        if (Environment.GetEnvironmentVariable("KIRBY_LAB_TEST_COLLECTOR") is "1" or "2")
+            dc.Hook_User.newGame += (orig, user, seed, level, custom, scoring, gameMode) =>
+                orig(user, seed, ((HaxeProxy.Runtime.HaxeProxyBase)dc.Data.Class.level.resolve("T_Courtyard".AsHaxeString(), false))
+                    .ToVirtual<LevelInfo>(), custom, scoring, gameMode);
         string? requestedScrolls = Environment.GetEnvironmentVariable("KIRBY_LAB_TEST_SCROLLS");
         if (Environment.GetEnvironmentVariable("KIRBY_LAB_TEST_MUTATIONS") is { Length: > 0 } requestedMutations)
             mutations = requestedMutations.Split(',', StringSplitOptions.RemoveEmptyEntries);
@@ -258,6 +267,8 @@ internal static class LabAbilityProbe
                 controlsListed = controls.Where(listed.Contains).ToArray(),
             }, new JsonSerializerOptions { WriteIndented = true }));
         }
+        if (Environment.GetEnvironmentVariable("KIRBY_LAB_TEST_COLLECTOR") is "1" or "2")
+            ProbeCollector(session);
         if (scrolls is not null && !scrollsGiven)
         {
             // Real scroll items through the normal inventory, then the host's
@@ -490,6 +501,70 @@ internal static class LabAbilityProbe
             critChance = session.Rules.Critical.Chance,
             critGuaranteed = session.Rules.Critical.Guaranteed,
             critDamage = session.Rules.Critical.DamageMultiplier,
+        }, new JsonSerializerOptions { WriteIndented = true }));
+    }
+
+    /// <summary>
+    /// The real Collector panel in the isolated profile (#99): reveals hidden and kept
+    /// entries, opens the panel, and records which entries it listed and the unlock
+    /// count with and without the Kirby filter. "2" turns the filter off.
+    /// </summary>
+    private static void ProbeCollector(KirbySession session)
+    {
+        string[] hidden = ["RevengeSword", "LongBow", "ExplosiveGrenade", "SlowOrb", "HorizontalTurret", "RandomBow", "RandomCC", "BackpackUnlock", "P_Ammo"];
+        string[] kept = ["WarriorShield", "RandomShield", "Flask2", "ArmoryUnlock", "P_Bleed"];
+        if (collectorOpened) return;
+        collectorOpened = true;
+        var meta = session.Hero._level.game.user.itemMeta;
+        bool unfiltered = Environment.GetEnvironmentVariable("KIRBY_LAB_TEST_COLLECTOR") == "2";
+        // Hidden entries are relocked so they must be counted; kept ones keep their state.
+        foreach (var id in hidden.Concat(kept)) meta.revealItem(id.AsHaxeString(), false);
+        foreach (var id in hidden) meta.relockItem(id.AsHaxeString());
+        // Every gate first needs Health Flask I; Random Starter Shield then needs 2 unlocks.
+        meta.unlockItem("Flask1".AsHaxeString());
+        KirbyCollector.TestUnfiltered = true;
+        int hostCount = meta.countUnlockedItems();
+        bool hostShieldGate = meta.canInvestOnItem("RandomShield".AsHaxeString());
+        KirbyCollector.TestUnfiltered = false;
+        int kirbyCount = meta.countUnlockedItems();
+        bool kirbyShieldGate = meta.canInvestOnItem("RandomShield".AsHaxeString());
+        KirbyCollector.TestUnfiltered = unfiltered;
+        collectorBase = new
+        {
+            unfiltered,
+            groups = hidden.Concat(kept).ToDictionary(id => id, id => KirbyCollector.Found(meta).Where(e => e.Id == id).Select(e => new { e.Group, e.CellCost, e.Unlocked }).FirstOrDefault()),
+            hostCount,
+            kirbyCount,
+            hostShieldGate,
+            kirbyShieldGate,
+        };
+        KirbyCollector.TestFiltered = (id, listed) => collectorListed[id] = listed;
+        // The panel pauses the level, so the result is written when it has built its list.
+        dc.ui.Hook_CollectorPanel.onMetaListAllBatchesDone += (orig, panel) =>
+        {
+            orig(panel);
+            WriteCollector(hidden, kept);
+        };
+        var entities = session.Hero._level.entities;
+        for (int i = 0; i < entities.length; i++)
+            if (entities.getDyn(i) is dc.en.inter.npc.CollectorPanelNpc npc && !npc.destroyed)
+            {
+                npc.openPanel();
+                return;
+            }
+        collectorBase = new { error = "No CollectorPanelNpc in " + session.Hero._level.uniqId.ToString(), setup = collectorBase };
+    }
+
+    private static void WriteCollector(string[] hidden, string[] kept)
+    {
+        System.IO.File.WriteAllText(Path.Combine(run!, "collector.json"), JsonSerializer.Serialize(new
+        {
+            setup = collectorBase,
+            tested = collectorListed.Count,
+            hiddenListed = hidden.Where(id => collectorListed.GetValueOrDefault(id)).ToArray(),
+            keptListed = kept.Where(id => collectorListed.GetValueOrDefault(id)).ToArray(),
+            notTested = hidden.Concat(kept).Where(id => !collectorListed.ContainsKey(id)).ToArray(),
+            otherHiddenListed = collectorListed.Where(e => e.Value && KirbyCollector.Hides(e.Key)).Select(e => e.Key).ToArray(),
         }, new JsonSerializerOptions { WriteIndented = true }));
     }
 }
