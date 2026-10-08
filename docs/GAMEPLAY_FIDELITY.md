@@ -24,7 +24,7 @@ in [NDS_BRIDGE.md](NDS_BRIDGE.md). The original bootstrap experiment remains in
 | Dive attack | The player's host dive binding in the air or on a ladder or chain (original jump, fall, float or climb) starts the host `DiveAttack` under its own rules. The original controller keeps its falling or exhaling animation and physics (3.5 px/frame cap) and drops straight down; the host adds 11.5 px/frame of descent through free space, 15 px a frame in all like the Beheaded's dive (about 900 px/s), and leaves the original a full fall step to make the floor contact; the host skill resolves the landing (shockwave, stun, damage, breakable floors with the Ram rune). Only what stops the original fall counts as floor: solids, slopes and one-way platforms from above, never ladders or chains. Enemy touch damage is off while stomping and for 30 frames after landing |
 | Camera | `CameraZoom` (default 1, the host camera) can zoom the host viewport; 2 shows about 200 host pixels of height, close to the DS screen's 192. Host cinematics and host zoom changes keep their framing |
 | Palette flashes | The original hurt and guard flashes of Kirby's first two palette banks are shown at `FlashStrength` (0.35) of their colour change, with original timing; lasting palette changes are adopted after four frames |
-| Graphics | Live original OAM, OBJ VRAM and palettes supply body, abilities, helper and effects; allowed host equipment has a separate overlay. OAM shows the previous source frame, so it is centred on that frame's Kirby position. The original's camera moves with the window, and a placement frames Kirby at once, so he and the effects around him stay on its 256-pixel screen. Its OAM builder only keeps pieces on that screen; the bridge widens that horizontal cull to screen x −127…380, about 252 px either side of Kirby, so far shots stay drawn (see [Far shots](#far-shots-63)) |
+| Graphics | Live original OAM, OBJ VRAM and palettes supply body, abilities, helper and effects; allowed host equipment has a separate overlay. OAM shows the previous source frame, so it is centred on that frame's Kirby position. The original's camera moves with the window, and a placement frames Kirby at once, so he and the effects around him stay on its 256-pixel screen. Its OAM builder only keeps pieces near that screen; the bridge rebuilds the pieces it culls from the same original sprite records, and the renderer draws them on a canvas 512 px either side of Kirby (see [Far shots](#far-shots-63-67)) |
 | Background effects | Original captured palette changes supply Crash/Paint/Mike timing and colors; host scenery receives the corresponding blend |
 | Sound | Original stereo sound effects continue; the source music player is muted so Dead Cells music remains |
 | Enemy collision | Live host enemies have paired source collision objects with their host dimensions; original routines resolve damage cadence, suction, grabs, throws and Cook |
@@ -186,66 +186,90 @@ inside those host calls. While the original recoil of a source hit holds a
 paired enemy, the source controls its position, so that enemy moves with the
 original recoil (5 px measured) instead of the host bump.
 
-Limits: a star far from Kirby keeps flying and striking but is not drawn:
-beyond about 128 px before #63, and with #63's widened cull beyond about 252 px
-(stars not measured separately; see [Far shots](#far-shots-63)).
+Limits: before #63, a star more than about 128 px from Kirby kept flying and
+striking but was not drawn. Since #67 stars, like every OBJ piece, are drawn
+out to 512 px from Kirby (stars not measured separately; see
+[Far shots](#far-shots-63-67)).
 The ability star's room edge is the edge of the 100×9 source terrain
 window, which starts 16 cells to Kirby's left. In the bridge it bounced off
 that left edge, not a host wall, so far from Kirby it can turn in open air. A star that hits an unpaired enemy does not burst on it. Only Zombies
 were struck live.
 
-### Far shots (#63)
+### Far shots (#63, #67)
 
-Owner report (2026-10-06): Plasma's fully charged shot vanished a short way
-from Kirby in open air. The shot was not removed. The original OAM builder
-(`0x020100A0`) drops every OBJ piece whose screen x is ≤ −64 or > 256, its
-own DS screen with Kirby at about x 128, and `NdsObjRenderer` draws only OAM.
-The host view is wider than that screen, so anything more than about 128 px
-from Kirby kept flying and hitting without being drawn.
+Owner reports (2026-10-06 and 2026-10-07): Plasma's fully charged shot vanished
+in open air before reaching a wall, an enemy or the screen edge. The shot was
+not removed. The original OAM builder (`0x020100A0`) drops every OBJ piece
+outside its own DS screen (screen x ≤ −64 or > 256, y ≤ −64 or > 192, with
+Kirby at about x 128), and the renderer drew only OAM. The host view is much
+wider: in the owner's 1080p recording, about 425 host px either side of Kirby.
 
-`widen_obj_cull` (in `kssu_step`, like the other validated RAM patches) changes
-only the builder's two horizontal compares, to keep pieces from screen x −127
-to 380. Those are the 512 values a 9-bit OAM x can tell apart, and
-`NdsObjRenderer` decodes OAM x 384–511 as the left side of its 512-pixel
-canvas. The vertical cull, the 128-entry OAM limit and every object's own
-update, collision and removal stay original. The DS hardware still hides the
-added pieces unless they are double-size affine; the host does not show the DS
-framebuffer.
+#63 widened the builder's horizontal cull to screen x −127…380 (`widen_obj_cull`),
+the most a 9-bit OAM x can tell apart; shots were drawn out to about 252 px but
+still cut before the edge of the owner's view. #67 removes that patch, so the
+original OAM is unchanged again, and draws the culled pieces separately:
 
-Native bridge evidence (`far_shot_draw`, and A/B runs of the old and new
-bridge with the same inputs):
+- After every frame, `build_far_objects` (in `src/nds/lib.rs`) runs the
+  builder's assembly over the same sprite records: manager `0x020598E0`,
+  sixteen priority lists of `0x1C`-byte records, their 8-byte pieces, the
+  32-entry affine matrix table, and the palette, priority and tile rules. It
+  accepts a frame only when every on-screen entry it builds equals the shadow
+  OAM the ROM just wrote (and the unused entries are the ROM's `0x00F8`
+  filler), and keeps the culled pieces with full 16-bit screen positions.
+- Those pieces are reported by `kssu_far_objs` once the hardware OAM equals
+  that shadow OAM, one frame later, so they pair with the OAM, VRAM and
+  palettes the host reads. A frame that fails either check reports none.
+- `NdsObjRenderer` draws OAM over the builder's own range (x −63…256,
+  y −63…192, so pieces just off the DS screen are no longer skipped) plus the
+  culled pieces, in original OAM order, on a 1024×512 canvas: 512 px either
+  side of Kirby and 256 px above and below.
 
-- A charged Plasma ball on an open source floor was drawn out to 252 px from
-  Kirby (96 OBJ pieces beyond the old cull); the old bridge stopped at 128 px.
-- Over 12,954 frames covering all 24 copy abilities (tap, hold and release,
-  dash attack, attack to the left; Plasma also fully charged), Kirby's
-  position and pose, every actor's position, the sub-screen OAM and every
-  main-screen OBJ piece inside the old cull were identical.
-- With all 31 enemy proxies spread across ±250 px, the main OAM used at most
-  57 of its 128 entries (52 before).
+Native bridge evidence:
 
-| Ability | Attack | Drawn reach before → after |
+- `far_shot_draw`: a charged Plasma ball on an open source floor was reported
+  out to 390 px from Kirby, on 43 frames, while the hardware OAM kept the
+  original cull. The ball is removed by the original at about that distance.
+- The bridge's culled pieces equaled an independent Python port of the builder
+  on all 681 compared frames of each of the 24 copy abilities; no frame with
+  culled pieces was rejected. That port, run over 598 frames of each ability
+  (against #66's widened cull), reproduced every entry of the ROM's shadow OAM
+  except on 0–4 frames per ability; the bridge rejects such frames.
+- A/B against the bridge before #66, same inputs, 12,954 frames of all 24
+  abilities: Kirby's position and pose, every actor, the sub-screen OAM and
+  the main OAM were identical.
+- `python3 tools/verify_renderer.py`: 29 sequences, 3,046,706 pixels, 0
+  mismatches, 0 unsupported.
+
+Pieces culled by the original and now drawn, farthest from Kirby in the bridge
+sequence (charge, tap, hold and release, dash attack, attack to the left):
+
+| Ability | Attack | Farthest culled piece |
 |---|---|---|
-| Plasma | Fully charged shot | 128 → 252 px |
-| Ninja | Thrown star | 128 → 248 px |
-| Beam | Charged wave beam | 126 → 171 px |
-| Sword | Sword beam | 125 → 146 px |
-| Base Kirby | Spit stars | Same cull; not measured separately |
+| Plasma | Fully charged shot | 389 px (the original removes it there) |
+| Ninja | Thrown star | 545 px |
+| Bomb | Thrown bombs | 609 px |
+| Beam | Charged wave beam | 170 px |
+| Crash | Explosion | 148 px |
+| Sword | Sword beam | 145 px |
 
-The other copy attacks end on their own within about 120 px and were never cut.
-Live run `20261006-235639` ([Far shots](RUNTIME_LAUNCH.md#far-shots-63)) drew
-a charged Plasma ball out to 246 px left of Kirby.
-Some short ranges are original: an uncharged Plasma shot is removed 76 px from
-Kirby on the ROM's own stage as well as on a host floor. The charged Plasma
-ball passes through walls in the ROM and keeps its hitbox there. Live, Dead
-Cells draws its wall tiles over Kirby's sprite layer, so the ball disappears
-behind a wall it enters.
+The other copy attacks stayed on the DS screen in that sequence. Some short
+ranges are original: an uncharged Plasma shot is removed 76 px from Kirby on
+the ROM's own stage as well as on a host floor. The charged Plasma ball passes
+through walls in the ROM and keeps its hitbox there; live, Dead Cells draws its
+wall tiles over Kirby's sprite layer, so the ball disappears behind a wall it
+enters. The ball's own pieces are drawn on one frame in three, with only its
+sparks in between; that blinking is original.
 
-Limits: the reach is about 252 px from Kirby. When the host view is wider than
-that (a large window or monitor at the default `CameraZoom`), a shot still
-stops being drawn before it reaches the screen edge. Going further would need
-drawing from the original sprite records instead of OAM. Vertical culling is
-unchanged.
+Live run `20261007-004025` ([Far shots](RUNTIME_LAUNCH.md#far-shots-63-67))
+drew the whole ball 300 px left of Kirby and, at 354 px, cut only by the
+lab view's own edge. Gameplay ran at the same rate as the #63 run (54.3 against
+54.1 source frames per second in the offscreen lab).
+
+Limits: the canvas reaches 512 px from Kirby horizontally and 256 px
+vertically; a view wider than that (an ultrawide monitor, or a smaller
+`CameraZoom`) can still lose a piece near its edge. When the builder's 128
+OAM entries are full, the ROM stops and the bridge reports nothing after that
+point. A frame the bridge cannot validate shows no culled pieces.
 
 ### Screen-wide attacks (#69)
 

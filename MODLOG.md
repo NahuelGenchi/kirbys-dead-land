@@ -1264,3 +1264,31 @@ the all-ability rendering tests as full gameplay acceptance.
   view died ~90 frames later from a sourceless host hit in every run (Mike
   too); not caused by this change, not investigated.
 - Source: `python3 scripts/check.py` passes (286 assertions).
+
+## 2026-10-07 — Far shots drawn from the original sprite records (#67)
+
+- Owner screencast (00:22): after #63 the range improved, but the charged
+  Plasma ball was still cut in open air. From the clip, the owner's 1080p view
+  shows about 425 host px either side of Kirby; #63's 9-bit OAM limit drew to
+  about 252 px (about 300 px with the DS camera's lead).
+- Removed #63's `widen_obj_cull`. `build_far_objects` in `src/nds/lib.rs`
+  reruns the original OAM builder's (`0x020100A0`) assembly over the same
+  sprite records after each frame, accepts it only when its on-screen entries
+  equal the ROM's shadow OAM, and keeps the culled pieces with full positions;
+  `kssu_far_objs` reports them when the hardware OAM equals that shadow OAM.
+  `NdsObjRenderer` draws them in original OAM order on a 1024×512 canvas and
+  reads OAM over the builder's own range (x −63…256, y −63…192).
+- Source: `python3 scripts/check.py` passes (282 core assertions, six for the
+  renderer's OAM range, filler, far pieces and order; Release build 0
+  warnings/errors). `python3 tools/nds_tests.py`: 75/75; `far_shot_draw` now
+  requires culled pieces at least 380 px out on at least 40 frames with the
+  original OAM cull (390 px, 43 frames). `python3 tools/verify_renderer.py`:
+  29 sequences, 3,046,706 pixels, 0 mismatches. Bridge pieces equal a Python
+  port of the builder on all frames of all 24 abilities; A/B against the
+  bridge before #66 identical over 12,954 frames.
+- Live (`repros/far-shots-20261006`, run `20261007-004025`): the whole ball
+  drawn 300 px left of Kirby, then cut only by the lab view's edge at 354 px.
+  Same gameplay rate as the #63 run. Saves unchanged, no fatal log.
+- Not run: the other far attacks live, spit stars, an enemy hit beyond 128 px.
+  Limit: 512 px horizontally and 256 px vertically from Kirby.
+

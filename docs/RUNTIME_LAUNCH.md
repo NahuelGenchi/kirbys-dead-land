@@ -556,8 +556,8 @@ Run `20261005-221418` passed all five phases with Kirby at 76/76. It used runtim
 | Spit into a wall (face x 984) | The star's last box was 974–994, centered on the wall face; no turn |
 | Discarded Sword star into the same wall | Turned with its left edge at 983, then came back |
 
-The process reached its time limit without fatal errors, and the real save inventories were unchanged. The captures show the discarded star above Kirby right after SELECT. Near the wall, about 156 px from Kirby, no star is drawn, because the original leaves objects outside its 256-pixel screen out of OAM. (#63 later widened that cull; see [Far shots](#far-shots-63).)
-## Far shots (#63)
+The process reached its time limit without fatal errors, and the real save inventories were unchanged. The captures show the discarded star above Kirby right after SELECT. Near the wall, about 156 px from Kirby, no star is drawn, because the original leaves objects outside its 256-pixel screen out of OAM. (#63 and #67 later drew such pieces; see [Far shots](#far-shots-63-67).)
+## Far shots (#63, #67)
 
 The ability probe copies Plasma (`--probe-ability 12`) and replays original
 buttons from `KIRBY_LAB_ABILITY_PLAN`, counted from when the copy is ready: Up
@@ -593,6 +593,22 @@ The offscreen 1024×768 view showed about 360 host px each side of Kirby
 (estimated from the ball's position in the captures), so here roughly the last
 100 px to the screen edge stay empty. Not run live: Ninja, Beam
 and Sword far shots, spit stars, and an enemy hit beyond the old 128 px.
+
+#67 rerun with the same plan and data root, the outfit pack rebuilt from
+`main` (same SHA-256), runtime DLL
+`885ada9313d9673e6d13afc5a86b980b1c61fe0eb2c228410db11e433608f0e7` and bridge
+`a326559a3747f7371e4c51a7ba1494e15e237c19bf44e0388d68d63d2e0079cf`, both built
+from the #67 branch. Run `20261007-004025` reached its time limit without a
+fatal log, and the real saves were unchanged.
+
+| Shot | Ball drawn (captures) | What ended it |
+|---|---|---|
+| Right, source frames 4497–4538 | Sparks at 144 px (`007594`) | The same level wall, about 190 px right; the object went on to 360 px behind its tiles |
+| Left, source frames 4795–4841 | Whole ball at 102, 156 and 300 px (`007819`, `007827`, `007849`); at 354 px half of it, at the left edge of the lab view (`007858`) | The view's edge; the object reached 378 px. Captures between those show only its sparks: the ball's pieces are drawn one frame in three in the ROM |
+
+Gameplay ran at 54.3 source frames per second over 33 s of play, against 54.1
+in the #63 run (offscreen lab with capture). Not run live: Ninja, Bomb, Beam,
+Crash and Sword far shots, spit stars, and an enemy hit beyond 128 px.
 ## Exit-door walk (2026-10-05)
 
 Issue #17. The lifecycle probe (`KIRBY_LAB_LIFECYCLE=1`) now places Kirby 1.5
