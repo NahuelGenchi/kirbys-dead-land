@@ -48,7 +48,7 @@ internal static class KirbyAbilityItems
         dc.ui.Hook_NewItemDesc.onResize += (orig, card, width, height) =>
         {
             orig(card, width, height);
-            if (IsAbilityItem(card.ii)) KirbyHud.ReplaceInfoLine(card);
+            if (IsAbilityItem(card.ii)) KirbyHud.ReplaceInfoLine(card, AbilityItems.InfoLine(card.ii.getDamageBonus()));
         };
         Hook_ItemDrop.onActivate += (orig, drop, by, longPress) =>
         {
@@ -116,8 +116,31 @@ internal static class KirbyAbilityItems
         string ability = KirbyNdsProvider.Abilities[Random.Shared.Next(KirbyNdsProvider.Abilities.Length)];
         TestReplaced?.Invoke(item.getItemKind().ToString(), ability);
         var replacement = Create(ability, item.getRawItemLevel());
+        // The host's own quality roll of the item it replaces (#56): each "+"
+        // (QualityUp) and a Legendary affix carry over.
+        AddQuality(replacement, item.getUpgradeLevel(), item.hasAffix("Legendary".AsHaxeString()));
         CarryAffixes(item, replacement);
         return replacement;
+    }
+
+    /// <summary>Give an ability item this many "+" (QualityUp affixes) and, optionally, the Legendary affix.</summary>
+    private static void AddQuality(InventItem item, int qualityUps, bool legendary)
+    {
+        var up = "QualityUp".AsHaxeString();
+        for (int i = 0; i < qualityUps; i++) item.addAffix(up, Ref<bool>.In(true));
+        if (legendary) item.addAffix("Legendary".AsHaxeString(), Ref<bool>.In(true));
+    }
+
+    /// <summary>
+    /// The copy's ability item in a weapon slot, if any. Its host damage bonus
+    /// (level, "+" and Legendary, as for any Dead Cells weapon) multiplies copy damage.
+    /// </summary>
+    public static InventItem? SlotItem(Hero hero, string? ability)
+    {
+        if (ability is null || hero.inventory is not { } inventory) return null;
+        for (int slot = 0; slot < inventory.nbWeapons; slot++)
+            if (inventory.getEquippedWeaponOn(slot) is { } item && AbilityOf(item) == ability) return item;
+        return null;
     }
 
     /// <summary>
@@ -286,6 +309,8 @@ internal static class KirbyAbilityItems
                 }
                 var copy = taken?.Item is { } swallowed && AbilityOf(swallowed) == wanted
                     ? swallowed : Create(wanted, hero._level?.map?.lootLevel ?? 1);
+                // A copy from an Elite is a Legendary item (#56); other enemies give base items.
+                if (!ReferenceEquals(copy, taken?.Item) && session.Rules.AbilityEmpowered) AddQuality(copy, 0, legendary: true);
                 inventory.add(copy);
                 changed = true;
                 TestSlot?.Invoke(wanted, copy.getRawItemLevel(), ReferenceEquals(copy, taken?.Item));

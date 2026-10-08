@@ -2,7 +2,7 @@
 
 `KirbySpriteRenderer` draws the running original machine's OBJ output. It reads ARM9 OAM, OBJ VRAM, palette RAM and DISPCNT after each source step. The source game selects poses, cap layers, projectiles, flips and frame timing; the host does not choose a replacement animation. `NdsObjRenderer` is the pure decoder used both in game and in the source framebuffer tests.
 
-OAM x is 9 bits. The bridge keeps OBJ pieces from screen x −127 to 380 (#63, see [Far shots](GAMEPLAY_FIDELITY.md#far-shots-63)), so `NdsObjRenderer` reads OAM x 0–383 as that screen x and 384–511 as x − 512, on its 512-pixel canvas centred on Kirby. Inside the DS screen this is the hardware's own decoding, so the scanout comparisons below are unchanged.
+The original OAM builder keeps OBJ pieces at screen x −63…256 and y −63…192, so `NdsObjRenderer` reads OAM over that range (OAM x above 256 and y above 192 are negative) and skips the builder's unused entries (attr0 `0x00F8`, attr1 0). The pieces it culls come from the bridge (`kssu_far_objs`, #67, see [Far shots](GAMEPLAY_FIDELITY.md#far-shots-63-67)) with full positions and are drawn in original OAM order. The canvas is 1024×512, centred on Kirby. Inside the DS screen this is the hardware's own decoding, so the scanout comparisons below are unchanged.
 
 The OBJ layer uses palette banks 0–7. Source enemies observed in the reference room use bank 8; Mike's flashed target uses bank 15. The decoder preserves numerical OBJ priority and OAM order, 4-bit tile layout, horizontal/vertical flips and affine matrices. Pixels are uploaded to a nearest-filtered host texture at original scale. The source player center is positioned 14.5 pixels above the host foot point. Both games use 24-pixel terrain cells.
 

@@ -23,7 +23,8 @@ preserved; generated assets and native dependencies remain in the private data r
   While copied, the pause screen (Escape) describes the ability and its main
   moves in the mod's controls; see
   [ability descriptions](docs/GAMEPLAY_FIDELITY.md#ability-descriptions).
-- Absorbing an Elite always gives original Sword, which deals double damage
+- Absorbing an Elite always gives original Sword as a Legendary ability item,
+  which deals more damage (×2.25 at item level I)
   until the ability is lost (hit off, discarded, made into a helper, or a new run).
   This is a deliberate deviation; see `docs/GAMEPLAY_FIDELITY.md`.
 - Kirby fights only with original inhale and copy abilities plus a Dead Cells
@@ -188,6 +189,10 @@ while playing Kirby; healing, equipment and interaction tutorials remain availab
   Lethal source damage ends the host run; New Game resets Kirby's full original state.
 - Original Crash, Paint and Mike effects were verified in the running host game,
   with the HUD outside the background tint.
+- Crash, Paint and Mike struck every Zombie in the Dead Cells view, including
+  ones the original could not reach, and left one off screen untouched (runs
+  `20261007-005031`, `004842`, `004639`; see
+  [Screen-wide attacks](docs/GAMEPLAY_FIDELITY.md#screen-wide-attacks-69)).
 - Original ladder, Suplex, Cook, helper and Wheel helper riding have source tests.
 - Kirby rides a real host `SimpleElevator` up and down in isolated live runs,
   standing on its surface at full speed both ways, and can jump on a rising one
@@ -221,11 +226,12 @@ while playing Kirby; healing, equipment and interaction tutorials remain availab
   real level wall, a spit star burst on the wall face and a discarded star
   bounced off it. Stars far from Kirby keep flying and hitting; past the drawn
   range (below) they are not drawn. See [star projectiles](docs/RUNTIME_LAUNCH.md#star-projectiles).
-- Shots stay drawn to about 252 px either side of Kirby, double the DS
-  screen's 128 px (#63): live, a fully charged Plasma ball was drawn 246 px
-  left of Kirby. Charged Plasma, Ninja's star, Beam's wave and Sword's beam
-  were cut off before. A wider host view can still lose a shot near its edge.
-  See [far shots](docs/GAMEPLAY_FIDELITY.md#far-shots-63).
+- Shots stay drawn to 512 px either side of Kirby, past the DS screen's
+  128 px (#63, #67): the bridge rebuilds the sprite pieces the original culls
+  from its own sprite records. Live, a fully charged Plasma ball was drawn
+  300 px left of Kirby and on to the edge of the lab view. Charged Plasma,
+  Ninja's star, thrown bombs, Beam's wave, Crash and Sword's beam were cut off
+  before. See [far shots](docs/GAMEPLAY_FIDELITY.md#far-shots-63-67).
 - Taking a real exit door, Kirby walks into the doorway in the original Walk
   action until the host fade, instead of gliding in one standing frame. See
   [exit-door walk](docs/RUNTIME_LAUNCH.md#exit-door-walk-2026-10-05).
