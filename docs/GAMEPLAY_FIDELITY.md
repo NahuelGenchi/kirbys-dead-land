@@ -477,8 +477,9 @@ kill at that cap kills the host enemy.
 
 Unchanged: incoming damage, retained-shield parries, boss
 capture resistance, source attack cadence and repeat-hit debounce. Only the scroll
-multiplier is applied. Host weapon quality, mutations/perks and other hero bonuses
-still do not alter copy attacks; critical hits are a mod addition, below.
+multiplier is applied. Host weapon quality and other hero bonuses still do not alter
+copy attacks; host mutations (see [Mutations on copy attacks](#mutations-on-copy-attacks))
+and critical hits (a mod addition, below) do.
 
 This replaces the per-Boss-Cell curve proposed in #7 / PR #8, which was not merged.
 At 0 scrolls the colorless factor is ×1, leaving the unit-scale and Elite behavior
@@ -574,6 +575,55 @@ showed `ownedMutations` of all five, the new texts from the host's
 copy kill and its end 361 source frames (6 s) later. Not run live: Blind Faith,
 Heart of Ice, Hunter's Instinct (the probe copies before it gives the mutation),
 Master of Arms damage stacks, and the menu itself.
+
+### Mutations on copy attacks
+
+Issue #91. In a Kirby run every copy attack counts as a melee attack: no Dead
+Cells weapon appears, so "ranged" has nothing to mean. Reading the host showed the
+copy hit already goes through the whole host hit pipeline as an ordinary hero
+melee hit (no tags, no carrier), so almost every damage mutation already acted on
+it. The one gap was the damage number itself: the mod replaces the host's final
+damage (`KirbyDamage`), which dropped every mutation *multiplier*.
+
+- **Multipliers, now applied.** `KirbyHostBonuses` asks the host's own
+  `HeroAttackSource.computeExtraBonusMul` (the perks and aspects product; it only
+  reads the hero's inventory and status effects) for a throwaway attack, with the
+  close-range tag so Point Blank counts, once per paired enemy per source frame.
+  The factor goes into that enemy's source-HP pairing next to the crit factor, so
+  lethality stays in agreement. It covers Tranquility, Combo, Vengeance, Tainted
+  Flask, Extended Healing, Gastronomy, Point Blank and Demon Strength, plus
+  aspects. Spit stars and screen attacks still get no bonus (and no crit), as noted
+  under the crit section.
+- **Already worked, now checked.** Flat extra damage and on-hit effects that the host
+  applies as part of the hit: Initiative (a separate extra hit), Counterattack
+  (the host's effect 108, a separate extra hit of its stored damage), Open Wounds
+  (an extra status effect), Combo stacking (the host's `onDirectHitFromHero`),
+  kill rewards (Predator, Berserker, Necromancy) and healing on hit.
+- **Not asked on purpose.** `computeBonusMul` also consumes one-shot status effects
+  whether or not a hit lands, so it is not called ahead of time. Its terms (the
+  full-life affix, the invisibility bonus, effect 112) therefore still do not
+  count for copy attacks, nor do target-side terms (vulnerable enemies, for
+  example).
+- **Text.** `CopyAttackWording` rewrites the host's own mutation text in a Kirby
+  run: "melee attacks/kills" become "copy attacks / copy-attack kills" and Point
+  Blank's "close-ranged ranged attacks" becomes "copy attacks at close range". The
+  host's numbers stay (they come from `getGameplayDesc`).
+- **Not offered.** Support, Parting Gift and Networking are hidden (see the
+  [mutation menu](#mutation-menu-intentional-deviation)).
+
+Evidence: core tests cover the wording and the pairing for factors 1.02 to 2.3 with
+and without a crit. Live runs in `repros/crit-88-20261008`: `20261008-022631`
+(`--probe-mutations P_DmgRevenge,P_NoMobAround,P_DmgKill --probe-affects 57:60,54:60`)
+gave a host factor of 1.87 (Revenge +60%, Tranquility +25%, one Combo step) and a
+hit of 117 where 63 was dealt without it; the next hit read 1.891 (Combo grew) and
+killed in the same tick. `20261008-022811` (`P_Bleed,P_DmgFirstHit,P_InvisibilityOnKill,P_DmgNearRanged,P_DeathShield`)
+showed the rewritten texts, Point Blank's factor of 1.31 (hit 82), Initiative's
+extra hit (93) and a new host status effect at the hit (index 89; that it is
+bleeding was not confirmed). `20261008-023052` (`P_DmgParry`, effect 108 set to
+368) showed Counterattack's extra hit of 368. Effects 57, 54 and 108 were set by
+the lab fixture, not earned in play. Not run live: earning those effects in play,
+Gastronomy, Extended Healing, Tainted Flask, Demon Strength, bosses, and the
+mutation menu itself.
 
 ### Host elevators (deviation)
 

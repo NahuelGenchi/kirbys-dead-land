@@ -860,3 +860,20 @@ crit chance (`critEvents`) to `ability-damage.json`.
   frame 4376 gave +5% and it ended at 4737, 361 frames (6 s) later. Hunter's
   Instinct gave nothing because the probe copies the ability before it gives the
   mutation, so that trigger is not exercised live.
+
+## Mutations on copy attacks (2026-10-08)
+
+Issue #91. `--probe-affects index:seconds[:value],...` (`KIRBY_LAB_TEST_AFFECTS`,
+with `--probe-mutations`) sets host hero status effects that a mutation reads, so a
+mutation can be checked without earning the effect in play. `ability-damage.json`
+now records each copy hit's `bonusFactor`.
+
+- `20261008-022631`: `P_DmgRevenge,P_NoMobAround,P_DmgKill` with effects 57 and 54.
+  Factor 1.87, hit 117 (63 without), then 1.891 and a kill in the same tick.
+- `20261008-022811`: `P_Bleed,P_DmgFirstHit,P_InvisibilityOnKill,P_DmgNearRanged,P_DeathShield`.
+  Texts rewritten ("Copy attacks inflict bleeding", "Copy attacks at close range
+  inflict 30% bonus damage", and so on), Point Blank factor 1.31 (hit 82), an
+  Initiative extra hit of 93, a new status effect (89) at the hit.
+- `20261008-023052`: `P_DmgParry` with effect 108 = 368. An extra hit of 368.
+
+No fatal log; real saves unchanged. The effects were set by the fixture.

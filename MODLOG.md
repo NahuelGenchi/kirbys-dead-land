@@ -1447,3 +1447,24 @@ the all-ability rendering tests as full gameplay acceptance.
   warnings/errors).
 - Live (`repros/crit-88-20261008`): texts, ownership and Killer Instinct's +5% and
   6 s ending verified; Blind Faith, Heart of Ice, Hunter's Instinct and the menu not run.
+
+## 2026-10-08 — mutations on copy attacks (#91)
+
+- Host reading (crashlink): `Mob.onDamage` calls `onDirectHitFromHero` for a hero
+  hit with no carrier and no ranged tag, so a copy hit is already a melee hit for
+  Combo, kill rewards and heals; Initiative and Counterattack run in
+  `HeroAttackSource.extraDamageEffects` as separate extra hits (Counterattack reads
+  effect 108). What was lost is the multiplier: `KirbyDamage` replaces `finalDmg`.
+  `computePerksBonusMul` and `computeAspectsBonusMul` are pure; `computeBonusMul` is
+  not (it removes effects 50 and 83), so it is left alone.
+- Plan change: the earlier idea of hand-written Support/Parting Gift/Networking
+  rules was dropped. Support, Parting Gift and Networking are hidden in #90.
+- `KirbyHostBonuses` reads `computeExtraBonusMul` for a throwaway attack with the
+  close-range tag, folded into the source-HP pairing. `CopyAttackWording` rewrites
+  the host's melee/ranged text.
+- Source: `python3 scripts/check.py` passes (348 core assertions; Release build 0
+  warnings/errors).
+- Live (`repros/crit-88-20261008`): `20261008-022631`, `-022811`, `-023052` as in
+  RUNTIME_LAUNCH.md. Effects were set by the fixture, not earned.
+- Not run: Gastronomy, Extended Healing, Tainted Flask, Demon Strength, bosses, the
+  menu, effects earned in play.

@@ -78,6 +78,7 @@ internal static class LabAbilityProbe
                 colorlessTier = enemies.ColorlessTier,
                 hostMultiplier = enemies.ColorlessMultiplier,
                 critChance = KirbyMod.Instance?.ActiveSession?.Rules.Critical.Chance,
+                bonusFactor = enemies.BonusFor(mob),
                 // What the host itself computes for colorless gear with this base damage.
                 hostColorlessDamage = (int)dc.Const.Class.scaleHeroValueToTier((double)sourceDamage, enemies.ColorlessTier),
             });
@@ -215,6 +216,17 @@ internal static class LabAbilityProbe
                 session.Hero.inventory.add(item);
                 mutationTexts[id] = item.getGameplayDesc(null)?.ToString() ?? "";
             }
+            // Host status effects the mutations read (for example 57 Vengeance, 54 Tranquility): "index:seconds[:value],...".
+            if (Environment.GetEnvironmentVariable("KIRBY_LAB_TEST_AFFECTS") is { Length: > 0 } affects)
+                foreach (var entry in affects.Split(',', StringSplitOptions.RemoveEmptyEntries))
+                {
+                    var parts = entry.Split(':');
+                    // An optional third number is the effect's value (Counterattack's flat damage in effect 108).
+                    session.Hero.setAffectS(int.Parse(parts[0], System.Globalization.CultureInfo.InvariantCulture),
+                        double.Parse(parts[1], System.Globalization.CultureInfo.InvariantCulture),
+                        parts.Length > 2 ? HaxeProxy.Runtime.Ref<double>.In(double.Parse(parts[2], System.Globalization.CultureInfo.InvariantCulture))
+                            : HaxeProxy.Runtime.Ref<double>.Null, null);
+                }
             mutationsGiven = true;
         }
         if (scrolls is not null && !scrollsGiven)
