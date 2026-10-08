@@ -863,6 +863,14 @@ abilities stay paused until normal play resumes. Original effect audio plays.
 Without horizontal movement, for example during the arrival cinematic, the source
 stays frozen as before.
 
+Paired enemies' source objects keep running in the original during those walk
+frames, so an inhale already under way can finish its swallow there (#80).
+Claiming a Scroll of Power is such a cinematic: the host walks the hero onto the
+scroll. The host side of a swallowed or vanished source object (the host enemy's
+removal, the copy) waits for the first normal step afterwards, as for host
+damage. Before #80 that step rebound the ended slot first, and the bridge's
+refusal (`-3`) was a fatal error.
+
 Live run `20261005-214713` took the T_Courtyard door: 148 of 149 cinematic polls
 were in the original Walk action (`0x060B`), facing right, with no Fall. Captured
 frames show changing walk poses up the steps until the fade. Exits where the

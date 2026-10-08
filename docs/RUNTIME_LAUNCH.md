@@ -771,3 +771,40 @@ B every 16 frames for 240 frames, then stops while its life is sampled.
 
 Not run: the Grenade affix, on-kill affixes, a forge reroll in play, and the
 arrow captured on screen.
+
+## Scroll claim (#80)
+
+`--input-plan scroll` (`LabScrollProbe`) places Kirby on a clear floor of a new
+run and creates four stationary Zombies (AI locked, 1000 life) three to six
+cells ahead of him and a real `SurvivalUp` scroll two cells ahead, through their
+own constructors. Kirby walks toward them; once a Zombie is paired, the scroll is
+claimed as a short press does (`ItemDrop.onActivate`). With
+`KIRBY_LAB_SCROLL_INHALE=1` Kirby holds the original inhale instead, and the
+claim happens once a Zombie is in the suction (proxy flag 32). Every host frame
+after the claim appends the pause, awake and cinematic state, whether the
+original advanced and the proxy flags to `scroll-trace.jsonl`; `scroll.json`
+holds the result.
+
+Separate data root `repros/scroll-claim-20261007`, outfit pack built from this
+branch (`8e44122d86f4d8b509bfdd08ee4acde4bf9f4b4cc21fd3e9a7d0e30d3b5be7af`),
+shared bridge build (`9a56cd32346fa0758b2e047fafbe6d548d193f70d10199f0bae1144ec264a2fc`;
+this branch does not change `src/nds`):
+
+```sh
+KIRBY_LAB_SCROLL_INHALE=1 python3 scripts/launch_runtime.py \
+  --data-root "$HOME/.local/share/kirby-dead-cells/repros/scroll-claim-20261007" \
+  --seconds 75 --start-game --outfit KirbySuperStarUltra --input-plan scroll --capture-fps 5
+```
+
+| Run | Build | Plan | Result |
+| :--- | :--- | :--- | :--- |
+| `20261007-115546` | Before the fix | Walk | The claim started a host cinematic of 214 host frames; the host walked the hero 18 px back to the scroll and the original advanced 18 frames with four Zombies paired. No source object ended; no fatal log |
+| `20261007-115757` | Before the fix | Inhale | During the cinematic the walk frames swallowed slots 2 and 3 (flag 4). The first normal step then failed with `NDS bridge returned -3` in `KirbyEnemies.Prepare`, the owner's crash (exit 255, fatal log) |
+| `20261007-115950` | Fixed (`e5dfe8ab…76c97b`) | Inhale | Slots 1 and 2 swallowed during the cinematic; the next normal step removed both host Zombies and freed the slots, Kirby kept the mouthful, the Survival tier went from 1 to 2. `passed: true`, no fatal log |
+| `20261007-120114` | Fixed | Walk | Tier 1 to 2, all four Zombies paired before and after. `passed: true`, no fatal log |
+
+The real saves were unchanged in every run. Not run live: a projectile or a
+dying enemy ending during the cinematic, Brutality and Tactics scrolls, scrolls
+that offer a choice, the exit-door walk with paired enemies, and the owner's own
+Ramparts room.
+

@@ -173,6 +173,11 @@ public sealed class KirbyEnemies
         for (uint i = 1; i <= Capacity; i++)
         {
             if (mobs[i] is not { } mob) continue;
+            // Original frames can also run without a normal step (a host cinematic
+            // walk, such as claiming a scroll), so its source object may already be
+            // swallowed or gone. Complete acknowledges that ending after this step;
+            // the bridge refuses to rebind the slot before then.
+            if (nds.Proxy(i) is { Swallowed: true } or { Gone: true }) continue;
             // Checked every tick: a host mob can also become an Elite after binding.
             if (mob is Mob { elite: true }) abilities[i] = EliteAbility;
             int x = checked((int)Math.Round(((mob.cx + mob.xr) * 24 - ox) * 65536));
