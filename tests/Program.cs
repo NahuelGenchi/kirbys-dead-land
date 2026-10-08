@@ -114,6 +114,26 @@ Check(!IceFreeze.Freezes(sourceAbility: 11, 4, true, false) && !IceFreeze.Freeze
 Check(IceFreeze.Applies(10) && !IceFreeze.Applies(18) && !IceFreeze.Applies(1),
       "Only Ice deals host Frost damage and skips the original remnant (no ice block)");
 
+// Bridge measurement: Kirby at (400, 153.5), camera (272, 12), Crash's record [144,656]×[-103,409].
+var crashBox = new StarBox(144, -103, 656, 409);
+Check(ScreenAttacks.IsScreenWide(2, 160, crashBox, 272, 12) && ScreenAttacks.IsScreenWide(2, 70, crashBox, 272, 12),
+    "Crash's and Paint's records cover the source window");
+Check(!ScreenAttacks.IsScreenWide(1, 70, crashBox, 272, 12), "Cook's screen grab (slot 1) is not a damaging wave");
+Check(!ScreenAttacks.IsScreenWide(2, 0, crashBox, 272, 12) && !ScreenAttacks.IsScreenWide(2, 52, new StarBox(137, 140, 157, 160), 272, 12),
+    "Harmless or ordinary attack records are not screen-wide");
+Check(ScreenAttacks.SourceReaches(560, 151.5, 272, 12) && !ScreenAttacks.SourceReaches(564, 151.5, 272, 12) &&
+      ScreenAttacks.SourceReaches(240, 151.5, 272, 12) && !ScreenAttacks.SourceReaches(236, 151.5, 272, 12),
+    "The original hits within 32 px of either side of its screen, as measured");
+Check(ScreenAttacks.SourceReaches(440, -17.7, 272, 12) && !ScreenAttacks.SourceReaches(440, -21.7, 272, 12) &&
+      ScreenAttacks.SourceReaches(440, 234.3, 272, 12) && !ScreenAttacks.SourceReaches(440, 238.3, 272, 12),
+    "The original hits within 32 px above and below its screen, as measured");
+Check(ScreenAttacks.HostStrikes(paired: false, sourceReaches: false, sourceHit: false),
+    "An enemy with no source object is struck by the host");
+Check(ScreenAttacks.HostStrikes(paired: true, sourceReaches: false, sourceHit: false),
+    "A paired enemy beyond the original's window is struck by the host");
+Check(!ScreenAttacks.HostStrikes(true, sourceReaches: true, sourceHit: false) && !ScreenAttacks.HostStrikes(true, false, sourceHit: true),
+    "The original collision decides inside its window, and a source hit is never repeated");
+
 Check(StarProjectiles.Identify(0x020BD718) == StarKind.Spit && StarProjectiles.Identify(0x020BDD08) == StarKind.BigSpit &&
       StarProjectiles.Identify(0x02166A54) == StarKind.Ability, "The three original star routines are recognized");
 Check(StarProjectiles.Identify(0x020C3700) == StarKind.None && StarProjectiles.Identify(0x020B2714) == StarKind.None,

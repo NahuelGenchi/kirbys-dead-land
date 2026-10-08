@@ -490,6 +490,31 @@ KIRBY_LAB_TEST_TARGET_LIFE=2000 python3 scripts/launch_runtime.py --data-root <r
 | `20261006-130738` | Final | Zombie, 131 life | Freeze on the first hit (4382), hits 38, 31, 31, 31 with no thaw, killed at 4400. No original ice block in 2,845 traced frames. |
 
 Each run ended by the expected timeout, logged no fatal errors and left the real saves unchanged. The probe's incoming 10-damage hit took Kirby from 76 to 68 in these runs. Other branches' recent ability runs recorded 68–75 for the same hit, so this change did not cause the difference. Not run live: freeze resistance on bosses and Elites, the diminishing factor across repeated freezes, Ice against breakables and hazards, and an Ice kill other than the breath.
+## Screen-wide attacks (#69)
+
+`--input-plan screen` (`LabScreenProbe`) prepares Crash through original
+inhale, supplied content and Down (`--probe-ability 21` or `22` for Paint or
+Mike). It places six real Zombies with locked AI on Kirby's floor: 40 px ahead
+(paired), 110 px ahead kept without a source object (`KirbyEnemies.TestUnpaired`),
+230 px ahead and behind, 360 px ahead and 1400 px ahead, then holds original B.
+`screen.json` records the host view, the original's window, and for each Zombie
+its position, pairing, whether the original reaches it and whether it is in view
+when B goes down, the host strikes and when it died. `screen-events.txt` also
+logs each source hit and host damage event. Results are in
+[Screen-wide attacks](GAMEPLAY_FIDELITY.md#screen-wide-attacks-69).
+
+```sh
+python3 scripts/stage_runtime.py --data-root ~/.local/share/kirby-dead-cells/repros/screen-attack-20261007 \
+  --original-runtime --outfit-pack "$HOME/.local/share/kirby-dead-cells/outfit-build-sync/res.pak"
+python3 scripts/launch_runtime.py --data-root ~/.local/share/kirby-dead-cells/repros/screen-attack-20261007 \
+  --seconds 90 --start-game --outfit KirbySuperStarUltra --input-plan screen
+```
+
+The repro root links `dotnet`, `research`, `oracle/ready2` and `oracle/vendor`
+to the main data root. The older `outfit-build/res.pak` lacks the ability item
+kinds; with it, level loading failed with `Invalid ItemKind: KirbyAbilitySleep`
+(run `20261007-003844`).
+
 ## Star projectiles
 
 `--input-plan stars` (`LabStarProbe`, issue #20) runs five phases with real Zombies:

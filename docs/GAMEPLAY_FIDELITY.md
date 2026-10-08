@@ -30,6 +30,7 @@ in [NDS_BRIDGE.md](NDS_BRIDGE.md). The original bootstrap experiment remains in
 | Enemy collision | Live host enemies have paired source collision objects with their host dimensions; original routines resolve damage cadence, suction, grabs, throws and Cook |
 | Enemy projectiles | Live hostile host arrows/grenades have paired copyless source objects; original suction, mouthful, spit star and swallow decide their fate |
 | Star projectiles | The ROM moves Kirby's spit, big spit and discarded ability stars through host terrain (spit stars burst on walls, the ability star bounces). Each star strikes host enemies once and staggers them with the host dive's stun and bump; paired enemies take spit-star damage through their source object, all others from the host (see below) |
+| Screen-wide attacks | Paint, Mike and Crash hit every enemy in the Dead Cells view: enemies the original cannot reach (no live source object, or one outside the original's window) take the attack's original damage from the host (see [Screen-wide attacks](#screen-wide-attacks-69)) |
 | Boss collision | Original resistance bits prevent inhale, Suplex capture and Cook; damage still uses original collision/debounce, while the host retains boss AI and phases |
 | Host triggers | Pressure plates (trap plates and pulley points too) and hidden triggers test Kirby's physical foot on the ground, as for the Beheaded; enemy attacks still test the projected original hurtbox |
 | Facing | The host hero's direction follows the original facing (bit 31 of player+0x6C) every source frame, so host shields block the way Kirby faces |
@@ -269,6 +270,71 @@ vertically; a view wider than that (an ultrawide monitor, or a smaller
 `CameraZoom`) can still lose a piece near its edge. When the builder's 128
 OAM entries are full, the ROM stops and the bridge reports nothing after that
 point. A frame the bridge cannot validate shows no culled pieces.
+
+### Screen-wide attacks (#69)
+
+Owner recording (2026-10-07, screencast 00-25-03): Crash exploded, but a
+Zombie and an archer lower on the Dead Cells screen were untouched. A copy
+attack reaches a host enemy only through the source object `KirbyEnemies`
+pairs with it, and pairing covers enemies within 300 px across and 96 px up or
+down of Kirby. The original then collides only objects inside its activity
+window. The Dead Cells view is larger than both.
+
+Measured on the bridge (`tools/nds_probe.py`, `ready2` seed, Kirby at
+(400, 153.5), camera (272, 12)):
+
+| Ability | Kirby's record (slot 2) | Damage |
+|---|---|---|
+| Crash | One frame, on the B press, box [144,656]×[−103,409] (512×512 around Kirby) | 160 |
+| Paint | Same box, one frame | 70 |
+| Mike | Same box, one frame per shout | 40, then 60 for a later shout |
+| Cook | Same box, but slot 1 (its grab) | — |
+
+Crash's explosion animation about 90 frames later adds no damage record. Mike
+also makes an unowned 80 record after Kirby's own; source objects never lost
+HP to it. A source object was hit up to camera x − 32 and x + 288 (missed at
+x + 292), and y − 18 to y + 234 (missed at y − 22 and y + 238): the original
+collides objects inside its 256×192 screen plus 32 px on each side.
+
+`ScreenAttacks` (`src/core/`) recognises a damaging record of Kirby's (slot 2,
+owned by him through `kssu_player_owns`) that covers that whole window. On the
+frame it appears, `KirbyScreenAttacks` strikes every live host `Mob` whose
+body overlaps the host viewport (`Viewport.realX/realY` ± `wid/hei` ÷ 2, as
+`getNormalizeScreenPos` computes it) and that the original cannot reach:
+
+- no live source object (unpaired, or its proxy pending or gone); or
+- a source object outside the original's window that lost no source HP in
+  that frame.
+
+The damage is the record's own word, converted like a paired enemy's HP drop
+(unit scale, Elite and colorless multipliers), once per record per enemy.
+Paired enemies inside the window stay with the original collision. Doors,
+props and other non-`Mob` hittables are not struck by the host.
+
+Live (separate data root `repros/screen-attack-20261007`; runtime
+`0d2cb6efff00abc854ec090eb78c362bf673b23fe9c1f1a8344ef85c5f533f5b`, core
+`56265b64f5333d34175c10c92612daab8fac4d3d80f6c24a1088a98000deabfc`, shared
+bridge `a326559a3747f7371e4c51a7ba1494e15e237c19bf44e0388d68d63d2e0079cf`),
+`screen` plan ([Screen-wide attacks](RUNTIME_LAUNCH.md#screen-wide-attacks-69)),
+six real Zombies with locked AI (life 108–132), lab view 683×400 host px:
+
+| Run | Ability | Result |
+|---|---|---|
+| `20261007-005031` | Crash | The paired Zombie 40 px ahead died through the source (36 source → 126 host). Three in view with no live source object (110 px ahead and kept unpaired, 230 px ahead, 230 px behind) took host strikes of 160 → 560 and died on the press frame. The one 1400 px away was untouched |
+| `20261007-004842` | Paint | Same layout: source kill, three host strikes of 70 → 245, all four died; off screen untouched |
+| `20261007-004639` | Mike | Same layout, first shout: source kill, three host strikes of 40 → 140, all four died; off screen untouched |
+
+Every run ended at its time limit without a fatal log, and saves were unchanged.
+In all of them (and in Crash runs `003935`, `004237` and `004445` of earlier
+probe builds), the Zombie placed 360 px ahead, just outside the view, took
+Physical damage with no attack source and died about 90 frames after the
+attack. Mike has no delayed damage and no Kirby strike observer fired, so it is
+not this change; its host cause was not investigated.
+
+Not run live: enemies above or below Kirby (all targets stood on Kirby's
+floor), a paired enemy outside the original's window (at 230 px the source
+object was not live at the attack, so the host took the no-source path), Mike's
+later shouts, Elites, bosses and other enemy types.
 
 ### Elite Sword (intentional deviation)
 
