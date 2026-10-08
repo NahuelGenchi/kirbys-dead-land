@@ -1410,3 +1410,26 @@ the all-ability rendering tests as full gameplay acceptance.
   unchanged, no fatal log.
 - Not run: a non-Legendary ability item after this change (the code path is the
   same `useItem` call), the owner's Parasol, resolutions other than 1024×768.
+
+## 2026-10-08 — Conjunctivius tentacles unpair while burrowed (#86)
+
+- Owner report (recording and play log `20261008-000039`): Conjunctivius kept
+  its shield; tentacle `BeholderTtcl#599447` never died, and Sword sparks hit an
+  invisible spot by the wall.
+- Cause (crashlink, `hlboot.dat`): a burrowed `BeholderTtcl` is unhittable
+  (`_isInGround`, affect 5, zero size), but `KirbyEnemies.Prepare` checked
+  `canBeHitBy` only when pairing. The burrowed tentacle stayed a 1×1 original
+  enemy; copy hits were rejected by the host, and the original recoil could hold
+  its AI, which is what makes it surface.
+- Fix: `Prepare` releases a paired enemy once the host stops letting the hero
+  hit it (not projectiles, floor ability items or swallowed objects); it pairs
+  again when hittable.
+- New `--input-plan tentacle` probe (`LabTentacleProbe`). Live
+  (`repros/conjunctivius-20261008`, empty save): before the fix `004843` showed
+  317 paired-while-burrowed tentacle-frames, 47 of them under original control;
+  fixed `004529` killed all three with none. The permanent stall itself was not
+  reproduced. Saves unchanged.
+- Found while staging: the default `outfit-build/res.pak` (Oct 4) predates the
+  ability items and fails new runs; the play build uses `8e44122d…`.
+- Source: `python3 scripts/check.py` passes (302 core assertions; Release build
+  0 warnings/errors). `tools/nds_tests.py` not run (`src/nds` unchanged).
