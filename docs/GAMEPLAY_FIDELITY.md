@@ -496,7 +496,7 @@ Other copy forms, bosses and breakables have not been run live with scrolls.
 
 ### Mutation menu (intentional deviation)
 
-Issue #90. Dead Cells weapons never appear in a Kirby run (#54), so a mutation
+Issue #90. (Twelve mutations; the table lists them.) Dead Cells weapons never appear in a Kirby run (#54), so a mutation
 that needs a weapon type, ammo, planted arrows, the backpack weapon or two weapons
 to switch between has nothing to act on, and a skill-use trigger never fires
 because skills are ability items too. While a Kirby session is active,
@@ -512,18 +512,21 @@ its offer with the same call, so the two agree). The list is
 | Kill Rhythm (`P_AttackSpeed_Combo`) | Needs two different weapons; both buttons fire the same ability |
 | Ranger's Gear, Scheme (`P_DmgSkillRanged`, `P_DmgSkl`) | Follow a skill use |
 | Ammo (`P_Ammo`) | Multiplies weapon ammo; its Kirby version (a longer-lived ability star) waits for #68 |
+| Support (`P_DeployedDmg`) | Needs a deployed skill; Kirby deploys none, and his helper's position is not readable from the source machine |
+| Parting Gift, Networking (`P_DeathBomb`, `P_ShareDamage`) | Follow ranged attacks; every copy attack counts as melee in a Kirby run |
 
-The mutations that name melee or ranged attacks but could work for copy attacks
-(Tranquility, Support, Counterattack, Point Blank, Networking, Parting Gift and
-others) are not hidden; #91 makes them work. A mutation the hero already holds
+The mutations that name melee attacks, and Point Blank, are not hidden; #91 makes
+them work for copy attacks. A mutation the hero already holds
 keeps working. Base Beheaded runs are unchanged.
 
 Evidence: core tests pin the list. Live runs `20261008-021537` (filter off) and
-`20261008-021638` (filter on), `--probe-ability 18 --probe-menu`, in
-`repros/crit-88-20261008`, opened the real `ui.PerkSelect` in the private profile
-with all nine and three ordinary mutations unlocked: unfiltered it listed all
-nine hidden ones, filtered it listed none and still listed the three ordinary
-ones. The NPC's own `PerkMaster.isVisible` hook was not exercised live.
+`20261008-021638` (filter on) were the first check, with nine hidden mutations;
+the list grew to twelve and the pair was rerun as `20261008-022159` and
+`20261008-022301` (see
+[RUNTIME_LAUNCH.md](RUNTIME_LAUNCH.md#mutation-menu-filter-2026-10-08)). Each
+opened the real `ui.PerkSelect` in the private profile with every hidden and three
+ordinary mutations unlocked: unfiltered it listed all of the hidden ones, filtered
+it listed none and still listed the three ordinary ones. The NPC's own `PerkMaster.isVisible` hook was not exercised live.
 
 ### Host elevators (deviation)
 

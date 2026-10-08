@@ -834,9 +834,11 @@ Ramparts room.
 ## Mutation menu filter (2026-10-08)
 
 Issue #90. `--probe-menu [filtered|unfiltered]` (`KIRBY_LAB_TEST_MENU`, with
-`--input-plan ability`) unlocks the nine hidden mutations and three ordinary ones
-in the private profile, opens the real `ui.PerkSelect` and writes the mutations it
-listed to `mutation-menu.json`. Run `20261008-021537` (unfiltered) listed all nine
-hidden mutations and the three ordinary ones. Run `20261008-021638` (filtered)
-listed none of the nine and all three ordinary ones. No fatal log. The mutation
+`--input-plan ability`) unlocks every hidden mutation and three ordinary ones in
+the private profile, opens the real `ui.PerkSelect` and writes the mutations it
+listed to `mutation-menu.json`. Runs `20261008-021537` (unfiltered) and
+`20261008-021638` (filtered) covered the first nine; the list then grew to twelve
+and runs `20261008-022159` (unfiltered) and `20261008-022301` (filtered) were
+repeated. Unfiltered it listed all twelve hidden mutations and the three ordinary
+ones; filtered it listed none of the twelve and all three ordinary ones. No fatal log. The mutation
 NPC's `PerkMaster.isVisible` hook was not exercised.

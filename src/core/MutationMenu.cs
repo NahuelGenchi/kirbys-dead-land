@@ -5,7 +5,8 @@ namespace Kirby.Core;
 /// them (#90). Dead Cells weapons never appear in a Kirby run: every weapon is an
 /// ability item, so mutations that need a weapon type, ammo, planted arrows, the
 /// backpack weapon or switching weapons have nothing to act on, and skill-use
-/// triggers never fire because skills become ability items too.
+/// triggers never fire because skills become ability items too. Mutations of
+/// "ranged" attacks go as well: every copy attack counts as melee in a Kirby run.
 /// </summary>
 public static class MutationMenu
 {
@@ -21,6 +22,9 @@ public static class MutationMenu
         ["P_DmgSkillRanged"] = "Ranger's Gear follows a skill use; skills are ability items for Kirby.",
         ["P_DmgSkl"] = "Scheme follows a skill use; skills are ability items for Kirby.",
         ["P_Ammo"] = "Ammo multiplies weapon ammo; Kirby has none (its Kirby version waits for #68).",
+        ["P_DeployedDmg"] = "Support needs a deployed skill; Kirby deploys none (his helper's position is not readable).",
+        ["P_DeathBomb"] = "Parting Gift follows kills by ranged attacks; Kirby has no ranged weapons.",
+        ["P_ShareDamage"] = "Networking marks enemies hit by ranged attacks; Kirby has no ranged weapons.",
     };
 
     public static bool IsHidden(string? itemId) => itemId is not null && Hidden.ContainsKey(itemId);

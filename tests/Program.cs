@@ -783,11 +783,11 @@ Check(SpeedMatch.RiseVelocity(KirbyActions.Jump, -2682) == -2682 && SpeedMatch.R
 }
 // Mutations that cannot work for Kirby are not offered (#90).
 {
-    Check(MutationMenu.Hidden.Count == 9, "Nine weapon-based mutations are hidden");
+    Check(MutationMenu.Hidden.Count == 12, "Twelve mutations that cannot work for Kirby are hidden");
     foreach (var id in new[] { "P_DmgPlantedArrow", "P_AmmoOnHit", "P_Backpack_Melee", "P_Backpack_Ranged", "P_Backpack_Shield",
-                 "P_AttackSpeed_Combo", "P_DmgSkillRanged", "P_DmgSkl", "P_Ammo" })
+                 "P_AttackSpeed_Combo", "P_DmgSkillRanged", "P_DmgSkl", "P_Ammo", "P_DeployedDmg", "P_DeathBomb", "P_ShareDamage" })
         Check(MutationMenu.IsHidden(id) && MutationMenu.Hidden[id].Length > 10, $"{id} is hidden with a reason");
-    Check(!MutationMenu.IsHidden("P_Bleed") && !MutationMenu.IsHidden("P_NoMobAround") && !MutationMenu.IsHidden("P_HealOnKill") &&
+    Check(!MutationMenu.IsHidden("P_Bleed") && !MutationMenu.IsHidden("P_NoMobAround") && !MutationMenu.IsHidden("P_HealOnKill") && !MutationMenu.IsHidden("P_DmgNearRanged") &&
         !MutationMenu.IsHidden(null) && !MutationMenu.IsHidden(""), "Other mutations stay in the menu");
     Check(!MutationMenu.IsHidden("p_ammo"), "Mutation IDs are matched exactly");
 }

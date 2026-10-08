@@ -47,7 +47,8 @@ preserved; generated assets and native dependencies remain in the private data r
   copy attacks like a weapon's (#57). See
   [ability items](docs/GAMEPLAY_FIDELITY.md#ability-items-intentional-addition).
 - Mutations that need Dead Cells weapons, ammo or skill use (Barbed Tips, Ripper,
-  the backpack mutations, Kill Rhythm, Ranger's Gear, Scheme and Ammo) are not
+  the backpack mutations, Kill Rhythm, Ranger's Gear, Scheme, Ammo, Support,
+  Parting Gift and Networking) are not
   offered in a Kirby run (#90). See
   [mutation menu](docs/GAMEPLAY_FIDELITY.md#mutation-menu-intentional-deviation).
 - Original inhale, mouthful, Down-to-swallow, spit, flight, guard, slide and copy

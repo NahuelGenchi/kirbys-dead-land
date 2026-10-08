@@ -1423,6 +1423,9 @@ the all-ability rendering tests as full gameplay acceptance.
 - Live (`repros/crit-88-20261008`): `20261008-021537` unfiltered listed all nine,
   `20261008-021638` filtered listed none; ordinary mutations stayed. Not run: the
   NPC hook, the pause screen, a mutation already held.
-- Scope note: the ranged mutations that can be reworked (Point Blank, Networking,
-  Parting Gift) move to #91 with their effect, so no text promises more than the
-  code does.
+- Scope note: Point Blank moves to #91 with its effect, so no text promises more
+  than the code does. Support (needs a deployed skill; the helper's position is not
+  readable), Parting Gift and Networking (ranged) were added to the hidden list
+  once the host code showed copy hits are already handled as melee: twelve in all.
+  Live reruns `20261008-022159` (unfiltered, all twelve listed) and
+  `20261008-022301` (filtered, none listed, ordinary ones kept).
