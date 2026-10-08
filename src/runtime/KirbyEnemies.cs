@@ -173,6 +173,14 @@ public sealed class KirbyEnemies
             if (mob is null) continue;
             if (!Live(mob) || mob._level.HashlinkPointer != hero._level.HashlinkPointer)
             { Release(nds, i); continue; }
+            // The host can stop letting the hero hit an enemy after it was paired:
+            // a Conjunctivius tentacle burrows (BeholderTtcl._isInGround, invulnerable,
+            // zero size), a mob hides. Its original object would keep taking copy hits
+            // the host rejects, and the original recoil would hold the host AI, so the
+            // tentacle could never surface and the boss shield stayed up (#86). It
+            // pairs again once hittable. A swallowed object is left to Complete.
+            if (!IsHazard(mob) && !KirbyAbilityItems.IsAbilityDrop(mob) && !mob.canBeHitBy(hero) && !nds.Proxy(i).Swallowed)
+            { Release(nds, i); continue; }
             // Only base Kirby can inhale an ability item; copy attacks never meet it.
             if (KirbyAbilityItems.IsAbilityDrop(mob) && !session.Rules.IsBaseForm && !controlled[i])
             { Release(nds, i); continue; }
@@ -285,8 +293,14 @@ public sealed class KirbyEnemies
                 bool crit = star == StarKind.None && critical[i];
                 int hostDamage = Math.Max(1, ColorlessDamage.HostDamage(damage, assignedHp[i], mob.life, CopyMultiplier(i, scale, mob, star == StarKind.None)));
                 TestObserver?.Invoke(mob, damage, hostDamage);
+                // A copy attack that reaches a secret wall opens it as the R key does: the host activation drops its reward.
+                // Base-form contact leaves the wall alone, as the original game does.
+                if (mob is HiddenBlock secret)
+                {
+                    if (!session.Rules.IsBaseForm && secret.canBeActivated(session.Hero)) secret.onActivate(session.Hero, false);
+                }
                 // A spit star's original hit (and burst) on its source object also staggers the host enemy.
-                if (mob is Mob struck && star != StarKind.None)
+                else if (mob is Mob struck && star != StarKind.None)
                 {
                     KirbyStars.TestObserver?.Invoke(star, mob, hostDamage, true);
                     KirbyStars.Stagger(struck, direction, () => KirbyDamage.Hit(session.Hero, mob, hostDamage));
@@ -442,8 +456,9 @@ public sealed class KirbyEnemies
         mob.addToLoot(new dc.LootType.InvItem(food), Ref<bool>.In(false));
     }
     // Gold deposits (PileOfGold, GoldNugget) have host life and drop gold in onDamage, like breakable props.
+    // A secret wall (HiddenBlock, "Scratch the wall") is hit the same way, so a copy attack opens it as R does.
     private static bool Eligible(Entity entity) =>
-        entity is Mob or Door or BreakableProp or ExplosiveBarrel or PileOfGold or GoldNugget || entity.isBreakableByHero();
+        entity is Mob or Door or BreakableProp or ExplosiveBarrel or PileOfGold or GoldNugget or HiddenBlock || entity.isBreakableByHero();
     private static (double X, double Y) Distance(Entity entity, double heroX, double heroY) =>
         (Math.Max(0, Math.Abs((entity.cx + entity.xr) * 24 - heroX) - entity.radius),
          Math.Max(0, Math.Abs((entity.cy + entity.yr) * 24 - entity.hei / 2 - (heroY - 14.5)) - (entity.hei + 29) / 2));
