@@ -21,7 +21,7 @@ in [NDS_BRIDGE.md](NDS_BRIDGE.md). The original bootstrap experiment remains in
 | Terrain | Nearby host solids, one-way floors, slopes, ladders and water become source collision cells. Vines grown with the Vine rune (`en.inter.VineLadder`) have no collision bits, only level spots (0, where the Beheaded climbs, and 18); their cells become source ladders, and the solid blocks a vine passes through or ends under become one-way ladder tops in that column. A ladder under a solid block stops the original below it, so this deviation lets Kirby climb onto the ledge, as the Beheaded's `exitLadderTop` does; all linked source objects and cached terrain probes move together when the window rebases by whole cells, while effects attached to a parent (Fire's head flame, Plasma's spark, attack effects) keep their offsets from it. Host movement of Kirby (speed match, stomp) moves only him and his terrain probes, so thrown bombs, cutters, effects and the helper keep their original paths |
 | Input | Existing host bindings become original digital buttons; ordinary source directional combinations still apply. A held direction dashes through the original double tap (`AlwaysDash`); a light analog tilt walks. A key bound to both Up and jump (W and the Up arrow by default) climbs at a ladder, chain or vine, as in the host, instead of jumping first |
 | Roll | Kirby's original slide is his roll and covers the Beheaded's roll: 131 px at up to 339 px/s. Host roll-zone tunnels (collision 65) open while he slides and stay open until he leaves one entered by sliding; walking cannot enter. The slide's fast part counts as a roll for the host's door and breakable-tile checks, and Suplex's grab lunge for its door check (see [Suplex's lunge bursts doors](#suplexs-lunge-bursts-doors-50)) |
-| Dive attack | The player's host dive binding in the air or on a ladder or chain (original jump, fall, float or climb) starts the host `DiveAttack` under its own rules. The original controller keeps its falling or exhaling animation and physics (3.5 px/frame cap) and drops straight down; the host adds 11.5 px/frame of descent through free space, 15 px a frame in all like the Beheaded's dive (about 900 px/s), and leaves the original a full fall step to make the floor contact; the host skill resolves the landing (shockwave, stun, damage, breakable floors with the Ram rune). Only what stops the original fall counts as floor: solids, slopes and one-way platforms from above, never ladders or chains. Enemy touch damage is off while stomping and for 30 frames after landing |
+| Dive attack | The player's host dive binding in the air or on a ladder or chain (original jump, fall, float or climb) starts the host `DiveAttack` under its own rules. The original controller keeps its falling or exhaling animation and physics (3.5 px/frame cap) and drops straight down; the host adds 11.5 px/frame of descent through free space, 15 px a frame in all like the Beheaded's dive (about 900 px/s), and leaves the original a full fall step to make the floor contact; the host skill resolves the landing (shockwave, stun, damage, breakable floors with the Ram rune). Only what stops the original fall counts as floor: solids, slopes and one-way platforms from above, never ladders or chains. From a climb the original A kicks him off; climbing down from a ladder or vine top the original ignores A for its first frames, so while it still climbs A is pressed every other frame and the host adds no descent, and the dive passes the ladder top in the row his feet climb in ([#74](#stomp-from-a-vine-top-74)) Enemy touch damage is off while stomping and for 30 frames after landing |
 | Camera | `CameraZoom` (default 1, the host camera) can zoom the host viewport; 2 shows about 200 host pixels of height, close to the DS screen's 192. Host cinematics and host zoom changes keep their framing |
 | Palette flashes | The original hurt and guard flashes of Kirby's first two palette banks are shown at `FlashStrength` (0.35) of their colour change, with original timing; lasting palette changes are adopted after four frames |
 | Graphics | Live original OAM, OBJ VRAM and palettes supply body, abilities, helper and effects; allowed host equipment has a separate overlay. OAM shows the previous source frame, so it is centred on that frame's Kirby position. The original's camera moves with the window, and a placement frames Kirby at once, so he and the effects around him stay on its 256-pixel screen. Its OAM builder only keeps pieces near that screen; the bridge rebuilds the pieces it culls from the same original sprite records, and the renderer draws them on a canvas 512 px either side of Kirby (see [Far shots](#far-shots-63-67)) |
@@ -626,8 +626,40 @@ grown through the host's own `VineLadder.activate`:
   climbs each way at 265.2 and 315.3 px/s; Kirby stood on the ladder top (600)
   each time and climbed down to the floor (864). Life stayed 76.
 
-Not run: hanging vines (`goingUp` false), a stomp from a vine, and a vine in a
+Not run: hanging vines (`goingUp` false) and a vine in a
 saved run after loading.
+
+### Stomp from a vine top (#74)
+
+Owner recording 2026-10-07 01:24: standing on the ledge at a vine's top, S then
+Space started the stomp, but Kirby went down the vine in the original climb pose
+and hung at its foot until the stomp's 3 s safety cancel. Down on a ladder top
+starts the original climb (`0916`) inside the top cell, and for its first frames
+(nine in the bridge runs) the original ignores A. The stomp's single kick-off
+press was lost, the original kept climbing with no buttons, and the host descent
+carried the climbing Kirby to 4.5 px above the floor, where neither the original
+landing nor the floor test happens.
+
+The stomp now passes the ladder top in the row Kirby's feet climb in, as the
+host dive passes the platform it starts above, and the original lets go of the
+ladder on the first frame. As a safeguard, while the original still climbs, A is
+pressed every other frame and the host adds no descent.
+
+- Bridge case `ladder_top_stomp` (`tools/nds_tests.py`): three frames after Down
+  on a one-way top, A leaves Kirby climbing; with the top cell passed, the same
+  A frame drops him into a fall (`070E`).
+- Live, separate data root `repros/vine-stomp-20261007`, `vine` setup, W to the
+  top, then S with Space 0.04 s or 0.2 s later. Before the fix, run
+  `20261007-013859`: both early presses stayed in the climb down to 1531.5
+  (floor 1536) and were cancelled after 3 s; the 0.2 s press landed (6.2
+  cells). With the fix, run `20261007-014012` (a different generated level and
+  vine): the 0.04 s press fell from the next frame and landed through the host
+  dive (12.6 cells), the 0.2 s press landed (10.2 cells). Saves unchanged, no
+  fatal log.
+
+Not run: a stomp from the top of an ordinary ladder or chain live (the bridge
+case uses the same one-way top), and hanging vines.
+
 ### Carrying ability moves (#40)
 
 Every copy-ability attack runs under the original action `142C`, which the speed

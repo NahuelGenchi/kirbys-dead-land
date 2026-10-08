@@ -453,24 +453,33 @@ var stompRun = new StompController();
 Check(!stompRun.TryStart(KirbyActions.Standing, 480), "A grounded Kirby cannot stomp");
 Check(stompRun.TryStart(KirbyActions.Fall, 400) && stompRun.Active, "A falling Kirby stomps");
 Check(!stompRun.TryStart(KirbyActions.Fall, 400), "A stomp cannot restart while active");
-Check(stompRun.Mask(1 | 128) == 0, "Original buttons are released during a falling stomp");
-Check(stompRun.Descent(100) == StompController.ExtraDescent, "Full extra descent in open air");
-Check(stompRun.Descent(8) == 3.5 && stompRun.Descent(4) == 0, "Descent leaves the original a full fall step to make the floor contact");
+Check(stompRun.Mask(1 | 128, KirbyActions.Fall) == 0, "Original buttons are released during a falling stomp");
+Check(stompRun.Descent(100, KirbyActions.Fall) == StompController.ExtraDescent, "Full extra descent in open air");
+Check(stompRun.Descent(8, KirbyActions.Fall) == 3.5 && stompRun.Descent(4, KirbyActions.Fall) == 0, "Descent leaves the original a full fall step to make the floor contact");
 Check(Math.Abs(3.5 + StompController.ExtraDescent - 15) < 1e-9, "The stomp falls 15 px a frame, the Beheaded's dive");
 Check(stompRun.Advance(landed: false, interrupted: false) == StompController.Outcome.None && stompRun.Active, "Still diving");
 Check(Math.Abs(stompRun.Height(472) - 3) < 1e-9, "Fall height is reported in host cells");
 Check(stompRun.Advance(landed: true, interrupted: false) == StompController.Outcome.Landed && !stompRun.Active, "Landing ends the stomp");
-Check(stompRun.Descent(100) == 0 && stompRun.Mask(1) == 1, "An idle stomp leaves descent and buttons alone");
+Check(stompRun.Descent(100, KirbyActions.Fall) == 0 && stompRun.Mask(1, KirbyActions.Fall) == 1, "An idle stomp leaves descent and buttons alone");
 var floatStomp = new StompController();
 Check(floatStomp.TryStart(KirbyActions.Float, 300), "A floating Kirby stomps");
-Check(floatStomp.Mask(1) == StompController.ButtonB && floatStomp.Mask(1) == 0, "A floating Kirby exhales once, then falls");
+Check(floatStomp.Mask(1, KirbyActions.Float) == StompController.ButtonB && floatStomp.Mask(1, KirbyActions.Ability) == 0, "A floating Kirby exhales once, then falls");
 Check(floatStomp.Advance(false, interrupted: true) == StompController.Outcome.Cancelled && !floatStomp.Active, "A hit cancels the stomp");
 var chainStomp = new StompController();
 Check(KirbyActions.CanStomp(KirbyActions.Climb) && chainStomp.TryStart(KirbyActions.Climb, 300), "Kirby stomps from a ladder or chain");
-Check(chainStomp.Mask(128 | 1) == StompController.ButtonA && chainStomp.Mask(128 | 1) == 0, "The original A kicks him off once, then buttons are released");
+Check(chainStomp.Mask(128 | 1, KirbyActions.Climb) == StompController.ButtonA && chainStomp.Mask(128 | 1, KirbyActions.Jump) == 0,
+    "The original A kicks him off once, then buttons are released");
+var vineTopStomp = new StompController();
+vineTopStomp.TryStart(KirbyActions.Climb, 300);
+// Climbing down from a ladder top, the original ignores A for its first frames (#74).
+Check(vineTopStomp.Mask(128 | 1, KirbyActions.Climb) == StompController.ButtonA && vineTopStomp.Mask(128 | 1, KirbyActions.Climb) == 0 &&
+      vineTopStomp.Mask(128 | 1, KirbyActions.Climb) == StompController.ButtonA && vineTopStomp.Mask(128 | 1, KirbyActions.Fall) == 0,
+    "While the original still climbs, A is pressed every other frame until it lets go");
+Check(vineTopStomp.Descent(100, KirbyActions.Climb) == 0 && vineTopStomp.Descent(100, KirbyActions.Fall) == StompController.ExtraDescent,
+    "No host descent carries a Kirby who still climbs");
 var fallStomp = new StompController();
 fallStomp.TryStart(KirbyActions.Fall, 300);
-Check(fallStomp.Mask(1) == 0, "A falling Kirby needs no releasing press");
+Check(fallStomp.Mask(1, KirbyActions.Fall) == 0, "A falling Kirby needs no releasing press");
 var stuck = new StompController();
 stuck.TryStart(KirbyActions.Jump, 0);
 var outcome = StompController.Outcome.None;

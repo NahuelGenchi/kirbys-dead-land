@@ -246,6 +246,22 @@ def run_case(name):
                 tops[top]=s['y_raw']/65536
             assert tops[3]==52.5 and tops[131]==20.0, tops
             return {'solid_top_y':tops[3],'one_way_top_y':tops[131]}
+        if name=='ladder_top_stomp':
+            # Kirby stands on a vine's one-way top and presses Down: for its first
+            # frames the original climb ignores A, so a stomp's single kick-off
+            # press leaves him climbing (#74). Passing the top cell lets him go at once.
+            action=lambda:struct.unpack('<H',b.read(0x020BAF80,2))[0]
+            def cells(passed):return [134 if col==4 and 4<=row<8 else (0 if passed else 131) if col==4 and row==3 else 3 if row>=8 or (row==3 and col<10) else 0 for row in range(9) for col in range(100)]
+            result={}
+            for passed in (False,True):
+                if passed:b.close();b=Bridge()
+                b.world(cells(False),108*65536,int(57.5*65536));b.step(0,40)
+                assert action()==0x406
+                for i in range(3):s=b.state();b.world(cells(False),s['x_raw'],s['y_raw']);b.step(128)
+                assert action()==0x916
+                s=b.state();b.world(cells(passed),s['x_raw'],s['y_raw']);b.step(1);result[passed]=action()
+            assert result[False]==0x916 and result[True]==0x70e, result
+            return {'kick_in_top_cell':hex(result[False]),'top_cell_passed':hex(result[True])}
         if name in ('proxy_suplex','proxy_cook','proxy_suplex_touch_off'):
             ability=24 if name=='proxy_cook' else 6;transform(b,ability)
             floor=[3 if y>=7 else 0 for y in range(9) for x in range(100)];q=Proxy();damage=[];captured=0;gone=None
@@ -619,7 +635,7 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--case');parser.add_argument('--skip-abilities',action='store_true');args=parser.parse_args()
     if args.case:
         print('RESULT '+json.dumps({'case':args.case,'result':run_case(args.case)}),flush=True);return
-    cases=['scene_doors', 'far_shot_draw', 'room_food', 'proxy_birth_contact', 'proxy_birth_inhale', 'proxy_contact', 'proxy_contact_sword', 'proxy_touch_off', 'proxy_swallow_touch_off', 'proxy_suplex_touch_off', 'proxy_ice_detach', 'proxy_ice_release', 'proxy_lethal', 'motion', 'ladder', 'ladder_top', 'one_way', 'solid_ceiling', 'water', 'proxy_water', 'proxy_water_sword', 'proxy_water_below', 'hurt_water', 'proxy_swallow', 'hazard_spit', 'hazard_swallow', 'star_spit', 'star_spit_wall', 'star_big', 'star_ability', 'proxy_sword', 'proxy_reuse', 'proxy_save', 'proxy_mix', 'boss_inhale', 'boss_suplex', 'boss_cook', 'boss_sword', 'proxy_capacity', 'copy_drop_reabsorb', 'wheelie_ride', 'proxy_suplex', 'proxy_cook', 'audio', 'hurt', 'hurt_lethal', 'hurt_cold', 'guard', 'health_invulnerable', 'health_sync', 'proxy_size']
+    cases=['scene_doors', 'far_shot_draw', 'room_food', 'proxy_birth_contact', 'proxy_birth_inhale', 'proxy_contact', 'proxy_contact_sword', 'proxy_touch_off', 'proxy_swallow_touch_off', 'proxy_suplex_touch_off', 'proxy_ice_detach', 'proxy_ice_release', 'proxy_lethal', 'motion', 'ladder', 'ladder_top', 'ladder_top_stomp', 'one_way', 'solid_ceiling', 'water', 'proxy_water', 'proxy_water_sword', 'proxy_water_below', 'hurt_water', 'proxy_swallow', 'hazard_spit', 'hazard_swallow', 'star_spit', 'star_spit_wall', 'star_big', 'star_ability', 'proxy_sword', 'proxy_reuse', 'proxy_save', 'proxy_mix', 'boss_inhale', 'boss_suplex', 'boss_cook', 'boss_sword', 'proxy_capacity', 'copy_drop_reabsorb', 'wheelie_ride', 'proxy_suplex', 'proxy_cook', 'audio', 'hurt', 'hurt_lethal', 'hurt_cold', 'guard', 'health_invulnerable', 'health_sync', 'proxy_size']
     if not args.skip_abilities:cases += [f'ability-{i}' for i in range(2,26)]
     results=[]
     for name in cases:
