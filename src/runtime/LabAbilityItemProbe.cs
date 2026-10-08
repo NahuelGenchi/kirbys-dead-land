@@ -112,9 +112,15 @@ internal static class LabAbilityItemProbe
         return new { spot.X, spot.Y };
     }
 
+    /// <summary>KIRBY_LAB_ITEMS_QUALITY=N gives the probe's Broadsword N "+" before it is dropped (#56).</summary>
+    private static readonly int quality = int.TryParse(Environment.GetEnvironmentVariable("KIRBY_LAB_ITEMS_QUALITY"), out int q) ? q : 0;
+
     private static ItemDrop Spawn(Hero hero, string id, int cx)
     {
-        var drop = new ItemDrop(hero._level, cx, hero.cy, InventItem.Class.fromItem(id.AsHaxeString(), null), true, Ref<bool>.In(false));
+        var host = InventItem.Class.fromItem(id.AsHaxeString(), null);
+        if (id == "BroadSword")
+            for (int i = 0; i < quality; i++) host.addAffix("QualityUp".AsHaxeString(), Ref<bool>.In(true));
+        var drop = new ItemDrop(hero._level, cx, hero.cy, host, true, Ref<bool>.In(false));
         drop.init();
         return drop;
     }
@@ -196,7 +202,9 @@ internal static class LabAbilityItemProbe
             grenadeAbility = KirbyAbilityItems.AbilityOf(grenade.item);
             swordUsefulToKirby = swordItem.isUsefulFor(hero);
             Event("spawned", new { swordAbility, grenadeAbility, shield = shield.item.getItemKind().ToString(),
-                swordLevel = swordItem.getRawItemLevel(), colorless = swordItem.hasAffix("Colorless".AsHaxeString()) });
+                swordLevel = swordItem.getRawItemLevel(), colorless = swordItem.hasAffix("Colorless".AsHaxeString()),
+                quality = swordItem.getUpgradeLevel(), bonus = swordItem.getDamageBonus(),
+                infoLine = Kirby.Core.AbilityItems.InfoLine(swordItem.getDamageBonus()) });
             spawnedAt = phaseAt = frame;
             phase = 1;
             return 0;

@@ -345,12 +345,13 @@ Kirby becomes empowered only when the original transform produces that Elite's
 Sword; a mouthful that the original Mix machinery turns into another ability is
 not empowered.
 
-While empowered, copy damage to host targets is doubled
-(`KirbyRules.EmpoweredDamageMultiplier`). This is a deliberate design choice, not
-original behavior. The multiplier applies on top of the original-unit scale in
-the Outgoing damage row: the paired source enemy holds host life ÷ (unit scale ×
-multiplier), and each source HP drop is multiplied back by the same product
-(`KirbyEnemies`). A hit that the source enemy survives never kills the host
+While empowered, the copy's ability item is **Legendary** (#56, replacing the
+earlier fixed ×2): the host's own weapon bonus for a Legendary item (item level
+plus 6) multiplies copy damage, ×2.25 at item level I. This is a deliberate
+design choice, not original behavior. The multiplier applies on top of the
+original-unit scale in the Outgoing damage row: the paired source enemy holds
+host life ÷ (unit scale × multiplier), and each source HP drop is multiplied back
+by the same product (`KirbyEnemies`). A hit that the source enemy survives never kills the host
 enemy, so original death reactions stay in the same tick as the host kill.
 `CopyDamageScale` in the core keeps the tested pairing rule for a single
 multiplier.
@@ -358,8 +359,8 @@ multiplier.
 The bonus ends whenever the copy is lost: a hit that knocks it off, a discard
 (a re-caught star is an ordinary Sword), creating a helper, spitting the Elite
 out before swallowing, or a new run. It survives saves and biome transitions.
-Ordinary enemies keep the uniform random roll, and a Sword copied from them is
-not doubled. Bosses are unchanged because they resist inhale. Known limit: source
+Ordinary enemies keep the uniform random roll and give a base item, so a Sword
+copied from them has no bonus beyond its item level. Bosses are unchanged because they resist inhale. Known limit: source
 damage is attributed per paired enemy, not per attacker. If an earlier helper is
 still alive when Kirby later becomes empowered, that helper's hits are doubled
 too. No visual cue shows the empowered state yet.
@@ -855,6 +856,16 @@ addition built from host items and the original inhale and swallow.
   shows its own message. A booth's price is the one the host set for the item it
   replaced. A shop mimic is not triggered by an ability item. A long press still
   sells or recycles. Legendary altars are not converted.
+- **Quality (#56).** A floor ability item keeps the host's quality roll of the
+  item it replaces: each "+" (`QualityUp`) and `Legendary` carry over with its
+  level, so the name shows "Beam II+", "++" or a gold legendary name. The item's
+  host weapon damage bonus (`InventItem.getDamageBonus`: adjusted level = level +
+  2 per "+", or + 6 when Legendary; 0.25 per stat bonus plus 0.75 × (adjusted − 1)
+  / 18) multiplies copy damage exactly as it multiplies a Dead Cells weapon's,
+  on top of the colorless scroll factor. Level I adds nothing, II +4%, III or I+
+  +33%. The item card's info line states it ("+67% copy damage"), or "Copy
+  ability" when it adds nothing. Copies from ordinary enemies are base items at
+  the level's loot level; an Elite's copy is Legendary.
 - **Taking one.** `InventItem.isUsefulFor` is false for an ability item for every
   hero but Kirby (#61: true for him, so a shop short of gold says so; his presses
   never pick one up). A short press shows "Inhale and swallow it to copy"; a long press still
