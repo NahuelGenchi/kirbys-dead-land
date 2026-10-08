@@ -6,6 +6,8 @@ namespace Kirby.Core;
 /// for one source frame after a new press, and once more after landing if
 /// Kirby is still walking. The original controller still decides whether a
 /// dash starts, so its speed, animation and every dash attack stay original.
+/// A landing counts only in the original's ground actions: Ninja's wall cling
+/// also stands still, and a release there would let go of the wall.
 /// </summary>
 public sealed class DashAssist
 {
@@ -22,10 +24,12 @@ public sealed class DashAssist
     /// <param name="enabled">False for a light analog tilt, which walks.</param>
     /// <param name="vx">Horizontal velocity after the previous source frame.</param>
     /// <param name="vy">Vertical velocity after the previous source frame.</param>
-    public ushort Filter(ushort mask, bool enabled, int vx, int vy)
+    /// <param name="action">Original action after the previous source frame.</param>
+    public ushort Filter(ushort mask, bool enabled, int vx, int vy, ushort action)
     {
         if (vy != 0) { airborne = true; groundFrames = 0; }
-        else groundFrames++;
+        else if (KirbyActions.OnGround(action)) groundFrames++;
+        else groundFrames = 0;
         int direction = (mask & Horizontal) switch { Right => 1, Left => -1, _ => 0 };
         // Down and guard combinations (slide, crouch, guard) keep their exact input.
         if (!enabled || direction == 0 || (mask & (Down | Guard)) != 0)

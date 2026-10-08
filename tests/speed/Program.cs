@@ -427,7 +427,7 @@ sealed class Sim
             if (next != word[0]) { word[0] = next; nds.Write(count, word[..1]); }
         }
         else walkCycle.Reset();
-        nds.Step(dash.Filter(raw, true, lastVx, lastVy));
+        nds.Step(dash.Filter(raw, true, lastVx, lastVy, action));
         NdsState s = nds.State;
         lastVx = s.VxRaw; lastVy = s.VyRaw;
         ushort after = nds.Action;
