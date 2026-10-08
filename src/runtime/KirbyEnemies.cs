@@ -142,6 +142,14 @@ public sealed class KirbyEnemies
             if (mob is null) continue;
             if (!Live(mob) || mob._level.HashlinkPointer != hero._level.HashlinkPointer)
             { Release(nds, i); continue; }
+            // The host can stop letting the hero hit an enemy after it was paired:
+            // a Conjunctivius tentacle burrows (BeholderTtcl._isInGround, invulnerable,
+            // zero size), a mob hides. Its original object would keep taking copy hits
+            // the host rejects, and the original recoil would hold the host AI, so the
+            // tentacle could never surface and the boss shield stayed up (#86). It
+            // pairs again once hittable. A swallowed object is left to Complete.
+            if (!IsHazard(mob) && !KirbyAbilityItems.IsAbilityDrop(mob) && !mob.canBeHitBy(hero) && !nds.Proxy(i).Swallowed)
+            { Release(nds, i); continue; }
             // Only base Kirby can inhale an ability item; copy attacks never meet it.
             if (KirbyAbilityItems.IsAbilityDrop(mob) && !session.Rules.IsBaseForm && !controlled[i])
             { Release(nds, i); continue; }
