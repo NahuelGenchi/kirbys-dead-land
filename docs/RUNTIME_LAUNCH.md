@@ -30,7 +30,7 @@ Relevant environment variables are used only by the lab helper:
 - `KIRBY_LAB_RESUME_GAME=1`: call the game's normal saved-run launch action once.
 - `KIRBY_LAB_SAVE_AFTER`: request a normal host save after this many original engine frames.
 - `KIRBY_LAB_OUTFIT`: outfit ID assigned before starting that private run.
-- `KIRBY_LAB_INPUT_PLAN`: `movement`, `combat`, `ability`, `visual`, `breakable`, `boss`, `crowd`, `aim`, `repro`, `hazard`, `stars`, `water`, or `items`, for a reproducible offscreen test. `repro` tests normal keyboard/controller bindings and keeps the normal tutorials. `items` is the ability item check (see [ability items](#ability-items-55)).
+- `KIRBY_LAB_INPUT_PLAN`: `movement`, `combat`, `ability`, `visual`, `breakable`, `boss`, `crowd`, `aim`, `repro`, `hazard`, `stars`, `water`, `items`, `scroll` or `tentacle`, for a reproducible offscreen test. `repro` tests normal keyboard/controller bindings and keeps the normal tutorials. `items` is the ability item check (see [ability items](#ability-items-55)).
 - `KIRBY_LAB_TEST_ABILITY`: optional source ability ID for the ability probe, exposed as `--probe-ability 2..25`. The probe prepares it through original inhale, supplied swallowed content, and Down before measuring combat. The separate `combat` probe uses a real enemy's random copy result.
 - `KIRBY_LAB_TEST_SCROLLS`: optional `B,T,S` scroll counts for the ability probe, exposed as `--probe-scrolls`. Before measuring, the probe adds that many real `BrutalityUp`, `TacticUp` and `SurvivalUp` items (`InventItem.fromItem`) through the normal inventory and calls the host's `Hero.computeTiers`. `ability-damage.json` then records the tiers, the host and core colorless multipliers, and each copy hit's source HP drop and host damage.
 - `KIRBY_LAB_TEST_HUD=1`: with the ability probe, exposed as `--probe-hud`. After the new run settles, it adds a real `StartShield` beside the starting sword through the normal inventory. It later discards the copy with the original Select button, and writes `hud.jsonl` whenever a HUD weapon slot changes: real item, slot item, icon texture, frame group, icon size and scale, and ammo flag. Each distinct decoded icon is saved as private `hud-icon-<hash>.rgba`.
@@ -351,6 +351,43 @@ KIRBY_LAB_BREAKABLE_TARGET=gold python3 scripts/launch_runtime.py \
 
 Each run reached its time limit without fatal errors, and real saves were unchanged.
 `GoldNugget` and copy forms other than Sword were not run.
+
+## Secret walls (#84)
+
+`KIRBY_LAB_BREAKABLE_TARGET=hidden` makes the `breakable` plan spawn a real
+`HiddenBlock` beside Kirby (constructor with direction 1 and a small food reward,
+then `init`) and copy Sword. The probe re-places Kirby beside the wall each frame
+of the attack, because the transform's Right press otherwise carries him past it.
+`breakable-hits.jsonl` records each host `onDamage`; `breakable.json` counts
+`HiddenBlock.onActivate` calls and lists the `ItemDrop`s within three cells of the
+wall. `hidden-base` presses attack in base form instead and passes only when the
+wall keeps its life and is not opened.
+
+```sh
+KIRBY_LAB_BREAKABLE_TARGET=hidden python3 scripts/launch_runtime.py \
+  --data-root ~/.local/share/kirby-dead-cells/repros/hidden-block-20261008 \
+  --seconds 60 --start-game --outfit KirbySuperStarUltra --input-plan breakable
+```
+
+Separate data root `repros/hidden-block-20261008`, staged with the ability-item
+outfit pack (`outfit-build-55`, SHA-256 `8e44122d…`) and the matching asset pack
+(`assets-final`, SHA-256 `3cdd1193…`). A lab staged with the older
+`outfit-build/res.pak` fails at startup with `Invalid ItemKind`.
+
+| Run | Build | Result |
+| :--- | :--- | :--- |
+| `20261008-002608` | control: no pairing change | Copy Sword active, wall `canBeHit` true 28 px away, no proxy for the wall, no hits, no activation, life 3 |
+| `20261008-002727` | pairing only (`Eligible`) | Three copy hits, life 3 → 0, not opened, no activation: the activation was missing |
+| `20261008-002858` | pairing and activation | One activation, life 0; drops not yet recorded |
+| `20261008-003014` | pairing and activation, drops recorded | One activation; `SmallMeat` dropped at the wall |
+| `20261008-003144` | base form (`hidden-base`), final code | Base form, no activation, no damage, life 3, wall `canBeHit` true 20–27 px away |
+| `20261008-003248` | final code, copy Sword | One activation; `SmallMeat` dropped beside the wall |
+
+Each run reached its 60-second limit (`exit_code` -15, expected) with
+`save_isolation_installed` true, `source_saves_unchanged` true and no fatal log.
+The owner's `--play` session on the main lab was not restaged or stopped.
+Not run: an R-key press beside a wall as a parity control, copy forms other than
+Sword, and rewards other than food.
 
 ## Suplex lunge into doors
 
@@ -830,6 +867,52 @@ The real saves were unchanged in every run. Not run live: a projectile or a
 dying enemy ending during the cinematic, Brutality and Tactics scrolls, scrolls
 that offer a choice, the exit-door walk with paired enemies, and the owner's own
 Ramparts room.
+
+
+## Conjunctivius tentacles (#86)
+
+`--input-plan tentacle` (`LabTentacleProbe`) starts a new run in the real
+`BeholderPit`. Once its Beholder exists, Kirby copies Sword (original inhale,
+supplied Sword content, Down). The boss's own `createTentacles(3, false)` then
+makes a wave of three real `BeholderTtcl`, which keep their natural AI. Kirby
+walks to the nearest living tentacle and swings every 16 frames, also while it
+is burrowed. Incoming damage to Kirby is cancelled. Every host frame appends each
+tentacle's life, `_isInGround`, `canBeHitBy(hero)`, pairing and source control
+to `tentacle-trace.jsonl`; burrow and surface events go to
+`tentacle-events.jsonl`, and `tentacle.json` holds the result. The probe passes
+when all three die to copy hits, at least one burrowed, and no tentacle stays
+paired for more than one host frame while the host refuses the hero's hits.
+
+Separate data root `repros/conjunctivius-20261008` with an empty lab save, the
+play build's outfit pack (`8e44122d…be7af`) and the shared bridge
+(`f4f30c93…6cb49`; this branch does not change `src/nds`):
+
+```sh
+python3 scripts/launch_runtime.py \
+  --data-root "$HOME/.local/share/kirby-dead-cells/repros/conjunctivius-20261008" \
+  --seconds 150 --start-game --outfit KirbySuperStarUltra --input-plan tentacle --capture-fps 5
+```
+
+| Run | Build | Result |
+| :--- | :--- | :--- |
+| `20261008-004843` | Before the fix (`664cde5f…c5044`) | Burrowed tentacles stayed paired for 317 tentacle-frames, up to 165 in a row, and for 47 of them the original recoil controlled a burrowed tentacle. All three still surfaced and died within 1469 frames. `passed: false` |
+| `20261008-004529` | Fixed (`7a7f07d0…c610f9`) | 3 of 3 killed in 1139 frames, 18 hits for 3804 damage, 3 burrows and 6 surfacings. Never paired or controlled while burrowed; every life loss happened while surfaced. `passed: true` |
+
+Both runs ended at the expected timeout with no fatal log, and the real saves
+were unchanged. The fight in the owner's recording, where a tentacle never
+surfaced again, was not reproduced: the run before the fix shows the
+mechanism (pairing and original control while burrowed) but not the permanent
+stall. Not run live: the boss's own tentacle phases from damage thresholds, a
+full Conjunctivius fight, other copy abilities, and other burrowing or hiding
+enemies.
+
+Four earlier attempts in this root (exit 255, fatal log, saves unchanged)
+were staged with the default `outfit-build/res.pak` (Oct 4, `6c141ee3…`), which
+predates the ability items. With a copy of the main lab save, the `tentacle`,
+`boss` and `movement` plans all failed while starting the new game with `Null
+access .commonProps`. With an empty save, copying Sword failed with `Invalid
+ItemKind: KirbyAbilitySword`. The copied save was not retried with the current
+pack. Stage the current outfit build instead.
 
 ## Copy-attack critical hits (2026-10-08)
 
