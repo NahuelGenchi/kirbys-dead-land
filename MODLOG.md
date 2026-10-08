@@ -1531,3 +1531,18 @@ the all-ability rendering tests as full gameplay acceptance.
   once the host code showed copy hits are already handled as melee: twelve in all.
   Live reruns `20261008-022159` (unfiltered, all twelve listed) and
   `20261008-022301` (filtered, none listed, ordinary ones kept).
+
+## 2026-10-08 — Original enemies the host killed alone no longer linger (#78)
+
+- The #79 damage log caught the owner's unexplained hits (Archer kill in the
+  Prisoners' Quarters, Grenadier kill in the Promenade): original body contact
+  from a detached proxy with the original 24×24 box, 0.8–1.3 s after the kill.
+- `KirbyEnemies` detached a living original enemy when its host enemy died in
+  the same tick without an original defeat. Now only a defeated (zero HP)
+  original object is detached, keeping its touch exclusion. Others are retired
+  and logged (`host death without an original defeat`).
+- Headless: a detached lethal Sword victim reported its defeat at frame 5 and
+  was gone at frame 14 without hurting Kirby. Source: `python3 scripts/check.py`
+  passes. Not run live.
+- Seen, not changed: host poison ticks play the original hurt reaction.
+

@@ -406,6 +406,37 @@ source, the runtime now logs every way Kirby loses health, with a
 - `kill`: each enemy a copy hit killed. Each hit line also gives the time since
   the last kill and that kill's position relative to Kirby.
 
+The log identified the source (owner play log, 2026-10-08). Two hits with
+nothing queued were original body contact: 7 HP 759 ms after an Archer kill in
+the Prisoners' Quarters, and 9 HP 1316 ms after a Grenadier kill in the
+Promenade. In both, the only box touching Kirby was proxy slot 1's slot 30 body.
+It was 24 × 24 with its bottom 5 px above the floor, the original Waddle Dee's
+own box, not a host-sized one, whose bottom is the floor. So it was a detached
+original object, and it still existed long after an original defeat ends (gone
+14 frames after the lethal hit in the bridge).
+
+`KirbyEnemies.Complete` detached every paired enemy whose host died in that
+tick, even when the original had not been defeated (a host death the original
+did not share, such as a hit or explosion in the same tick). That object kept
+its own AI. `kssu_proxy_detach` clears the proxy options, including the
+touch exclusion. Headless, a living detached proxy kept its masked collision
+while walking through Kirby and while being hit, so what re-enabled the touch in
+play is not identified.
+
+Now only an original object already at zero HP is detached, and the touch
+exclusion is set again on it for its defeat. A detached lethal Sword victim
+still reported its defeat at frame 5 and was gone at frame 14 without hurting
+Kirby. A host death the original did not share retires the original object at
+once, and the log records it as `host death without an original defeat`. Each
+touching proxy in a `source hit` line now also gives its binding (enemy,
+`detached` or `free`), flags and HP.
+
+Not verified live after this change.
+
+Also seen in the same logs (not changed here): host poison ticks
+(`dmgType=Poison`, no source) are queued like any host hit. Each 1 HP tick
+therefore plays the original hurt reaction and knockback.
+
 ### Enemies the host stops letting Kirby hit (#86)
 
 Owner report (2026-10-08, recording and play log): in the Conjunctivius fight
