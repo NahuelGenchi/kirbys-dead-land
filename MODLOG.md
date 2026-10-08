@@ -1513,3 +1513,21 @@ the all-ability rendering tests as full gameplay acceptance.
   RUNTIME_LAUNCH.md. Effects were set by the fixture, not earned.
 - Not run: Gastronomy, Extended Healing, Tainted Flask, Demon Strength, bosses, the
   menu, effects earned in play.
+## 2026-10-08 — mutations Kirby cannot use leave the menu (#90)
+
+- Host: both `PerkSelect.isVisible` and `PerkMaster.isVisible` call
+  `itemMeta.hasUnlockedItem` (plus the custom-game lock); `PerkMaster.getAvailablePerks`
+  counts with the NPC's call, so both are filtered.
+- `MutationMenu.Hidden` (`src/core/`) lists nine mutations with reasons;
+  `KirbyMutationMenu` filters them while a Kirby session is active.
+- Source: `python3 scripts/check.py` passes (302 core assertions; Release build 0
+  warnings/errors).
+- Live (`repros/crit-88-20261008`): `20261008-021537` unfiltered listed all nine,
+  `20261008-021638` filtered listed none; ordinary mutations stayed. Not run: the
+  NPC hook, the pause screen, a mutation already held.
+- Scope note: Point Blank moves to #91 with its effect, so no text promises more
+  than the code does. Support (needs a deployed skill; the helper's position is not
+  readable), Parting Gift and Networking (ranged) were added to the hidden list
+  once the host code showed copy hits are already handled as melee: twelve in all.
+  Live reruns `20261008-022159` (unfiltered, all twelve listed) and
+  `20261008-022301` (filtered, none listed, ordinary ones kept).

@@ -42,6 +42,7 @@ public sealed class KirbyMod(ModInfo info) : ModBase(info), IOnHeroUpdate,
         KirbyEnemyHooks.Install();
         KirbyDamage.Install();
         KirbyMutations.Install();
+        KirbyMutationMenu.Install();
         KirbyVines.Install();
         dc.en.inter.Hook_Elevator.postUpdate += (orig, elevator) => { orig(elevator); NativeProvider?.AlignToElevator(elevator); };
         if (config.EnableOriginalRuntime)
