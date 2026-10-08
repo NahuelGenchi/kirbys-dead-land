@@ -181,7 +181,7 @@ internal static unsafe class LabCombatProbe
             victimElite = victim?.elite,
             empoweredAfterSwallow,
             empowered = session.Rules.AbilityEmpowered,
-            damageMultiplier = session.Rules.DamageMultiplier,
+            damageMultiplier = 1 + (KirbyAbilityItems.SlotItem(session.Hero, session.Rules.AbilityId)?.getDamageBonus() ?? 0),
             attackerHits,
             enemyConsumed = victim is not null && (victim.destroyed || victim.life <= 0),
             selectedAbility = session.Rules.AbilityId,

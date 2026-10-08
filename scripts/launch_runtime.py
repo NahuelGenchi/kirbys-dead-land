@@ -49,8 +49,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--data-root', type=Path, default=DEFAULT_ROOT)
     parser.add_argument('--play', action='store_true', help='Open the game for normal play, with isolated saves and no time limit.')
-    parser.add_argument('--input-plan', choices=['movement', 'combat', 'ability', 'cook', 'visual', 'breakable', 'boss', 'crowd', 'aim', 'repro', 'hazard', 'stars', 'water', 'items', 'rewards'], help='Run an isolated input test (repro tests normal keyboard/controller bindings).')
-    parser.add_argument('--probe-ability', type=int, choices=range(2, 26), metavar='2..25', help='Prepare this original ability through inhale/feed/swallow before the ability probe.')
+    parser.add_argument('--input-plan', choices=['movement', 'combat', 'ability', 'cook', 'visual', 'breakable', 'boss', 'crowd', 'aim', 'repro', 'hazard', 'stars', 'screen', 'water', 'items', 'rewards', 'scroll'], help='Run an isolated input test (repro tests normal keyboard/controller bindings).')
+    parser.add_argument('--probe-ability', type=int, choices=range(2, 26), metavar='2..25', help='Prepare this original ability through inhale/feed/swallow before the ability or screen probe.')
     parser.add_argument('--probe-scrolls', metavar='B,T,S', help='Give the ability probe this many Brutality, Tactics and Survival scrolls before measuring damage.')
     parser.add_argument('--probe-hud', action='store_true', help='Add a shield beside the starting sword before the ability probe and record the HUD weapon slots.')
     parser.add_argument('--probe-pause', action='store_true', help='With --probe-hud, open the pause/equipment screen while copied and record its cards.')
@@ -70,8 +70,8 @@ def main() -> None:
         parser.error('--gdb is only available for bounded offscreen diagnostics')
     if args.start_game and args.resume_game:
         parser.error('--start-game and --resume-game are mutually exclusive')
-    if args.probe_ability is not None and args.input_plan != 'ability':
-        parser.error('--probe-ability requires --input-plan ability')
+    if args.probe_ability is not None and args.input_plan not in ('ability', 'screen'):
+        parser.error('--probe-ability requires --input-plan ability or screen')
     if args.probe_hud and args.input_plan != 'ability':
         parser.error('--probe-hud requires --input-plan ability')
     if args.probe_pause and not args.probe_hud:
