@@ -532,8 +532,8 @@ kill at that cap kills the host enemy.
 
 Unchanged: incoming damage, retained-shield parries, boss
 capture resistance, source attack cadence and repeat-hit debounce. Only the scroll
-multiplier is applied. Host weapon quality, affixes, mutations/perks, critical hits
-and other hero bonuses still do not alter copy attacks.
+multiplier is applied. Host weapon quality, mutations/perks and other hero bonuses
+still do not alter copy attacks; critical hits are a mod addition, below.
 
 This replaces the per-Boss-Cell curve proposed in #7 / PR #8, which was not merged.
 At 0 scrolls the colorless factor is ×1, leaving the unit-scale and Elite behavior
@@ -548,6 +548,47 @@ Wheel 23/14 became 40/24, and lethal Ice still left the original frozen object.
 Those runs predate the original-unit scale from #3, so they show the colorless
 factor, not today's absolute numbers.
 Other copy forms, bosses and breakables have not been run live with scrolls.
+
+### Copy-attack critical hits (intentional addition)
+
+Issue #88. The original game has no crits and Dead Cells gives ability items the
+`NoCritical` tag, so Kirby could not crit. This is a mod addition, the base for
+the mutation work that replaces the skill-cooldown mutations (#89).
+
+- **Chance and damage.** `CopyCritical` in `src/core/` holds Kirby's crit chance
+  and crit factor. The base chance is `CopyCriticalChance` in `config.json` (0 by
+  default: Kirby does not crit until a mutation says so) and the factor is
+  `CopyCriticalDamage` (×1.5). Timed bonuses to chance or factor add to them, and
+  a "sure crit" makes the next hit that lands a crit. Nothing grants those bonuses
+  yet; #89 does.
+- **Roll before the hit.** `KirbyEnemies.Prepare` rolls once per paired enemy on
+  every source frame and folds the factor into the multiplier that sets that
+  enemy's source HP, so a hit on a rolled frame is lethal in the source exactly
+  when its scaled damage is lethal in the host. The original death reaction
+  therefore still happens in the same tick as the host kill, with no native
+  change. A roll does not depend on whether a hit lands, so one roll per frame is
+  the same as one roll per hit. A rolled frame without a hit changes only the
+  source enemy's HP, which is reset every frame anyway.
+- **Host crit.** `KirbyDamage` marks the hit and, once the host has resolved the
+  target's blocks and parries, upgrades a `Normal` result to the host's own
+  `Critical` (`AttackTargetImpl.updateHitResult`), so Dead Cells draws its crit
+  number. A blocked or parried hit stays blocked, and a sure crit is spent only by
+  a hit that lands.
+- **What does not crit.** Spit stars and the ability star share their slot's
+  roll but are hit with the ordinary multiplier. Their lethality still follows the
+  rolled source HP, so a star can kill slightly earlier than its plain damage on a
+  rolled frame (a known edge). Screen-wide attacks (Crash, Mike and the like) and
+  the host-side star strike do not crit yet. Floor ability items, projectiles and
+  non-enemy targets never crit.
+- **Time.** Timed bonuses age by 1/60 s per source frame.
+
+Evidence: core tests (`tests/Program.cs`) cover the chance, timed bonuses, sure
+crit and the lethality pairing for crit factors ×1, ×1.5 and ×2 at three scroll
+tiers. Live runs `20261008-020113` (chance forced to 1) and `20261008-020259` (chance
+0), both `--input-plan ability --probe-ability 18` in the separate root
+`repros/crit-88-20261008`, are recorded in
+[RUNTIME_LAUNCH.md](RUNTIME_LAUNCH.md#copy-attack-critical-hits-2026-10-08). The
+effect of a partial chance, of bosses, and the Ice/star edge cases were not run.
 
 ### Host elevators (deviation)
 

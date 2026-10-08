@@ -781,4 +781,51 @@ Check(SpeedMatch.RiseVelocity(KirbyActions.Jump, -2682) == -2682 && SpeedMatch.R
     mouth.Observe(mouthFull: false, baseForm: true);
     Check(!mouth.Emptied && mouth.Count == 0, "Settling clears the spit state");
 }
+
+// Copy critical hits (#88).
+{
+    var crit = new CopyCritical();
+    Check(crit.Chance == 0 && crit.DamageMultiplier == 1.5 && !crit.Roll(() => 0), "Kirby starts with no crit chance and a ×1.5 crit");
+    crit.BaseChance = 0.25;
+    Check(crit.Roll(() => 0.24) && !crit.Roll(() => 0.25), "A roll below the chance is a crit");
+    crit.AddChance(0.1, 2); crit.AddChance(0.1, 5);
+    Check(Math.Abs(crit.Chance - 0.45) < 1e-12, "Timed chance bonuses add up");
+    crit.Advance(2);
+    Check(Math.Abs(crit.Chance - 0.35) < 1e-12, "A timed bonus ends when its time is up");
+    crit.Advance(10);
+    Check(Math.Abs(crit.Chance - 0.25) < 1e-12, "Only the base chance remains after every bonus ended");
+    crit.AddChance(2, 1);
+    Check(crit.Chance == 1, "Crit chance is capped at 100%");
+    crit.Reset(); crit.BaseChance = 0;
+    crit.AddChance(-1, 1); crit.AddChance(0.5, 0); crit.AddChance(double.NaN, 1);
+    Check(crit.Chance == 0, "Invalid bonuses are ignored");
+    crit.Guarantee();
+    Check(crit.Roll(() => 0.99) && crit.Roll(() => 0.99), "A sure crit stays until a hit spends it");
+    crit.Spend();
+    Check(!crit.Roll(() => 0.99), "A spent sure crit is gone");
+    crit.AddDamage(0.5, 3);
+    Check(crit.DamageMultiplier == 2 && crit.Factor(true) == 2 && crit.Factor(false) == 1, "A damage bonus raises the crit factor only");
+    crit.Advance(3);
+    Check(crit.DamageMultiplier == 1.5, "A damage bonus ends on time");
+    crit.BaseDamageMultiplier = 0.2;
+    Check(crit.DamageMultiplier == 1, "A crit never lowers damage");
+
+    // A crit tick folds into the pairing multiplier, so lethality stays in agreement.
+    foreach (int tier in new[] { 1, 3, 7 })
+    foreach (double factor in new[] { 1.0, 1.5, 2.0 })
+    {
+        double m = ColorlessDamage.Multiplier(tier) * 3.5 * factor;
+        for (int life = 1; life <= 300; life += 7)
+        {
+            int hp = ColorlessDamage.SourceHp(life, m, 32760);
+            for (int hit = 1; hit <= hp + 2; hit++)
+            {
+                int dealt = ColorlessDamage.HostDamage(hit, hp, life, m);
+                if ((hit >= hp) != (dealt >= life)) throw new Exception($"Crit pairing broke: tier {tier} ×{factor} life {life} hit {hit}");
+            }
+        }
+    }
+    Check(true, "Source and host agree on lethal hits for crit ticks");
+    Check(ColorlessDamage.HostDamage(10, 100, 500, 3.5 * 1.5) == 52, "A ×1.5 crit truncates 10 × 5.25 to 52");
+}
 Console.WriteLine($"PASS: {assertions} user-rule assertions. No claim of NDS physics or in-game verification.");
