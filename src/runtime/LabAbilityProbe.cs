@@ -28,7 +28,8 @@ internal static class LabAbilityProbe
     private static bool scrollsGiven;
     private static readonly bool hudFixture = Environment.GetEnvironmentVariable("KIRBY_LAB_TEST_HUD") == "1";
     private static readonly bool pauseFixture = Environment.GetEnvironmentVariable("KIRBY_LAB_TEST_PAUSE") == "1";
-    private static bool pauseOpened;
+    private static readonly bool legendaryFixture = Environment.GetEnvironmentVariable("KIRBY_LAB_TEST_LEGENDARY") == "1";
+    private static bool pauseOpened, legendaryGiven;
     private static bool hudEquipped;
     private static uint? hudSettle;
     private static string? lastHud;
@@ -175,6 +176,26 @@ internal static class LabAbilityProbe
                 }
                 return 128;
             }
+        }
+        if (legendaryFixture && !legendaryGiven && !session.Rules.IsBaseForm)
+        {
+            // #82: once the copy's own ability item is in a slot, give it the
+            // host's Legendary affix and let the host re-read its slots.
+            var inventory = session.Hero.inventory;
+            var legendary = "Legendary".AsHaxeString();
+            for (int slot = 0; slot < inventory.nbWeapons; slot++)
+            {
+                if (inventory.getEquippedWeaponOn(slot) is not { } item || !KirbyAbilityItems.IsAbilityItem(item)) continue;
+                item.addAffix(legendary, HaxeProxy.Runtime.Ref<bool>.In(false));
+                if (!item.hasAffix(legendary)) item.addAffix(legendary, HaxeProxy.Runtime.Ref<bool>.In(true));
+                legendaryGiven = true;
+                System.IO.File.AppendAllText(Path.Combine(run!, "hud.jsonl"), JsonSerializer.Serialize(new
+                {
+                    frame = machine.State.Frame, legendarySlot = slot, item = item.getItemKind()?.ToString(),
+                    hasLegendary = item.hasAffix(legendary),
+                }) + "\n");
+            }
+            if (legendaryGiven) session.Hero.hudInitItems();
         }
         if (scrolls is not null && !scrollsGiven)
         {

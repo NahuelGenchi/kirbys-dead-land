@@ -1391,3 +1391,22 @@ the all-ability rendering tests as full gameplay acceptance.
 - Source: `python3 scripts/check.py` passes. `tools/nds_tests.py` not run
   (`src/nds` unchanged).
 
+## 2026-10-07 — Legendary ability items get the legendary HUD frame (#82)
+
+- Owner report (two screenshots): "Parasol II-L" had the gold legendary card on
+  the pause screen but a gray colorless HUD slot.
+- Cause: `KirbyHud` drew every copied HUD slot from a Colorless-only
+  `StartSword` stand-in. Host `Skill.setBgColors` (`ui/hud/Skill.hx:395-404`,
+  read from the lab `hlboot.dat` with crashlink) uses `skillSlotLegendary` for
+  the `Legendary` affix before `skillSlotColorless`.
+- Fix: a slot holding a real ability item is drawn from that item (as its pause
+  card since #62); the stand-in stays for other weapons and empty slots. New lab
+  option `--probe-legendary` (`KIRBY_LAB_TEST_LEGENDARY`).
+- Source: `python3 scripts/check.py` passes (278 core assertions; Release build
+  0 warnings/errors).
+- Live (separate root `repros/legendary-hud-20261007`): `20261007-124255`
+  copied Sword with a Legendary `KirbyAbilitySword`; the HUD slot showed the
+  original icon in `skillSlotLegendary` with Survival green and gold. Saves
+  unchanged, no fatal log.
+- Not run: a non-Legendary ability item after this change (the code path is the
+  same `useItem` call), the owner's Parasol, resolutions other than 1024×768.
