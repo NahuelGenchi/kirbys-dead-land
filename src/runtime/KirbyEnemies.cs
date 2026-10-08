@@ -28,6 +28,9 @@ public sealed class KirbyEnemies
     private double damageMultiplier = 1;
     private EnemyBinding[]? restoring;
     private readonly KirbyStars stars = new();
+    private readonly KirbyScreenAttacks screen = new();
+    // Host enemies that lost source HP in the source frame just completed.
+    private readonly HashSet<nint> sourceHit = [];
     /// <summary>Floor ability items the original inhale put in Kirby's mouth this source tick.</summary>
     internal readonly List<KirbyAbilityItems.Held> Swallowed = [];
     /// <summary>Highest scroll tier sampled for the current source tick.</summary>
@@ -51,6 +54,17 @@ public sealed class KirbyEnemies
             if (mobs[i]?.HashlinkPointer == mob.HashlinkPointer) return true;
         return false;
     }
+    /// <summary>Where the host enemy's live source object is, in source pixels; null without one.</summary>
+    internal (double X, double Y)? SourcePosition(NdsRuntime nds, Entity mob)
+    {
+        for (uint i = 1; i <= Capacity; i++)
+        {
+            if (mobs[i]?.HashlinkPointer != mob.HashlinkPointer) continue;
+            var proxy = nds.Proxy(i);
+            return proxy.Pending || proxy.Gone ? null : (proxy.XRaw / 65536.0, proxy.YRaw / 65536.0);
+        }
+        return null;
+    }
     internal EnemyBinding[] Capture() => Enumerable.Range(1, Capacity)
         .Where(i => detached[i] || mobs[i] is { destroyed: false }).Select(i => detached[i]
             ? new EnemyBinding { Slot = i, Detached = true }
@@ -65,6 +79,8 @@ public sealed class KirbyEnemies
     {
         for (uint i = 1; i <= Capacity; i++) Release(nds, i);
         stars.Clear();
+        screen.Clear();
+        sourceHit.Clear();
         Swallowed.Clear();
     }
     private void Release(NdsRuntime nds, uint i)
@@ -186,6 +202,7 @@ public sealed class KirbyEnemies
         // Kirby's ability in the source step just run: Ice hits use the host freeze.
         byte sourceAbility = nds.State.Ability;
         stars.Scan(nds);
+        sourceHit.Clear();
         for (uint i = 1; i <= Capacity; i++)
         {
             if (mobs[i] is not { } mob) continue;
@@ -221,6 +238,7 @@ public sealed class KirbyEnemies
             int damage = assignedHp[i] - proxy.Hp;
             if (damage > 0 && !mob.destroyed && mob.life > 0)
             {
+                sourceHit.Add(mob.HashlinkPointer);
                 int hostDamage = Math.Max(1, ColorlessDamage.HostDamage(damage, assignedHp[i], mob.life, HostMultiplier(scale, mob)));
                 TestObserver?.Invoke(mob, damage, hostDamage);
                 // A spit star's original hit (and burst) on its source object also staggers the host enemy.
@@ -264,6 +282,7 @@ public sealed class KirbyEnemies
             controlled[i] = sourceControls;
         }
         stars.StrikeHost(session.Hero, this, ox, oy, scale);
+        screen.Strike(session.Hero, nds, this, stars.Records, sourceHit, scale);
         return copied;
     }
     /// <summary>
