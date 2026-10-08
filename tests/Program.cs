@@ -319,8 +319,9 @@ Check(Run(slow, 30, 300) is >= 597 and <= 600, "A 30 Hz host runs two original f
 var paused = new FramePacer();
 Check(paused.Steps(double.NaN) == 0 && paused.Steps(5) <= 15, "Invalid and long host deltas are bounded");
 
+// Moving frames are airborne and still frames walk, unless a test gives the action.
 ushort[] Feed(DashAssist assist, params (ushort Mask, bool Enabled, int Vx, int Vy)[] frames) =>
-    frames.Select(f => assist.Filter(f.Mask, f.Enabled, f.Vx, f.Vy)).ToArray();
+    frames.Select(f => assist.Filter(f.Mask, f.Enabled, f.Vx, f.Vy, f.Vy != 0 ? KirbyActions.Fall : KirbyActions.Walk)).ToArray();
 var dash = new DashAssist();
 var started = Feed(dash, (16, true, 0, 0), (16, true, 50, 0), (16, true, 100, 0), (16, true, 150, 0));
 Check(started.SequenceEqual(new ushort[] { 16, 0, 16, 16 }), "A new press becomes the original press-release-press double tap");
@@ -342,6 +343,15 @@ Check(Feed(walk, (16, false, 0, 0), (16, false, 50, 0), (16, false, 100, 0)).All
 var turn = new DashAssist();
 var turned = Feed(turn, (16, true, 0, 0), (16, true, 0, 0), (16, true, 528, 0), (32, true, 528, 0), (32, true, 300, 0), (32, true, -100, 0));
 Check(turned.SequenceEqual(new ushort[] { 16, 0, 16, 32, 0, 32 }), "Turning around double-taps the new direction");
+// Ninja's wall cling (0x712) stands still in the air; the original lets go when the direction is released.
+const ushort WallCling = 0x0712;
+var cling = new DashAssist();
+Feed(cling, (16, true, 0, 0), (16, true, 0, 0), (17, true, 368, -600), (16, true, 368, 400));
+var clung = Enumerable.Range(0, 30).Select(_ => cling.Filter(16, true, 0, 0, WallCling)).ToArray();
+var dropped = new[] { cling.Filter(16, true, 0, 300, KirbyActions.Fall) }.Concat(
+    new[] { KirbyActions.Landing, KirbyActions.Landing, KirbyActions.Landing, KirbyActions.Walk }.Select(a => cling.Filter(16, true, 352, 0, a))).ToArray();
+Check(clung.All(m => m == 16) && dropped.SequenceEqual(new ushort[] { 16, 16, 16, 0, 16 }),
+    "A held wall cling keeps its direction; the landing after it still re-taps");
 
 byte[] Palette(params ushort[] banks)
 {

@@ -1546,6 +1546,22 @@ the all-ability rendering tests as full gameplay acceptance.
   passes. Not run live.
 - Seen, not changed: host poison ticks play the original hurt reaction.
 
+
+## 2026-10-08 — Ninja's wall cling holds while a direction is held (#97)
+
+- Owner recording: Ninja Kirby on a wall flickered between the cling and a
+  fall and slid down instead of holding on.
+- Cause: `DashAssist` (`AlwaysDash`) counted any still frame as ground. After
+  two still cling frames (original 0x712) it released the direction for one
+  frame to re-tap a dash; the original lets go of the wall on release (0x70E),
+  clings again on the next press, and the cycle repeated every five frames.
+- Landing frames now count only in original ground actions
+  (`KirbyActions.OnGround`). The landing re-tap after a fall is unchanged.
+- Headless (bridge, Ninja, scratch script, not committed): before, right held
+  gave `712 712 712 70E 70E` repeating with the feet sinking 0.5 px a cycle;
+  after, 0x712 held for 100 frames. Source: `python3 scripts/check.py` passes
+  with a new cling assertion. `tests/speed` does not build on main
+  (`FarObject` missing), so it was not run. Not run live.
 ## 2026-10-08 — the Collector hides upgrades Kirby cannot use (#99)
 
 - Owner request: the Collector offered weapon, bow and skill upgrades that do
