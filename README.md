@@ -72,6 +72,10 @@ preserved; generated assets and native dependencies remain in the private data r
   Hunter's Instinct, Instinct of the Master of Arms) give timed crit chance or damage
   in a Kirby run, with new text in the mutation menu (#89). See
   [cooldown mutations](docs/GAMEPLAY_FIDELITY.md#cooldown-mutations-intentional-deviation).
+- Every copy attack counts as a melee attack for mutations: the damage mutations
+  (Tranquility, Combo, Vengeance, Point Blank and others) now change copy-attack
+  damage, and mutation text says "copy attack" (#91). See
+  [mutations on copy attacks](docs/GAMEPLAY_FIDELITY.md#mutations-on-copy-attacks).
 - While copied, each non-shield weapon slot in the HUD (normally Left-Click)
   shows the current ability's original icon in a colorless slot. See the
   [HUD ability slot](docs/GAMEPLAY_FIDELITY.md#hud-ability-slot). The pause

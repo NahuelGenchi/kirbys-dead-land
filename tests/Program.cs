@@ -892,4 +892,29 @@ Check(SpeedMatch.RiseVelocity(KirbyActions.Jump, -2682) == -2682 && SpeedMatch.R
     timed.AddChance(0.1, 5, "a", 2); timed.AddChance(0.1, 3, "a", 2); timed.Advance(1); timed.AddChance(0.3, 5, "a", 2);
     Check(Math.Abs(timed.Chance - 0.4) < 1e-12, "A full stack replaces the bonus with the least time left");
 }
+// Copy-attack wording and the pairing with a host mutation factor (#91).
+{
+    Check(CopyAttackWording.Rewrite("Melee attacks inflict bleeding (18 DPS for 1.5 sec).") == "Copy attacks inflict bleeding (18 DPS for 1.5 sec).", "Open Wounds text");
+    Check(CopyAttackWording.Rewrite("Your first melee attack on an enemy inflicts +100 damage.") == "Your first copy attack on an enemy inflicts +100 damage.", "Initiative text");
+    Check(CopyAttackWording.Rewrite("Melee kills make you invisible for 1 sec.") == "Copy-attack kills make you invisible for 1 sec.", "Predator text");
+    Check(CopyAttackWording.Rewrite("Killing an enemy with a melee attack reduces the damage you take.") == "Killing an enemy with a copy attack reduces the damage you take.", "Berserker text");
+    Check(CopyAttackWording.Rewrite("Close-ranged ranged attacks inflict 30% bonus damage.") == "Copy attacks at close range inflict 30% bonus damage.", "Point Blank text");
+    Check(CopyAttackWording.Rewrite("+25% damage if there are no enemies near you.") is null && CopyAttackWording.Rewrite("") is null && CopyAttackWording.Rewrite(null) is null,
+        "Texts without those words are left alone");
+    // A host mutation factor folds into the pairing multiplier like a crit factor.
+    foreach (double bonus in new[] { 1.02, 1.25, 1.6, 2.3 })
+    foreach (double crit in new[] { 1.0, 1.5 })
+    {
+        double m = ColorlessDamage.Multiplier(3) * 3.5 * bonus * crit;
+        for (int life = 1; life <= 400; life += 11)
+        {
+            int hp = ColorlessDamage.SourceHp(life, m, 32760);
+            for (int hit = 1; hit <= hp + 2; hit++)
+                if ((hit >= hp) != (ColorlessDamage.HostDamage(hit, hp, life, m) >= life))
+                    throw new Exception($"Mutation pairing broke: ×{bonus} crit ×{crit} life {life} hit {hit}");
+        }
+    }
+    Check(true, "Source and host agree on lethal hits with a host mutation factor");
+    Check(ColorlessDamage.HostDamage(18, 100, 500, 3.5 * 1.6) == 100, "Vengeance's ×1.6 truncates 18 × 5.6 to 100");
+}
 Console.WriteLine($"PASS: {assertions} user-rule assertions. No claim of NDS physics or in-game verification.");

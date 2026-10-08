@@ -119,3 +119,24 @@ public static class MutationDescriptions
     private static string Percent(double fraction) => Math.Round(fraction * 100).ToString(System.Globalization.CultureInfo.InvariantCulture);
     private static string Seconds(double seconds) => seconds.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture);
 }
+
+/// <summary>
+/// The host's mutation texts say "melee" and "ranged" attacks. In a Kirby run every
+/// copy attack counts as melee (no host weapons appear), so the words change and
+/// the host's own numbers stay (#91).
+/// </summary>
+public static class CopyAttackWording
+{
+    /// <summary>The text with its melee and ranged wording turned into copy-attack wording, or null if nothing changed.</summary>
+    public static string? Rewrite(string? text)
+    {
+        if (string.IsNullOrEmpty(text)) return null;
+        string result = System.Text.RegularExpressions.Regex.Replace(text, "(?i)close-ranged ranged attacks?", m =>
+            char.IsUpper(m.Value[0]) ? "Copy attacks at close range" : "copy attacks at close range");
+        result = System.Text.RegularExpressions.Regex.Replace(result, @"(?i)\bmelee kills?\b", m =>
+            (char.IsUpper(m.Value[0]) ? "Copy-attack kill" : "copy-attack kill") + (m.Value.EndsWith('s') || m.Value.EndsWith('S') ? "s" : ""));
+        result = System.Text.RegularExpressions.Regex.Replace(result, @"(?i)\bmelee attacks?\b", m =>
+            (char.IsUpper(m.Value[0]) ? "Copy attack" : "copy attack") + (m.Value.EndsWith('s') || m.Value.EndsWith('S') ? "s" : ""));
+        return result == text ? null : result;
+    }
+}

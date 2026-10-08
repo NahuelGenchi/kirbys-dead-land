@@ -21,6 +21,8 @@ public sealed class KirbyEnemies
     private readonly bool[] controlled = new bool[Capacity + 1];
     /// <summary>This source tick's crit roll for each paired enemy (#88), folded into its source HP.</summary>
     private readonly bool[] critical = new bool[Capacity + 1];
+    /// <summary>The host's mutation damage factor for each paired enemy this tick (#91).</summary>
+    private readonly double[] bonus = new double[Capacity + 1];
     private double criticalFactor = 1;
     /// <summary>A sure crit was in force for this source tick's rolls.</summary>
     private bool criticalGuaranteed;
@@ -53,11 +55,19 @@ public sealed class KirbyEnemies
     internal double HostMultiplier(Func<Entity, double> scale, Entity mob) =>
         scale(mob) * damageMultiplier * ColorlessMultiplier;
     /// <summary>
-    /// <see cref="HostMultiplier"/> with this tick's crit roll for slot <paramref name="slot"/>.
-    /// A spit star shares the slot but never crits, so it passes <paramref name="crit"/> false.
+    /// <see cref="HostMultiplier"/> with this tick's crit roll and host mutation factor for slot
+    /// <paramref name="slot"/>. A spit star shares the slot but gets neither, so it passes
+    /// <paramref name="copyHit"/> false.
     /// </summary>
-    private double CopyMultiplier(uint slot, Func<Entity, double> scale, Entity mob, bool crit) =>
-        HostMultiplier(scale, mob) * (crit && critical[slot] ? criticalFactor : 1);
+    private double CopyMultiplier(uint slot, Func<Entity, double> scale, Entity mob, bool copyHit) =>
+        HostMultiplier(scale, mob) * (copyHit ? bonus[slot] * (critical[slot] ? criticalFactor : 1) : 1);
+    /// <summary>Lab-only: the mutation factor of the slot holding <paramref name="mob"/> this tick.</summary>
+    internal double BonusFor(Entity mob)
+    {
+        for (int i = 1; i <= Capacity; i++)
+            if (mobs[i]?.HashlinkPointer == mob.HashlinkPointer) return bonus[i];
+        return 1;
+    }
     /// <summary>The host enemy has a live source object (not a detached corpse).</summary>
     internal bool Pairs(Entity mob)
     {
@@ -97,7 +107,7 @@ public sealed class KirbyEnemies
     private void Release(NdsRuntime nds, uint i)
     {
         nds.SetProxy(i, 0, 0, 1, false);
-        mobs[i] = null; controlled[i] = false; abilities[i] = 0; assignedHp[i] = 0; detached[i] = false; critical[i] = false;
+        mobs[i] = null; controlled[i] = false; abilities[i] = 0; assignedHp[i] = 0; detached[i] = false; critical[i] = false; bonus[i] = 1;
     }
     /// <param name="scale">Host life per original damage point for a target.</param>
     /// <param name="bodyContact">The original touch damage between Kirby and enemies: off by default
@@ -145,6 +155,7 @@ public sealed class KirbyEnemies
         // hit is lethal in the host too. One source frame is 1/60 s.
         var crit = session.Rules.Critical;
         var mutations = session.Rules.Mutations;
+        var hostBonuses = KirbyHostBonuses.Begin(hero);
         mutations.SetOwned(KirbyMutations.Owned(hero));
         crit.Advance(1.0 / 60);
         criticalFactor = crit.DamageMultiplier;
@@ -217,6 +228,7 @@ public sealed class KirbyEnemies
             // the colorless scroll multiplier apply on top.
             // A floor ability item takes no damage: its proxy keeps full HP.
             bool item = KirbyAbilityItems.IsAbilityDrop(mob);
+            bonus[i] = mob is Mob && !item && !IsHazard(mob) ? hostBonuses.Factor(mob) : 1;
             critical[i] = mob is Mob && !item && !IsHazard(mob) &&
                 crit.Roll(Random.Shared.NextDouble, mutations.TargetChance(KirbyMutations.HeartOfIceTarget(hero, mob)));
             assignedHp[i] = IsHazard(mob) ? 1 : item ? MaxSourceHp :
@@ -279,7 +291,7 @@ public sealed class KirbyEnemies
                 var star = mob is Mob ? stars.SourceStrike(proxy.Entity, mob, ox, oy, out direction) : StarKind.None;
                 // A spit star never crits; only the copy attack's own hits do.
                 bool crit = star == StarKind.None && critical[i];
-                int hostDamage = Math.Max(1, ColorlessDamage.HostDamage(damage, assignedHp[i], mob.life, CopyMultiplier(i, scale, mob, crit)));
+                int hostDamage = Math.Max(1, ColorlessDamage.HostDamage(damage, assignedHp[i], mob.life, CopyMultiplier(i, scale, mob, star == StarKind.None)));
                 TestObserver?.Invoke(mob, damage, hostDamage);
                 // A copy attack that reaches a secret wall opens it as the R key does: the host activation drops its reward.
                 // Base-form contact leaves the wall alone, as the original game does.

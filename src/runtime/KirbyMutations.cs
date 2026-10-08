@@ -19,12 +19,19 @@ internal static class KirbyMutations
     public static void Install()
     {
         // Mutation cards and the pause screen describe a mutation through
-        // getGameplayDesc; in a Kirby run the cooldown mutations say what they do now.
+        // getGameplayDesc; in a Kirby run the cooldown mutations say what they do now,
+        // and the others call every attack a copy attack.
         Hook_InventItem.getGameplayDesc += (orig, item, level) =>
-            KirbyMod.Instance?.ActiveSession is { } session &&
-            MutationDescriptions.Describe(item.getItemKind()?.ToString(), session.Rules.Mutations.Tuning) is { } text
-                ? text.AsHaxeString()
-                : orig(item, level);
+        {
+            if (KirbyMod.Instance?.ActiveSession is not { } session) return orig(item, level);
+            string? id = item.getItemKind()?.ToString();
+            if (MutationDescriptions.Describe(id, session.Rules.Mutations.Tuning) is { } text) return text.AsHaxeString();
+            var original = orig(item, level);
+            // Every other mutation keeps the host's text and numbers; only "melee" and
+            // "ranged" become "copy attack" (#91).
+            return id is not null && id.StartsWith("P_", StringComparison.Ordinal) &&
+                CopyAttackWording.Rewrite(original?.ToString()) is { } changed ? changed.AsHaxeString() : original;
+        };
         // Blind Faith: the host reports each parry that lands on an enemy.
         dc.en.Hook_Hero.onPerfectParry += (orig, hero, attack) =>
         {
