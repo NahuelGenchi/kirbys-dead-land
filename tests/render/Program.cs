@@ -10,7 +10,7 @@ ushort buttons = args.Length > 4 ? ushort.Parse(args[4]) : (ushort)0;
 int lastPaletteBank = args.Length > 6 ? int.Parse(args[6]) : 7;
 if (lastPaletteBank is < 0 or > 15) throw new ArgumentOutOfRangeException(nameof(lastPaletteBank));
 byte[] oam = new byte[1024], vram = new byte[256 * 1024], palette = new byte[512], display = new byte[4];
-byte[] rgba = new byte[512 * 512 * 4], framebuffer = new byte[256 * 192 * 4];
+byte[] rgba = new byte[NdsObjRenderer.CanvasWidth * NdsObjRenderer.CanvasHeight * 4], framebuffer = new byte[256 * 192 * 4];
 int compared = 0, mismatched = 0, unsupported = 0;
 int[] paletteObjects = new int[16], modes = new int[4];
 int affineObjects = 0, flippedObjects = 0;
@@ -39,7 +39,7 @@ for (int frame = 0; frame < frames; frame++)
     int pixels = 0, misses = 0;
     for (int y = 0; y < 192; y++) for (int x = 0; x < 256; x++)
     {
-        int from = ((y + 256) * 512 + x + 256) * 4;
+        int from = ((y + NdsObjRenderer.CenterY) * NdsObjRenderer.CanvasWidth + x + NdsObjRenderer.CenterX) * 4;
         if (rgba[from + 3] == 0) continue;
         int to = (y * 256 + x) * 4;
         pixels++;

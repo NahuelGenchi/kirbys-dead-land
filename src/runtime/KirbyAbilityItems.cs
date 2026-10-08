@@ -26,6 +26,8 @@ internal static class KirbyAbilityItems
     internal static Action<string, string>? TestReplaced;
     /// <summary>Lab-only observer of each slot change: (ability or null, item level, came from the floor).</summary>
     internal static Action<string?, int, bool>? TestSlot;
+    /// <summary>Lab-only observer of each copy attack press that used the item's affixes.</summary>
+    internal static Action<InventItem>? TestUsed;
     /// <summary>Lab-only observer of each item put back on the floor: (floor item, target cell).</summary>
     internal static Action<ItemDrop, int, int>? TestReturned;
 
@@ -46,7 +48,7 @@ internal static class KirbyAbilityItems
         dc.ui.Hook_NewItemDesc.onResize += (orig, card, width, height) =>
         {
             orig(card, width, height);
-            if (IsAbilityItem(card.ii)) KirbyHud.ReplaceInfoLine(card);
+            if (IsAbilityItem(card.ii)) KirbyHud.ReplaceInfoLine(card, AbilityItems.InfoLine(card.ii.getDamageBonus()));
         };
         Hook_ItemDrop.onActivate += (orig, drop, by, longPress) =>
         {
@@ -113,7 +115,75 @@ internal static class KirbyAbilityItems
             return null;
         string ability = KirbyNdsProvider.Abilities[Random.Shared.Next(KirbyNdsProvider.Abilities.Length)];
         TestReplaced?.Invoke(item.getItemKind().ToString(), ability);
-        return Create(ability, item.getRawItemLevel());
+        var replacement = Create(ability, item.getRawItemLevel());
+        // The host's own quality roll of the item it replaces (#56): each "+"
+        // (QualityUp) and a Legendary affix carry over.
+        AddQuality(replacement, item.getUpgradeLevel(), item.hasAffix("Legendary".AsHaxeString()));
+        CarryAffixes(item, replacement);
+        return replacement;
+    }
+
+    /// <summary>Give an ability item this many "+" (QualityUp affixes) and, optionally, the Legendary affix.</summary>
+    private static void AddQuality(InventItem item, int qualityUps, bool legendary)
+    {
+        var up = "QualityUp".AsHaxeString();
+        for (int i = 0; i < qualityUps; i++) item.addAffix(up, Ref<bool>.In(true));
+        if (legendary) item.addAffix("Legendary".AsHaxeString(), Ref<bool>.In(true));
+    }
+
+    /// <summary>
+    /// The copy's ability item in a weapon slot, if any. Its host damage bonus
+    /// (level, "+" and Legendary, as for any Dead Cells weapon) multiplies copy damage.
+    /// </summary>
+    public static InventItem? SlotItem(Hero hero, string? ability)
+    {
+        if (ability is null || hero.inventory is not { } inventory) return null;
+        for (int slot = 0; slot < inventory.nbWeapons; slot++)
+            if (inventory.getEquippedWeaponOn(slot) is { } item && AbilityOf(item) == ability) return item;
+        return null;
+    }
+
+    /// <summary>
+    /// The replaced item's own affixes (#57) that the host lets an ability item
+    /// take (its Melee group, NoCritical tag and the affix's own tag rules);
+    /// weapon- or skill-only ones are dropped. Quality affixes are #56's.
+    /// </summary>
+    private static void CarryAffixes(InventItem from, InventItem to)
+    {
+        if (from.affixes is not { } affixes) return;
+        for (int i = 0; i < affixes.length; i++)
+        {
+            object? entry = affixes.getDyn(i);
+            string? affix = entry?.ToString();
+            if (affix is null or "Colorless" or "QualityUp" or "Legendary" or "StartItem") continue;
+            var id = affix.AsHaxeString();
+            if (!to.hasAffix(id) && to.canReceiveAffix(id)) to.addAffix(id, Ref<bool>.In(false));
+        }
+    }
+
+    /// <summary>The copy's ability item for this hero while Kirby is copied, or null.</summary>
+    public static InventItem? CopyItem(Hero hero)
+    {
+        if (KirbyMod.Instance?.ActiveSession is not { } session || session.Hero.HashlinkPointer != hero.HashlinkPointer ||
+            session.Rules.AbilityId is not { } ability || hero.inventory is not { } inventory) return null;
+        for (int slot = 0; slot < inventory.nbWeapons; slot++)
+            if (inventory.getEquippedWeaponOn(slot) is { } item && AbilityOf(item) == ability) return item;
+        return null;
+    }
+
+    /// <summary>
+    /// A copy attack press uses the copy's item as a Dead Cells weapon attack
+    /// uses its weapon (#57): Weapon.prepare clears affixesDone and throws the
+    /// Grenade affix's grenade, then Weapon.onExecute runs executeAffixes (the
+    /// arrow affixes and the on-use shield), each with the host's own cooldowns.
+    /// </summary>
+    public static void UseAffixes(Hero hero)
+    {
+        if (CopyItem(hero) is not { } item || hero.weaponsManager?.findItemInMain(item) is not { } weapon) return;
+        weapon.affixesDone = false;
+        if (item.hasAffix("Grenade".AsHaxeString())) hero.createGrenadeFromAffix(item);
+        weapon.executeAffixes();
+        TestUsed?.Invoke(item);
     }
 
     private static bool IsKirby(Hero? hero) =>
@@ -239,6 +309,8 @@ internal static class KirbyAbilityItems
                 }
                 var copy = taken?.Item is { } swallowed && AbilityOf(swallowed) == wanted
                     ? swallowed : Create(wanted, hero._level?.map?.lootLevel ?? 1);
+                // A copy from an Elite is a Legendary item (#56); other enemies give base items.
+                if (!ReferenceEquals(copy, taken?.Item) && session.Rules.AbilityEmpowered) AddQuality(copy, 0, legendary: true);
                 inventory.add(copy);
                 changed = true;
                 TestSlot?.Invoke(wanted, copy.getRawItemLevel(), ReferenceEquals(copy, taken?.Item));
