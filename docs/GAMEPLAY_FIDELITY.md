@@ -139,7 +139,27 @@ from their own `onDamage`/`onDie`, so the host still decides every gold drop.
 Live (`docs/RUNTIME_LAUNCH.md`, "Gold deposits"): Sword Kirby broke a real
 `PileOfGold` in four hits (life 4 → 0, four host gold drops); the same fixture
 without the change did no damage. `GoldNugget` was not run live. Other host hittables outside the pairing list (`PiggyBank`,
-`Gift`, `BreakableWall`, `HiddenBlock`, `Flower`, …) are unchanged and unchecked.
+`Gift`, `BreakableWall`, `Flower`, …) are unchanged and unchecked.
+
+### Secret walls (#84)
+
+`en.inter.HiddenBlock` ("Scratch the wall") was reachable only with the R key:
+copied attacks paired only with the objects listed for gold deposits, so an
+attack passed through the wall. It now pairs like the gold deposits
+(`KirbyEnemies.Eligible`). A copy attack that reaches it activates it through the
+host's own `canBeActivated` and `onActivate`, the path R uses, and the wall drops
+its reward. Ordinary copy damage is not applied to the wall: the activation
+replaces it, so the host life falls to 0 without a host `onDamage`. Base-form
+contact does nothing to the wall (no activation, no damage), as before this
+change.
+
+Live (`docs/RUNTIME_LAUNCH.md`, "Secret walls (#84)"): a copy Sword beside a
+real wall with `canBeHit` true opened it once and dropped a `SmallMeat` beside it.
+Before the change the same setup took no hits and dropped nothing. Base-form
+contact left the wall at 3 life, unopened.
+
+Not run: a live R-key press beside a wall as a parity control, copy forms other
+than Sword, and rewards other than food.
 
 ### Star projectiles
 
