@@ -1333,3 +1333,19 @@ the all-ability rendering tests as full gameplay acceptance.
   pre-fix `20261007-013859` reproduced the hang twice; fixed `014012` landed
   both vine-top stomps (12.6 and 10.2 cells). Saves unchanged, no fatal log.
 - Not run: stomps from ordinary ladder or chain tops live, hanging vines.
+## 2026-10-07 — Shift bound to Dodge starts Kirby's slide (#75)
+
+- Owner request: Shift and Ctrl both made Kirby guard; Shift should do the
+  slide Down + jump (S + Space) does. The recorded binding arrays bind Dodge
+  (action 1) to Shift (16) and Ctrl (17).
+- `KirbyInput` splits Dodge by key: Shift slides, every other Dodge binding
+  guards. `SlideKey` sends Down + A for one source frame per press on the
+  ground; the original controller starts the slide.
+- ROM measurement: one Down + A frame starts the full 36-frame slide whether
+  Down stays held or not, and same-frame Down + A slides from standing and
+  running.
+- Source: `python3 scripts/check.py` passes. Native: `tests/speed` 42/42 pass,
+  including four new Shift checks.
+- Live (`repros/shift-slide-20261007`, run `20261007-014554`): Shift slid
+  130.7 px right and, after turning, left; Ctrl guarded (`0x0A17`); Shift held
+  in the air did nothing; held standing it slid once. Saves unchanged.

@@ -23,6 +23,8 @@ internal static unsafe class KirbyInput
     /// or chain instead of jumping.
     /// </summary>
     public static bool JumpFromUpOnly { get; private set; }
+    /// <summary>A Shift key bound to Dodge is held: Kirby's original slide instead of the guard.</summary>
+    public static bool SlideButton { get; private set; }
     private const double AnalogDashTilt = 0.75;
     private sealed record Suppression(ControllerAccess Access, ArrayBytes_Int[] Arrays, int[] Saved, Suppression? Parent);
     private static Suppression? suppressed;
@@ -32,6 +34,9 @@ internal static unsafe class KirbyInput
     // the dedicated dive attack: Kirby's stomp starts the host dive itself.
     private static readonly int[] movementActions = [0, 1, 4, 5, 10, 11, 12, 13, 28, 36];
     private const int DiveAction = 36;
+    private const int DodgeAction = 1;
+    // hxd.Key.SHIFT; the left and right keys add a location flag above the low byte.
+    private const int ShiftKey = 16;
     private static readonly int[] directionActions = [10, 11, 12, 13];
     public static void Install()
     {
@@ -70,6 +75,30 @@ internal static unsafe class KirbyInput
             }
         return false;
     }
+    /// <summary>
+    /// Dodge splits by key: a Shift key slides (Kirby's roll), and every other
+    /// key or button bound to Dodge (Ctrl by default) guards.
+    /// </summary>
+    private static (bool Guard, bool Slide) DodgeDown(ControllerAccess access)
+    {
+        Controller c = access.parent;
+        BindingProfiles b = c.get_bindings();
+        bool guard = false, slide = false;
+        if ((c.mode & Controller.Class.ENABLE_KEY) != 0)
+            foreach (var a in new[] { b.primary, b.secondary, b.third })
+            {
+                int key = Get(a, DodgeAction);
+                if (key < 0 || !dc.hxd.Key.Class.isDown(key)) continue;
+                if ((key & 0xFF) == ShiftKey) slide = true; else guard = true;
+            }
+        if ((c.mode & Controller.Class.ENABLE_PAD) != 0)
+            foreach (var a in new[] { b.padA, b.padB, b.padC })
+            {
+                int key = Get(a, DodgeAction);
+                if (key >= 0 && c.padIsDown(key)) guard = true;
+            }
+        return (guard, slide);
+    }
     private static bool JumpOnlyFromUp(ControllerAccess access)
     {
         Controller c = access.parent;
@@ -105,13 +134,16 @@ internal static unsafe class KirbyInput
         AnalogWalk = false;
         DiveButton = false;
         JumpFromUpOnly = false;
+        SlideButton = false;
         if (TestOverride?.Invoke(session) is ushort test) return WithShieldGuard(session, test);
         if (!Available(h)) return 0;
         var c = h.controller;
         DiveButton = Down(c, DiveAction);
         ushort keys = 0;
         if (Down(c, 0)) keys |= 1; // DS A: original jump, flight, slide combinations.
-        if (Down(c, 1)) keys |= 512; // DS L: original guard.
+        (bool guard, bool slide) = DodgeDown(c);
+        if (guard) keys |= 512; // DS L: original guard.
+        SlideButton = slide; // Down + A on the ground: original slide (KirbyNdsProvider.Step).
         if (Down(c, 4)) keys |= 2; // Skill 1: original inhale/ability/spit.
         if (Down(c, 5)) keys |= 4; // DS SELECT: original copy discard, verified against the ROM.
         if (Down(c, 28)) keys |= 1024; // DS X: create/return the original CPU helper.

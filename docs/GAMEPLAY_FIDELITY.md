@@ -20,7 +20,7 @@ in [NDS_BRIDGE.md](NDS_BRIDGE.md). The original bootstrap experiment remains in
 | Input | Existing host bindings become original digital buttons; ordinary source directional combinations still apply. A held direction dashes through the original double tap (`AlwaysDash`); a light analog tilt walks. A key bound to both Up and jump (W and the Up arrow by default) climbs at a ladder or chain, as in the host, instead of jumping first |
 | Terrain | Nearby host solids, one-way floors, slopes, ladders and water become source collision cells. Vines grown with the Vine rune (`en.inter.VineLadder`) have no collision bits, only level spots (0, where the Beheaded climbs, and 18); their cells become source ladders, and the solid blocks a vine passes through or ends under become one-way ladder tops in that column. A ladder under a solid block stops the original below it, so this deviation lets Kirby climb onto the ledge, as the Beheaded's `exitLadderTop` does; all linked source objects and cached terrain probes move together when the window rebases by whole cells, while effects attached to a parent (Fire's head flame, Plasma's spark, attack effects) keep their offsets from it. Host movement of Kirby (speed match, stomp) moves only him and his terrain probes, so thrown bombs, cutters, effects and the helper keep their original paths |
 | Input | Existing host bindings become original digital buttons; ordinary source directional combinations still apply. A held direction dashes through the original double tap (`AlwaysDash`); a light analog tilt walks. A key bound to both Up and jump (W and the Up arrow by default) climbs at a ladder, chain or vine, as in the host, instead of jumping first |
-| Roll | Kirby's original slide is his roll and covers the Beheaded's roll: 131 px at up to 339 px/s. Host roll-zone tunnels (collision 65) open while he slides and stay open until he leaves one entered by sliding; walking cannot enter. The slide's fast part counts as a roll for the host's door and breakable-tile checks, and Suplex's grab lunge for its door check (see [Suplex's lunge bursts doors](#suplexs-lunge-bursts-doors-50)) |
+| Roll | Kirby's original slide is his roll and covers the Beheaded's roll: 131 px at up to 339 px/s. A Shift key bound to Dodge starts it too (see [Shift slides](#shift-slides-75)); Ctrl and the other Dodge bindings guard. Host roll-zone tunnels (collision 65) open while he slides and stay open until he leaves one entered by sliding; walking cannot enter. The slide's fast part counts as a roll for the host's door and breakable-tile checks, and Suplex's grab lunge for its door check (see [Suplex's lunge bursts doors](#suplexs-lunge-bursts-doors-50)) |
 | Dive attack | The player's host dive binding in the air or on a ladder or chain (original jump, fall, float or climb) starts the host `DiveAttack` under its own rules. The original controller keeps its falling or exhaling animation and physics (3.5 px/frame cap) and drops straight down; the host adds 11.5 px/frame of descent through free space, 15 px a frame in all like the Beheaded's dive (about 900 px/s), and leaves the original a full fall step to make the floor contact; the host skill resolves the landing (shockwave, stun, damage, breakable floors with the Ram rune). Only what stops the original fall counts as floor: solids, slopes and one-way platforms from above, never ladders or chains. From a climb the original A kicks him off; climbing down from a ladder or vine top the original ignores A for its first frames, so while it still climbs A is pressed every other frame and the host adds no descent, and the dive passes the ladder top in the row his feet climb in ([#74](#stomp-from-a-vine-top-74)) Enemy touch damage is off while stomping and for 30 frames after landing |
 | Camera | `CameraZoom` (default 1, the host camera) can zoom the host viewport; 2 shows about 200 host pixels of height, close to the DS screen's 192. Host cinematics and host zoom changes keep their framing |
 | Palette flashes | The original hurt and guard flashes of Kirby's first two palette banks are shown at `FlashStrength` (0.35) of their colour change, with original timing; lasting palette changes are adopted after four frames |
@@ -749,6 +749,48 @@ Live in `repros/suplex-door-20261006` (see `docs/RUNTIME_LAUNCH.md`, "Suplex
 lunge into doors"): with the change, the lunge broke a real generated door on
 its sixth frame; the control without the door hook bounced off a door the same
 way and left it closed.
+
+### Shift slides (#75)
+
+The host binds Dodge to Shift and Ctrl by default (the recorded profile's
+binding arrays: action 1 is key 16 in `primary` and 17 in `secondary`), and
+both sent the original guard. At the owner's request a keyboard Dodge binding
+whose key is Shift (`hxd.Key` 16, with or without the left or right location
+flag) now starts the slide instead; Ctrl, any other Dodge key and the
+controller's Dodge button still guard, as does a held shield.
+
+`SlideKey` turns a new press on the ground (original standing, landing, walk
+or dash) into Down + A for one source frame, the input S + Space gives, and the
+original controller decides the slide. On the supplied ROM one such frame
+starts the full 36-frame slide whether or not Down stays held, from standing
+or running, and it slides the way Kirby faces, as S + Space does. A press with
+jump already held first sends one frame of Down alone, so A arrives as a new
+press. A press in the air, on a ladder or during an attack does nothing and is
+not kept for landing; holding Shift slides once. With a mouthful, Down
+swallows, exactly as S + Space would.
+
+Headless (`tests/speed`, original controller): a Shift tap while running slid
+36 frames and 131 px; Shift held from standing slid once and Kirby stood
+afterwards; Shift held in the air left the action sequence identical to the
+same jump without it; Shift with jump still held after landing slid.
+
+Live (`repro` plan injecting key codes through the host bindings, separate
+data root `repros/shift-slide-20261007`, runtime DLL
+`4051a7186b01cbcae2dc3bed6db113ce9ae2717742d78e828bf88caf3f6db5e6`), run
+`20261007-014554`:
+
+| Input | Result |
+| :--- | :--- |
+| Shift tap, standing | Slide 36 frames, 130.7 px right; no guard bit |
+| Ctrl held 1.5 s | Guard bit (512), original guard `0x0A17`, no movement |
+| Shift tap after turning left | Slide 130.7 px left |
+| Shift held from mid-jump through landing | Jump, fall, land, stand: no slide, no float |
+| Shift held 1.5 s, standing | One slide (130.7 px), then standing |
+
+Run `20261007-014417` also slid on a Shift tap while running right (velocity
+704 against a wall). Both runs reached their time limit with no fatal log and
+the real saves unchanged. Not run: a controller, a remapped Dodge key, a copy
+ability's slide, a mouthful.
 
 ### Cinematic walks (intentional deviation)
 

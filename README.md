@@ -136,8 +136,9 @@ Existing Dead Cells bindings are used:
 | Move / directional input | Original movement and move combinations |
 | Jump | Jump / puff / flight |
 | Down + jump on the ground | Original slide; passes roll-zone tunnels and bursts doors like a roll |
+| A Shift key bound to Dodge (Shift by default), on the ground | The same original slide, once per press |
 | Dive attack binding in the air or on a chain (Down + jump by default) | Stomp through the host dive attack; a floating Kirby exhales first, a climbing Kirby kicks off the chain |
-| Dodge | Original Kirby guard |
+| Dodge, any other key or button (Ctrl and the controller's dodge by default) | Original Kirby guard |
 | Skill 1 | Inhale / spit / copy ability attack |
 | Down with a mouthful | Swallow and transform |
 | Skill 2 | Discard the current copy ability |
