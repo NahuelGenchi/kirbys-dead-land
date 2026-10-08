@@ -65,6 +65,9 @@ preserved; generated assets and native dependencies remain in the private data r
   1.15^(tier − 1), where tier is 1 + your highest scroll count (Brutality,
   Tactics or Survival). With no scrolls this factor is ×1. See
   [colorless copy damage](docs/GAMEPLAY_FIDELITY.md#colorless-copy-damage).
+- Copy attacks can crit (×1.5, drawn as a Dead Cells crit). Kirby has no crit
+  chance of his own: mutations will add it (#89). See
+  [copy-attack critical hits](docs/GAMEPLAY_FIDELITY.md#copy-attack-critical-hits-intentional-addition).
 - While copied, each non-shield weapon slot in the HUD (normally Left-Click)
   shows the current ability's original icon in a colorless slot. See the
   [HUD ability slot](docs/GAMEPLAY_FIDELITY.md#hud-ability-slot). The pause

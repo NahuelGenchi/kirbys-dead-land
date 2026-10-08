@@ -831,3 +831,18 @@ dying enemy ending during the cinematic, Brutality and Tactics scrolls, scrolls
 that offer a choice, the exit-door walk with paired enemies, and the owner's own
 Ramparts room.
 
+## Copy-attack critical hits (2026-10-08)
+
+Issue #88. Both runs used `python3 scripts/launch_runtime.py --data-root
+~/.local/share/kirby-dead-cells/repros/crit-88-20261008 --seconds 90 --start-game
+--outfit KirbySuperStarUltra --input-plan ability --probe-ability 18` (original
+Sword on a real Zombie) with the staged `config.json` edited only in that root.
+`ability-damage-events.jsonl` now also records the host `hitResult`.
+
+- Run `20261008-020113`, `CopyCriticalChance` 1: both Sword hits were host `Critical`, 94 damage for
+  original 18 and 26 for original 5 (18 × 3.5 × 1.5 = 94.5 and 5 × 3.5 × 1.5 =
+  26.25, truncated). The second hit took the Zombie from 23 to dead in the same
+  tick as its source enemy. No fatal log, real saves unchanged.
+- Run `20261008-020259`, `CopyCriticalChance` 0: hits were `Normal` at 63 and 52, the previous damage.
+
+Not run: a partial chance, a sure crit, bosses, Ice, spit stars, screen attacks.

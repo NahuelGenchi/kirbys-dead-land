@@ -27,6 +27,8 @@ public sealed class KirbyRules
     }
 
     public string? AbilityId { get; private set; }
+    /// <summary>Critical hits of Kirby's copy attacks (#88).</summary>
+    public CopyCritical Critical { get; } = new();
     public bool IsBaseForm => AbilityId is null;
     /// <summary>
     /// The current copy came from swallowing an Elite and has not been lost since.
@@ -188,6 +190,7 @@ public sealed class KirbyRules
         AbilityEmpowered = false;
         PendingEmpowerment = null;
         RetainedShieldId = null;
+        Critical.Reset();
         consumedEnemies.Clear();
         cookedEnemies.Clear();
     }

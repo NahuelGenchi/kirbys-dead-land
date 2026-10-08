@@ -1410,3 +1410,24 @@ the all-ability rendering tests as full gameplay acceptance.
   unchanged, no fatal log.
 - Not run: a non-Legendary ability item after this change (the code path is the
   same `useItem` call), the owner's Parasol, resolutions other than 1024×768.
+
+## 2026-10-08 — critical hits for copy attacks (#88)
+
+- Design (owner): the cooldown mutations do nothing in a Kirby run, so they become
+  timed crit bonuses (#89); every copy attack counts as melee (#91); weapon
+  mutations leave the choice list (#90). All need Kirby to crit first.
+- `CopyCritical` (`src/core/`) holds chance, factor, timed bonuses and a sure
+  crit. `KirbyEnemies.Prepare` rolls per paired enemy each source frame and folds
+  the factor into the source-HP pairing, so lethality stays in agreement without
+  native changes. `KirbyDamage` upgrades a surviving `Normal` hit to the host's
+  `Critical` through `AttackTargetImpl.updateHitResult`: `AttackUtils.hitInit`
+  resets `hitResult` to `Normal`, so it cannot be set beforehand. Host bytecode
+  read with crashlink (`updateDamages` applies `critMul` only on `Critical`; the
+  mod's `applyAttackResult` hook already replaces the damage, so ×1.5 lives only in
+  the mod multiplier). Decompiled output stayed in the session scratchpad.
+- Config: `CopyCriticalChance` (0) and `CopyCriticalDamage` (1.5).
+- Source: `python3 scripts/check.py` passes (core assertions incl. the new crit
+  pairing; Release build 0 warnings/errors).
+- Live (separate root `repros/crit-88-20261008`): chance 1 gave host `Critical`
+  hits of 94 and 26; chance 0 gave the old `Normal` 63 and 52.
+- Not run: partial chance, sure crit, bosses, Ice, stars, screen attacks.

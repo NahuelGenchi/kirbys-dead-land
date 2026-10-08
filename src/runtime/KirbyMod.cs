@@ -321,4 +321,11 @@ public sealed class RuntimeConfig
     /// 16-18 HP enemy with one ability hit; 3.5 makes a 120-life Zombie take two.
     /// </summary>
     public double CopyDamageScale { get; set; } = 3.5;
+    /// <summary>
+    /// Critical hits of copy attacks (#88, a mod addition). Kirby has no base
+    /// crit chance; mutations add timed chance. A crit multiplies the hit by
+    /// <see cref="CopyCriticalDamage"/>.
+    /// </summary>
+    public double CopyCriticalChance { get; set; }
+    public double CopyCriticalDamage { get; set; } = 1.5;
 }

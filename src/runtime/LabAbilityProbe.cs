@@ -100,6 +100,7 @@ internal static class LabAbilityProbe
                     source = attack.source?.GetType().FullName,
                     x = (mob.cx + mob.xr) * 24, y = (mob.cy + mob.yr) * 24,
                     baseDmg = Convert.ToString(attack.baseDmg, System.Globalization.CultureInfo.InvariantCulture),
+                    hitResult = attack.hitResult?.GetType().Name,
                     attack.rawFinalDmg,
                     attack.finalDmg,
                     attack.inflictedDmg,
