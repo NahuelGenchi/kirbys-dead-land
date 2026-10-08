@@ -33,6 +33,8 @@ public sealed class KirbyEnemies
     private static readonly byte EliteAbility = checked((byte)(Array.IndexOf(KirbyNdsProvider.Abilities, "Sword") + 2));
     // The copy's ability item bonus, sampled when source HP is assigned so the matching delta scales identically.
     private double damageMultiplier = 1;
+    /// <summary>Whether original body contact hurts (sampled in Prepare).</summary>
+    private bool touchDamage;
     private EnemyBinding[]? restoring;
     private readonly KirbyStars stars = new();
     private readonly KirbyScreenAttacks screen = new();
@@ -95,6 +97,9 @@ public sealed class KirbyEnemies
     {
         Array.Clear(mobs); Array.Clear(controlled); Array.Clear(abilities); Array.Clear(detached); Array.Clear(assignedHp); restoring = bindings;
     }
+    /// <summary>Lab and damage-log description of a source slot's host binding.</summary>
+    internal string DescribeSlot(uint slot) => slot is < 1 or > Capacity ? "none" :
+        detached[slot] ? "detached" : mobs[slot] is { } mob ? $"{mob.GetType().Name}#{mob.__uid}" : "free";
     public bool Controls(Entity mob) => Enumerable.Range(1, Capacity).Any(i => controlled[i] && mobs[i]?.HashlinkPointer == mob.HashlinkPointer);
     public void Clear(NdsRuntime nds)
     {
@@ -116,6 +121,7 @@ public sealed class KirbyEnemies
     public void Prepare(KirbySession session, NdsRuntime nds, int ox, double oy, Func<Entity, double> scale, bool bodyContact = true)
     {
         var hero = session.Hero;
+        touchDamage = bodyContact;
         if (restoring is not null)
         {
             foreach (var binding in restoring)
@@ -317,16 +323,26 @@ public sealed class KirbyEnemies
             }
             if (mob.destroyed || mob.life <= 0)
             {
-                if (!proxy.Gone && mob is Mob and not dc.en.mob.Boss && !IceFreeze.Applies(sourceAbility))
+                // Only an original object already defeated (zero HP) runs on
+                // detached. A host death the original did not share (a host-only
+                // hit or explosion) retires it at once: left running, it walked
+                // on unseen and its touch hurt Kirby (#78).
+                if (!proxy.Gone && proxy.Hp <= 0 && mob is Mob and not dc.en.mob.Boss && !IceFreeze.Applies(sourceAbility))
                 {
                     // Loot/death belong to the host; the original defeated
                     // object's star or other reaction keeps running. Reserve
                     // the slot until its native destructor completes. An Ice
                     // kill is retired at once instead: no original ice block.
                     nds.DetachProxy(i);
+                    // Detaching drops the touch exclusion; keep it for the defeat.
+                    if (!touchDamage) nds.SetProxyContact(i, false);
                     mobs[i] = null; controlled[i] = false; detached[i] = true;
                 }
-                else Release(nds, i);
+                else
+                {
+                    if (!proxy.Gone && proxy.Hp > 0 && mob is Mob) KirbyDamageLog.UnsharedDeath(mob, i, proxy.Hp);
+                    Release(nds, i);
+                }
                 continue;
             }
             if (proxy.Gone) { Release(nds, i); continue; }

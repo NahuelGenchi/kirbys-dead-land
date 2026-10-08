@@ -631,7 +631,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         if (riding is not null) Diagnostic?.Invoke("elevator-stepped", new { action = nds.Action, y = nds.State.YRaw, vy = nds.State.VyRaw });
         int healthAfter = nds.Health;
         if (healthBefore >= 0 && healthAfter >= 0 && healthAfter < healthBefore)
-            KirbyDamageLog.SourceHit(hero, nds, healthBefore, healthAfter, damageSource);
+            KirbyDamageLog.SourceHit(hero, nds, enemies, healthBefore, healthAfter, damageSource);
         // The bridge normalizes the original signed lethal HP sentinel to zero.
         // Stop normal stepping here: only the original death animation runs on,
         // the host owns the run's death transition, and its last-hit protection

@@ -64,6 +64,11 @@ internal static unsafe class KirbyDamageLog
             $"kill {mob.GetType().Name}#{mob.__uid} t={clock.ElapsedMilliseconds}"));
     }
 
+    /// <summary>A host enemy died while its original object still had HP; that object is retired.</summary>
+    internal static void UnsharedDeath(dc.Entity mob, uint slot, int sourceHp) =>
+        Write(() => string.Create(CultureInfo.InvariantCulture,
+            $"host death without an original defeat: {mob.GetType().Name}#{mob.__uid} proxy{slot} source hp={sourceHp} t={clock.ElapsedMilliseconds}; retired"));
+
     /// <summary>A host attack accepted for Kirby; it enters the next original tick as a hurt.</summary>
     internal static void HostAttack(Hero hero, AttackData attack, int sourceDamage)
     {
@@ -75,10 +80,10 @@ internal static unsafe class KirbyDamageLog
     }
 
     /// <summary>The original lowered Kirby's health. Names the original hit boxes touching him.</summary>
-    internal static void SourceHit(Hero hero, NdsRuntime nds, int before, int after, dc.Entity? queued) =>
-        Write(() => DescribeSourceHit(hero, nds, before, after, queued));
+    internal static void SourceHit(Hero hero, NdsRuntime nds, KirbyEnemies enemies, int before, int after, dc.Entity? queued) =>
+        Write(() => DescribeSourceHit(hero, nds, enemies, before, after, queued));
 
-    private static string DescribeSourceHit(Hero hero, NdsRuntime nds, int before, int after, dc.Entity? queued)
+    private static string DescribeSourceHit(Hero hero, NdsRuntime nds, KirbyEnemies enemies, int before, int after, dc.Entity? queued)
     {
         var text = new StringBuilder(string.Create(CultureInfo.InvariantCulture,
             $"source hit t={clock.ElapsedMilliseconds} {before}->{after} queued={(queued is null ? "none" : Describe(queued, hero))}; {SinceKill(hero)}; touching:"));
@@ -99,7 +104,9 @@ internal static unsafe class KirbyDamageLog
             if (hits[i].Owner == player || body is not { } k) continue;
             var b = Bounds(ref hits[i]);
             if (b.R < k.L - 8 || b.L > k.R + 8 || b.B < k.T - 8 || b.T > k.B + 8) continue;
-            string owner = owners.TryGetValue(hits[i].Owner, out uint s) ? "proxy" + s : "0x" + hits[i].Owner.ToString("x8");
+            string owner = owners.TryGetValue(hits[i].Owner, out uint s)
+                ? $"proxy{s}={enemies.DescribeSlot(s)} flags={nds.Proxy(s).Flags} hp={nds.Proxy(s).Hp}"
+                : "0x" + hits[i].Owner.ToString("x8");
             text.Append(CultureInfo.InvariantCulture, $" [{owner} slot{hits[i].Slot} {b.L},{b.T},{b.R},{b.B}]");
         }
         if (body is { } kb) text.Append(CultureInfo.InvariantCulture, $" kirby={kb.L},{kb.T},{kb.R},{kb.B}");
