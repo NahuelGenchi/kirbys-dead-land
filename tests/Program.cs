@@ -828,4 +828,68 @@ Check(SpeedMatch.RiseVelocity(KirbyActions.Jump, -2682) == -2682 && SpeedMatch.R
     Check(true, "Source and host agree on lethal hits for crit ticks");
     Check(ColorlessDamage.HostDamage(10, 100, 500, 3.5 * 1.5) == 52, "A ×1.5 crit truncates 10 × 5.25 to 52");
 }
+
+// Kirby versions of the cooldown mutations (#89).
+{
+    var r = new KirbyRules(["fire", "sword", "ice"], n => 0);
+    var m = r.Mutations;
+    m.CopyKill(); m.Parry(); m.Copied(); m.CriticalLanded();
+    Check(r.Critical.Chance == 0 && !r.Critical.Guaranteed, "Without the mutations nothing grants crit chance");
+    m.SetOwned(KirbyMutation.KillerInstinct);
+    for (int i = 0; i < 7; i++) m.CopyKill();
+    Check(Math.Abs(r.Critical.Chance - 0.25) < 1e-12, "Killer Instinct stacks to its cap");
+    r.Critical.Advance(6.1);
+    Check(r.Critical.Chance == 0, "Killer Instinct bonuses end on time");
+    m.CopyKill(); r.Critical.Advance(3); m.CopyKill();
+    r.Critical.Advance(3.05);
+    Check(Math.Abs(r.Critical.Chance - 0.05) < 1e-12, "Each Killer Instinct stack ends on its own time");
+    r.Critical.Reset();
+    m.SetOwned(KirbyMutation.BlindFaith);
+    m.Parry();
+    Check(r.Critical.Guaranteed && r.Critical.Roll(() => 0.99), "A parry makes the next copy attack a sure crit");
+    r.Critical.Advance(8.1);
+    Check(!r.Critical.Guaranteed, "A sure crit from a parry runs out");
+    m.Parry(); r.Critical.Spend();
+    Check(!r.Critical.Guaranteed, "A landed hit spends the parry's sure crit");
+    m.SetOwned(KirbyMutation.None);
+    m.Parry();
+    Check(!r.Critical.Guaranteed, "A parry gives nothing without Blind Faith");
+    m.SetOwned(KirbyMutation.HeartOfIce);
+    Check(m.TargetChance(true) == 0.25 && m.TargetChance(false) == 0, "Heart of Ice only helps against a controlled, close target");
+    Check(r.Critical.Roll(() => 0.2, m.TargetChance(true)) && !r.Critical.Roll(() => 0.2, m.TargetChance(false)),
+        "Heart of Ice raises one target's chance, not Kirby's");
+    m.SetOwned(KirbyMutation.None);
+    Check(m.TargetChance(true) == 0, "No Heart of Ice, no bonus");
+    m.SetOwned(KirbyMutation.HuntersInstinct);
+    r.SetSourceAbility("fire");
+    Check(Math.Abs(r.Critical.Chance - 0.20) < 1e-12, "Copying an ability gives Hunter's Instinct chance");
+    r.SetSourceAbility("fire");
+    r.Critical.Advance(10.1);
+    r.SetSourceAbility("fire");
+    Check(r.Critical.Chance == 0, "The same ability seen again is not a new copy");
+    r.SetSourceAbility("ice");
+    Check(Math.Abs(r.Critical.Chance - 0.20) < 1e-12, "Copying another ability counts again");
+    r.SetSourceAbility("ice"); r.SetSourceAbility("sword");
+    Check(Math.Abs(r.Critical.Chance - 0.20) < 1e-12, "Hunter's Instinct does not stack");
+    r.Critical.Reset();
+    m.SetOwned(KirbyMutation.MasterOfArmsInstinct);
+    Check(Math.Abs(r.Critical.Chance - 0.10) < 1e-12, "Master of Arms Instinct gives chance while owned");
+    for (int i = 0; i < 5; i++) m.CriticalLanded();
+    Check(Math.Abs(r.Critical.DamageMultiplier - 2.25) < 1e-12, "Crits stack Master of Arms damage to its cap");
+    m.SetOwned(KirbyMutation.None);
+    Check(r.Critical.Chance == 0, "Losing the mutation ends its chance");
+    r.Mutations.SetOwned(KirbyMutation.HeartOfIce | KirbyMutation.BlindFaith);
+    r.Reset();
+    Check(r.Mutations.Owned == KirbyMutation.None && r.Critical.Chance == 0, "A new run forgets the mutations");
+
+    var tuning = new MutationTuning();
+    Check(MutationDescriptions.Describe("P_CDR_Kill", tuning) == "Copy-attack kills give +5% critical chance for 6 sec. Stacks up to 5 times.", "Killer Instinct text");
+    Check(MutationDescriptions.Describe("P_CDR_locked", tuning)!.StartsWith("+25% critical chance against slowed"), "Heart of Ice text");
+    Check(MutationDescriptions.Describe("P_CDR_Parry", new MutationTuning { BlindFaithSeconds = 2.5 })!.Contains("within 2.5 sec"), "Texts use the live numbers");
+    Check(MutationDescriptions.Describe("P_CDR_Distance", tuning) is not null && MutationDescriptions.Describe("P_CDR_Crit", tuning) is not null &&
+        MutationDescriptions.Describe("P_Bleed", tuning) is null && MutationDescriptions.Describe(null, tuning) is null, "Only the cooldown mutations are rewritten");
+    var timed = new CopyCritical();
+    timed.AddChance(0.1, 5, "a", 2); timed.AddChance(0.1, 3, "a", 2); timed.Advance(1); timed.AddChance(0.3, 5, "a", 2);
+    Check(Math.Abs(timed.Chance - 0.4) < 1e-12, "A full stack replaces the bonus with the least time left");
+}
 Console.WriteLine($"PASS: {assertions} user-rule assertions. No claim of NDS physics or in-game verification.");
