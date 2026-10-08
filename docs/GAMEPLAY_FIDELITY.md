@@ -139,7 +139,27 @@ from their own `onDamage`/`onDie`, so the host still decides every gold drop.
 Live (`docs/RUNTIME_LAUNCH.md`, "Gold deposits"): Sword Kirby broke a real
 `PileOfGold` in four hits (life 4 → 0, four host gold drops); the same fixture
 without the change did no damage. `GoldNugget` was not run live. Other host hittables outside the pairing list (`PiggyBank`,
-`Gift`, `BreakableWall`, `HiddenBlock`, `Flower`, …) are unchanged and unchecked.
+`Gift`, `BreakableWall`, `Flower`, …) are unchanged and unchecked.
+
+### Secret walls (#84)
+
+`en.inter.HiddenBlock` ("Scratch the wall") was reachable only with the R key:
+copied attacks paired only with the objects listed for gold deposits, so an
+attack passed through the wall. It now pairs like the gold deposits
+(`KirbyEnemies.Eligible`). A copy attack that reaches it activates it through the
+host's own `canBeActivated` and `onActivate`, the path R uses, and the wall drops
+its reward. Ordinary copy damage is not applied to the wall: the activation
+replaces it, so the host life falls to 0 without a host `onDamage`. Base-form
+contact does nothing to the wall (no activation, no damage), as before this
+change.
+
+Live (`docs/RUNTIME_LAUNCH.md`, "Secret walls (#84)"): a copy Sword beside a
+real wall with `canBeHit` true opened it once and dropped a `SmallMeat` beside it.
+Before the change the same setup took no hits and dropped nothing. Base-form
+contact left the wall at 3 life, unopened.
+
+Not run: a live R-key press beside a wall as a parity control, copy forms other
+than Sword, and rewards other than food.
 
 ### Star projectiles
 
@@ -385,6 +405,41 @@ source, the runtime now logs every way Kirby loses health, with a
   synced into the original.
 - `kill`: each enemy a copy hit killed. Each hit line also gives the time since
   the last kill and that kill's position relative to Kirby.
+
+### Enemies the host stops letting Kirby hit (#86)
+
+Owner report (2026-10-08, recording and play log): in the Conjunctivius fight
+(`en.mob.boss.Beholder`) the boss stayed in its shield for good during the second
+tentacle phase. Kirby's Sword sparked on an invisible spot by the arena wall and
+the boss HP bar never moved. One of the three `BeholderTtcl` of that wave never
+died. The shield waits for every tentacle (`Beholder.onTtclDeath`).
+
+From `hlboot.dat` (SHA-256 `59350cad…07ce7e`, read with crashlink):
+
+- `BeholderTtcl.canBeHitBy` is false while `_isInGround`. When it burrows
+  (`onCooldownEnd` "offGround" or "endSweeping") it also takes invulnerable
+  affect 5 and sets `radius = hei = 0` and `sprScaleY = 0`.
+- `Mob.canBeHitBy` is false while the mob is `hidden`, during the reveal
+  cooldown (`260046848`, set by `Mob.reveal`), or with affect 5
+  (`Entity.canBeHit`). Ordinary hits set none of these.
+- The tentacle surfaces only through its stroke skill, which `behaviourAi`
+  starts when the hero is in its touching area.
+
+`KirbyEnemies.Prepare` checked `canBeHitBy(hero)` only when it first paired an
+enemy. A tentacle that burrowed stayed paired as a 1×1 original enemy. Copy
+attacks hit it, and the host rejected that damage. `BeholderTtcl` is a plain
+`Mob`, so the original hit recoil also took control of it: `interruptSkills`,
+`lockAiS` and its position follow the source object. That is the only state in
+which it can begin to surface.
+
+`Prepare` now releases a paired enemy (other than projectiles and floor ability
+items) as soon as the host stops letting the hero hit it, unless its source
+object was already swallowed. It is paired again, with a new random copy
+ability, once the host allows hits, as for an enemy that leaves and re-enters
+range. The same applies to other enemies that burrow, hide or become
+invulnerable (for example `SewerTtcl`). If one is caught in the original
+suction at that moment, the suction lets it go. Live result: [Conjunctivius
+tentacles](RUNTIME_LAUNCH.md#conjunctivius-tentacles-86).
 
 ### Elite Sword (intentional deviation)
 

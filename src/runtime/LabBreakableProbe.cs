@@ -5,16 +5,21 @@ namespace Kirby.Runtime;
 
 /// <summary>
 /// Opt-in copy attack against a genuine generated level door, or with
-/// KIRBY_LAB_BREAKABLE_TARGET=gold a real host PileOfGold spawned beside Kirby.
+/// KIRBY_LAB_BREAKABLE_TARGET=gold a real host PileOfGold, or with
+/// KIRBY_LAB_BREAKABLE_TARGET=hidden a real HiddenBlock ("Scratch the wall"),
+/// spawned beside Kirby; hidden-base presses attack in base form instead.
 /// </summary>
 internal static class LabBreakableProbe
 {
-    private static readonly bool Gold = Environment.GetEnvironmentVariable("KIRBY_LAB_BREAKABLE_TARGET") == "gold";
+    private static readonly string? targetKind = Environment.GetEnvironmentVariable("KIRBY_LAB_BREAKABLE_TARGET");
+    private static readonly bool Gold = targetKind == "gold";
+    private static readonly bool BaseForm = targetKind == "hidden-base";
+    private static readonly bool Hidden = targetKind is "hidden" or "hidden-base";
     private static string? run;
     private static uint? setupStart, start;
     private static bool fed;
     private static dc.Entity? target;
-    private static int initialLife, damage, goldDrops;
+    private static int initialLife, damage, goldDrops, activations;
     private static uint lastFrame;
 
     public static void Install(string output)
@@ -23,6 +28,12 @@ internal static class LabBreakableProbe
         dc.tool.Hook_Tutorial.tryToStart += (_, _, _) => false;
         Hook_Door.onDamage += (orig, door, attack) => { orig(door, attack); Damaged(door, attack); };
         Hook_PileOfGold.onDamage += (orig, pile, attack) => { orig(pile, attack); Damaged(pile, attack); };
+        Hook_HiddenBlock.onDamage += (orig, block, attack) => { orig(block, attack); Damaged(block, attack); };
+        Hook_HiddenBlock.onActivate += (orig, block, by, longPress) =>
+        {
+            if (target?.HashlinkPointer == block.HashlinkPointer) activations++;
+            orig(block, by, longPress);
+        };
         Hook_PileOfGold.dropLoot += (orig, pile, x, y, power) =>
         {
             if (target?.HashlinkPointer == pile.HashlinkPointer) goldDrops++;
@@ -46,7 +57,7 @@ internal static class LabBreakableProbe
     {
         var machine = KirbyMod.Instance?.NativeProvider?.Machine;
         if (machine is null) return 0;
-        if (machine.State.Ability != 18)
+        if (!BaseForm && machine.State.Ability != 18)
         {
             if (machine.State.Ability != 1) { setupStart = null; return 4; }
             setupStart ??= machine.State.Frame;
@@ -64,6 +75,14 @@ internal static class LabBreakableProbe
                 pile.init();
                 target = pile;
             }
+            else if (Hidden)
+            {
+                // The wall's reward is a real host item (a small food, as the cook probe uses).
+                var reward = dc.tool.InventItem.Class.fromItem(dc.level.LootGen.Class.getSmallHealingKind(), 1);
+                var block = new HiddenBlock(hero._level, hero.cx, hero.cy, 1, reward);
+                block.init();
+                target = block;
+            }
             else target = Enumerable.Range(0, hero._level.entities.length)
                 .Select(i => hero._level.entities.getDyn(i)).OfType<Door>()
                 .Where(d => !d.destroyed && d.life > 0 && d._breakable && !d.locked && !d.broken)
@@ -75,12 +94,16 @@ internal static class LabBreakableProbe
             start = machine.State.Frame;
         }
         uint elapsed = machine.State.Frame - start.Value;
+        // The transform's Right press and the copy attack's own motion can carry
+        // Kirby past a wall. Keep him beside it while the attack runs.
+        if (Hidden && target is not null && elapsed < 1000)
+            session.Hero.setPosPixel((target.cx + target.xr) * 24 - 28, (target.cy + target.yr) * 24);
         // Copy acquisition changes the ability before its original transform
         // animation releases control. Let it finish before pressing attack.
         if (elapsed is >= 100 and < 115) return 16;
         if (elapsed is >= 120 and < 250) return 2;
-        // The pile takes one life per hit: keep tapping attack until it breaks.
-        if (Gold && elapsed is >= 250 and < 1000) return (ushort)((elapsed / 8) % 2 == 0 ? 2 : 0);
+        // The pile or wall takes one life per hit: keep tapping attack until it breaks.
+        if ((Gold || Hidden) && elapsed is >= 250 and < 1000) return (ushort)((elapsed / 8) % 2 == 0 ? 2 : 0);
         return 0;
     }
 
@@ -106,13 +129,21 @@ internal static class LabBreakableProbe
             canBeHit = target?.canBeHitBy(session.Hero),
             proxies,
         }) + "\n");
+        // Floor items beside a secret wall: its reward once the wall opens.
+        var drops = target is null ? Array.Empty<object>() : Enumerable.Range(0, session.Hero._level.entities.length)
+            .Select(i => session.Hero._level.entities.getDyn(i)).OfType<dc.en.inter.ItemDrop>()
+            .Where(d => !d.destroyed && Math.Abs(d.cx - target.cx) <= 3 && Math.Abs(d.cy - target.cy) <= 3)
+            .Select(d => (object)new { d.cx, d.cy, item = d.item?.getItemKind().ToString() }).ToArray();
         System.IO.File.WriteAllText(Path.Combine(run, "breakable.json"), JsonSerializer.Serialize(new
         {
             frame = lastFrame, sourceAbility = machine.State.Ability,
             target = target?.GetType().FullName, targetUid = target?.__uid,
             initialLife, life = target?.life, destroyed = target?.destroyed,
-            broken = (target as Door)?.broken, damage, goldDrops,
-            passed = target is not null && damage > 0 && ((target as Door)?.broken == true || target.life <= 0 || target.destroyed),
+            broken = (target as Door)?.broken, damage, goldDrops, activations, drops,
+            // A secret wall passes only when the copy hit activates it and its reward lies beside it.
+            passed = BaseForm ? target is not null && activations == 0 && target.life == initialLife && damage == 0 :
+                Hidden ? activations > 0 && drops.Length > 0 :
+                target is not null && damage > 0 && ((target as Door)?.broken == true || target.life <= 0 || target.destroyed),
         }, new JsonSerializerOptions { WriteIndented = true }));
     }
 }

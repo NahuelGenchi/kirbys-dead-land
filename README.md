@@ -224,6 +224,10 @@ while playing Kirby; healing, equipment and interaction tutorials remain availab
   31-Zombie fixture kept all 31 paired objects active and delivered exact Sword
   damage to 21 targets. These controlled checks are scoped in
   [the host boundary report](docs/HOST_BOUNDARY_TESTS.md).
+- In the real Conjunctivius arena, a wave of three tentacles from the boss's own
+  `createTentacles` died to original Sword hits. A burrowed tentacle, which Dead
+  Cells makes unhittable, is no longer paired with an original object (#86). See
+  [Conjunctivius tentacles](docs/RUNTIME_LAUNCH.md#conjunctivius-tentacles-86).
 - Live natural Grenader grenades and an Archer arrow (caught mid-jump; arrows
   fly above the original inhale box on flat ground) entered the original
   mouthful without hurting Kirby. Each spat star hit its shooter for 52 damage;
