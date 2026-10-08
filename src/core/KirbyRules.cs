@@ -26,16 +26,16 @@ public sealed class KirbyRules
         this.chooseIndex = chooseIndex ?? Random.Shared.Next;
     }
 
-    /// <summary>Copy damage multiplier while an Elite-granted ability is held.</summary>
-    public const double EmpoweredDamageMultiplier = 2;
-
     public string? AbilityId { get; private set; }
     public bool IsBaseForm => AbilityId is null;
-    /// <summary>The current copy came from swallowing an Elite and has not been lost since.</summary>
+    /// <summary>
+    /// The current copy came from swallowing an Elite and has not been lost since.
+    /// Its ability item is Legendary (#56); that, not a separate multiplier, is
+    /// the Elite's extra damage.
+    /// </summary>
     public bool AbilityEmpowered { get; private set; }
     /// <summary>An Elite is in Kirby's mouth; its ability empowers Kirby only if the swallow yields it.</summary>
     public string? PendingEmpowerment { get; private set; }
-    public double DamageMultiplier => AbilityEmpowered ? EmpoweredDamageMultiplier : 1;
     public string? RetainedShieldId { get; private set; }
 
     /// <summary>

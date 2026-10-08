@@ -36,6 +36,27 @@ public static class AbilityItems
         !abilityItem && (skill || weapon && !shield);
 
     /// <summary>
+    /// Dead Cells' own weapon damage bonus (InventItem.getDamageBonus, adjusted
+    /// level from getAdjustedItemLevel and getStatBonusCount for non-amulets),
+    /// as a fraction: copy damage is multiplied by 1 + this. The adjusted level
+    /// is the item level plus 2 per "+" (QualityUp), or plus 6 when Legendary.
+    /// The runtime asks the host itself; this copy documents and tests the rule.
+    /// </summary>
+    public static double HostDamageBonus(int itemLevel, int qualityUps, bool legendary)
+    {
+        int adjusted = itemLevel + (legendary ? 6 : 2 * Math.Max(0, qualityUps));
+        int statBonuses = adjusted <= 1 ? 0 : adjusted / 3 + (adjusted - 1) / 3;
+        return statBonuses * 0.25 + 0.75 * (adjusted - 1) / 18.0;
+    }
+
+    /// <summary>The item card's main info line: the copy-damage bonus, or plain "Copy ability".</summary>
+    public static string InfoLine(double damageBonus)
+    {
+        int percent = (int)Math.Round(damageBonus * 100, MidpointRounding.AwayFromZero);
+        return percent > 0 ? $"+{percent}% copy damage" : "Copy ability";
+    }
+
+    /// <summary>
     /// The weapon slot the copy's item goes to: the slot that already holds an
     /// ability item, else a slot holding another unusable weapon (it is removed),
     /// else an empty slot, else a shield other than the retained one. Returns -1

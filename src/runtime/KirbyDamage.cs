@@ -54,6 +54,14 @@ internal static class KirbyDamage
     {
         var attack = AttackUtils.Class.createFromHero(hero, damage, null);
         attack.useHeroScaling = false;
+        // The copy's ability item is the attack's source item, so its affixes
+        // (burn, bleed, poison, oil, freeze, on-kill effects…) apply as for a
+        // weapon's hit (AttackUtils.createFromHeroItem) (#57).
+        if (KirbyAbilityItems.CopyItem(hero) is { } item)
+        {
+            attack.useItemAffixes(item);
+            attack.sourceItem = item;
+        }
         if (frozenSafe) attack.dmgType = Frost;
         bool alive = !mob.destroyed && mob.life > 0;
         sourceHits.Add(attack.HashlinkPointer, damage);

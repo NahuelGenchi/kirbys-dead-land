@@ -23,6 +23,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
     private const int DeathAnimationFrames = 180;
     private readonly FramePacer pacer = new();
     private readonly DashAssist dash = new();
+    private readonly SlideKey slideKey = new();
     private readonly RollZoneGate rollZones = new();
     private readonly StompController stomp = new();
     private readonly SpeedMatch.ActionFilter motionActions = new();
@@ -147,7 +148,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         LabActivationTrace.Mark("Audio begin");
         audio = new NdsAudio(nds);
         LabActivationTrace.Mark("Audio complete");
-        pacer.Reset(); dash.Reset(); rollZones.Reset(); CancelStomp(); previousAbility = nds.State.Ability; window = null;
+        pacer.Reset(); dash.Reset(); slideKey.Reset(); rollZones.Reset(); CancelStomp(); previousAbility = nds.State.Ability; window = null;
         motionActions.Reset();
         previousInput = 0; previousDiveButton = false; upJumpClimbs = false; SlideStrike = GrabStrike = false;
         deathFrames = -1; deathAnchor = null; sourceDead = nds.Health == 0;
@@ -551,15 +552,20 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         if (!KirbyInput.JumpFromUpOnly) upJumpClimbs = false;
         else if (action == KirbyActions.Climb || AtLadder(map, hostX, centerY + 14.5)) upJumpClimbs = true;
         if (upJumpClimbs) mask &= unchecked((ushort)~1);
+        mask = slideKey.Filter(mask, KirbyInput.SlideButton && !stomp.Active, action, previousInput);
         ushort raw = mask;
         int direction = (raw & 48) switch { 16 => 1, 32 => -1, _ => 0 };
         bool diveButton = KirbyInput.DiveButton;
         bool jumpPressed = (raw & 1) != 0 && (previousInput & 1) == 0;
+        // Each copy attack press (DS B while copied) uses the copy item's affixes (#57).
+        // A copied Kirby holds no mouthful (the original mouth-count bit stays stale after a swallow).
+        if ((raw & 2) != 0 && (previousInput & 2) == 0 && !session.Rules.IsBaseForm)
+            KirbyAbilityItems.UseAffixes(hero);
         if (!stomp.Active && KirbyActions.CanStomp(action) && DiveRequested(raw, diveButton))
             BeginStomp(hero, action, centerY + 14.5);
         previousInput = raw;
         previousDiveButton = diveButton;
-        if (stomp.Active) centerY += stomp.Descent(FreeBelow(map, hostX, centerY + 14.5));
+        if (stomp.Active) centerY += stomp.Descent(FreeBelow(map, hostX, centerY + 14.5), action);
         // The stomp moves at the Beheaded's dive speed on its own.
         bool matched = config.MatchHostSpeed && !stomp.Active;
         // Down + jump on the ground starts the original slide during this
@@ -600,7 +606,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         NdsAudio.PrepareSource(nds);
         if (stomp.Active)
         {
-            mask = stomp.Mask(mask);
+            mask = stomp.Mask(mask, action);
             // Straight down at the original fall cap; the original clamps the
             // speed to its current state (falling, or exhaling while it lasts).
             Span<byte> velocity = stackalloc byte[4];
@@ -979,6 +985,10 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         activeDive = dive;
         dive.start();
         stompIgnoreRow = hero.ignoreGround is { } ignore ? ignore.untilY : int.MinValue;
+        // From a ladder, chain or vine the dive also passes the row Kirby's feet
+        // climb in: climbing down from the top, that is the ladder top itself,
+        // which would hold him when the original lets go of the ladder.
+        if (action == KirbyActions.Climb) stompIgnoreRow = Math.Max(stompIgnoreRow, (int)Math.Floor(feetY / 24));
         Diagnostic?.Invoke("stomp-start", new { action, feetY, dive.duration, dive.cooldown, dive.hold,
             ignoreRow = stompIgnoreRow, ground = hero.distToGroundCase(), active = dive.isActive() });
     }

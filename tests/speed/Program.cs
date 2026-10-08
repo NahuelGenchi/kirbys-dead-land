@@ -69,6 +69,37 @@ double Speed(List<Row> r, int a, int b) => (r[b].X - r[a].X) / (b - a) * 60;
     Check(wall.Run(P(R(128, 3), new ushort[] { 129 }, R(128, 50))).Max(x => x.X) <= 399.5 + 1e-6, "A slide into a wall stops at the original contact");
 }
 {
+    // KirbyNdsProvider.Step: a Shift key bound to Dodge goes through SlideKey before the dash filter.
+    List<Row> Keyed(IEnumerable<(ushort Mask, bool Key)> plan)
+    {
+        var sim = new Sim(nds, seed);
+        var key = new SlideKey();
+        ushort previous = 0, action = nds.Action;
+        var rows = new List<Row>();
+        foreach (var (mask, held) in plan)
+        {
+            previous = key.Filter(mask, held, action, previous);
+            var row = sim.Step(previous);
+            action = row.Action;
+            rows.Add(row);
+        }
+        return rows;
+    }
+    IEnumerable<(ushort, bool)> K(ushort mask, bool key, int frames) => Repeat((mask, key), frames);
+    int Slides(List<Row> r) => Range(1, r.Count - 1).Count(i => r[i].Action == KirbyActions.Slide && r[i - 1].Action != KirbyActions.Slide);
+    var run = Keyed(K(16, false, 60).Concat(K(16, true, 1)).Concat(K(16, false, 60)));
+    int start = run.FindIndex(x => x.Action == KirbyActions.Slide), end = run.FindLastIndex(x => x.Action == KirbyActions.Slide);
+    Check(Slides(run) == 1 && end - start + 1 == 36 && Math.Abs(run[end].X - run[start - 1].X - 131) < 4,
+        $"A Shift tap while running starts the whole original slide ({end - start + 1} frames, {run[end].X - run[start - 1].X:F0} px)");
+    var hold = Keyed(K(0, false, 5).Concat(K(0, true, 90)));
+    Check(Slides(hold) == 1 && hold.TakeLast(20).All(x => x.Action == KirbyActions.Standing), "Holding Shift slides once and does not crouch after");
+    var plain = new Sim(nds, seed).Run(P(R(1, 8), R(0, 60))).Select(x => x.Action);
+    var air = Keyed(K(1, false, 8).Concat(K(0, true, 60))).Select(x => x.Action);
+    Check(air.SequenceEqual(plain), "Shift in the air changes nothing");
+    var jumpHeld = Keyed(K(1, false, 80).Concat(K(1, true, 40)));
+    Check(jumpHeld.Skip(80).Any(x => x.Action == KirbyActions.Slide), "Shift slides while jump is still held after landing");
+}
+{
     var sim = new Sim(nds, seed);
     for (int y = 15; y < 30; y++) sim.Tiles[(12, y)] = 134;
     sim.Tiles[(12, 14)] = SpeedMatch.OneWay;
