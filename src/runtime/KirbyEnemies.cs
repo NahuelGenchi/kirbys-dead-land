@@ -272,6 +272,7 @@ public sealed class KirbyEnemies
             {
                 var enemy = (Mob)mob;
                 if (!controlled[i]) enemy.interruptSkills();
+                CancelLeap(enemy);
                 enemy.lockAiS(0.1);
                 enemy.dx = enemy.dy = 0;
                 enemy.setPosPixel(proxy.XRaw / 65536.0 + ox, proxy.YRaw / 65536.0 + oy + 17);
@@ -295,6 +296,25 @@ public sealed class KirbyEnemies
         double factor = mob.getDiminishingFactor(IceFreeze.DiminishingKey, IceFreeze.DiminishingFullPowerUses,
             IceFreeze.DiminishingMaxUses, null);
         if (factor > 0) mob.setAffectS(IceFreeze.FreezeAffect, IceFreeze.FreezeSeconds * factor, Ref<double>.Null, null);
+    }
+    /// <summary>
+    /// Host cooldown key of a leap attack in progress (Zombie, Stomper, Behemoth).
+    /// While it is set, Zombie.fixedUpdate applies its jump hit every frame and
+    /// Zombie.onLand applies it once more. interruptSkills leaves it set.
+    /// </summary>
+    private const int LeapCooldown = 1226833920;
+    /// <summary>
+    /// An enemy held by the original recoil is no longer mid-leap. Unset the leap
+    /// key as the host's inlined Cooldown.unset does; otherwise the suspended
+    /// leap resumes when the original releases the enemy, and its jump hit lands
+    /// on Kirby with no visible attack.
+    /// </summary>
+    private static void CancelLeap(Mob mob)
+    {
+        if (mob.cd is not { } cd || cd.fastCheck.get(LeapCooldown) is not dc.tool._Cooldown.CdInst leap) return;
+        cd.cdList.remove(leap);
+        leap.frames = 0;
+        cd.fastCheck.remove(leap.k);
     }
     private void CompleteHazard(NdsRuntime nds, uint i, Entity projectile, NdsProxy proxy, int ox, double oy)
     {

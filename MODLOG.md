@@ -1349,3 +1349,25 @@ the all-ability rendering tests as full gameplay acceptance.
 - Live (`repros/shift-slide-20261007`, run `20261007-014554`): Shift slid
   130.7 px right and, after turning, left; Ctrl guarded (`0x0A17`); Shift held
   in the air did nothing; held standing it slid once. Saves unchanged.
+
+## 2026-10-07 — Zombies no longer bite after the original recoil (#78)
+
+- Owner report: Kirby sometimes took a hit with the original knockback right as
+  he killed a Zombie, with no visible attack.
+- Cause (bytecode review of `hlboot.dat`): the Zombie's leap keeps cooldown key
+  `1226833920` set, and `Zombie.fixedUpdate` applies its jump hit while the key
+  is set. The original recoil's control skipped the Zombie's updates without
+  ending the leap, so the leap resumed on release and bit Kirby.
+- `KirbyEnemies` now unsets the leap key while the original holds an enemy.
+  Record: [Leaps held by the original recoil](docs/GAMEPLAY_FIDELITY.md#leaps-held-by-the-original-recoil-78).
+- Headless original-ROM scratch checks ruled out the source side (detached
+  enemies, all 24 abilities' defeat reactions, projectile proxies, health sync,
+  hurtbox union).
+- Source: `python3 scripts/check.py` passes. Not run live.
+- Later the same day the owner was hit again just after killing a Zombie, on a
+  staged integration build that included the leap change. The cause is not yet
+  known. Added `KirbyDamageLog` (`Kirby damage:` lines in the DCCM log) for
+  host hits, original health drops, host-only health loss and copy-hit kills.
+  Its runtime DLL was swapped into the owner's staged integration build
+  (`de34d4f` + this commit). The previous DLL was backed up to
+  `lab/checkpoints/before-damage-log-20261007-122317`. Not run live by the agent.

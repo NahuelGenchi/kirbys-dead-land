@@ -336,6 +336,56 @@ floor), a paired enemy outside the original's window (at 230 px the source
 object was not live at the attack, so the host took the no-source path), Mike's
 later shouts, Elites, bosses and other enemy types.
 
+### Leaps held by the original recoil (#78)
+
+Owner report (2026-10-07): in the Prisoners' Quarters, Kirby sometimes lost HP
+with the original hurt knockback right as he killed a Zombie, although no enemy
+was visibly attacking him.
+
+The host Zombie's leap (read from `hlboot.dat`) sets cooldown key `1226833920`
+for up to one second. While it is set, `Zombie.fixedUpdate` calls
+`applyJumpHit` every frame, and `Zombie.onLand` calls it once more before
+unsetting the key. `applyJumpHit` checks only that each target is alive.
+While the original recoil of a source hit holds a paired enemy, the runtime
+skips that enemy's `canUpdate`, `fixedUpdate` and `updatePositionXY`, and
+`interruptSkills` stops its skills but not the leap. A Zombie struck mid-leap
+therefore kept a suspended leap. On the first host frame after the original
+released it, the leap resumed and its jump hit landed on Kirby, who was in
+melee range. A killed mob is destroyed in `Entity.onDie`, so the bite came from
+a hit before the killing one.
+
+While the original holds an enemy, the runtime now unsets that key as the
+host's inlined `Cooldown.unset` does. A leap the original recoil interrupted
+never lands. Stomper and Behemoth use the same key. A leap that is not
+interrupted by original recoil still hits as in Dead Cells.
+
+Headless original-ROM checks (scratch scripts, not in `tools/nds_tests.py`)
+ruled out the source side. Kirby's source HP stayed at 76 in each case:
+detached living and dying source enemies, defeat reactions for all 24 copy
+abilities, projectile proxies at birth and in flight, a host heal synced before
+and after a kill, and the slot 14 hurtbox union through kills.
+
+Not verified live: no run has yet reproduced a Zombie leap interrupted by a
+copy hit, with or without this change.
+
+Still open: on 2026-10-07 the owner was hit again a moment after killing a
+Zombie, on a staged build that included this change. Dead Cells runs `onDie`
+inside `Entity.applyAttackResult` on the killing hit, and `Entity.onDie`
+destroys the mob, so the killed Zombie cannot be the attacker. To identify the
+source, the runtime now logs every way Kirby loses health, with a
+`Kirby damage:` prefix in the DCCM log:
+
+- `host hit`: a Dead Cells attack Kirby accepted. Logs the attacker's type,
+  uid, life and offset from Kirby, the carrier, weapon, hit result, damage type
+  and projected hurtbox, plus the managed hooks the call came through.
+- `source hit`: an original health drop. Logs the queued host source, if any,
+  and the original hit boxes within 8 px of Kirby's slot 14 body, named by
+  proxy slot.
+- `host life`: host health that fell without an original hit, before it is
+  synced into the original.
+- `kill`: each enemy a copy hit killed. Each hit line also gives the time since
+  the last kill and that kill's position relative to Kirby.
+
 ### Elite Sword (intentional deviation)
 
 Elite host mobs do not roll a random ability: their source collision metadata
