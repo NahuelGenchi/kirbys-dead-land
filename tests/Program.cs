@@ -114,6 +114,26 @@ Check(!IceFreeze.Freezes(sourceAbility: 11, 4, true, false) && !IceFreeze.Freeze
 Check(IceFreeze.Applies(10) && !IceFreeze.Applies(18) && !IceFreeze.Applies(1),
       "Only Ice deals host Frost damage and skips the original remnant (no ice block)");
 
+// Bridge measurement: Kirby at (400, 153.5), camera (272, 12), Crash's record [144,656]×[-103,409].
+var crashBox = new StarBox(144, -103, 656, 409);
+Check(ScreenAttacks.IsScreenWide(2, 160, crashBox, 272, 12) && ScreenAttacks.IsScreenWide(2, 70, crashBox, 272, 12),
+    "Crash's and Paint's records cover the source window");
+Check(!ScreenAttacks.IsScreenWide(1, 70, crashBox, 272, 12), "Cook's screen grab (slot 1) is not a damaging wave");
+Check(!ScreenAttacks.IsScreenWide(2, 0, crashBox, 272, 12) && !ScreenAttacks.IsScreenWide(2, 52, new StarBox(137, 140, 157, 160), 272, 12),
+    "Harmless or ordinary attack records are not screen-wide");
+Check(ScreenAttacks.SourceReaches(560, 151.5, 272, 12) && !ScreenAttacks.SourceReaches(564, 151.5, 272, 12) &&
+      ScreenAttacks.SourceReaches(240, 151.5, 272, 12) && !ScreenAttacks.SourceReaches(236, 151.5, 272, 12),
+    "The original hits within 32 px of either side of its screen, as measured");
+Check(ScreenAttacks.SourceReaches(440, -17.7, 272, 12) && !ScreenAttacks.SourceReaches(440, -21.7, 272, 12) &&
+      ScreenAttacks.SourceReaches(440, 234.3, 272, 12) && !ScreenAttacks.SourceReaches(440, 238.3, 272, 12),
+    "The original hits within 32 px above and below its screen, as measured");
+Check(ScreenAttacks.HostStrikes(paired: false, sourceReaches: false, sourceHit: false),
+    "An enemy with no source object is struck by the host");
+Check(ScreenAttacks.HostStrikes(paired: true, sourceReaches: false, sourceHit: false),
+    "A paired enemy beyond the original's window is struck by the host");
+Check(!ScreenAttacks.HostStrikes(true, sourceReaches: true, sourceHit: false) && !ScreenAttacks.HostStrikes(true, false, sourceHit: true),
+    "The original collision decides inside its window, and a source hit is never repeated");
+
 Check(StarProjectiles.Identify(0x020BD718) == StarKind.Spit && StarProjectiles.Identify(0x020BDD08) == StarKind.BigSpit &&
       StarProjectiles.Identify(0x02166A54) == StarKind.Ability, "The three original star routines are recognized");
 Check(StarProjectiles.Identify(0x020C3700) == StarKind.None && StarProjectiles.Identify(0x020B2714) == StarKind.None,
@@ -211,18 +231,17 @@ for (int hostLife = 1; hostLife <= 400; hostLife++)
         if ((hit >= sourceHp) != (ColorlessDamage.HostDamage(hit, sourceHp, hostLife, m) >= hostLife))
             throw new Exception($"Combined lethality differs at x{m}, life {hostLife}, hit {hit}");
 }
-Check(true, "Lethality agrees with unit scale, Elite bonus and colorless tier combined");
+Check(true, "Lethality agrees with unit scale, item bonus and colorless tier combined");
 
 var elite = new KirbyRules(["fire", "sword"], _ => 0);
 Check(elite.ConfirmAbsorption(1, "sword", elite: true) == "sword" && elite.PendingEmpowerment == "sword" &&
-      !elite.AbilityEmpowered && elite.DamageMultiplier == 1, "Elite in mouth is pending, not yet empowered");
+      !elite.AbilityEmpowered, "Elite in mouth is pending, not yet empowered");
 elite.SetSourceAbility("sword");
-Check(elite.AbilityEmpowered && elite.PendingEmpowerment is null &&
-      elite.DamageMultiplier == KirbyRules.EmpoweredDamageMultiplier, "Elite swallow empowers its Sword");
+Check(elite.AbilityEmpowered && elite.PendingEmpowerment is null, "Elite swallow empowers its Sword");
 elite.SetSourceAbility("sword");
 Check(elite.AbilityEmpowered, "Repeated source report keeps the empowerment");
 elite.DropAbility();
-Check(!elite.AbilityEmpowered && elite.DamageMultiplier == 1, "Losing the copy ends the empowerment");
+Check(!elite.AbilityEmpowered, "Losing the copy ends the empowerment");
 elite.SetSourceAbility("sword");
 Check(!elite.AbilityEmpowered, "A re-caught discarded star is an ordinary Sword");
 elite.DropAbility();
@@ -425,6 +444,18 @@ Check(KirbyActions.CanStomp(KirbyActions.Jump) && KirbyActions.CanStomp(KirbyAct
 Check(!KirbyActions.CanStomp(KirbyActions.Standing) && !KirbyActions.CanStomp(KirbyActions.Slide) && !KirbyActions.CanStomp(KirbyActions.Ability),
     "No stomp on the ground, while sliding or during an exhale or inhale");
 Check(KirbyActions.CanSlide(KirbyActions.Walk) && !KirbyActions.CanSlide(KirbyActions.Fall), "Slides start on the ground only");
+var slideKey = new SlideKey();
+Check(slideKey.Filter(16, true, KirbyActions.Dash, 16) == 145 && slideKey.Filter(16, true, KirbyActions.Slide, 145) == 16 &&
+    slideKey.Filter(16, true, KirbyActions.Slide, 16) == 16, "The slide key sends Down + jump once per press, keeping the held direction");
+slideKey.Reset();
+Check(slideKey.Filter(0, true, KirbyActions.Fall, 0) == 0 && slideKey.Filter(0, true, KirbyActions.Standing, 0) == 0 &&
+    slideKey.Filter(0, false, KirbyActions.Standing, 0) == 0 && slideKey.Filter(0, true, KirbyActions.Standing, 0) == 129,
+    "A slide key press in the air does nothing and is not kept for landing");
+slideKey.Reset();
+Check(slideKey.Filter(1, true, KirbyActions.Standing, 1) == 128 && slideKey.Filter(1, true, KirbyActions.Standing, 128) == 129,
+    "With jump already held, the slide key releases it for a frame so the jump is a new press");
+slideKey.Reset();
+Check(slideKey.Filter(64, true, KirbyActions.Standing, 0) == 129, "The slide key's Down replaces a held Up");
 Check(HostStrikes.Slide(KirbyActions.Slide, -704) && !HostStrikes.Slide(KirbyActions.Slide, 384) && !HostStrikes.Slide(KirbyActions.Dash, 704),
     "Only the slide's fast part strikes like a roll");
 Check(HostStrikes.Grab(HostStrikes.Suplex, SpeedMatch.Carry, -1766) && !HostStrikes.Grab(HostStrikes.Suplex, SpeedMatch.Carry, 300) &&
@@ -434,24 +465,33 @@ var stompRun = new StompController();
 Check(!stompRun.TryStart(KirbyActions.Standing, 480), "A grounded Kirby cannot stomp");
 Check(stompRun.TryStart(KirbyActions.Fall, 400) && stompRun.Active, "A falling Kirby stomps");
 Check(!stompRun.TryStart(KirbyActions.Fall, 400), "A stomp cannot restart while active");
-Check(stompRun.Mask(1 | 128) == 0, "Original buttons are released during a falling stomp");
-Check(stompRun.Descent(100) == StompController.ExtraDescent, "Full extra descent in open air");
-Check(stompRun.Descent(8) == 3.5 && stompRun.Descent(4) == 0, "Descent leaves the original a full fall step to make the floor contact");
+Check(stompRun.Mask(1 | 128, KirbyActions.Fall) == 0, "Original buttons are released during a falling stomp");
+Check(stompRun.Descent(100, KirbyActions.Fall) == StompController.ExtraDescent, "Full extra descent in open air");
+Check(stompRun.Descent(8, KirbyActions.Fall) == 3.5 && stompRun.Descent(4, KirbyActions.Fall) == 0, "Descent leaves the original a full fall step to make the floor contact");
 Check(Math.Abs(3.5 + StompController.ExtraDescent - 15) < 1e-9, "The stomp falls 15 px a frame, the Beheaded's dive");
 Check(stompRun.Advance(landed: false, interrupted: false) == StompController.Outcome.None && stompRun.Active, "Still diving");
 Check(Math.Abs(stompRun.Height(472) - 3) < 1e-9, "Fall height is reported in host cells");
 Check(stompRun.Advance(landed: true, interrupted: false) == StompController.Outcome.Landed && !stompRun.Active, "Landing ends the stomp");
-Check(stompRun.Descent(100) == 0 && stompRun.Mask(1) == 1, "An idle stomp leaves descent and buttons alone");
+Check(stompRun.Descent(100, KirbyActions.Fall) == 0 && stompRun.Mask(1, KirbyActions.Fall) == 1, "An idle stomp leaves descent and buttons alone");
 var floatStomp = new StompController();
 Check(floatStomp.TryStart(KirbyActions.Float, 300), "A floating Kirby stomps");
-Check(floatStomp.Mask(1) == StompController.ButtonB && floatStomp.Mask(1) == 0, "A floating Kirby exhales once, then falls");
+Check(floatStomp.Mask(1, KirbyActions.Float) == StompController.ButtonB && floatStomp.Mask(1, KirbyActions.Ability) == 0, "A floating Kirby exhales once, then falls");
 Check(floatStomp.Advance(false, interrupted: true) == StompController.Outcome.Cancelled && !floatStomp.Active, "A hit cancels the stomp");
 var chainStomp = new StompController();
 Check(KirbyActions.CanStomp(KirbyActions.Climb) && chainStomp.TryStart(KirbyActions.Climb, 300), "Kirby stomps from a ladder or chain");
-Check(chainStomp.Mask(128 | 1) == StompController.ButtonA && chainStomp.Mask(128 | 1) == 0, "The original A kicks him off once, then buttons are released");
+Check(chainStomp.Mask(128 | 1, KirbyActions.Climb) == StompController.ButtonA && chainStomp.Mask(128 | 1, KirbyActions.Jump) == 0,
+    "The original A kicks him off once, then buttons are released");
+var vineTopStomp = new StompController();
+vineTopStomp.TryStart(KirbyActions.Climb, 300);
+// Climbing down from a ladder top, the original ignores A for its first frames (#74).
+Check(vineTopStomp.Mask(128 | 1, KirbyActions.Climb) == StompController.ButtonA && vineTopStomp.Mask(128 | 1, KirbyActions.Climb) == 0 &&
+      vineTopStomp.Mask(128 | 1, KirbyActions.Climb) == StompController.ButtonA && vineTopStomp.Mask(128 | 1, KirbyActions.Fall) == 0,
+    "While the original still climbs, A is pressed every other frame until it lets go");
+Check(vineTopStomp.Descent(100, KirbyActions.Climb) == 0 && vineTopStomp.Descent(100, KirbyActions.Fall) == StompController.ExtraDescent,
+    "No host descent carries a Kirby who still climbs");
 var fallStomp = new StompController();
 fallStomp.TryStart(KirbyActions.Fall, 300);
-Check(fallStomp.Mask(1) == 0, "A falling Kirby needs no releasing press");
+Check(fallStomp.Mask(1, KirbyActions.Fall) == 0, "A falling Kirby needs no releasing press");
 var stuck = new StompController();
 stuck.TryStart(KirbyActions.Jump, 0);
 var outcome = StompController.Outcome.None;
@@ -632,10 +672,10 @@ Check(SpeedMatch.RiseVelocity(KirbyActions.Jump, -2682) == -2682 && SpeedMatch.R
           icon.AsSpan(Pixel(16, 23), 4).SequenceEqual(new byte[] { 0, 255, 0, 255 }), "Apply both OBJ flips");
 }
 {
-    // The bridge keeps OBJ pieces from screen x -127 to 380 (#63): OAM x up to
-    // 383 is to the right, 384..511 to the left. Kirby at screen (128, 100).
+    // OAM is read over the original builder's range, screen x -63..256 and
+    // y -63..192, and culled pieces come from the bridge (#67). Kirby at (128, 100).
     byte[] oam = new byte[1024], vram = new byte[256 * 1024], palette = new byte[512];
-    byte[] rgba = new byte[Kirby.Runtime.NdsObjRenderer.Canvas * Kirby.Runtime.NdsObjRenderer.Canvas * 4];
+    byte[] rgba = new byte[Kirby.Runtime.NdsObjRenderer.CanvasWidth * Kirby.Runtime.NdsObjRenderer.CanvasHeight * 4];
     void Obj(int index, ushort a0, ushort a1, ushort a2)
     {
         System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(oam.AsSpan(index * 8), a0);
@@ -644,15 +684,29 @@ Check(SpeedMatch.RiseVelocity(KirbyActions.Jump, -2682) == -2682 && SpeedMatch.R
     }
     for (int index = 0; index < 128; index++) Obj(index, 0x0200, 0, 0);
     vram.AsSpan(0, 32).Fill(0x11); // Tile 0: colour 1 everywhere.
-    System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(palette.AsSpan(32 + 2), 0x001F);
-    // Canvas row 256 is screen y 100; canvas column 256 is screen x 128.
-    bool Drawn(int screenX) => rgba[(256 * 512 + 128 + screenX) * 4 + 3] == 255;
-    Obj(0, 100, 300, 1 << 12);
-    Kirby.Runtime.NdsObjRenderer.Render(0x10, oam, vram, palette, rgba, 128, 100);
-    Check(Drawn(300) && Drawn(307), "OAM x 300 is drawn 172 px right of Kirby, not wrapped off the canvas");
-    Obj(0, 100, 400, 1 << 12);
-    Kirby.Runtime.NdsObjRenderer.Render(0x10, oam, vram, palette, rgba, 128, 100);
-    Check(Drawn(400 - 512) && Drawn(400 - 512 + 7), "OAM x 400 is screen x -112, left of the DS screen");
+    System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(palette.AsSpan(32 + 2), 0x001F); // Bank 1: red.
+    System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(palette.AsSpan(64 + 2), 0x7C00); // Bank 2: blue.
+    int At(int screenX, int screenY) =>
+        ((Kirby.Runtime.NdsObjRenderer.CenterY + screenY - 100) * Kirby.Runtime.NdsObjRenderer.CanvasWidth +
+         Kirby.Runtime.NdsObjRenderer.CenterX + screenX - 128) * 4;
+    bool Drawn(int screenX, int screenY = 100) => rgba[At(screenX, screenY) + 3] == 255;
+    void Draw(params Kirby.Runtime.FarObject[] far) => Kirby.Runtime.NdsObjRenderer.Render(0x10, oam, vram, palette, rgba, 128, 100, far: far);
+    Obj(0, 100, 256, 1 << 12);
+    Draw();
+    Check(Drawn(256) && Drawn(263), "OAM x 256, the builder's right limit, is drawn right of the DS screen, not wrapped");
+    Obj(0, 100, 460, 1 << 12);
+    Draw();
+    Check(Drawn(-52) && Drawn(-45), "OAM x 460 is screen x -52");
+    Obj(0, 0xF8, 0, 1 << 12);
+    Draw();
+    Check(!Drawn(0, -8), "An unused OAM entry (y 0xF8, attr1 0) is not drawn");
+    Obj(0, 100, 200, 1 << 12);
+    Draw(new Kirby.Runtime.FarObject { X = 600, Y = 100, Attr0 = 100, Attr1 = 600 & 511, Attr2 = 1 << 12, Order = 1 });
+    Check(Drawn(600) && Drawn(607) && Drawn(200), "A culled piece at screen x 600 is drawn 472 px right of Kirby");
+    Draw(new Kirby.Runtime.FarObject { X = 200, Y = 100, Attr0 = 100, Attr1 = 200, Attr2 = 2 << 12, Order = 0 });
+    Check(rgba[At(200, 100) + 2] == 255 && rgba[At(200, 100)] == 0, "A culled piece written before OAM entry 0 draws in front of it");
+    Draw(new Kirby.Runtime.FarObject { X = 200, Y = 100, Attr0 = 100, Attr1 = 200, Attr2 = 2 << 12, Order = 1 });
+    Check(rgba[At(200, 100)] == 255 && rgba[At(200, 100) + 2] == 0, "A culled piece written after OAM entry 0 draws behind it");
 }
 {
     // Same IDs and order as KirbyNdsProvider.Abilities (original abilities 2..25).
@@ -683,6 +737,15 @@ Check(SpeedMatch.RiseVelocity(KirbyActions.Jump, -2682) == -2682 && SpeedMatch.R
     Check(!AbilityItems.Replaces(weapon: false, skill: false, shield: false, abilityItem: false), "Amulets, food and other items stay");
     Check(!AbilityItems.Replaces(weapon: true, skill: false, shield: false, abilityItem: true), "An ability item is never replaced again");
 
+    // Host rule, checked against host cards: "Rusty Sword I+" shows "+33% damage".
+    Check(AbilityItems.InfoLine(AbilityItems.HostDamageBonus(1, 1, false)) == "+33% copy damage", "Level I+ gives +33%");
+    Check(AbilityItems.HostDamageBonus(1, 0, false) == 0 && AbilityItems.InfoLine(0) == "Copy ability", "A level I base item adds nothing");
+    Check(AbilityItems.InfoLine(AbilityItems.HostDamageBonus(2, 0, false)) == "+4% copy damage", "Level II adds a little");
+    Check(AbilityItems.InfoLine(AbilityItems.HostDamageBonus(3, 0, false)) == "+33% copy damage", "Level III adds a stat bonus");
+    Check(AbilityItems.HostDamageBonus(2, 2, false) > AbilityItems.HostDamageBonus(2, 1, false) &&
+          AbilityItems.HostDamageBonus(2, 1, false) > AbilityItems.HostDamageBonus(2, 0, false), "Each + raises the bonus");
+    Check(Math.Abs(AbilityItems.HostDamageBonus(1, 0, true) - 1.25) < 1e-9 && AbilityItems.HostDamageBonus(1, 3, true) == AbilityItems.HostDamageBonus(1, 0, true),
+        "Legendary is level + 6 regardless of quality");
     Check(AbilityItems.Slot([SlotContent.Other, SlotContent.Empty]) == 0, "The copy replaces an unusable host weapon first");
     Check(AbilityItems.Slot([SlotContent.Empty, SlotContent.Other]) == 1, "An unusable weapon is replaced before an empty slot is used");
     Check(AbilityItems.Slot([SlotContent.Shield, SlotContent.Empty], retainedShieldSlot: 0) == 1, "The copy takes the empty slot beside a shield");

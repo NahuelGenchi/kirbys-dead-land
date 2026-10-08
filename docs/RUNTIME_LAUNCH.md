@@ -490,6 +490,31 @@ KIRBY_LAB_TEST_TARGET_LIFE=2000 python3 scripts/launch_runtime.py --data-root <r
 | `20261006-130738` | Final | Zombie, 131 life | Freeze on the first hit (4382), hits 38, 31, 31, 31 with no thaw, killed at 4400. No original ice block in 2,845 traced frames. |
 
 Each run ended by the expected timeout, logged no fatal errors and left the real saves unchanged. The probe's incoming 10-damage hit took Kirby from 76 to 68 in these runs. Other branches' recent ability runs recorded 68–75 for the same hit, so this change did not cause the difference. Not run live: freeze resistance on bosses and Elites, the diminishing factor across repeated freezes, Ice against breakables and hazards, and an Ice kill other than the breath.
+## Screen-wide attacks (#69)
+
+`--input-plan screen` (`LabScreenProbe`) prepares Crash through original
+inhale, supplied content and Down (`--probe-ability 21` or `22` for Paint or
+Mike). It places six real Zombies with locked AI on Kirby's floor: 40 px ahead
+(paired), 110 px ahead kept without a source object (`KirbyEnemies.TestUnpaired`),
+230 px ahead and behind, 360 px ahead and 1400 px ahead, then holds original B.
+`screen.json` records the host view, the original's window, and for each Zombie
+its position, pairing, whether the original reaches it and whether it is in view
+when B goes down, the host strikes and when it died. `screen-events.txt` also
+logs each source hit and host damage event. Results are in
+[Screen-wide attacks](GAMEPLAY_FIDELITY.md#screen-wide-attacks-69).
+
+```sh
+python3 scripts/stage_runtime.py --data-root ~/.local/share/kirby-dead-cells/repros/screen-attack-20261007 \
+  --original-runtime --outfit-pack "$HOME/.local/share/kirby-dead-cells/outfit-build-sync/res.pak"
+python3 scripts/launch_runtime.py --data-root ~/.local/share/kirby-dead-cells/repros/screen-attack-20261007 \
+  --seconds 90 --start-game --outfit KirbySuperStarUltra --input-plan screen
+```
+
+The repro root links `dotnet`, `research`, `oracle/ready2` and `oracle/vendor`
+to the main data root. The older `outfit-build/res.pak` lacks the ability item
+kinds; with it, level loading failed with `Invalid ItemKind: KirbyAbilitySleep`
+(run `20261007-003844`).
+
 ## Star projectiles
 
 `--input-plan stars` (`LabStarProbe`, issue #20) runs five phases with real Zombies:
@@ -531,8 +556,8 @@ Run `20261005-221418` passed all five phases with Kirby at 76/76. It used runtim
 | Spit into a wall (face x 984) | The star's last box was 974–994, centered on the wall face; no turn |
 | Discarded Sword star into the same wall | Turned with its left edge at 983, then came back |
 
-The process reached its time limit without fatal errors, and the real save inventories were unchanged. The captures show the discarded star above Kirby right after SELECT. Near the wall, about 156 px from Kirby, no star is drawn, because the original leaves objects outside its 256-pixel screen out of OAM. (#63 later widened that cull; see [Far shots](#far-shots-63).)
-## Far shots (#63)
+The process reached its time limit without fatal errors, and the real save inventories were unchanged. The captures show the discarded star above Kirby right after SELECT. Near the wall, about 156 px from Kirby, no star is drawn, because the original leaves objects outside its 256-pixel screen out of OAM. (#63 and #67 later drew such pieces; see [Far shots](#far-shots-63-67).)
+## Far shots (#63, #67)
 
 The ability probe copies Plasma (`--probe-ability 12`) and replays original
 buttons from `KIRBY_LAB_ABILITY_PLAN`, counted from when the copy is ready: Up
@@ -568,6 +593,22 @@ The offscreen 1024×768 view showed about 360 host px each side of Kirby
 (estimated from the ball's position in the captures), so here roughly the last
 100 px to the screen edge stay empty. Not run live: Ninja, Beam
 and Sword far shots, spit stars, and an enemy hit beyond the old 128 px.
+
+#67 rerun with the same plan and data root, the outfit pack rebuilt from
+`main` (same SHA-256), runtime DLL
+`885ada9313d9673e6d13afc5a86b980b1c61fe0eb2c228410db11e433608f0e7` and bridge
+`a326559a3747f7371e4c51a7ba1494e15e237c19bf44e0388d68d63d2e0079cf`, both built
+from the #67 branch. Run `20261007-004025` reached its time limit without a
+fatal log, and the real saves were unchanged.
+
+| Shot | Ball drawn (captures) | What ended it |
+|---|---|---|
+| Right, source frames 4497–4538 | Sparks at 144 px (`007594`) | The same level wall, about 190 px right; the object went on to 360 px behind its tiles |
+| Left, source frames 4795–4841 | Whole ball at 102, 156 and 300 px (`007819`, `007827`, `007849`); at 354 px half of it, at the left edge of the lab view (`007858`) | The view's edge; the object reached 378 px. Captures between those show only its sparks: the ball's pieces are drawn one frame in three in the ROM |
+
+Gameplay ran at 54.3 source frames per second over 33 s of play, against 54.1
+in the #63 run (offscreen lab with capture). Not run live: Ninja, Bomb, Beam,
+Crash and Sword far shots, spit stars, and an enemy hit beyond 128 px.
 ## Exit-door walk (2026-10-05)
 
 Issue #17. The lifecycle probe (`KIRBY_LAB_LIFECYCLE=1`) now places Kirby 1.5
@@ -698,6 +739,38 @@ each equipment card's texts to `pause-cards.jsonl`.
 
 The owner's missing passive was the stand-in card hiding the real item. Affixes
 do not act on copy attacks until #57.
+
+### Ability item quality (#56)
+
+- `KIRBY_LAB_ITEMS_QUALITY=2 … --input-plan items` run `20261007-003043`: a "++"
+  Broadsword became a Hammer ability item with two `QualityUp`, host damage bonus
+  0.667 and the info line "+67% copy damage"; the probe passed (spit, re-inhale,
+  swallow, slot, HUD, discard).
+- `KIRBY_LAB_COMBAT_ELITE=1 … --input-plan combat` run `20261007-003221`: the
+  swallowed Elite Zombie gave Sword (ability 18), empowered, with copy damage
+  multiplier 2.25 from the Legendary item; the shield parry and counter passed.
+- Both: saves unchanged, no fatal log. Not run: a host-rolled "+" or legendary
+  floor drop, the card text on screen, the Elite hit damage against a second
+  enemy (the combat probe's second Zombie was not struck in this run).
+
+### Ability item affixes (#57)
+
+`KIRBY_LAB_ITEMS_AFFIXES=1 … --input-plan items` gives the probe's Broadsword the
+host `BleedOnHit` affix before it is dropped (it must carry over), forces the
+floor item to Sword, and after the swallow adds `FrontArrow` and `BleedOnHit` to
+the copy's item. A Zombie with 30000 life stands three cells ahead; Kirby presses
+B every 16 frames for 240 frames, then stops while its life is sampled.
+
+- `20261007-004739`, `004958` and `005200` (`repros/ability-items-20261006`):
+  15 affix uses (one per press), a host `dc.en.Bullet` (the arrow) spawned, and
+  the Zombie lost life after the attacks stopped (bleed; 29125 → 29059 in
+  `004739`). In `005200` the replaced Broadsword's `BleedOnHit` carried over to
+  the ability item. All `passed: true`, saves unchanged, no fatal log.
+- `20261007-004127` (before the fix) showed no affix use: the press check also
+  required an empty original mouth, whose count bit stays stale after a swallow.
+
+Not run: the Grenade affix, on-kill affixes, a forge reroll in play, and the
+arrow captured on screen.
 
 ## Scroll claim (#80)
 

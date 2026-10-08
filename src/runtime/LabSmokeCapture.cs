@@ -88,6 +88,8 @@ internal static class LabSmokeCapture
             LabWaterProbe.Install(run);
         if (Environment.GetEnvironmentVariable("KIRBY_LAB_INPUT_PLAN") == "stars")
             LabStarProbe.Install(run);
+        if (Environment.GetEnvironmentVariable("KIRBY_LAB_INPUT_PLAN") == "screen")
+            LabScreenProbe.Install(run);
         if (Environment.GetEnvironmentVariable("KIRBY_LAB_INPUT_PLAN") == "items")
             LabAbilityItemProbe.Install(run);
         if (Environment.GetEnvironmentVariable("KIRBY_LAB_INPUT_PLAN") == "rewards")
@@ -119,6 +121,7 @@ internal static class LabSmokeCapture
             LabHazardProbe.Poll();
             LabWaterProbe.Poll();
             LabStarProbe.Poll();
+            LabScreenProbe.Poll();
             LabMovesProbe.Poll();
             LabItemProbe.Poll();
             LabScrollProbe.Poll();

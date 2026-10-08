@@ -25,6 +25,8 @@ public sealed class StompController
     public const int MaxFrames = 180;
     // Button that frees Kirby for the dive on its first frame, or 0.
     private ushort release;
+    // Whether the latest frame on a ladder pressed A, so the next one releases it.
+    private bool kicked;
 
     public bool Active { get; private set; }
     public int Frames { get; private set; }
@@ -38,22 +40,38 @@ public sealed class StompController
         Frames = 0;
         StartFeetY = feetY;
         // A floating Kirby is full of air: he exhales it, as when he stops
-        // floating normally. On a ladder or chain the original A kicks him off.
-        release = action switch { KirbyActions.Float => ButtonB, KirbyActions.Climb => ButtonA, _ => 0 };
+        // floating normally. On a ladder or chain the original A kicks him off (see Mask).
+        release = action == KirbyActions.Float ? ButtonB : (ushort)0;
+        kicked = false;
         return true;
     }
 
-    /// <summary>Buttons for the next source frame: none while stomping, except one releasing press.</summary>
-    public ushort Mask(ushort requested)
+    /// <summary>
+    /// Buttons for the next source frame, given the original action before it:
+    /// none while stomping, except one releasing press. While the original
+    /// still climbs, A is pressed every other frame until it lets go: the
+    /// original ignores A for the first frames of climbing down from a ladder top.
+    /// </summary>
+    public ushort Mask(ushort requested, ushort action)
     {
         if (!Active) return requested;
+        if (action == KirbyActions.Climb)
+        {
+            kicked = !kicked;
+            return kicked ? ButtonA : (ushort)0;
+        }
         ushort mask = release;
         release = 0;
         return mask;
     }
 
-    /// <summary>Host descent for the next source frame, given the free space under Kirby's feet.</summary>
-    public double Descent(double free) => Active ? Math.Clamp(free - LandingMargin, 0, ExtraDescent) : 0;
+    /// <summary>
+    /// Host descent for the next source frame, given the free space under Kirby's
+    /// feet and the original action. None while the original still climbs: it
+    /// would carry a climbing Kirby down the ladder, short of the floor.
+    /// </summary>
+    public double Descent(double free, ushort action) =>
+        Active && action != KirbyActions.Climb ? Math.Clamp(free - LandingMargin, 0, ExtraDescent) : 0;
 
     public enum Outcome { None, Landed, Cancelled }
 
@@ -77,6 +95,7 @@ public sealed class StompController
     {
         Active = false;
         release = 0;
+        kicked = false;
         Frames = 0;
     }
 }

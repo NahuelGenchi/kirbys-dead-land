@@ -17,6 +17,8 @@ public readonly record struct StarBox(int Left, int Top, int Right, int Bottom)
 {
     public bool Overlaps(StarBox other) =>
         Left <= other.Right && other.Left <= Right && Top <= other.Bottom && other.Top <= Bottom;
+    public bool Contains(StarBox other) =>
+        Left <= other.Left && other.Right <= Right && Top <= other.Top && other.Bottom <= Bottom;
     public StarBox Union(StarBox other) => new(Math.Min(Left, other.Left), Math.Min(Top, other.Top),
         Math.Max(Right, other.Right), Math.Max(Bottom, other.Bottom));
     public StarBox Offset(int x, int y) => new(Left + x, Top + y, Right + x, Bottom + y);

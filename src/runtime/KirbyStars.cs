@@ -17,12 +17,15 @@ internal sealed unsafe class KirbyStars
     private const uint RamStart = 0x02000000, RamEnd = 0x02400000;
     // The native hit list holds every active original collision record.
     private readonly NdsHit[] records = new NdsHit[512];
+    private int count;
     private readonly Dictionary<uint, uint> updates = [];
     private readonly Dictionary<uint, Star> stars = [];
     // Union of each other original object's records: a source enemy's body.
     private readonly Dictionary<uint, StarBox> bodies = [];
     private readonly Dictionary<uint, double> lastX = [];
     private readonly StarStrikes strikes = new();
+    /// <summary>Every original collision record of the source frame last scanned.</summary>
+    internal ReadOnlySpan<NdsHit> Records => records.AsSpan(0, count);
     /// <summary>Lab-only observer of (star kind, target, host damage, struck through its source enemy).</summary>
     internal static Action<StarKind, Entity, int, bool>? TestObserver;
     /// <summary>Lab-only observer of each star's host box (pixels) after every source frame.</summary>
@@ -32,14 +35,14 @@ internal sealed unsafe class KirbyStars
 
     public void Clear()
     {
-        stars.Clear(); bodies.Clear(); lastX.Clear(); strikes.Clear();
+        stars.Clear(); bodies.Clear(); lastX.Clear(); strikes.Clear(); count = 0;
     }
 
     /// <summary>Read the stars and source bodies of the source frame just stepped.</summary>
     public void Scan(NdsRuntime nds)
     {
         stars.Clear(); bodies.Clear(); updates.Clear();
-        int count = nds.ReadHits(records);
+        count = nds.ReadHits(records);
         Span<byte> word = stackalloc byte[4];
         for (int i = 0; i < count; i++)
         {
@@ -131,7 +134,7 @@ internal sealed unsafe class KirbyStars
     }
 
     /// <summary>Host hurt box in pixels: the size and foot alignment the source object is given.</summary>
-    private static StarBox HostBody(Entity mob)
+    internal static StarBox HostBody(Entity mob)
     {
         double x = (mob.cx + mob.xr) * 24, foot = (mob.cy + mob.yr) * 24;
         return new((int)Math.Floor(x - mob.radius), (int)Math.Floor(foot - mob.hei), (int)Math.Ceiling(x + mob.radius), (int)Math.Ceiling(foot));

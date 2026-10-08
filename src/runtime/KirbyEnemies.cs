@@ -24,10 +24,13 @@ public sealed class KirbyEnemies
     private readonly (int Cx, int Cy)[] itemOrigins = new (int, int)[Capacity + 1];
     /// <summary>Swallowing an Elite always yields original Sword.</summary>
     private static readonly byte EliteAbility = checked((byte)(Array.IndexOf(KirbyNdsProvider.Abilities, "Sword") + 2));
-    // Sampled when source HP is assigned so the matching delta scales identically.
+    // The copy's ability item bonus, sampled when source HP is assigned so the matching delta scales identically.
     private double damageMultiplier = 1;
     private EnemyBinding[]? restoring;
     private readonly KirbyStars stars = new();
+    private readonly KirbyScreenAttacks screen = new();
+    // Host enemies that lost source HP in the source frame just completed.
+    private readonly HashSet<nint> sourceHit = [];
     /// <summary>Floor ability items the original inhale put in Kirby's mouth this source tick.</summary>
     internal readonly List<KirbyAbilityItems.Held> Swallowed = [];
     /// <summary>Highest scroll tier sampled for the current source tick.</summary>
@@ -39,8 +42,8 @@ public sealed class KirbyEnemies
     /// <summary>Lab-only: host entities kept without a source object, as if out of range.</summary>
     internal static Func<Entity, bool>? TestUnpaired;
     /// <summary>
-    /// Host life per source damage point: the original-unit scale, times the Elite
-    /// empowerment, times the colorless scroll multiplier, all sampled in Prepare.
+    /// Host life per source damage point: the original-unit scale, times the copy's
+    /// ability item bonus, times the colorless scroll multiplier, all sampled in Prepare.
     /// </summary>
     internal double HostMultiplier(Func<Entity, double> scale, Entity mob) =>
         scale(mob) * damageMultiplier * ColorlessMultiplier;
@@ -50,6 +53,17 @@ public sealed class KirbyEnemies
         for (int i = 1; i <= Capacity; i++)
             if (mobs[i]?.HashlinkPointer == mob.HashlinkPointer) return true;
         return false;
+    }
+    /// <summary>Where the host enemy's live source object is, in source pixels; null without one.</summary>
+    internal (double X, double Y)? SourcePosition(NdsRuntime nds, Entity mob)
+    {
+        for (uint i = 1; i <= Capacity; i++)
+        {
+            if (mobs[i]?.HashlinkPointer != mob.HashlinkPointer) continue;
+            var proxy = nds.Proxy(i);
+            return proxy.Pending || proxy.Gone ? null : (proxy.XRaw / 65536.0, proxy.YRaw / 65536.0);
+        }
+        return null;
     }
     internal EnemyBinding[] Capture() => Enumerable.Range(1, Capacity)
         .Where(i => detached[i] || mobs[i] is { destroyed: false }).Select(i => detached[i]
@@ -65,6 +79,8 @@ public sealed class KirbyEnemies
     {
         for (uint i = 1; i <= Capacity; i++) Release(nds, i);
         stars.Clear();
+        screen.Clear();
+        sourceHit.Clear();
         Swallowed.Clear();
     }
     private void Release(NdsRuntime nds, uint i)
@@ -110,7 +126,9 @@ public sealed class KirbyEnemies
         // passed through the host's own Const.scaleHeroValueToTier.
         ColorlessTier = ColorlessDamage.Tier(hero.brutalityTier, hero.tacticTier, hero.survivalTier);
         ColorlessMultiplier = dc.Const.Class.scaleHeroValueToTier(1.0, ColorlessTier);
-        damageMultiplier = session.Rules.DamageMultiplier;
+        // The copy's ability item: Dead Cells' own weapon bonus for its level,
+        // "+" and Legendary (an Elite's copy), as for any weapon (#56).
+        damageMultiplier = 1 + (KirbyAbilityItems.SlotItem(hero, session.Rules.AbilityId)?.getDamageBonus() ?? 0);
         double hx = (hero.cx + hero.xr) * 24, hy = (hero.cy + hero.yr) * 24;
         for (uint i = 1; i <= Capacity; i++)
         {
@@ -167,7 +185,7 @@ public sealed class KirbyEnemies
             // A projectile's source object has one HP: any original attack that
             // strikes it is lethal and removes the host projectile. Enemies hold
             // the host life in original damage units, so both games agree on
-            // which hit is lethal (death reactions); the Elite empowerment and
+            // which hit is lethal (death reactions); the ability item bonus and
             // the colorless scroll multiplier apply on top.
             // A floor ability item takes no damage: its proxy keeps full HP.
             bool item = KirbyAbilityItems.IsAbilityDrop(mob);
@@ -189,6 +207,7 @@ public sealed class KirbyEnemies
         // Kirby's ability in the source step just run: Ice hits use the host freeze.
         byte sourceAbility = nds.State.Ability;
         stars.Scan(nds);
+        sourceHit.Clear();
         for (uint i = 1; i <= Capacity; i++)
         {
             if (mobs[i] is not { } mob) continue;
@@ -224,6 +243,7 @@ public sealed class KirbyEnemies
             int damage = assignedHp[i] - proxy.Hp;
             if (damage > 0 && !mob.destroyed && mob.life > 0)
             {
+                sourceHit.Add(mob.HashlinkPointer);
                 int hostDamage = Math.Max(1, ColorlessDamage.HostDamage(damage, assignedHp[i], mob.life, HostMultiplier(scale, mob)));
                 TestObserver?.Invoke(mob, damage, hostDamage);
                 // A spit star's original hit (and burst) on its source object also staggers the host enemy.
@@ -257,6 +277,7 @@ public sealed class KirbyEnemies
             {
                 var enemy = (Mob)mob;
                 if (!controlled[i]) enemy.interruptSkills();
+                CancelLeap(enemy);
                 enemy.lockAiS(0.1);
                 enemy.dx = enemy.dy = 0;
                 enemy.setPosPixel(proxy.XRaw / 65536.0 + ox, proxy.YRaw / 65536.0 + oy + 17);
@@ -267,6 +288,7 @@ public sealed class KirbyEnemies
             controlled[i] = sourceControls;
         }
         stars.StrikeHost(session.Hero, this, ox, oy, scale);
+        screen.Strike(session.Hero, nds, this, stars.Records, sourceHit, scale);
         return copied;
     }
     /// <summary>
@@ -279,6 +301,25 @@ public sealed class KirbyEnemies
         double factor = mob.getDiminishingFactor(IceFreeze.DiminishingKey, IceFreeze.DiminishingFullPowerUses,
             IceFreeze.DiminishingMaxUses, null);
         if (factor > 0) mob.setAffectS(IceFreeze.FreezeAffect, IceFreeze.FreezeSeconds * factor, Ref<double>.Null, null);
+    }
+    /// <summary>
+    /// Host cooldown key of a leap attack in progress (Zombie, Stomper, Behemoth).
+    /// While it is set, Zombie.fixedUpdate applies its jump hit every frame and
+    /// Zombie.onLand applies it once more. interruptSkills leaves it set.
+    /// </summary>
+    private const int LeapCooldown = 1226833920;
+    /// <summary>
+    /// An enemy held by the original recoil is no longer mid-leap. Unset the leap
+    /// key as the host's inlined Cooldown.unset does; otherwise the suspended
+    /// leap resumes when the original releases the enemy, and its jump hit lands
+    /// on Kirby with no visible attack.
+    /// </summary>
+    private static void CancelLeap(Mob mob)
+    {
+        if (mob.cd is not { } cd || cd.fastCheck.get(LeapCooldown) is not dc.tool._Cooldown.CdInst leap) return;
+        cd.cdList.remove(leap);
+        leap.frames = 0;
+        cd.fastCheck.remove(leap.k);
     }
     private void CompleteHazard(NdsRuntime nds, uint i, Entity projectile, NdsProxy proxy, int ox, double oy)
     {

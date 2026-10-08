@@ -102,6 +102,20 @@ public sealed unsafe class NdsRuntime : IDisposable
         Check(); if (destination.IsEmpty) return;
         fixed (byte* ptr = destination) Result(Native.ReadGpu(handle, address, ptr, (nuint)destination.Length));
     }
+    /// <summary>
+    /// Copy the OBJ pieces the original OAM builder culled from the OAM the
+    /// hardware shows now (see <see cref="FarObject"/>). Returns the count.
+    /// </summary>
+    public int ReadFarObjects(Span<FarObject> destination)
+    {
+        Check();
+        fixed (FarObject* ptr = destination)
+        {
+            int count = Native.FarObjects(handle, ptr, (nuint)destination.Length);
+            Result(count);
+            return count;
+        }
+    }
     public void Write(uint address, ReadOnlySpan<byte> source)
     {
         Check(); if (source.IsEmpty) return;
@@ -167,6 +181,7 @@ public sealed unsafe class NdsRuntime : IDisposable
         [DllImport("kssu_bridge", EntryPoint = "kssu_set_health", CallingConvention = CallingConvention.Cdecl)] internal static extern int SetHealth(nint h, ushort current, ushort maximum);
         [DllImport("kssu_bridge", EntryPoint = "kssu_hurt", CallingConvention = CallingConvention.Cdecl)] internal static extern int Hurt(nint h, ushort damage, int direction);
         [DllImport("kssu_bridge", EntryPoint = "kssu_read_gpu", CallingConvention = CallingConvention.Cdecl)] internal static extern int ReadGpu(nint h, uint address, byte* data, nuint length);
+        [DllImport("kssu_bridge", EntryPoint = "kssu_far_objs", CallingConvention = CallingConvention.Cdecl)] internal static extern int FarObjects(nint h, FarObject* objects, nuint capacity);
         [DllImport("kssu_bridge", EntryPoint = "kssu_proxy_size", CallingConvention = CallingConvention.Cdecl)] internal static extern int ProxySize(nint h, uint slot, ushort width, ushort height);
         [DllImport("kssu_bridge", EntryPoint = "kssu_proxy_options", CallingConvention = CallingConvention.Cdecl)] internal static extern int ProxyOptions(nint h, uint slot, byte ability, [MarshalAs(UnmanagedType.I1)] bool boss);
         [DllImport("kssu_bridge", EntryPoint = "kssu_proxy_contact", CallingConvention = CallingConvention.Cdecl)] internal static extern int ProxyContact(nint h, uint slot, [MarshalAs(UnmanagedType.I1)] bool enabled);

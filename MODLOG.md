@@ -1248,6 +1248,129 @@ the all-ability rendering tests as full gameplay acceptance.
   `Grenade` affix; `235012` resumed with the affix still on the slot item, and
   its pause card listed it. Saves unchanged, no fatal log.
 - Source: `python3 scripts/check.py` passes.
+## 2026-10-07 — Ability item quality scales copy damage (#56)
+
+- Owner report: "Beam II" and "Suplex III" showed no stat. Host research: an
+  item's name is its level as a numeral plus one "+" per `QualityUp`;
+  `InventItem.getDamageBonus` turns level, "+" and `Legendary` into the weapon
+  damage bonus (checked against the owner's "Rusty Sword I+ / +33% damage").
+- Floor ability items now keep the replaced item's "+" and `Legendary`; copy
+  damage is multiplied by 1 + the slot item's host bonus; the card shows
+  "+N% copy damage". An Elite's copy is Legendary (×2.25 at level I), replacing
+  the separate ×2 (`KirbyRules.EmpoweredDamageMultiplier` removed).
+- The 7-second dropped star moved to #68 (needs ROM work).
+- Source: `python3 scripts/check.py` passes (284 core assertions).
+- Live: `20261007-003043` (++ item, +67%), `20261007-003221` (Elite, ×2.25).
+## 2026-10-07 — Crash hits every enemy on the Dead Cells screen (#69)
+
+- Owner recording 00-25-03: Crash left a Zombie and an archer lower on screen
+  untouched. Only enemies with a source object near Kirby could be hit, and the
+  original only collides objects within 32 px of its 256×192 screen.
+- Measured on the bridge: Crash, Paint and Mike each make one Kirby-owned
+  slot-2 record, 512×512 around him, for one frame (160, 70, 40/60 damage).
+- `ScreenAttacks` (core) and `KirbyScreenAttacks` (runtime): the host strikes
+  every enemy in its viewport that the original cannot reach, with the record's
+  own damage converted as usual. New `screen` lab plan.
+- Live (`repros/screen-attack-20261007`): Crash `005031`, Paint `004842`,
+  Mike `004639` killed all four Zombies in view; the off-screen one was
+  untouched. Saves unchanged, no fatal log. A Zombie spawned just outside the
+  view died ~90 frames later from a sourceless host hit in every run (Mike
+  too); not caused by this change, not investigated.
+- Source: `python3 scripts/check.py` passes (286 assertions).
+
+## 2026-10-07 — Far shots drawn from the original sprite records (#67)
+
+- Owner screencast (00:22): after #63 the range improved, but the charged
+  Plasma ball was still cut in open air. From the clip, the owner's 1080p view
+  shows about 425 host px either side of Kirby; #63's 9-bit OAM limit drew to
+  about 252 px (about 300 px with the DS camera's lead).
+- Removed #63's `widen_obj_cull`. `build_far_objects` in `src/nds/lib.rs`
+  reruns the original OAM builder's (`0x020100A0`) assembly over the same
+  sprite records after each frame, accepts it only when its on-screen entries
+  equal the ROM's shadow OAM, and keeps the culled pieces with full positions;
+  `kssu_far_objs` reports them when the hardware OAM equals that shadow OAM.
+  `NdsObjRenderer` draws them in original OAM order on a 1024×512 canvas and
+  reads OAM over the builder's own range (x −63…256, y −63…192).
+- Source: `python3 scripts/check.py` passes (282 core assertions, six for the
+  renderer's OAM range, filler, far pieces and order; Release build 0
+  warnings/errors). `python3 tools/nds_tests.py`: 75/75; `far_shot_draw` now
+  requires culled pieces at least 380 px out on at least 40 frames with the
+  original OAM cull (390 px, 43 frames). `python3 tools/verify_renderer.py`:
+  29 sequences, 3,046,706 pixels, 0 mismatches. Bridge pieces equal a Python
+  port of the builder on all frames of all 24 abilities; A/B against the
+  bridge before #66 identical over 12,954 frames.
+- Live (`repros/far-shots-20261006`, run `20261007-004025`): the whole ball
+  drawn 300 px left of Kirby, then cut only by the lab view's edge at 354 px.
+  Same gameplay rate as the #63 run. Saves unchanged, no fatal log.
+- Not run: the other far attacks live, spit stars, an enemy hit beyond 128 px.
+  Limit: 512 px horizontally and 256 px vertically from Kirby.
+
+## 2026-10-07 — Ability item affixes act on copy attacks (#57)
+
+- Owner report (screencast): an ability item's arrow passive never fired.
+- Host flow: `Weapon.prepare` clears `affixesDone` and throws the Grenade affix,
+  `Weapon.onExecute` runs `executeAffixes` (arrows, on-use shield); hits carry
+  their item's affixes through `AttackData.useItemAffixes`.
+- `KirbyDamage.Hit` makes the copy's ability item each hit's source item; each
+  copy attack press runs the item's weapon prepare/execute affix steps; floor
+  ability items keep the replaced item's affixes the host allows.
+- Live `004739`, `004958`, `005200`: arrows and bleed on copy attacks, affix
+  carry-over. Saves unchanged.
+- Source: `python3 scripts/check.py` passes.
+## 2026-10-07 — Stomp from the top of a vine lands (#74)
+
+- Owner recording 01:24: S then Space on the ledge at a vine's top started the
+  stomp, but Kirby slid down the vine in the climb pose and hung at its foot
+  until the 3 s safety cancel.
+- Cause (bridge, ready2 seed): Down on a ladder top starts the original climb
+  inside the top cell, which ignores A for its first frames. The stomp's single
+  kick-off press was lost and the host descent carried the still-climbing Kirby
+  to 4.5 px above the floor, short of any landing.
+- The stomp now passes the ladder top in the row Kirby's feet climb in, so the
+  original lets go at once; while it still climbs, A is pressed every other
+  frame and no host descent is added. New bridge case `ladder_top_stomp`.
+- Live (separate data root `repros/vine-stomp-20261007`, `vine` setup):
+  pre-fix `20261007-013859` reproduced the hang twice; fixed `014012` landed
+  both vine-top stomps (12.6 and 10.2 cells). Saves unchanged, no fatal log.
+- Not run: stomps from ordinary ladder or chain tops live, hanging vines.
+## 2026-10-07 — Shift bound to Dodge starts Kirby's slide (#75)
+
+- Owner request: Shift and Ctrl both made Kirby guard; Shift should do the
+  slide Down + jump (S + Space) does. The recorded binding arrays bind Dodge
+  (action 1) to Shift (16) and Ctrl (17).
+- `KirbyInput` splits Dodge by key: Shift slides, every other Dodge binding
+  guards. `SlideKey` sends Down + A for one source frame per press on the
+  ground; the original controller starts the slide.
+- ROM measurement: one Down + A frame starts the full 36-frame slide whether
+  Down stays held or not, and same-frame Down + A slides from standing and
+  running.
+- Source: `python3 scripts/check.py` passes. Native: `tests/speed` 42/42 pass,
+  including four new Shift checks.
+- Live (`repros/shift-slide-20261007`, run `20261007-014554`): Shift slid
+  130.7 px right and, after turning, left; Ctrl guarded (`0x0A17`); Shift held
+  in the air did nothing; held standing it slid once. Saves unchanged.
+
+## 2026-10-07 — Zombies no longer bite after the original recoil (#78)
+
+- Owner report: Kirby sometimes took a hit with the original knockback right as
+  he killed a Zombie, with no visible attack.
+- Cause (bytecode review of `hlboot.dat`): the Zombie's leap keeps cooldown key
+  `1226833920` set, and `Zombie.fixedUpdate` applies its jump hit while the key
+  is set. The original recoil's control skipped the Zombie's updates without
+  ending the leap, so the leap resumed on release and bit Kirby.
+- `KirbyEnemies` now unsets the leap key while the original holds an enemy.
+  Record: [Leaps held by the original recoil](docs/GAMEPLAY_FIDELITY.md#leaps-held-by-the-original-recoil-78).
+- Headless original-ROM scratch checks ruled out the source side (detached
+  enemies, all 24 abilities' defeat reactions, projectile proxies, health sync,
+  hurtbox union).
+- Source: `python3 scripts/check.py` passes. Not run live.
+- Later the same day the owner was hit again just after killing a Zombie, on a
+  staged integration build that included the leap change. The cause is not yet
+  known. Added `KirbyDamageLog` (`Kirby damage:` lines in the DCCM log) for
+  host hits, original health drops, host-only health loss and copy-hit kills.
+  Its runtime DLL was swapped into the owner's staged integration build
+  (`de34d4f` + this commit). The previous DLL was backed up to
+  `lab/checkpoints/before-damage-log-20261007-122317`. Not run live by the agent.
 ## 2026-10-07 — Claiming a scroll no longer crashes (#80)
 
 - Owner report: claiming a green (Survival) scroll ended the game with
