@@ -35,6 +35,7 @@ internal static unsafe class KirbyInput
     private static readonly int[] movementActions = [0, 1, 4, 5, 10, 11, 12, 13, 28, 36];
     private const int DiveAction = 36;
     private const int DodgeAction = 1;
+    private const int HealAction = 7;
     // hxd.Key.SHIFT; the left and right keys add a location flag above the low byte.
     private const int ShiftKey = 16;
     private static readonly int[] directionActions = [10, 11, 12, 13];
@@ -135,6 +136,8 @@ internal static unsafe class KirbyInput
         DiveButton = false;
         JumpFromUpOnly = false;
         SlideButton = false;
+        // The host Heal binding (F by default) fires the stored limited-use ability (#102).
+        KirbyFSlot.Held = Available(h) && Down(h.controller, HealAction);
         if (TestOverride?.Invoke(session) is ushort test) return WithShieldGuard(session, test);
         if (!Available(h)) return 0;
         var c = h.controller;

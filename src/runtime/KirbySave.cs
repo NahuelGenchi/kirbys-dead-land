@@ -27,6 +27,8 @@ internal sealed class KirbySnapshot
     public bool KirbyActive { get; set; } = true;
     public EnemyBinding[] Enemies { get; set; } = [];
     public HostBodySnapshot? HostBody { get; set; }
+    // The F slot and any F press in progress (#102); absent in older saves.
+    public FSlotSnapshot? FSlot { get; set; }
     public byte[] Machine { get; set; } = [];
 
     public string Encode()

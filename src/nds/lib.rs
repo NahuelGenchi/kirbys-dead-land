@@ -129,6 +129,7 @@ pub unsafe extern "C" fn kssu_open(
         native_trace("open: ROM validated");
         let state = CStr::from_ptr(state_path).to_str().ok()?.to_owned();
         let mut saved = fs::read(&state).ok()?;
+        let hook = take_hook_trailer(&mut saved);
         let metadata = read_metadata(&saved);
         if metadata.is_some() {
             saved.truncate(saved.len() - metadata_len(&saved));
@@ -155,6 +156,7 @@ pub unsafe extern "C" fn kssu_open(
         if !nds.read_savestate_bytes(&mut saved) {
             return None;
         }
+        restore_hook(hook);
         native_trace("open: snapshot loaded; returning handle");
         Some(Box::into_raw(Box::new(Bridge {
             nds,
@@ -358,6 +360,7 @@ pub unsafe extern "C" fn kssu_save_state(
     let b = &mut *(handle as *mut Bridge);
     let mut data = b.nds.savestate();
     append_metadata(&mut data, &b.proxies);
+    append_hook_trailer(&mut data);
     if fs::write(path, data).is_ok() {
         0
     } else {
@@ -927,6 +930,7 @@ pub unsafe extern "C" fn kssu_load_state(
     if data.len() < 16 || data.get(..4) != Some(b"MELN") {
         return -4;
     }
+    let hook = take_hook_trailer(&mut data);
     let metadata = read_metadata(&data);
     if metadata.is_some() {
         data.truncate(data.len() - metadata_len(&data));
@@ -940,6 +944,7 @@ pub unsafe extern "C" fn kssu_load_state(
         b.anchors.clear();
         b.far_pending = None;
         b.far_shown.clear();
+        restore_hook(hook);
         0
     } else {
         -5
@@ -1787,3 +1792,117 @@ pub unsafe extern "C" fn kssu_far_objs(handle: *mut std::ffi::c_void, dest: *mut
     ptr::copy_nonoverlapping(b.far_shown.as_ptr(), dest, count);
     count as i32
 }
+
+// ---- Original ability change (#102) ----
+// The F slot switches Kirby's copy through the ROM's own ability routine
+// SetAbility(actor, record, ability) at 0x0211B734, the routine every original
+// path uses (the swallow, each limited ability's last-use revert, the original
+// give-ability routine 0x020AF020). The checked melonDS hook
+// (tools/nds_call_patch.py) runs it once at the entry of the player's per-frame
+// update, 0x020B2714, then resumes that update. It loads the ability's
+// graphics from the cartridge, so it can take 2-5 frames to return.
+extern "C" {
+    static mut kssu_hook_at: u32;
+    static mut kssu_hook_fn: u32;
+    static mut kssu_hook_state: u32;
+    static mut kssu_hook_args: [u32; 4];
+    static mut kssu_hook_saved: [u32; 15];
+}
+const PLAYER_SLOT: usize = 0x49df0;
+const PLAYER_RECORD: u32 = 0x020baf68;
+const PLAYER_UPDATE: u32 = 0x020b2714;
+const SET_ABILITY: u32 = 0x0211b734;
+const ABILITY_MIKE: u8 = 22;
+/// Mike's remaining shouts; its copy sets 3 and each shout takes one off.
+const MIKE_SHOUTS: usize = 0x05b6b1;
+const HOOK_MAGIC: &[u8; 8] = b"KSSUHK01";
+const HOOK_WORDS: usize = 3 + 4 + 15;
+
+/// Arm one original ability change. Returns 0 when armed, -2 while the original
+/// would refuse it (the give-ability routine's own test: an active player standing,
+/// walking, airborne or swimming, field 2 == 1 and action group 4, 6, 7 or 8;
+/// an attack, a mouthful, a slide, a recoil or a ladder are other groups), -3
+/// while a change is still pending, and -4 when the player is not the expected object.
+#[no_mangle]
+pub unsafe extern "C" fn kssu_set_ability(handle: *mut std::ffi::c_void, ability: u8) -> i32 {
+    if handle.is_null() || !(1..=25).contains(&ability) {
+        return -1;
+    }
+    if matches!(kssu_hook_state, 1 | 2) {
+        return -3;
+    }
+    let inhaling = kssu_action_flags(handle) & 1 != 0;
+    let r = (&*(handle as *mut Bridge)).nds.main_ram();
+    let actor = u32at(r, PLAYER_SLOT);
+    let Some(a) = off(actor, 0x44) else {
+        return -4;
+    };
+    if u32at(r, a + 0x30) != PLAYER_UPDATE || u32at(r, a + 0x40) != PLAYER_RECORD {
+        return -4;
+    }
+    let record = (PLAYER_RECORD - BASE) as usize;
+    if inhaling || r[record + 0x12] != 1 || !matches!(r[record + 0x19], 4 | 6 | 7 | 8) {
+        return -2;
+    }
+    kssu_hook_args = [actor, PLAYER_RECORD, ability as u32, 0];
+    kssu_hook_fn = SET_ABILITY;
+    kssu_hook_at = PLAYER_UPDATE;
+    kssu_hook_state = 1;
+    0
+}
+/// 1 while an armed ability change has not returned yet, otherwise 0.
+#[no_mangle]
+pub unsafe extern "C" fn kssu_ability_change_pending(handle: *mut std::ffi::c_void) -> i32 {
+    if handle.is_null() {
+        return -1;
+    }
+    if kssu_hook_state == 3 {
+        kssu_hook_state = 0;
+    }
+    matches!(kssu_hook_state, 1 | 2) as i32
+}
+/// Set Mike's remaining shouts (1-3) while Kirby holds Mike, before the shout.
+#[no_mangle]
+pub unsafe extern "C" fn kssu_set_mike_shouts(handle: *mut std::ffi::c_void, shouts: u8) -> i32 {
+    if handle.is_null() || !(1..=3).contains(&shouts) {
+        return -1;
+    }
+    let r = (&mut *(handle as *mut Bridge)).nds.main_ram_mut();
+    if r[(PLAYER_RECORD - BASE) as usize + 0x13] != ABILITY_MIKE {
+        return -2;
+    }
+    r[MIKE_SHOUTS] = shouts;
+    0
+}
+// The hook state belongs to the machine: a snapshot taken while a change loads
+// must resume it, and any other snapshot clears it.
+unsafe fn append_hook_trailer(data: &mut Vec<u8>) {
+    let words = [kssu_hook_state, kssu_hook_at, kssu_hook_fn];
+    for v in words.iter().chain(kssu_hook_args.iter()).chain(kssu_hook_saved.iter()) {
+        data.extend(v.to_le_bytes());
+    }
+    data.extend(HOOK_MAGIC);
+}
+fn take_hook_trailer(data: &mut Vec<u8>) -> Option<[u32; HOOK_WORDS]> {
+    let len = HOOK_WORDS * 4 + 8;
+    if data.len() < len + 16 || &data[data.len() - 8..] != HOOK_MAGIC {
+        return None;
+    }
+    let start = data.len() - len;
+    let mut words = [0u32; HOOK_WORDS];
+    for (i, w) in words.iter_mut().enumerate() {
+        *w = u32at(data, start + i * 4);
+    }
+    data.truncate(start);
+    Some(words)
+}
+unsafe fn restore_hook(words: Option<[u32; HOOK_WORDS]>) {
+    let w = words.unwrap_or([0; HOOK_WORDS]);
+    // A finished change (3) needs nothing more; only armed or running ones resume.
+    kssu_hook_state = if matches!(w[0], 1 | 2) { w[0] } else { 0 };
+    kssu_hook_at = w[1];
+    kssu_hook_fn = w[2];
+    kssu_hook_args.copy_from_slice(&w[3..7]);
+    kssu_hook_saved.copy_from_slice(&w[7..]);
+}
+

@@ -5,6 +5,7 @@ from pathlib import Path
 from oracle_build import ROOT,WRAPPER,CORE,BRIDGE,REPAIRS,git_output
 from nds_vendor import GPU_EDITS,check_gpu_patch
 from nds_graphics_patch import GRAPHICS_WRAPPER_FILES,GRAPHICS_CORE_FILES,check_graphics_patch
+from nds_call_patch import CALL_CORE_FILES,check_call_patch
 
 def main():
     vendor=ROOT/'vendor/melon-rs'
@@ -13,13 +14,14 @@ def main():
     changed=git_output(vendor,'diff','--name-only').splitlines()
     if any(path not in (BRIDGE,'melonDS',*GPU_EDITS,*GRAPHICS_WRAPPER_FILES) for path in changed):
         raise SystemExit('Unexpected wrapper changes; left untouched.')
-    if any(path not in GRAPHICS_CORE_FILES for path in git_output(vendor/'melonDS','diff','--name-only').splitlines()):
+    if any(path not in (*GRAPHICS_CORE_FILES,*CALL_CORE_FILES) for path in git_output(vendor/'melonDS','diff','--name-only').splitlines()):
         raise SystemExit('Unexpected core changes; left untouched.')
     original=subprocess.check_output(['git','-C',str(vendor),'show',f'{WRAPPER}:{BRIDGE}'],text=True)
     repaired=original
     for before,after in REPAIRS:repaired=repaired.replace(before,after)
     if (vendor/BRIDGE).read_text()!=repaired:raise SystemExit('Required checked camera shim repairs missing; run tools/oracle_build.py.')
     check_graphics_patch(vendor,WRAPPER,CORE,apply=True)
+    check_call_patch(vendor,CORE,apply=True)
     check_gpu_patch(vendor,WRAPPER,apply=True)
     crate=ROOT/'bridge';crate.mkdir(exist_ok=True)
     source=Path(__file__).resolve().parents[1]/'src/nds/lib.rs'

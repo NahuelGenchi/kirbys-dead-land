@@ -62,6 +62,12 @@ preserved; generated assets and native dependencies remain in the private data r
   Flask, Cursed Flask) are hidden; the Collector's gates no longer need Health
   Flask I. See
   [health flask and fountains](docs/GAMEPLAY_FIDELITY.md#health-flask-and-fountains-intentional-deviation).
+- Crash, Paint, Mike and Cook are limited-use abilities (#102). They are never
+  swallowed: no enemy gives them, and their floor item is taken with Interact
+  (R by default) into the F slot, replacing (and dropping) any stored one. F
+  fires the original attack while Kirby keeps his copy ability; Mike has three
+  shouts, the others one use. See
+  [F slot](docs/GAMEPLAY_FIDELITY.md#f-slot-limited-use-abilities-intentional-deviation).
 - Original inhale, mouthful, Down-to-swallow, spit, flight, guard, slide and copy
   discard are executed by the ROM. All 24 original copy forms load through the
   original transformation code, rather than replacing them with host weapons.
@@ -173,6 +179,8 @@ Existing Dead Cells bindings are used:
 | Weapon buttons other than a shield (left-click by default), base form | Inhale / spit (original B) |
 | Weapon buttons other than a shield, copied form | Copy attack (original B) |
 | Shield button | Host shield parry and original guard; while copied, only the retained shield |
+| Interact (R by default) on a Crash, Paint, Mike or Cook item | Take it into the F slot |
+| Heal (F by default) | Fire the stored limited-use ability; Kirby keeps his copy ability |
 
 Shared bindings remain shared: if W is assigned to both Up and Jump, it sends
 both actions. Change either binding in the game's controls menu to separate them.
@@ -184,8 +192,8 @@ primary weapon button. The adapter follows the configured actions, so
 remapping them in the game's controls menu also changes Kirby's controls.
 Host tutorials for replaced jump, dodge and Homunculus actions, and the flask's
 "heal" tutorial, are suppressed while playing Kirby; equipment and interaction
-tutorials remain available. The Heal binding (F by default) does nothing for
-Kirby for now; it is reserved for the stored limited-use ability (#102).
+tutorials remain available. The Heal binding (F by default) fires the stored
+limited-use ability; Kirby has no health flask (#101).
 
 ## Verified behavior
 

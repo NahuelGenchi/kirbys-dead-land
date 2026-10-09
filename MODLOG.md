@@ -1601,3 +1601,31 @@ the all-ability rendering tests as full gameplay acceptance.
   `20261008-222204`/`222245` passed. Not run: a generated fountain, flask
   recharge items, a profile that owned the flask at run start, normal play.
 
+## 2026-10-09 — F slot for limited-use abilities (#102)
+
+- Owner request: Crash, Paint, Mike and Cook are never swallowed; Interact (R)
+  takes their item into the F slot (a new one replaces the stored one); F fires
+  it while Kirby keeps his copy; Mike keeps three shouts.
+- Research (private trace build of the bridge: CPU write watch, execution log and
+  call injection; never shipped): the only writer of the copy byte `0x020BAF7B`
+  is the field setter called from `SetAbility(actor, record, ability)` at
+  `0x0211B734`, used by the swallow, each limited ability's revert and the
+  original give-ability routine `0x020AF020` (whose precondition — action group
+  4, 6, 7 or 8 — the bridge copies). Calling it directly fires each limited
+  ability exactly like a swallowed one (reverts on frames 266/404/135/445) with no
+  swallow; it loads graphics for 2–5 frames. Called mid-attack or with a mouthful
+  it leaves Kirby stuck. Mike's shouts are at `0x0205B6B1`.
+- `tools/nds_call_patch.py` adds a checked hook to the pinned ARM9 interpreter
+  that runs one original routine at the player update entry `0x020B2714`; the
+  bridge adds `kssu_set_ability`, `kssu_ability_change_pending`,
+  `kssu_set_mike_shouts` and a `KSSUHK01` savestate trailer.
+- Core `LimitedAbilities`, `FSlot` and `FSequence`; enemies no longer roll limited
+  abilities. Runtime `KirbyFSlot` (Interact take, F press, HUD `skillPotion`
+  icon and count, save), limited floor items are not paired for the inhale, the
+  stored item's damage bonus applies while it fires. New `--input-plan fslot`.
+- Source: `python3 scripts/check.py` passes (408 core assertions);
+  `python3 tools/nds_tests.py` passes 78 cases including `f_slot` and `f_slot_save`.
+- Live (`repros/fslot-102-20261009`): `20261009-010357` took and fired all four,
+  replacement and save; `20261009-010718` restored the slot from the save. Not run:
+  a press lost to a hit, stomp/ladder/water, helper, room change mid-attack, normal play.
+

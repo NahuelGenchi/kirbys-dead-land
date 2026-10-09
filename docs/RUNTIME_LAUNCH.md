@@ -1033,3 +1033,50 @@ saves unchanged. Earlier runs `20261008-220743` to `221046` used a stale build
 (staging does not rebuild) and pressed Interact on the fountain's first frame, so
 it never activated; `221150` and `221251` were the same check before the second
 hit and the flask unlock were added.
+
+## F slot (2026-10-09)
+
+Issue #102. `--input-plan fslot` (`LabFSlotProbe`) runs the whole F slot through
+real host input: base Kirby holds the inhale for 70 frames beside a floor Crash
+item, gets Sword through the original inhale, supplied content and DOWN, then
+takes items with the real Interact binding (action 6, R) and fires them with the
+real Heal binding (action 7, F). It takes Crash and fires it beside a real
+Zombie; takes Mike and fires its three shouts; walks away from the start room's
+own floor items, takes Paint, then Cook (Paint must drop back); fires Cook at a
+Zombie and fires the returned Paint; takes Mike, writes a normal host save
+(`Main.writeSave`), and finally presses F and lands a real host Zombie hit while
+the switch loads. With `--resume-game` it records the restored slot and fires it
+once. It writes `fslot.json` and `fslot-events.txt`. Separate data root
+`repros/fslot-102-20261009` (a copy of `repros/healing-101-20261008`), outfit pack
+`outfit-build-sync/res.pak`, runtime DLL
+`240d134b2c13350f3cc752c038c8c18993c88696aad5ac77023afa8019aaa334`, bridge
+`17420bdc68772f8ea7c442daf91498f1a92ce13108b83a64ce3fefeb8b8d0d0c` (built by
+`tools/nds_build.py` with `tools/nds_call_patch.py`):
+
+```sh
+python3 scripts/stage_runtime.py --data-root ~/.local/share/kirby-dead-cells/repros/fslot-102-20261009 \
+  --original-runtime --outfit-pack "$HOME/.local/share/kirby-dead-cells/outfit-build-sync/res.pak"
+python3 scripts/launch_runtime.py --data-root ~/.local/share/kirby-dead-cells/repros/fslot-102-20261009 \
+  --seconds 170 --start-game --outfit KirbySuperStarUltra --input-plan fslot --capture-fps 2
+python3 scripts/launch_runtime.py --data-root ~/.local/share/kirby-dead-cells/repros/fslot-102-20261009 \
+  --seconds 45 --resume-game --outfit KirbySuperStarUltra --input-plan fslot
+```
+
+`20261009-010357`: the Crash item stayed on the floor through the inhale (never
+paired with a proxy). R took Crash (slot Crash, 1 use, floor item gone, main copy
+Sword). F fired it: the 119-life Zombie died, Sword came back, the slot emptied.
+Mike's three shouts each came back to Sword and emptied the slot after the third.
+Taking Cook over Paint returned `replaced: Paint` and put Paint on the floor
+beside Kirby. Cook fired from F consumed a Zombie and dropped one host food item;
+the returned Paint fired; Sword came back each time. Mike was stored and the save
+written. The hit sent while Mike's switch loaded did no damage (76 → 76), so the
+lost-press retry was not exercised live; the shout fired and Sword came back.
+`20261009-010718` (resume): the slot came back as Mike, 3 uses, its item restored,
+main copy Sword; F fired one shout (2 left) and Sword came back. Both ended at the
+time limit with no fatal log and source saves unchanged. Captures from the earlier
+`20261009-003927` show the HUD F slot with Crash's item icon, empty after it, then
+Mike's icon with 3 and 2. Earlier runs of the same probe (`004146` to `005835`)
+failed only in probe phases: duplicated spawns (the test input runs twice per host
+frame), a focus on other floor items, and a stale Interact press.
+`tools/nds_tests.py` passed all 78 cases, including `f_slot` and `f_slot_save`.
+

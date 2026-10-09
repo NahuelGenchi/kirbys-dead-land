@@ -54,6 +54,7 @@ public sealed class KirbyMod(ModInfo info) : ModBase(info), IOnHeroUpdate,
             KirbyHostSkills.Install();
             KirbyHud.Install();
             KirbyAbilityItems.Install(config.OutfitId);
+            KirbyFSlot.Install();
             camera = new KirbyCamera(config.CameraZoom);
             RegisterProvider(new KirbyNdsProvider(config, Info.ModRoot.GetFilePath(".")));
         }
