@@ -8,12 +8,17 @@ namespace Kirby.Runtime;
 /// Collector in a Kirby run. The panel lists an entry when <c>baseFilter</c>
 /// accepts it, and an upgrade's "unlock N more items" gate reads
 /// <c>countUnlockedItems</c>; a found hidden entry counts there as unlocked, so
-/// the gates move as in a normal run. Nothing is written to the save.
+/// the gates move as in a normal run. While <c>canInvestOnItem</c> checks its
+/// prerequisites (Health Flask I first, then any required item), a hidden entry
+/// counts as unlocked (#101), so a profile that never bought the hidden flask can
+/// still invest. Nothing is written to the save.
 /// </summary>
 internal static class KirbyCollector
 {
     /// <summary>Host item ID → (group, cell cost), read once from the item sheet.</summary>
     private static Dictionary<string, (int Group, int CellCost)>? rows;
+    /// <summary>Depth of <c>canInvestOnItem</c> calls in a Kirby run.</summary>
+    private static int prerequisiteCheck;
 
     /// <summary>Lab-only: list every entry and keep the host count, to compare with the filtered Collector.</summary>
     internal static bool TestUnfiltered;
@@ -31,6 +36,19 @@ internal static class KirbyCollector
         };
         Hook_ItemMetaManager.countUnlockedItems += (orig, meta) =>
             Active() ? CollectorMenu.CountUnlocked(orig(meta), Found(meta)) : orig(meta);
+        Hook_ItemMetaManager.canInvestOnItem += (orig, meta, id) =>
+        {
+            if (!Active()) return orig(meta, id);
+            prerequisiteCheck++;
+            try { return orig(meta, id); }
+            finally { prerequisiteCheck--; }
+        };
+        Hook_ItemMetaManager.hasUnlockedItem += (orig, meta, id) =>
+        {
+            bool unlocked = orig(meta, id);
+            return prerequisiteCheck > 0 && id?.ToString() is { } item && Row(item) is { } row
+                ? CollectorMenu.MeetsPrerequisite(item, row.Group, unlocked) : unlocked;
+        };
     }
 
     private static bool Active() => !TestUnfiltered && KirbyMod.Instance?.ActiveSession is not null;

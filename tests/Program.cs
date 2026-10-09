@@ -930,20 +930,23 @@ Check(SpeedMatch.RiseVelocity(KirbyActions.Jump, -2682) == -2682 && SpeedMatch.R
 
 // Mutations that cannot work for Kirby are not offered (#90).
 {
-    Check(MutationMenu.Hidden.Count == 12, "Twelve mutations that cannot work for Kirby are hidden");
+    Check(MutationMenu.Hidden.Count == 16, "Sixteen mutations that cannot work for Kirby are hidden");
     foreach (var id in new[] { "P_DmgPlantedArrow", "P_AmmoOnHit", "P_Backpack_Melee", "P_Backpack_Ranged", "P_Backpack_Shield",
-                 "P_AttackSpeed_Combo", "P_DmgSkillRanged", "P_DmgSkl", "P_Ammo", "P_DeployedDmg", "P_DeathBomb", "P_ShareDamage" })
+                 "P_AttackSpeed_Combo", "P_DmgSkillRanged", "P_DmgSkl", "P_Ammo", "P_DeployedDmg", "P_DeathBomb", "P_ShareDamage",
+                 "P_Hot", "P_QuickHeal", "P_CorruptedHealing", "P_CursedFlask" })
         Check(MutationMenu.IsHidden(id) && MutationMenu.Hidden[id].Length > 10, $"{id} is hidden with a reason");
     Check(!MutationMenu.IsHidden("P_Bleed") && !MutationMenu.IsHidden("P_NoMobAround") && !MutationMenu.IsHidden("P_HealOnKill") && !MutationMenu.IsHidden("P_DmgNearRanged") &&
-        !MutationMenu.IsHidden(null) && !MutationMenu.IsHidden(""), "Other mutations stay in the menu");
+        !MutationMenu.IsHidden("P_Health") && !MutationMenu.IsHidden("P_HealOnParry") && !MutationMenu.IsHidden(null) && !MutationMenu.IsHidden(""), "Other mutations stay in the menu");
     Check(!MutationMenu.IsHidden("p_ammo"), "Mutation IDs are matched exactly");
 }
 // The Collector hides entries that do nothing for Kirby and still counts them for its gates (#99).
 {
     foreach (var group in new[] { 0, 1, 3, 4, 5 })
         Check(CollectorMenu.Hides("AnyBlueprint", group), $"Weapon and skill group {group} ({CollectorMenu.HiddenGroups[group]}) is hidden");
-    Check(!CollectorMenu.Hides("StartShield", 6) && !CollectorMenu.Hides("Flask4", 9) && !CollectorMenu.Hides("RandomShield", 9) &&
-        !CollectorMenu.Hides("ArmoryUnlock", 9) && !CollectorMenu.Hides("P_Bleed", 12), "Shields, flasks, the starter shield, the armory and usable mutations stay");
+    Check(!CollectorMenu.Hides("StartShield", 6) && !CollectorMenu.Hides("RandomShield", 9) &&
+        !CollectorMenu.Hides("ArmoryUnlock", 9) && !CollectorMenu.Hides("P_Bleed", 12), "Shields, the starter shield, the armory and usable mutations stay");
+    Check(new[] { "Flask1", "Flask2", "Flask3", "Flask4" }.All(id => CollectorMenu.Hides(id, 9)) &&
+        CollectorMenu.Hides("P_Hot", 12) && CollectorMenu.Hides("P_CursedFlask", 12), "Health flask upgrades and flask mutations are hidden (#101)");
     Check(CollectorMenu.Hides("RandomBow", 9) && CollectorMenu.Hides("RandomCC", 9) && CollectorMenu.Hides("BackpackUnlock", 9),
         "Random Starter Bow, Random Melee Weapon and the backpack are hidden");
     Check(CollectorMenu.HiddenUpgrades.Values.All(reason => reason.Length > 10), "Every hidden upgrade has a reason");
@@ -955,10 +958,17 @@ Check(SpeedMatch.RiseVelocity(KirbyActions.Jump, -2682) == -2682 && SpeedMatch.R
         ("Bow2", 5, 25, true),           // hidden, unlocked: the host already counts it
         ("BaseBow", 5, 0, false),        // no cell cost: the host never counts these
         ("RandomBow", 9, 65, false),     // hidden upgrade, locked: counts
-        ("Flask2", 9, 50, false),        // kept and locked: still needs buying
+        ("ArmoryUnlock", 9, 50, false),  // kept and locked: still needs buying
         ("P_Bleed", 12, 30, false),
     };
     Check(CollectorMenu.CountUnlocked(7, found) == 9, "Found, locked, hidden entries with a cell cost count as unlocked");
     Check(CollectorMenu.CountUnlocked(0, []) == 0, "Nothing found adds nothing");
+    Check(CollectorMenu.MeetsPrerequisite("Flask1", 9, false) && CollectorMenu.MeetsPrerequisite("ArmoryUnlock", 9, true) &&
+        !CollectorMenu.MeetsPrerequisite("ArmoryUnlock", 9, false), "A hidden prerequisite counts as owned; a kept one needs buying (#101)");
+}
+// Kirby has no health flask; a fountain heals half his maximum health (#101).
+{
+    Check(Healing.FountainHeal(76) == 38 && Healing.FountainHeal(77) == 39, "A fountain heals half of maximum health, rounded up");
+    Check(Healing.FountainHeal(1) == 1 && Healing.FountainHeal(0) == 0 && Healing.FountainHeal(-5) == 0, "Tiny and empty health pools stay in range");
 }
 Console.WriteLine($"PASS: {assertions} user-rule assertions. No claim of NDS physics or in-game verification.");

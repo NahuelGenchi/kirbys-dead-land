@@ -56,6 +56,12 @@ preserved; generated assets and native dependencies remain in the private data r
   the mutations above. A hidden blueprint you have found counts as unlocked for
   the "unlock N more items" gates. See
   [Collector](docs/GAMEPLAY_FIDELITY.md#collector-intentional-deviation).
+- Kirby has no health flask (#101): F does not heal. He heals by eating Dead
+  Cells food and at health fountains, which heal half his maximum health. Health
+  Flask I–IV and the flask mutations (Extended Healing, Emergency Triage, Tainted
+  Flask, Cursed Flask) are hidden; the Collector's gates no longer need Health
+  Flask I. See
+  [health flask and fountains](docs/GAMEPLAY_FIDELITY.md#health-flask-and-fountains-intentional-deviation).
 - Original inhale, mouthful, Down-to-swallow, spit, flight, guard, slide and copy
   discard are executed by the ROM. All 24 original copy forms load through the
   original transformation code, rather than replacing them with host weapons.
@@ -176,8 +182,10 @@ inhale/spit/attack with a copy ability, **Q** discards it, **Space** jumps, and
 also inhales). Keyboard X is a contextual menu binding; controller X is the
 primary weapon button. The adapter follows the configured actions, so
 remapping them in the game's controls menu also changes Kirby's controls.
-Host tutorials for replaced jump, dodge and Homunculus actions are suppressed
-while playing Kirby; healing, equipment and interaction tutorials remain available.
+Host tutorials for replaced jump, dodge and Homunculus actions, and the flask's
+"heal" tutorial, are suppressed while playing Kirby; equipment and interaction
+tutorials remain available. The Heal binding (F by default) does nothing for
+Kirby for now; it is reserved for the stored limited-use ability (#102).
 
 ## Verified behavior
 

@@ -7,6 +7,7 @@ namespace Kirby.Core;
 /// backpack weapon or switching weapons have nothing to act on, and skill-use
 /// triggers never fire because skills become ability items too. Mutations of
 /// "ranged" attacks go as well: every copy attack counts as melee in a Kirby run.
+/// Kirby has no health flask (#101), so the mutations that change or refill it go too.
 /// </summary>
 public static class MutationMenu
 {
@@ -25,6 +26,10 @@ public static class MutationMenu
         ["P_DeployedDmg"] = "Support needs a deployed skill; Kirby deploys none (his helper's position is not readable).",
         ["P_DeathBomb"] = "Parting Gift follows kills by ranged attacks; Kirby has no ranged weapons.",
         ["P_ShareDamage"] = "Networking marks enemies hit by ranged attacks; Kirby has no ranged weapons.",
+        ["P_Hot"] = "Extended Healing changes how the health flask heals; Kirby has no flask.",
+        ["P_QuickHeal"] = "Emergency Triage changes how the health flask heals; Kirby has no flask.",
+        ["P_CorruptedHealing"] = "Tainted Flask follows health flask use and refills its charges; Kirby has no flask.",
+        ["P_CursedFlask"] = "Cursed Flask changes the health flask's charges; Kirby has no flask.",
     };
 
     public static bool IsHidden(string? itemId) => itemId is not null && Hidden.ContainsKey(itemId);

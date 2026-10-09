@@ -1002,3 +1002,34 @@ real panel but wrote no file because the panel pauses the level;
 `20261008-194902`/`194947` were the same pair before the gate check (count 0 and
 9, same lists), and `20261008-195058`/`195152` matched the final pair on a build
 that differed only in the probe's layout.
+
+## Healing without the flask (2026-10-08)
+
+Issue #101. `--input-plan healing` (`LabHealingProbe`) unlocks Health Flask I
+through the host's own unlock path if the profile lacks it, hurts Kirby with two
+real host Zombie attacks, holds the real Heal binding (action 7) for 90 frames,
+then builds a real `Fountain` at Kirby's cell and presses the real Interact
+binding (action 6) once a second while Kirby is focused on it. It writes
+`healing.json` and `healing-events.txt`. Separate data root
+`repros/healing-101-20261008` (a copy of `repros/collector-99-20261008`), outfit
+pack `outfit-build-sync/res.pak`, runtime DLL
+`6048c94f10576df329996a0e1c396fa9273ac705483d19c62ccc71660e760ea5`:
+
+```sh
+python3 scripts/stage_runtime.py --data-root ~/.local/share/kirby-dead-cells/repros/healing-101-20261008 \
+  --original-runtime --outfit-pack "$HOME/.local/share/kirby-dead-cells/outfit-build-sync/res.pak"
+python3 scripts/launch_runtime.py --data-root ~/.local/share/kirby-dead-cells/repros/healing-101-20261008 \
+  --seconds 55 --start-game --outfit KirbySuperStarUltra --input-plan healing --capture-fps 1
+```
+
+`20261008-221759`: life 76 → 16 after the hits; F held, no `HealFlask.onStart`,
+still 16; fountain heal asked 76, gave 38, life and source 54; fountain used. The
+HUD capture after the flask unlock has no F slot. In the same root, the Collector
+probe (`--probe-collector`, now also relocking Health Flask I, Flask II and
+Extended Healing, with Gold Reserves I kept) ran as `20261008-221942`, and the
+mutation menu pair as `20261008-222204` (unfiltered) and `20261008-222245`
+(filtered). Every run ended at its time limit with no fatal log and the source
+saves unchanged. Earlier runs `20261008-220743` to `221046` used a stale build
+(staging does not rebuild) and pressed Interact on the fountain's first frame, so
+it never activated; `221150` and `221251` were the same check before the second
+hit and the flask unlock were added.
