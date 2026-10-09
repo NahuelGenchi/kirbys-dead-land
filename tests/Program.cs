@@ -971,4 +971,88 @@ Check(SpeedMatch.RiseVelocity(KirbyActions.Jump, -2682) == -2682 && SpeedMatch.R
     Check(Healing.FountainHeal(76) == 38 && Healing.FountainHeal(77) == 39, "A fountain heals half of maximum health, rounded up");
     Check(Healing.FountainHeal(1) == 1 && Healing.FountainHeal(0) == 0 && Healing.FountainHeal(-5) == 0, "Tiny and empty health pools stay in range");
 }
+// Limited-use abilities live in the F slot and are never swallowed (#102).
+{
+    Check(LimitedAbilities.Ids.SequenceEqual(["Paint", "Mike", "Crash", "Cook"]) && !LimitedAbilities.IsLimited("Sleep") &&
+        !LimitedAbilities.IsLimited("crash") && !LimitedAbilities.IsLimited(null), "Paint, Mike, Crash and Cook are the limited-use abilities");
+    Check(LimitedAbilities.Uses("Mike") == 3 && LimitedAbilities.Uses("Crash") == 1, "Mike keeps three shouts, the others one use");
+    var slot = new FSlot();
+    Check(slot.IsEmpty && slot.Take("Crash") is null && slot.Ability == "Crash" && slot.Uses == 1, "Taking into an empty slot");
+    Check(slot.Take("Mike") == "Crash" && slot.Ability == "Mike" && slot.Uses == 3, "A new limited ability replaces the stored one");
+    Check(!slot.Spend() && !slot.Spend() && slot.Spend() && slot.IsEmpty && slot.Uses == 0, "Mike empties the slot after its third shout");
+    try { slot.Take("Sword"); throw new Exception("Sword accepted"); } catch (ArgumentException) { Check(slot.IsEmpty, "A swallowable ability never goes in the F slot"); }
+    slot.Restore("Mike", 2);
+    Check(slot.Ability == "Mike" && slot.Uses == 2, "A saved slot is restored");
+    try { slot.Restore("Crash", 2); throw new Exception("Bad save accepted"); } catch (ArgumentException) { Check(true, "Saved uses beyond the ability's own are refused"); }
+    var all = KirbyAbilityIdsForTests.All;
+    var picked = new HashSet<string>();
+    for (int i = 0; i < 20; i++) { int k = i; picked.Add(new KirbyRules(all, n => k % n).SelectCopyAbility()); }
+    Check(picked.Count == 20 && !picked.Any(LimitedAbilities.IsLimited), "Enemies give every ability but the limited-use ones");
+    var fRules = new KirbyRules(all, _ => 0);
+    fRules.Stored.Take("Paint"); fRules.Reset();
+    Check(fRules.Stored.IsEmpty, "A new run empties the F slot");
+    Check(AbilityDescriptions.Describe("Crash").EndsWith(AbilityDescriptions.LimitedControls) &&
+        AbilityDescriptions.Describe("Sword").EndsWith(AbilityDescriptions.Controls), "Limited items describe Interact and F");
+}
+// One F press through a simulated original machine (#102).
+{
+    // ROM model: a change loads for 3 frames; an attack held for its length reverts to base (1);
+    // a hit's recoil (hurtAt, 20 frames) swallows attack presses; changes need a free Kirby.
+    (FOutcome? Outcome, byte Ability, int Frames, int Presses, int Limits, int Requests) RunF(byte stored, byte main, int attackFrames,
+        Func<int, bool> free, FSequence? sequence = null, byte start = 0, int stopAt = int.MaxValue, int hurtAt = -1, bool neverFires = false)
+    {
+        var f = sequence ?? new FSequence();
+        if (sequence is null) f.Begin(stored, main);
+        byte ability = start == 0 ? main : start; byte target = 0; int loading = 0, attack = start == stored ? attackFrames : -1, presses = 0, limits = 0, requests = 0;
+        for (int frame = 0; frame < 3000; frame++)
+        {
+            if (frame == stopAt) return (null, ability, frame, presses, limits, requests);
+            bool recoil = hurtAt >= 0 && frame >= hurtAt && frame < hurtAt + 20;
+            bool isFree = free(frame) && attack < 0 && !recoil;
+            var command = f.Advance(ability, loading > 0, isFree, a => { if (!isFree || loading > 0) return false; requests++; target = a; loading = 3; return true; });
+            if (command.PressAttack) { presses++; if (attack < 0 && ability == stored && !recoil && !neverFires) attack = attackFrames; }
+            if (command.LimitShouts) limits++;
+            if (command.Finished is { } done) return (done, ability, frame, presses, limits, requests);
+            if (loading > 0 && --loading == 0) ability = target;
+            if (attack > 0 && --attack == 0) { ability = 1; attack = -1; }
+        }
+        return (null, ability, 3000, presses, limits, requests);
+    }
+    var crash = RunF(23, 18, 266, _ => true);
+    Check(crash.Outcome == new FOutcome(true, true) && crash.Ability == 18, "Crash fires and the main Sword comes back");
+    Check(crash.Presses == FSequence.FireFrames && crash.Limits == 0 && crash.Requests == 2, "One switch, one attack press, one restore");
+    Check(crash.Frames < 266 + 20, "The press costs only a few frames beyond the original attack");
+    var mike = RunF(22, 2, 121, _ => true);
+    Check(mike.Outcome == new FOutcome(true, true) && mike.Limits == 1, "Mike is limited to one shout per press");
+    var bare = RunF(21, 1, 404, _ => true);
+    Check(bare.Outcome == new FOutcome(true, true) && bare.Ability == 1 && bare.Requests == 1, "Without a main copy Kirby simply stays in base form");
+    var waited = RunF(24, 18, 445, frame => frame >= 10);
+    Check(waited.Outcome == new FOutcome(true, true), "A press waits while Kirby finishes another action");
+    var refused = RunF(24, 18, 445, _ => false);
+    Check(refused.Outcome == new FOutcome(false, true) && refused.Frames == FSequence.WaitLimit - 1 && refused.Ability == 18,
+        "A press Kirby cannot take is dropped without firing");
+    var lost = RunF(23, 18, 266, frame => frame < 20);
+    Check(lost.Outcome == new FOutcome(true, false), "A main copy that cannot come back is reported lost");
+    var hurt = RunF(23, 18, 266, _ => true, hurtAt: 2);
+    Check(hurt.Outcome == new FOutcome(true, true) && hurt.Ability == 18 && hurt.Presses > FSequence.FireFrames,
+        "A press lost to a hit's recoil is pressed again once Kirby is free");
+    var dud = RunF(23, 18, 266, _ => true, neverFires: true);
+    Check(dud.Outcome == new FOutcome(false, true) && dud.Ability == 18 && dud.Presses == FSequence.FireFrames * (1 + FSequence.MaxRetries),
+        "If the stored ability never fires, Kirby gets his main copy back and keeps the use");
+    var f = new FSequence(); f.Begin(23, 18);
+    var half = RunF(23, 18, 266, _ => true, f, stopAt: 100);
+    var saved = f.Capture();
+    Check(saved.Step == FStep.Attacking && saved.Stored == 23 && saved.Main == 18, "A press in progress is captured");
+    var resumed = new FSequence(); resumed.Resume(saved);
+    var after = RunF(23, 18, 100, _ => true, resumed, start: 23);
+    Check(after.Outcome == new FOutcome(true, true) && after.Ability == 18, "A saved press resumes and restores the main copy");
+    var waiting = new FSequence(); waiting.Resume(new FProgress(FStep.Waiting, 23, 18, false, false));
+    Check(!waiting.Active && !new FSequence().Begin(1, 18) && !new FSequence().Begin(23, 0), "A waiting press is not resumed; invalid presses are refused");
+}
 Console.WriteLine($"PASS: {assertions} user-rule assertions. No claim of NDS physics or in-game verification.");
+static class KirbyAbilityIdsForTests
+{
+    public static readonly string[] All = ["Cutter", "Mirror", "Beam", "Fighter", "Suplex", "YoYo", "Wheel", "Bomb", "Ice", "Fire", "Plasma", "Ninja",
+        "Stone", "Wing", "Jet", "Copy", "Sword", "Hammer", "Parasol", "Paint", "Mike", "Crash", "Cook", "Sleep"];
+}
+

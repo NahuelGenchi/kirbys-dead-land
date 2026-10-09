@@ -11,6 +11,8 @@ public sealed unsafe class NdsRuntime : IDisposable
     private nint handle;
     private static nint library;
     private static delegate* unmanaged[Cdecl]<nint, int, int, int> movePlayer;
+    private static delegate* unmanaged[Cdecl]<nint, byte, int> setAbility, setMikeShouts;
+    private static delegate* unmanaged[Cdecl]<nint, int> abilityChangePending;
     private bool firstStep = true, firstWorld = true;
     // Kirby's original screen position after the latest source frame, taken
     // before the next World call rebases his coordinates.
@@ -50,6 +52,14 @@ public sealed unsafe class NdsRuntime : IDisposable
             throw new InvalidOperationException("The native bridge does not match this runtime. Rebuild and stage both components together.");
         if (movePlayer == null && NativeLibrary.TryGetExport(library, "kssu_move_player", out nint move))
             movePlayer = (delegate* unmanaged[Cdecl]<nint, int, int, int>)move;
+        if (setAbility == null && NativeLibrary.TryGetExport(library, "kssu_set_ability", out nint set) &&
+            NativeLibrary.TryGetExport(library, "kssu_ability_change_pending", out nint pending) &&
+            NativeLibrary.TryGetExport(library, "kssu_set_mike_shouts", out nint shouts))
+        {
+            setAbility = (delegate* unmanaged[Cdecl]<nint, byte, int>)set;
+            abilityChangePending = (delegate* unmanaged[Cdecl]<nint, int>)pending;
+            setMikeShouts = (delegate* unmanaged[Cdecl]<nint, byte, int>)shouts;
+        }
         LabActivationTrace.Mark("Native Open begin");
         handle = Native.Open(Path.GetFullPath(rom), Path.GetFullPath(state));
         LabActivationTrace.Mark("Native Open returned");
@@ -167,6 +177,33 @@ public sealed unsafe class NdsRuntime : IDisposable
         Check();
         if (movePlayer == null) throw new NotSupportedException("The native bridge cannot move Kirby alone. Rebuild and stage it with this runtime.");
         Result(movePlayer(handle, dxRaw, dyRaw));
+    }
+    /// <summary>The bridge can change Kirby's copy through the original ability routine (#102).</summary>
+    public static bool CanChangeAbility => setAbility != null;
+    /// <summary>
+    /// Ask the original ability routine for this copy byte (1 is base form) on the
+    /// next player update. False while the original would refuse it (Kirby is not
+    /// standing, walking, airborne or swimming) or a change is still loading.
+    /// </summary>
+    public bool RequestAbility(byte ability)
+    {
+        Check();
+        if (setAbility == null) return false;
+        int result = setAbility(handle, ability);
+        if (result is -2 or -3) return false;
+        Result(result);
+        return true;
+    }
+    /// <summary>A requested ability change has not returned yet (it loads graphics for 2–5 frames).</summary>
+    public bool AbilityChangePending
+    {
+        get { Check(); if (abilityChangePending == null) return false; int value = abilityChangePending(handle); Result(value); return value != 0; }
+    }
+    /// <summary>Set Mike's remaining shouts before a shout; false unless Kirby holds Mike.</summary>
+    public bool SetMikeShouts(byte shouts)
+    {
+        Check();
+        return setMikeShouts != null && setMikeShouts(handle, shouts) == 0;
     }
     public void Dispose()
     {

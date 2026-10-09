@@ -39,7 +39,13 @@ public static class AbilityDescriptions
         ["Sleep"] = "Kirby falls asleep and cannot attack until he wakes up.",
     };
 
-    /// <summary>The card text for an ability: its summary, then the shared controls.</summary>
-    public static string Describe(string abilityId) =>
-        Summaries.TryGetValue(abilityId, out string? summary) ? $"{summary}\n{Controls}" : Controls;
+    /// <summary>Controls of a limited-use ability (#102): never swallowed, fired from the F slot.</summary>
+    public const string LimitedControls = "Interact: take it into the F slot. F: use it; Kirby keeps his copy ability.";
+
+    /// <summary>The card text for an ability: its summary, then its controls.</summary>
+    public static string Describe(string abilityId)
+    {
+        string controls = LimitedAbilities.IsLimited(abilityId) ? LimitedControls : Controls;
+        return Summaries.TryGetValue(abilityId, out string? summary) ? $"{summary}\n{controls}" : controls;
+    }
 }

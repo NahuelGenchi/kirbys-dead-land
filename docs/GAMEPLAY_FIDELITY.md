@@ -829,6 +829,66 @@ had no F slot, and the captured fountain matched the owner's screenshot. Not run
 a fountain placed by the level generator, a flask recharge item, Captain Chicken,
 infection, and a profile that already owned the flask when the run started.
 
+### F slot: limited-use abilities (intentional deviation)
+
+Issue #102. In the original, Crash, Paint, Mike and Cook are copied by
+swallowing an enemy and replace Kirby's ability until used (Mike after three
+shouts). The owner wants them kept apart: they are never swallowed, Kirby keeps
+his main copy, and F (the host Heal binding, action 7, which #101 freed) fires
+the stored one.
+
+- **Never swallowed.** No enemy carries them: `KirbyRules.SelectCopyAbility`
+  draws only from the other twenty abilities (an Elite still gives Sword). Their
+  floor ability items still replace host weapons and skills like the others, but
+  are never paired with a source proxy, so the original inhale does not pull them
+  in; their item card names Interact and F instead of the copy controls.
+- **Taken with Interact.** Interact (R by default) on such an item takes it into
+  the F slot (`Rules.Stored`, item kept by `KirbyFSlot`) with its full uses: three
+  for Mike, one for the others. A stored one is replaced and its item is put back
+  on the floor under Kirby, as Dead Cells swaps a weapon. No pickup sound or item
+  cinematic plays.
+- **Fired through the original machine.** F asks the bridge to run the ROM's own
+  ability routine (`SetAbility`, see
+  [the bridge](NDS_BRIDGE.md#original-ability-change-102)) with the stored ability,
+  then holds the original attack button for three frames, waits for the ROM's own
+  return to base form after the use, and runs the routine again with Kirby's main
+  copy (none from base form). The switch loads in 2–5 frames, so the attack starts
+  about four frames after F; the rest is the original attack (Crash reverts after
+  266 frames, Paint 404, Cook 445, a Mike shout about 121). Mike's shout counter is
+  set to one before each press, so each press is one shout and the slot counts the
+  three. Nothing is swallowed and no copy star appears. Copy tracking, the HUD
+  copy slot and the main copy's ability item stay on the main copy throughout.
+- **Only when Kirby is free.** The routine is only run when the original's own
+  give-ability routine would allow it: standing, walking, airborne or swimming.
+  Called during an attack or with a mouthful, it left Kirby stuck in the attack
+  action, so a press waits up to half a second for Kirby to be free and is
+  otherwise dropped. A hit's recoil before the attack starts can swallow the
+  press; Kirby still holding the stored ability and free again is pressed again
+  (up to three times), then switched straight back to his main copy with the use
+  kept. In the attack itself the original makes Kirby immune to the hit.
+- **Damage and rewards.** Hits use the stored item's own Dead Cells damage bonus
+  (level, "+", Legendary) instead of the main copy's. Cook still drops host food
+  from each ordinary enemy it consumes. The stored item's affixes do not trigger.
+- **HUD and saves.** The HUD's own F slot (the flask's `skillPotion`) shows the
+  stored ability's item icon, with Mike's remaining shouts as its count. The Kirby
+  save keeps the slot, its item's level, quality and affixes, and any F press in
+  progress; the bridge keeps a switch that was loading in its own savestate
+  trailer.
+
+Evidence: core tests pin the slot, the enemy draw and the press (a simulated
+machine with load time, reverts, a refusing state, a hit before the attack, a
+stored ability that never fires and a saved press). Bridge cases `f_slot` and
+`f_slot_save` (`tools/nds_tests.py`) cover the refusal during an attack, the
+switch, Crash's revert on frame 266, the restore and a save taken mid-switch.
+Live runs `20261009-010357` and `20261009-010718` (see
+[RUNTIME_LAUNCH.md](RUNTIME_LAUNCH.md#f-slot-2026-10-09)) took and fired all four
+abilities with real Interact and F presses from a swallowed Sword, killed real
+Zombies with Crash and Cook (one food item), counted Mike's three shouts, dropped
+a replaced Paint back on the floor, and restored the slot from a host save. Not
+run: a press lost to a hit (the live hit during the switch did no damage), F
+during a stomp, on a ladder or under water, the helper, a room change during the
+attack, Elite or Boss targets, and normal play with `./play-kirby`.
+
 ### Host elevators (deviation)
 
 Dead Cells elevators (`en.inter.Elevator` and its `SimpleElevator`,
@@ -1313,7 +1373,9 @@ addition built from host items and the original inhale and swallow.
   Kirby, a host weapon other than a shield, or a skill (host kind `Active`),
   becomes a random ability item, chosen uniformly among the 24 like an enemy's
   copy and not from the level seed. Shields, amulets, food, gold, blueprints and
-  keys stay. Saved levels are unserialized without `initItem` and keep their
+  keys stay. Crash, Paint, Mike and Cook items are taken with Interact into the F
+  slot instead of being inhaled ([F slot](#f-slot-limited-use-abilities-intentional-deviation)).
+  Saved levels are unserialized without `initItem` and keep their
   items. Shop booths are a separate entity and still sell host weapons and
   skills (#58). The run's starting Rusty Sword is equipped by the host, not
   dropped; it stays in its slot until the first copy replaces it (#39 owns the

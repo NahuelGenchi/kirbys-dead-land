@@ -56,8 +56,12 @@ internal static class KirbyAbilityItems
             // to take it instead. A long press still recycles it for gold.
             // A long press normally recycles it; with the host's long-press pickup
             // option it would pick it up instead, which Kirby never does.
+            // A limited-use ability is never swallowed: Interact takes it into the F slot (#102).
             if ((!longPress || drop.longPressPickup) && IsAbilityItem(drop.item) && !drop.destroyed)
+            {
+                if (IsLimited(drop.item) && KirbyFSlot.Take(by, drop)) return;
                 drop.popError("Inhale and swallow it to copy".AsHaxeString(), null);
+            }
             else orig(drop, by, longPress);
         };
     }
@@ -67,8 +71,15 @@ internal static class KirbyAbilityItems
 
     public static bool IsAbilityItem(InventItem? item) => AbilityOf(item) is not null;
 
-    /// <summary>A floor ability item, the only kind of floor item paired with a proxy.</summary>
-    public static bool IsAbilityDrop(dc.Entity entity) => entity is ItemDrop { destroyed: false } drop && IsAbilityItem(drop.item);
+    /// <summary>A limited-use ability's item (#102): taken into the F slot, never inhaled.</summary>
+    public static bool IsLimited(InventItem? item) => LimitedAbilities.IsLimited(AbilityOf(item));
+
+    /// <summary>
+    /// A floor ability item Kirby can inhale, the only kind of floor item paired
+    /// with a proxy. A limited-use ability's item is never inhaled (#102).
+    /// </summary>
+    public static bool IsAbilityDrop(dc.Entity entity) =>
+        entity is ItemDrop { destroyed: false } drop && IsAbilityItem(drop.item) && !IsLimited(drop.item);
 
     /// <summary>The original copy byte (2..25) of a floor ability item, or 0.</summary>
     public static byte CopyByte(dc.Entity entity)
@@ -88,6 +99,33 @@ internal static class KirbyAbilityItems
         if (!item.hasAffix(colorless)) item.addAffix(colorless, Ref<bool>.In(true));
         return item;
     }
+
+    /// <summary>A saved ability item: its level, "+", Legendary and carried affixes.</summary>
+    public static InventItem Create(string ability, int itemLevel, int qualityUps, bool legendary, IEnumerable<string> affixes)
+    {
+        var item = Create(ability, itemLevel);
+        AddQuality(item, qualityUps, legendary);
+        foreach (string affix in affixes)
+        {
+            var id = affix.AsHaxeString();
+            if (!item.hasAffix(id) && item.canReceiveAffix(id)) item.addAffix(id, Ref<bool>.In(false));
+        }
+        return item;
+    }
+
+    /// <summary>An ability item's own affixes, without Colorless and its quality ones.</summary>
+    public static string[] Affixes(InventItem? item)
+    {
+        if (item?.affixes is not { } affixes) return [];
+        var result = new List<string>();
+        for (int i = 0; i < affixes.length; i++)
+            if (affixes.getDyn(i)?.ToString() is { } affix && affix is not ("Colorless" or "QualityUp" or "Legendary" or "StartItem"))
+                result.Add(affix);
+        return [.. result];
+    }
+
+    /// <summary>Put an item back on the floor under the hero, with the host's loot bounce.</summary>
+    public static void DropOnFloor(Hero hero, InventItem item) => Drop(hero, item, hero.cx, hero.cy, pop: true);
 
     private static bool KirbyRun() => string.Equals(dc.pr.Game.Class.ME?.user?.heroSkin?.ToString(), outfitId, StringComparison.Ordinal);
 

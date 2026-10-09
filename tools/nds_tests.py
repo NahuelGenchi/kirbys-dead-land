@@ -627,6 +627,60 @@ def run_case(name):
                     damage.append(hp-q.hp);hp=q.hp
             assert damage==[18,16], f'Source Sword combo damage/debounce changed: {damage}'
             return {'original_collision_damage_events':damage,'remaining_native_hp':hp}
+        if name in ('f_slot','f_slot_save'):
+            # #102: the stored ability through the original SetAbility routine, never the swallow.
+            l=b.lib
+            for fn in ('kssu_set_ability','kssu_set_mike_shouts'):getattr(l,fn).argtypes=[C.c_void_p,C.c_uint8]
+            l.kssu_ability_change_pending.argtypes=[C.c_void_p]
+            ability=lambda:b.read(0x020baf7b,1)[0]
+            def change(target,limit=20):
+                assert l.kssu_set_ability(b.handle,target)==0
+                for frame in range(1,limit+1):
+                    b.step()
+                    if not l.kssu_ability_change_pending(b.handle):
+                        assert ability()==target,(ability(),target);return frame
+                raise AssertionError('ability change never returned')
+            transform(b,18)
+            b.step(2,2)  # an inhale-free Sword swing is an attack: the original refuses a change
+            refused=l.kssu_set_ability(b.handle,23);assert refused==-2,refused
+            b.step(0,60)
+            if name=='f_slot_save':
+                import tempfile,os
+                assert l.kssu_set_ability(b.handle,23)==0;b.step()
+                assert l.kssu_ability_change_pending(b.handle)==1
+                path=os.path.join(tempfile.mkdtemp(),'mid.state').encode();b.save(path)
+                assert l.kssu_load_state(b.handle,path)==0;assert l.kssu_ability_change_pending(b.handle)==1
+                for _ in range(20):
+                    b.step()
+                    if not l.kssu_ability_change_pending(b.handle):break
+                assert ability()==23 and b.action_flags()&1==0
+                b.step(2,3)
+                for frame in range(400):
+                    b.step()
+                    if ability()==1:break
+                assert ability()==1
+                return {'resumed_after_mid_change_save':True,'reverted_after':frame+4}
+            switch=change(23)
+            b.step(2,3);revert=None
+            for frame in range(4,400):
+                b.step()
+                if ability()==1:revert=frame;break
+            assert revert==266,revert
+            restore=change(18)
+            hit=False
+            for frame in range(20):
+                b.step(2 if frame<3 else 0)
+                hit=hit or any(b.owns(h['owner']) and h['slot']!=14 for h in b.hits())
+            assert ability()==18 and hit
+            b.step(0,60)
+            mike=change(22);assert l.kssu_set_mike_shouts(b.handle,1)==0 and b.read(0x0205b6b1,1)[0]==1
+            b.step(2,3)
+            for frame in range(4,400):
+                b.step()
+                if ability()==1:break
+            assert ability()==1 and frame<200,frame
+            assert l.kssu_set_mike_shouts(b.handle,1)==-2
+            return {'refused_during_attack':refused,'switch_frames':switch,'crash_revert_frame':revert,'restore_frames':restore,'mike_one_shout_revert':frame}
         raise ValueError(name)
     finally:b.close()
 
@@ -635,7 +689,7 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--case');parser.add_argument('--skip-abilities',action='store_true');args=parser.parse_args()
     if args.case:
         print('RESULT '+json.dumps({'case':args.case,'result':run_case(args.case)}),flush=True);return
-    cases=['scene_doors', 'far_shot_draw', 'room_food', 'proxy_birth_contact', 'proxy_birth_inhale', 'proxy_contact', 'proxy_contact_sword', 'proxy_touch_off', 'proxy_swallow_touch_off', 'proxy_suplex_touch_off', 'proxy_ice_detach', 'proxy_ice_release', 'proxy_lethal', 'motion', 'ladder', 'ladder_top', 'ladder_top_stomp', 'one_way', 'solid_ceiling', 'water', 'proxy_water', 'proxy_water_sword', 'proxy_water_below', 'hurt_water', 'proxy_swallow', 'hazard_spit', 'hazard_swallow', 'star_spit', 'star_spit_wall', 'star_big', 'star_ability', 'proxy_sword', 'proxy_reuse', 'proxy_save', 'proxy_mix', 'boss_inhale', 'boss_suplex', 'boss_cook', 'boss_sword', 'proxy_capacity', 'copy_drop_reabsorb', 'wheelie_ride', 'proxy_suplex', 'proxy_cook', 'audio', 'hurt', 'hurt_lethal', 'hurt_cold', 'guard', 'health_invulnerable', 'health_sync', 'proxy_size']
+    cases=['scene_doors', 'far_shot_draw', 'room_food', 'proxy_birth_contact', 'proxy_birth_inhale', 'proxy_contact', 'proxy_contact_sword', 'proxy_touch_off', 'proxy_swallow_touch_off', 'proxy_suplex_touch_off', 'proxy_ice_detach', 'proxy_ice_release', 'proxy_lethal', 'motion', 'ladder', 'ladder_top', 'ladder_top_stomp', 'one_way', 'solid_ceiling', 'water', 'proxy_water', 'proxy_water_sword', 'proxy_water_below', 'hurt_water', 'proxy_swallow', 'hazard_spit', 'hazard_swallow', 'star_spit', 'star_spit_wall', 'star_big', 'star_ability', 'proxy_sword', 'proxy_reuse', 'proxy_save', 'proxy_mix', 'boss_inhale', 'boss_suplex', 'boss_cook', 'boss_sword', 'proxy_capacity', 'copy_drop_reabsorb', 'wheelie_ride', 'proxy_suplex', 'proxy_cook', 'audio', 'hurt', 'hurt_lethal', 'hurt_cold', 'guard', 'health_invulnerable', 'health_sync', 'proxy_size', 'f_slot', 'f_slot_save']
     if not args.skip_abilities:cases += [f'ability-{i}' for i in range(2,26)]
     results=[]
     for name in cases:

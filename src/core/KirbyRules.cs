@@ -11,6 +11,8 @@ public enum AttackRoute { None, Ability, Parry }
 public sealed class KirbyRules
 {
     private readonly string[] abilityIds;
+    /// <summary>Abilities an enemy can give through the swallow: every one but the limited-use ones (#102).</summary>
+    private readonly string[] swallowIds;
     private readonly Func<int, int> chooseIndex;
     private readonly HashSet<long> consumedEnemies = [];
     private readonly HashSet<long> cookedEnemies = [];
@@ -23,6 +25,8 @@ public sealed class KirbyRules
             this.abilityIds.Any(string.IsNullOrWhiteSpace) ||
             this.abilityIds.Distinct(StringComparer.Ordinal).Count() != this.abilityIds.Length)
             throw new ArgumentException("A nonempty set of unique ability IDs is required.", nameof(abilityIds));
+        swallowIds = this.abilityIds.Where(id => !LimitedAbilities.IsLimited(id)).ToArray();
+        if (swallowIds.Length == 0) swallowIds = this.abilityIds;
         this.chooseIndex = chooseIndex ?? Random.Shared.Next;
         Critical = new CopyCritical();
         Mutations = new CriticalMutations(Critical);
@@ -43,6 +47,8 @@ public sealed class KirbyRules
     /// <summary>An Elite is in Kirby's mouth; its ability empowers Kirby only if the swallow yields it.</summary>
     public string? PendingEmpowerment { get; private set; }
     public string? RetainedShieldId { get; private set; }
+    /// <summary>The stored limited-use ability fired with F (#102).</summary>
+    public FSlot Stored { get; } = new();
 
     /// <summary>
     /// Kirby fights only with original inhale and copy abilities plus a host
@@ -107,13 +113,16 @@ public sealed class KirbyRules
         return ConfirmAbsorption(enemyId, SelectCopyAbility());
     }
 
-    /// <summary>Assign a stable random source ability to a live enemy before it is inhaled.</summary>
+    /// <summary>
+    /// Assign a stable random source ability to a live enemy before it is inhaled.
+    /// Limited-use abilities are never swallowed (#102), so no enemy carries one.
+    /// </summary>
     public string SelectCopyAbility()
     {
-        int index = chooseIndex(abilityIds.Length);
-        if ((uint)index >= (uint)abilityIds.Length)
+        int index = chooseIndex(swallowIds.Length);
+        if ((uint)index >= (uint)swallowIds.Length)
             throw new InvalidOperationException("Ability selector returned an out-of-range index.");
-        return abilityIds[index];
+        return swallowIds[index];
     }
 
     /// <summary>
@@ -195,6 +204,7 @@ public sealed class KirbyRules
         AbilityEmpowered = false;
         PendingEmpowerment = null;
         RetainedShieldId = null;
+        Stored.Clear();
         Critical.Reset();
         Mutations.SetOwned(KirbyMutation.None);
         consumedEnemies.Clear();

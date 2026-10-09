@@ -74,6 +74,8 @@ internal static class LabSmokeCapture
             LabCookProbe.Install(run);
         if (Environment.GetEnvironmentVariable("KIRBY_LAB_INPUT_PLAN") == "healing")
             LabHealingProbe.Install(run);
+        if (Environment.GetEnvironmentVariable("KIRBY_LAB_INPUT_PLAN") == "fslot")
+            LabFSlotProbe.Install(run);
         if (Environment.GetEnvironmentVariable("KIRBY_LAB_INPUT_PLAN") == "visual")
             LabVisualProbe.Install(run);
         if (Environment.GetEnvironmentVariable("KIRBY_LAB_INPUT_PLAN") == "breakable")
@@ -118,6 +120,7 @@ internal static class LabSmokeCapture
             LabAbilityProbe.Poll();
             LabCookProbe.Poll();
             LabHealingProbe.Poll();
+            LabFSlotProbe.Poll();
             LabVisualProbe.Poll();
             LabBreakableProbe.Poll();
             LabBossCrowdProbe.Poll();

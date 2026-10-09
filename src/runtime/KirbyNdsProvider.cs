@@ -126,6 +126,10 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         LabActivationTrace.Mark("Native runtime ready");
         session.Rules.Restore(lastSession?.Rules.AbilityId, lastSession?.Rules.RetainedShieldId ?? session.Rules.RetainedShieldId,
             lastSession?.Rules.AbilityEmpowered ?? false, lastSession?.Rules.PendingEmpowerment);
+        // The F slot carries over like the copy; a press in progress does not (#102).
+        KirbyFSlot.Reset();
+        if (lastSession is not null && !ReferenceEquals(lastSession, session))
+            session.Rules.Stored.Restore(lastSession.Rules.Stored.Ability, lastSession.Rules.Stored.Uses);
         lastSession = session;
         LabActivationTrace.Mark("BindSave begin");
         var binding = BindSave(session);
@@ -221,10 +225,11 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
             pendingCopy = value.PendingCopy;
             mouthfulItems.Clear();
             enemies.Restore(value.Enemies);
+            KirbyFSlot.Restore(session, value.FSlot);
         }
         else if (boundSave is not null)
         {
-            nds!.LoadState(config.SeedStatePath); session.Rules.Reset(); pendingCopy = false; window = null;
+            nds!.LoadState(config.SeedStatePath); session.Rules.Reset(); KirbyFSlot.Reset(); pendingCopy = false; window = null;
         }
         boundSave = save.Value;
         boundSave.Capture = CaptureSave;
@@ -241,7 +246,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
             return new KirbySnapshot { Ability = lastSession.Rules.AbilityId, Shield = lastSession.Rules.RetainedShieldId,
                 PendingCopy = pendingCopy, AbilityEmpowered = lastSession.Rules.AbilityEmpowered,
                 PendingEmpowerment = lastSession.Rules.PendingEmpowerment, KirbyActive = KirbyMod.Instance?.ActiveSession is not null,
-                HostBody = originalBody ?? savedHostBody,
+                HostBody = originalBody ?? savedHostBody, FSlot = KirbyFSlot.Capture(lastSession),
                 Enemies = enemies.Capture(), Machine = System.IO.File.ReadAllBytes(path) }.Encode();
         }
         finally { System.IO.File.Delete(path); }
@@ -367,6 +372,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         long stepped = System.Diagnostics.Stopwatch.GetTimestamp();
         RenderSource();
         KirbyAbilityItems.Sync(session, mouthfulItems, pendingCopy);
+        KirbyFSlot.Update(session);
         KirbyHud.Update(session, nds);
         PumpAudio();
         RecordPacing(steps, stepped - started, System.Diagnostics.Stopwatch.GetTimestamp() - stepped);
@@ -462,6 +468,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         window = null;
         renderer?.ResetPalette();
         pendingCopy = false;
+        KirbyFSlot.Sequence.Reset();
         if (!session.Rules.IsBaseForm) session.DropAbility();
         previousAbility = nds.State.Ability;
         nds.SetHealth((ushort)Math.Clamp(session.Hero.life, 1, sourceMaxLife), (ushort)sourceMaxLife);
@@ -545,6 +552,9 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         centerY -= ride.Raise + lift;
         if (ride.Raise != 0) Diagnostic?.Invoke("elevator-carry", new { ride.Raise, ride.Lift, action = nds!.Action });
         ushort action = nds!.Action;
+        // F fires the stored limited-use ability through the original machine (#102).
+        var (fMask, fBusy, fAttack) = KirbyFSlot.Step(session, nds, mask);
+        mask = fMask;
         // At a ladder or chain the host climbs with a key bound to both Up and
         // jump; the original would jump on A first and grab the ladder after.
         // Keep only Up from that key while Kirby holds or overlaps a ladder,
@@ -592,6 +602,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         session.Rules.Critical.BaseChance = config.CopyCriticalChance;
         session.Rules.Critical.BaseDamageMultiplier = config.CopyCriticalDamage;
         session.Rules.Mutations.Tuning = config.CriticalMutations;
+        enemies.FiringItem = KirbyFSlot.Sequence.Active ? KirbyFSlot.Item : null;
         enemies.Prepare(session, nds, originX * 24, originY * 24 + lift, SourceDamageScale,
             bodyContact: config.OriginalTouchDamage && !stomp.Active && stompShield == 0);
         int healthBefore = nds.Health;
@@ -627,6 +638,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
             if (matched && !hurt) MatchVelocity(action, motionActions.Effective, direction);
         }
         PaceWalkCycle(action, matched);
+        if (fAttack) mask |= 2;
         nds.Step(mask);
         if (riding is not null) Diagnostic?.Invoke("elevator-stepped", new { action = nds.Action, y = nds.State.YRaw, vy = nds.State.VyRaw });
         int healthAfter = nds.Health;
@@ -693,7 +705,9 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         if (stomp.Active) FinishStompFrame(hero, map, after, healthAfter < healthBefore);
         SlideStrike = HostStrikes.Slide(after, state.VxRaw);
         GrabStrike = HostStrikes.Grab(state.Ability, motion, state.VxRaw);
-        if (state.Ability != previousAbility)
+        // An F press switches the original copy and back; the rules keep the main copy.
+        if (fBusy) previousAbility = state.Ability;
+        else if (state.Ability != previousAbility)
         {
             if (state.Ability == 1 && !pendingCopy) session.DropAbility();
             previousAbility = state.Ability;
@@ -703,7 +717,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
                 pendingCopy = false;
             }
         }
-        if (pendingCopy && state.Ability == 1 && (nds.ActionFlags & 2) == 0 && (mask & 2) != 0)
+        if (!fBusy && pendingCopy && state.Ability == 1 && (nds.ActionFlags & 2) == 0 && (mask & 2) != 0)
         { pendingCopy = false; session.DropAbility(); }
         mouthfulItems.Observe((nds.ActionFlags & 2) != 0, state.Ability == 1);
     }

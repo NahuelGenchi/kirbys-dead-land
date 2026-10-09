@@ -42,6 +42,8 @@ public sealed class KirbyEnemies
     private readonly HashSet<nint> sourceHit = [];
     /// <summary>Floor ability items the original inhale put in Kirby's mouth this source tick.</summary>
     internal readonly List<KirbyAbilityItems.Held> Swallowed = [];
+    /// <summary>The stored limited-use ability's item while F fires it (#102), else null.</summary>
+    internal dc.tool.InventItem? FiringItem { get; set; }
     /// <summary>Highest scroll tier sampled for the current source tick.</summary>
     internal int ColorlessTier { get; private set; } = 1;
     /// <summary>The host's colorless damage multiplier for <see cref="ColorlessTier"/>.</summary>
@@ -155,7 +157,8 @@ public sealed class KirbyEnemies
         ColorlessMultiplier = dc.Const.Class.scaleHeroValueToTier(1.0, ColorlessTier);
         // The copy's ability item: Dead Cells' own weapon bonus for its level,
         // "+" and Legendary (an Elite's copy), as for any weapon (#56).
-        damageMultiplier = 1 + (KirbyAbilityItems.SlotItem(hero, session.Rules.AbilityId)?.getDamageBonus() ?? 0);
+        // While F fires the stored limited-use ability (#102), its own item's bonus applies.
+        damageMultiplier = 1 + ((FiringItem ?? KirbyAbilityItems.SlotItem(hero, session.Rules.AbilityId))?.getDamageBonus() ?? 0);
         // Copy-attack crits (#88). The roll is made now, before the source step, so
         // the paired source HP already includes the crit factor and a lethal source
         // hit is lethal in the host too. One source frame is 1/60 s.
