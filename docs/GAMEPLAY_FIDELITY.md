@@ -712,7 +712,7 @@ Gastronomy, Extended Healing, Tainted Flask, Demon Strength, bosses, and the
 mutation menu itself.
 ### Mutation menu (intentional deviation)
 
-Issue #90. (Twelve mutations; the table lists them.) Dead Cells weapons never appear in a Kirby run (#54), so a mutation
+Issues #90 and #101. (Sixteen mutations; the table lists them.) Dead Cells weapons never appear in a Kirby run (#54), so a mutation
 that needs a weapon type, ammo, planted arrows, the backpack weapon or two weapons
 to switch between has nothing to act on, and a skill-use trigger never fires
 because skills are ability items too. While a Kirby session is active,
@@ -730,6 +730,7 @@ its offer with the same call, so the two agree). The list is
 | Ammo (`P_Ammo`) | Multiplies weapon ammo; its Kirby version (a longer-lived ability star) waits for #68 |
 | Support (`P_DeployedDmg`) | Needs a deployed skill; Kirby deploys none, and his helper's position is not readable from the source machine |
 | Parting Gift, Networking (`P_DeathBomb`, `P_ShareDamage`) | Follow ranged attacks; every copy attack counts as melee in a Kirby run |
+| Extended Healing, Emergency Triage, Tainted Flask, Cursed Flask (`P_Hot`, `P_QuickHeal`, `P_CorruptedHealing`, `P_CursedFlask`) | Change, follow or refill the health flask; Kirby has none (#101) |
 
 The mutations that name melee attacks, and Point Blank, are not hidden; #91 makes
 them work for copy attacks. A mutation the hero already holds
@@ -743,6 +744,9 @@ the list grew to twelve and the pair was rerun as `20261008-022159` and
 opened the real `ui.PerkSelect` in the private profile with every hidden and three
 ordinary mutations unlocked: unfiltered it listed all of the hidden ones, filtered
 it listed none and still listed the three ordinary ones. The NPC's own `PerkMaster.isVisible` hook was not exercised live.
+With the four flask mutations (#101), the pair `20261008-222204` (filter off: all
+sixteen listed) and `20261008-222245` (filter on: none listed, the three ordinary
+ones listed) repeated the check in `repros/healing-101-20261008`.
 
 
 ### Collector (intentional deviation)
@@ -780,6 +784,51 @@ showed. Not run: a real run that finds a blueprint, the Collector in other
 transition levels, the "Show unlocked items" view, the skin and head rewards that
 also read `countUnlockedItems` (in a Kirby run they see the raised count too), and
 weapon blueprint drops, which still appear and count once found.
+
+Since #101 the Collector also hides Health Flask I–IV (`Flask1`–`Flask4`): Kirby
+has no flask (see [health flask and fountains](#health-flask-and-fountains-intentional-deviation)).
+`ItemMetaManager.canInvestOnItem` refuses every investment until Health Flask I
+is unlocked, and Flask II, Gold Reserves I (`Money1`) and Recycling I (`Recycling1`)
+also name Health Flask I as their required item. While that check runs in a Kirby run,
+`KirbyCollector` answers `hasUnlockedItem` with true for a hidden entry
+(`CollectorMenu.MeetsPrerequisite`), so a profile that never bought the flask can
+still invest. Nothing is written to the save. Live run `20261008-221942`
+relocked Health Flask I and II with the other hidden entries: the host refused
+Random Starter Shield and Gold Reserves, the Kirby run allowed both (count 0 →
+14), and the panel listed none of the twelve hidden entries and all five kept
+ones (`Money1` now among them).
+
+### Health flask and fountains (intentional deviation)
+
+Issue #101. The owner wants F (host action 7) for Kirby's stored limited-use
+ability (#102), so Kirby has no health flask. He heals by eating Dead Cells food
+(level food, enemy drops and Cook's food) and at health fountains.
+
+- `HealFlask.isEnabled` already returns false while the host's Captain Chicken
+  pet is active. `KirbyHealing` returns false for a Kirby session the same way,
+  so `Heal.isUsingInputs` ignores F, fountains and flask recharges have no flask
+  to fill, and the HUD rebuild leaves out the flask's slot.
+- The fountain (`en.inter.Fountain`) is untouched until its cinematic ends:
+  `onActivate` still requires missing health (or infection), marks the fountain
+  used and plays `cine.HealFountain`. Its `applyEffect` clears infection and calls
+  `Hero.heal(maxLife)`; while it runs for Kirby, that heal becomes
+  `Healing.FountainHeal` (half of maximum health, rounded up). Host health is
+  authoritative, so the source health follows.
+- The flask's "heal" tutorial is suppressed. Base Beheaded runs are unchanged.
+
+Evidence: core tests pin the heal amount and the hidden lists. Live `--input-plan
+healing` (`LabHealingProbe`) in `repros/healing-101-20261008`, runtime DLL
+`6048c94f10576df329996a0e1c396fa9273ac705483d19c62ccc71660e760ea5`, run
+`20261008-221759`: two real host Zombie attacks took Kirby from 76 to 16; holding
+the real Heal key (F, code 70) for 90 frames started no flask (`isEnabled` and
+`canUse` false) and left 16/16 (host/source). A real `Fountain` next to Kirby, used
+with the real Interact key (R), ran the host cinematic; the host asked to heal 76,
+Kirby got 38 and ended at 54/54, and the fountain was used. Health Flask I was
+unlocked mid-run through the host's own unlock path first; the captured HUD then
+had no F slot, and the captured fountain matched the owner's screenshot. Not run:
+a fountain placed by the level generator, a flask recharge item, Captain Chicken,
+infection, and a profile that already owned the flask when the run started.
+
 ### Host elevators (deviation)
 
 Dead Cells elevators (`en.inter.Elevator` and its `SimpleElevator`,

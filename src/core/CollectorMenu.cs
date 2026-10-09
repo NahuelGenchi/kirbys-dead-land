@@ -29,6 +29,11 @@ public static class CollectorMenu
         ["RandomBow"] = "Random Starter Bow only picks which bow the run starts with; that bow becomes a random ability item either way.",
         ["RandomCC"] = "Random Melee Weapon only picks which melee weapon the run starts with; that weapon becomes a random ability item either way.",
         ["BackpackUnlock"] = "The backpack holds a weapon; Kirby carries none.",
+        // Kirby has no health flask (#101); F holds his limited-use ability.
+        ["Flask1"] = "Health Flask I unlocks the health flask; Kirby has no flask.",
+        ["Flask2"] = "Health Flask II adds a flask charge; Kirby has no flask.",
+        ["Flask3"] = "Health Flask III adds a flask charge; Kirby has no flask.",
+        ["Flask4"] = "Health Flask IV adds a flask charge; Kirby has no flask.",
     };
 
     /// <summary>
@@ -46,4 +51,12 @@ public static class CollectorMenu
     /// </summary>
     public static int CountUnlocked(int hostCount, IEnumerable<(string Id, int Group, int CellCost, bool Unlocked)> found) =>
         hostCount + found.Count(entry => !entry.Unlocked && entry.CellCost > 0 && Hides(entry.Id, entry.Group));
+
+    /// <summary>
+    /// Whether an entry counts as owned when the Collector checks a prerequisite
+    /// (<c>canInvestOnItem</c>): every investment first needs Health Flask I, and
+    /// some name another entry as their required item. A hidden entry cannot be
+    /// bought, so it counts as owned (#101); otherwise the host's own answer stands.
+    /// </summary>
+    public static bool MeetsPrerequisite(string? itemId, int group, bool hostUnlocked) => hostUnlocked || Hides(itemId, group);
 }

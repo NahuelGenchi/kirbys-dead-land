@@ -511,8 +511,9 @@ internal static class LabAbilityProbe
     /// </summary>
     private static void ProbeCollector(KirbySession session)
     {
-        string[] hidden = ["RevengeSword", "LongBow", "ExplosiveGrenade", "SlowOrb", "HorizontalTurret", "RandomBow", "RandomCC", "BackpackUnlock", "P_Ammo"];
-        string[] kept = ["WarriorShield", "RandomShield", "Flask2", "ArmoryUnlock", "P_Bleed"];
+        string[] hidden = ["RevengeSword", "LongBow", "ExplosiveGrenade", "SlowOrb", "HorizontalTurret", "RandomBow", "RandomCC", "BackpackUnlock", "P_Ammo",
+            "Flask1", "Flask2", "P_Hot"];
+        string[] kept = ["WarriorShield", "RandomShield", "Money1", "ArmoryUnlock", "P_Bleed"];
         if (collectorOpened) return;
         collectorOpened = true;
         var meta = session.Hero._level.game.user.itemMeta;
@@ -520,14 +521,16 @@ internal static class LabAbilityProbe
         // Hidden entries are relocked so they must be counted; kept ones keep their state.
         foreach (var id in hidden.Concat(kept)) meta.revealItem(id.AsHaxeString(), false);
         foreach (var id in hidden) meta.relockItem(id.AsHaxeString());
-        // Every gate first needs Health Flask I; Random Starter Shield then needs 2 unlocks.
-        meta.unlockItem("Flask1".AsHaxeString());
+        // Every gate first needs Health Flask I, relocked above: only the Kirby
+        // run may count it (#101). Random Starter Shield then needs 2 unlocks.
         KirbyCollector.TestUnfiltered = true;
         int hostCount = meta.countUnlockedItems();
         bool hostShieldGate = meta.canInvestOnItem("RandomShield".AsHaxeString());
+        bool hostMoneyGate = meta.canInvestOnItem("Money1".AsHaxeString());
         KirbyCollector.TestUnfiltered = false;
         int kirbyCount = meta.countUnlockedItems();
         bool kirbyShieldGate = meta.canInvestOnItem("RandomShield".AsHaxeString());
+        bool kirbyMoneyGate = meta.canInvestOnItem("Money1".AsHaxeString());
         KirbyCollector.TestUnfiltered = unfiltered;
         collectorBase = new
         {
@@ -537,6 +540,8 @@ internal static class LabAbilityProbe
             kirbyCount,
             hostShieldGate,
             kirbyShieldGate,
+            hostMoneyGate,
+            kirbyMoneyGate,
         };
         KirbyCollector.TestFiltered = (id, listed) => collectorListed[id] = listed;
         // The panel pauses the level, so the result is written when it has built its list.

@@ -1579,3 +1579,25 @@ the all-ability rendering tests as full gameplay acceptance.
   filtered listed none of nine hidden and all five kept; `20261008-195429`
   unfiltered listed all. Count 1 → 10; the Random Starter Shield gate opened. Not
   run: a real blueprint pickup, other transition levels, skin/head rewards.
+
+## 2026-10-08 — Kirby has no health flask; fountains heal half (#101)
+
+- Owner request: F stops healing; Kirby heals from food and fountains only, and
+  flask upgrades and mutations are hidden. F is kept for the stored limited-use
+  ability (#102).
+- Host bytecode (`hlboot.dat`, crashlink): `HealFlask.isEnabled` already turns
+  the flask off for Captain Chicken; `Fountain.onActivate` marks the fountain used
+  and plays `cine.HealFountain`, whose end calls `Fountain.applyEffect` →
+  `Hero.heal(maxLife)`; `ItemMetaManager.canInvestOnItem` needs Health Flask I
+  for every investment.
+- `KirbyHealing` disables the flask and turns the fountain's heal into half of
+  maximum health (`Healing.FountainHeal`). `MutationMenu` hides Extended Healing,
+  Emergency Triage, Tainted Flask and Cursed Flask; `CollectorMenu` hides Health
+  Flask I–IV, and a hidden entry now satisfies the Collector's prerequisites. The
+  flask's "heal" tutorial is suppressed. New `--input-plan healing` probe.
+- Source: `python3 scripts/check.py` passes (384 core assertions).
+- Live (`repros/healing-101-20261008`): `20261008-221759` F held without healing,
+  fountain 16 → 54 of 76; Collector `20261008-221942` and mutation menu
+  `20261008-222204`/`222245` passed. Not run: a generated fountain, flask
+  recharge items, a profile that owned the flask at run start, normal play.
+

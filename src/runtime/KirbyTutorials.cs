@@ -8,7 +8,9 @@ namespace Kirby.Runtime;
 internal static class KirbyTutorials
 {
     private static bool Replaced(string? id) => id is
-        "jump" or "doubleJump" or "jumpDown" or "dodge1" or "dodge2" or "homunculus";
+        "jump" or "doubleJump" or "jumpDown" or "dodge1" or "dodge2" or "homunculus" or
+        // Kirby has no health flask (#101).
+        "heal";
 
     public static void Install(string outfitId)
     {
