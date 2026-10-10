@@ -401,6 +401,23 @@ Check(!gate.Update(sliding: false, inside: true), "Re-entering without a slide s
 gate.Update(true, true); gate.Reset();
 Check(!gate.Open && !gate.Update(false, true), "Reset forgets an entered roll zone");
 
+var hostLanding = new HostLanding();
+Check(!hostLanding.Update(KirbyActions.Standing, 0) && !hostLanding.Update(KirbyActions.Walk, 0), "Standing and walking are not landings");
+Check(!hostLanding.Update(KirbyActions.Jump, -2682) && !hostLanding.Update(KirbyActions.Jump, -744), "A rising jump has not landed");
+Check(!hostLanding.Update(KirbyActions.Fall, 44) && hostLanding.Update(KirbyActions.Landing, 0), "Kirby landing from a fall raises the host landing once");
+Check(!hostLanding.Update(KirbyActions.Standing, 0), "The landing is not repeated while he stands");
+Check(!hostLanding.Update(KirbyActions.Jump, -744) && !hostLanding.Update(KirbyActions.Fall, 44) &&
+      !hostLanding.Update(KirbyActions.Ability, 0) && hostLanding.Update(KirbyActions.Standing, 0), "A fall interrupted by an ability still lands");
+Check(!hostLanding.Update(KirbyActions.Walk, 0) && !hostLanding.Update(KirbyActions.Ability, 0) && !hostLanding.Update(KirbyActions.Standing, 0),
+    "A ground ability is not a landing");
+Check(!hostLanding.Update(KirbyActions.Jump, -744) && !hostLanding.Update(KirbyActions.Climb, 0) && !hostLanding.Update(KirbyActions.Standing, 0),
+    "Stepping off a ladder is not a landing");
+Check(!hostLanding.Update(KirbyActions.Fall, 44) && !hostLanding.Update(KirbyActions.Climb, 0) && !hostLanding.Update(KirbyActions.Standing, 0),
+    "Grabbing a ladder mid-fall forgets the fall");
+Check(!hostLanding.Update(KirbyActions.Fall, 44) && hostLanding.Update(KirbyActions.Slide, 0), "Landing into a slide counts");
+hostLanding.Update(KirbyActions.Fall, 44); hostLanding.Reset();
+Check(!hostLanding.Update(KirbyActions.Standing, 0), "Reset forgets a fall in progress");
+
 // Elevator at centre column 10, four cells wide, cell row 10; its solid row is 11 (top 264).
 Check(ElevatorRide.Over(10, 264, 10, 4, 10, 1, 0, false) is { Lift: 0, Raise: 0, Carrying: false }, "An elevator at rest needs no lift and carries nothing");
 Check(ElevatorRide.Over(10, 264, 10, 4, 10, 1, 0.5, false) is { Lift: 0, Carrying: true }, "An elevator that arrived this frame still carried Kirby");
