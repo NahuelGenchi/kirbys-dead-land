@@ -681,6 +681,45 @@ def run_case(name):
             assert ability()==1 and frame<200,frame
             assert l.kssu_set_mike_shouts(b.handle,1)==-2
             return {'refused_during_attack':refused,'switch_frames':switch,'crash_revert_frame':revert,'restore_frames':restore,'mike_one_shout_revert':frame}
+        if name in ('helper_reaction','helper_move'):
+            # The original CPU helper (DS X). The bridge caps its reaction wait and can move it alone.
+            class Helper(C.Structure):_fields_=[('x_raw',C.c_int32),('y_raw',C.c_int32),('vx_raw',C.c_int16),('vy_raw',C.c_int16),('action',C.c_uint16),('reserved',C.c_uint16)]
+            b.lib.kssu_helper_state.argtypes=[C.c_void_p,C.POINTER(Helper)];b.lib.kssu_move_helper.argtypes=[C.c_void_p,C.c_int32,C.c_int32]
+            def helper():
+                h=Helper();return h if b.lib.kssu_helper_state(b.handle,C.byref(h))==0 else None
+            transform(b,18);floor=[3 if y>=7 else 0 for y in range(9) for x in range(100)]
+            b.world(floor,(50*24+12)*65536,int(153.5*65536));b.step(0,30)
+            assert helper() is None, 'No helper before the X button'
+            for i in range(200):
+                state=b.state();b.world(floor,state['x_raw'],state['y_raw']);b.step(1024 if i==0 else 0)
+            h=helper();assert h is not None, 'Original helper missing'
+            assert abs(h.x_raw-b.state()['x_raw'])<24*65536 and h.action in (0x0406,0x142c), (h.x_raw,h.action)
+            getter=struct.unpack('<2I',b.read(0x020b53d4,8));assert getter==(0xe3500006,0xc3a00006),[hex(w) for w in getter]
+            if name=='helper_reaction':
+                # Without the cap an enemy 110 px away was first hit about 185 frames after it appeared (60 px: 30).
+                frames={};q=Proxy()
+                for distance in (60,110):
+                    hit=None;b.lib.kssu_proxy_set(b.handle,1,0,0,100,False);b.step(0,60)
+                    for i in range(240):
+                        state=b.state();b.world(floor,state['x_raw'],state['y_raw'])
+                        b.lib.kssu_proxy_state(b.handle,1,C.byref(q))
+                        if i==0 or not q.flags&12:b.lib.kssu_proxy_set(b.handle,1,int((state['x_raw']/65536+distance)*65536),151*65536,100,True)
+                        b.step(0);b.lib.kssu_proxy_state(b.handle,1,C.byref(q))
+                        if q.hp<100:hit=i;break
+                    assert hit is not None and hit<=60,(distance,hit)
+                    frames[distance]=hit
+                return {'cap_words':[hex(w) for w in getter],'first_hit_frames_by_distance':frames}
+            before=h.x_raw
+            def probe_cells():return [struct.unpack('<hh',b.read(0x020bb784+0x14c+i*28,4)) for i in range(10)]
+            was=probe_cells()
+            assert b.lib.kssu_move_helper(b.handle,5*65536,65536)==0
+            after=helper();assert after.x_raw==before+5*65536 and after.y_raw==h.y_raw+65536
+            probes=probe_cells()
+            assert all(q[0]==p[0]+5 and q[1]==p[1]+1 for p,q in zip(was,probes)),(was,probes)
+            for i in range(30):
+                state=b.state();b.world(floor,state['x_raw'],state['y_raw']);b.step(0)
+            assert helper() is not None
+            return {'moved_raw':[after.x_raw-before,after.y_raw-h.y_raw],'probes_moved_with_helper':True,'helper_alive_after':True}
         raise ValueError(name)
     finally:b.close()
 
@@ -689,7 +728,7 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--case');parser.add_argument('--skip-abilities',action='store_true');args=parser.parse_args()
     if args.case:
         print('RESULT '+json.dumps({'case':args.case,'result':run_case(args.case)}),flush=True);return
-    cases=['scene_doors', 'far_shot_draw', 'room_food', 'proxy_birth_contact', 'proxy_birth_inhale', 'proxy_contact', 'proxy_contact_sword', 'proxy_touch_off', 'proxy_swallow_touch_off', 'proxy_suplex_touch_off', 'proxy_ice_detach', 'proxy_ice_release', 'proxy_lethal', 'motion', 'ladder', 'ladder_top', 'ladder_top_stomp', 'one_way', 'solid_ceiling', 'water', 'proxy_water', 'proxy_water_sword', 'proxy_water_below', 'hurt_water', 'proxy_swallow', 'hazard_spit', 'hazard_swallow', 'star_spit', 'star_spit_wall', 'star_big', 'star_ability', 'proxy_sword', 'proxy_reuse', 'proxy_save', 'proxy_mix', 'boss_inhale', 'boss_suplex', 'boss_cook', 'boss_sword', 'proxy_capacity', 'copy_drop_reabsorb', 'wheelie_ride', 'proxy_suplex', 'proxy_cook', 'audio', 'hurt', 'hurt_lethal', 'hurt_cold', 'guard', 'health_invulnerable', 'health_sync', 'proxy_size', 'f_slot', 'f_slot_save']
+    cases=['scene_doors', 'far_shot_draw', 'room_food', 'proxy_birth_contact', 'proxy_birth_inhale', 'proxy_contact', 'proxy_contact_sword', 'proxy_touch_off', 'proxy_swallow_touch_off', 'proxy_suplex_touch_off', 'proxy_ice_detach', 'proxy_ice_release', 'proxy_lethal', 'motion', 'ladder', 'ladder_top', 'ladder_top_stomp', 'one_way', 'solid_ceiling', 'water', 'proxy_water', 'proxy_water_sword', 'proxy_water_below', 'hurt_water', 'proxy_swallow', 'hazard_spit', 'hazard_swallow', 'star_spit', 'star_spit_wall', 'star_big', 'star_ability', 'proxy_sword', 'proxy_reuse', 'proxy_save', 'proxy_mix', 'boss_inhale', 'boss_suplex', 'boss_cook', 'boss_sword', 'proxy_capacity', 'copy_drop_reabsorb', 'wheelie_ride', 'proxy_suplex', 'proxy_cook', 'audio', 'hurt', 'hurt_lethal', 'hurt_cold', 'guard', 'health_invulnerable', 'health_sync', 'proxy_size', 'f_slot', 'f_slot_save', 'helper_reaction', 'helper_move']
     if not args.skip_abilities:cases += [f'ability-{i}' for i in range(2,26)]
     results=[]
     for name in cases:

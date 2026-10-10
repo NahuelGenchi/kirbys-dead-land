@@ -780,8 +780,27 @@ the timed pedestal emptied; buying took 1000 gold and removed the booth. Each
 item lay on the floor once as a floor ability item. Captured frames show the
 altar's ability tip and the "-1000" gold pop. `passed: true`, saves unchanged,
 no fatal log. Not run: real kill-count or timed-door rooms, pick-one altar
-groups, a level saved before this fix, a shop short of gold, mimics and
-legendary altars.
+groups, a level saved before this fix, a shop short of gold and mimics.
+
+#### Legendary altars (#107)
+
+The `rewards` plan also creates a `LegendaryAltar` holding a Lightning Whip
+with the `Legendary` affix, six cells right of Kirby, and activates it as a
+short press does. `rewards.json` gains `legendary` in `spawned`, the altar's
+item and floor count after the press, and `legendaryAffix`; `passed` now also
+needs the altar's item to be a Legendary ability item, the altar empty and one
+floor ability item.
+
+`20261010-145915` (separate root `repros/legendary-altar-20261010`, staged from
+this branch with `outfit-build-55` SHA-256 `8e44122d…` and `assets-final`
+SHA-256 `1bc2d0b7…`): the Legendary Lightning Whip became `KirbyAbilityBomb`
+with `Legendary`, the altar's item was null after the press and one
+`KirbyAbilityBomb` floor item lay at its cell, alongside the altar, timed item
+and booth results above (1000 gold taken). `passed: true`, saves unchanged, no
+fatal log. The captured frame shows only copy-ability icons, the Bomb with a gold
+glow. Not run: a legendary altar the level generator places (the owner's report
+was Spartan Sandals IV-L), taking one with the real Interact press, a level saved
+before this fix, and the locked refusal.
 ### Pause card and save of an ability item (#62)
 
 `KIRBY_LAB_ITEMS_KEEP=1` makes the `items` probe keep the swallowed copy and give
