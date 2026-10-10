@@ -21,6 +21,7 @@ internal static class KirbyFSlot
     private static bool previousF, hudDirty = true;
     private static string? shownAbility;
     private static int shownUses = -1;
+    private static nint shownSkill, shownTile;
 
     /// <summary>The stored ability's item: its level, "+" and affixes as for any ability item.</summary>
     public static InventItem? Item { get; private set; }
@@ -111,10 +112,16 @@ internal static class KirbyFSlot
     private static void DrawHud(Hero hero, string? ability, int uses)
     {
         if (hero._level?.game?.hud?.skillPotion is not { } skill) return;
-        if (!hudDirty && ability == shownAbility && uses == shownUses) return;
+        // The host also hides or rebuilds its F slot with no flask call (a new
+        // level's HUD), so the slot is checked as drawn, not only on events (#109).
+        bool intact = ability is null || skill.HashlinkPointer == shownSkill && skill.visible &&
+            (shownTile == 0 || skill.icon?.tile?.HashlinkPointer == shownTile);
+        if (!hudDirty && intact && ability == shownAbility && uses == shownUses) return;
         hudDirty = false;
         shownAbility = ability;
         shownUses = uses;
+        shownSkill = skill.HashlinkPointer;
+        shownTile = 0;
         if (ability is null)
         {
             skill.setIcon(null!);
@@ -125,6 +132,7 @@ internal static class KirbyFSlot
         skill.setItemIcon(AbilityItems.ItemId(ability).AsHaxeString());
         if (LimitedAbilities.Uses(ability) > 1) skill.setCount(uses, null);
         else skill.disableCount();
+        shownTile = skill.icon?.tile?.HashlinkPointer ?? 0;
     }
 
     /// <summary>A new session or machine: no F press is running and the HUD is redrawn.</summary>

@@ -30,6 +30,15 @@ internal static class LabHealingProbe
     private static (int Requested, int Given)? fountainHeal;
     private static bool? fountainUsed;
     private static readonly List<string> events = [];
+    private static bool stored, refilled, swordReady, fed;
+    private static uint? swordFrom;
+    private static uint? refreshAt;
+    private static bool exitTaken;
+    private const byte SwordByte = 18;
+    private static readonly bool withSword = Environment.GetEnvironmentVariable("KIRBY_LAB_HEALING_SWORD") == "1";
+    private static readonly bool takeExit = Environment.GetEnvironmentVariable("KIRBY_LAB_HEALING_EXIT") == "1";
+    private static nint potionPointer;
+    private static string? lastSlotState;
 
     private static void Stage(string phase)
     {
@@ -41,6 +50,20 @@ internal static class LabHealingProbe
     {
         run = output;
         dc.tool.Hook_Tutorial.tryToStart += (_, _, _) => false;
+        // The owner's profile already owns Health Flask I when a run starts (#109).
+        dc.tool.Hook_ItemMetaManager.hasUnlockedItem += (orig, meta, id) => id?.ToString() == "Flask1" || orig(meta, id);
+        dc.ui.Hook_HUD.setHealings += (orig, hud, healings, max) =>
+        {
+            Stage($"HUD.setHealings({healings},{max})");
+            orig(hud, healings, max);
+        };
+        dc.ui.Hook_HUD.refreshItems += (orig, hud) => { Stage("HUD.refreshItems"); orig(hud); };
+        dc.ui.hud.Hook_Skill.setIcon += (orig, skill, tile) =>
+        {
+            if (skill.HashlinkPointer == potionPointer)
+                Stage($"skillPotion.setIcon tile={(tile is null ? "null" : tile.HashlinkPointer.ToString("X"))}");
+            orig(skill, tile);
+        };
         dc.tool.mainSkills.Hook_HealFlask.onStart += (orig, flask) => { flaskStarts++; Stage("HealFlask.onStart"); orig(flask); };
         dc.en.inter.Hook_Fountain.onActivate += (orig, f, by, longPress) =>
         {
@@ -103,6 +126,32 @@ internal static class LabHealingProbe
             Stage($"Health Flask I owned at start: {flaskUnlocked}");
         }
         if (elapsed < 180) return 0;
+        if (withSword && !swordReady)
+        {
+            // A main copy ability turns the HUD overlay and its host refreshes on (#109).
+            swordFrom ??= tick;
+            uint n = tick - swordFrom.Value;
+            if (machine.State.Ability == SwordByte && session.Rules.AbilityId == "Sword")
+            {
+                if (n > 200) { swordReady = true; start = tick - 180; Stage("Sword ready"); }
+                return 0;
+            }
+            if (!fed) { if (n < 50) return 2; fed = machine.Feed(SwordByte); return 2; }
+            return 128;
+        }
+        if (refreshAt is uint due && lastTick >= due)
+        {
+            refreshAt = null;
+            Stage("HUD.refreshItems() called by the probe");
+            hero._level?.game?.hud?.refreshItems();
+        }
+        if (!stored)
+        {
+            // An ability waiting in the F slot must survive the fountain (#109).
+            stored = true;
+            session.Rules.Stored.Take("Mike");
+            Stage("Stored Mike in the F slot");
+        }
         // Two real hits, after the first one's invulnerability, so the fountain's
         // half heal is not capped by maximum health.
         if (hits < 2 && elapsed >= 180 + 120u * (uint)hits)
@@ -116,6 +165,13 @@ internal static class LabHealingProbe
             return 0;
         }
         if (elapsed < 420) return 0;
+        if (!refilled && Flask(hero) is { } host && lastTick - (healFrom ?? lastTick) > 100)
+        {
+            refilled = true;
+            Stage("Host flask refill (Heal.onFountainRefill)");
+            host.onFountainRefill();
+            refreshAt = lastTick + 20;
+        }
         if (healFrom is null)
         {
             lifeAfterHurt = hero.life;
@@ -140,6 +196,21 @@ internal static class LabHealingProbe
             Stage($"Fountain spawned at Kirby's cell; life {hero.life}");
             return 0;
         }
+        if (effectFrame is uint healed && tick - healed > 150 && !exitTaken && takeExit)
+        {
+            // The next level builds a new Hero: the F slot must come along (#109).
+            exitTaken = true;
+            dc.en.inter.Exit? exit = null;
+            for (int i = 0; i < hero._level.entities.length; i++)
+                if (hero._level.entities.getDyn(i) is dc.en.inter.Exit candidate && !candidate.locked &&
+                    !string.IsNullOrEmpty(candidate.destLevel?.ToString())) { exit = candidate; break; }
+            if (exit is null) { Stage("No unlocked exit"); return 0; }
+            hero.setPosPixel((exit.cx + exit.xr - 1.5) * 24, (exit.cy + exit.yr) * 24);
+            if (hero.yr == 0) { hero.cy--; hero.yr = 1; }
+            Stage($"Taking exit to {exit.destLevel}; F slot {session.Rules.Stored.Ability} x{session.Rules.Stored.Uses}");
+            exit.onActivate(hero, false);
+            return 0;
+        }
         // Press Interact once a second while focused, until the fountain is used.
         if (tick - spawnedAt >= 60 && !fountain.used && (interactAt is null || tick - interactAt.Value >= 60) && presses < 5)
         {
@@ -161,6 +232,15 @@ internal static class LabHealingProbe
         if (run.Length == 0 || session is null || machine is null || machine.State.Frame == lastReportFrame) return;
         lastReportFrame = machine.State.Frame;
         var hero = session.Hero;
+        var skill = hero._level?.game?.hud?.skillPotion;
+        if (skill is not null) potionPointer = skill.HashlinkPointer;
+        string slotState = $"stored={session.Rules.Stored.Ability} uses={session.Rules.Stored.Uses} " +
+            $"item={KirbyFSlot.Item is not null} visible={skill?.visible} icon={skill?.icon?.tile?.HashlinkPointer.ToString("X")} life={hero.life}";
+        if (slotState != lastSlotState)
+        {
+            lastSlotState = slotState;
+            Stage($"F slot: {slotState}");
+        }
         if (effectFrame is uint at && lastReportFrame - at >= 30 && lifeAfterFountain is null)
         {
             lifeAfterFountain = hero.life;
@@ -178,6 +258,7 @@ internal static class LabHealingProbe
             fountainRequested = fountainHeal?.Requested, fountainGiven = fountainHeal?.Given,
             lifeAfterFountain, sourceAfterFountain, fountainUsed,
             currentLife = hero.life, currentSource = machine.Health,
+            slot = slotState,
             events,
         }, new JsonSerializerOptions { WriteIndented = true }));
     }
