@@ -1629,6 +1629,24 @@ the all-ability rendering tests as full gameplay acceptance.
   replacement and save; `20261009-010718` restored the slot from the save. Not run:
   a press lost to a hit, stomp/ladder/water, helper, room change mid-attack, normal play.
 
+## 2026-10-10 — helper reacts quickly and keeps pace with Kirby (#105)
+
+- Owner report: the Homunculus (X) helper took too long to detect and attack
+  enemies and was much slower than Kirby.
+- Research (private oracle bridge, ARM disassembly): the ROM brain's notice timer
+  is clamped by the getter at `0x020B53C0` (60 to 120+ frames); the helper got no
+  host speed match, Kirby does. Widening the helper's vision was tried and
+  dropped: enemy proxies only spawn ~150 px from Kirby.
+- Bridge: `quicken_helper_reaction` (wait capped at 6 frames, validated RAM
+  patch), `kssu_helper_state`, `kssu_move_helper`. Runtime: `KirbyHelperMatch`
+  applies `SpeedMatch` to the helper after Kirby's own match.
+- Source: `python3 scripts/check.py` passes; `tests/speed` passes with the new
+  helper checks; `python3 tools/nds_tests.py` passes 80 cases including `helper_reaction` and
+  `helper_move`. `tests/nds` does not build (missing `FarObject` include, same
+  before this change; not touched).
+- Live: none run. Not verified: the feel in the running game, a helper in water or
+  on a ladder, and the Wheelie helper (left at the original speed).
+
 ## 2026-10-10 — Legendary altars offer ability items, not weapons (#107)
 
 - Owner report (two screenshots): a gold "Spartan Sandals IV-L" (+187% damage,

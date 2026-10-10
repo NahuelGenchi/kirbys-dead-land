@@ -312,6 +312,44 @@ foreach (ushort t in new ushort[] { SpeedMatch.SlopeUpRight, SpeedMatch.SlopeUpL
     double native = PerCycle(false), matched = PerCycle(true);
     Check(matched / native < 1.2, $"Kirby's walk cycle keeps up with the matched run ({matched:0.0} px a cycle, original {native:0.0})");
 }
+{
+    // The original CPU helper (DS X, #105) is another controller instance; KirbyHelperMatch speeds
+    // its motion up as Kirby's is, within the same terrain limits. The helper's AI follows Kirby
+    // and attacks enemies, so a running Kirby shows whether it keeps up.
+    (List<double> Gap, double Peak, double Last, bool Fell) Follow(bool helperMatch, int wallColumn = -1)
+    {
+        var sim = new Sim(nds, seed) { MatchHelper = helperMatch };
+        if (wallColumn >= 0) for (int y = 20; y < 30; y++) sim.Tiles[(wallColumn, y)] = SpeedMatch.Solid;
+        if (!sim.Transform(18)) throw new InvalidOperationException("Sword transform failed");
+        sim.Step(1024);
+        foreach (ushort m in R(0, 130)) sim.Step(m);
+        var gap = new List<double>();
+        double peak = 0, last = sim.HelperX ?? double.NaN;
+        bool fell = false;
+        foreach (ushort m in R(16, 150))
+        {
+            var kirby = sim.Step(m);
+            if (sim.HelperX is not { } hx) { gap.Add(double.NaN); continue; }
+            gap.Add(kirby.X - hx);
+            peak = Math.Max(peak, Math.Abs(hx - last));
+            last = hx;
+            fell |= sim.HelperFeet > 720 + 1e-6;
+        }
+        return (gap, peak, last, fell);
+    }
+    var native = Follow(false);
+    var matched = Follow(true);
+    Console.WriteLine("  helper gap by 15 frames: native " + string.Join(' ', native.Gap.Where((_, i) => i % 15 == 14).Select(g => g.ToString("0"))) +
+        "; matched " + string.Join(' ', matched.Gap.Where((_, i) => i % 15 == 14).Select(g => g.ToString("0"))));
+    double nativeGap = native.Gap[^1], matchedGap = matched.Gap[^1];
+    // The helper's AI trails a running Kirby at a fixed 60 px; at the original speed it falls behind without limit.
+    Check(matched.Gap.All(g => !double.IsNaN(g)) && matchedGap < 70 && Math.Abs(matchedGap - matched.Gap[^60]) < 4 && nativeGap > 200,
+        $"A running Kirby keeps his helper at its 60 px follow distance ({matchedGap:0} px after 2.5 s, steady for 1 s; original speed: {nativeGap:0} px behind)");
+    Check(matched.Peak <= SpeedMatch.RunSpeed + 0.5 && !matched.Fell,
+        $"The helper never moves faster than Kirby's run ({matched.Peak:0.00} px a frame) or into the floor");
+    var wall = Follow(true, wallColumn: 20);
+    Check(wall.Last <= 20 * 24 - SpeedMatch.HalfWidth + 1e-6 && !wall.Fell, $"The helper stops at a wall as the original does ({wall.Last:0.0} px)");
+}
 Console.WriteLine(failures == 0 ? "PASS: Kirby's movement matches the Beheaded's speeds on the original controller." : $"{failures} FAILED");
 return failures;
 
@@ -323,6 +361,7 @@ sealed class Sim
     readonly NdsRuntime nds;
     readonly DashAssist dash = new();
     readonly SpeedMatch.ActionFilter motionActions = new();
+    readonly KirbyHelperMatch helper = new();
     readonly AnimationPacer walkCycle = new();
     public readonly Dictionary<(int, int), ushort> Tiles = [];
     readonly int floor;
@@ -332,6 +371,11 @@ sealed class Sim
     (int X, int Y)? window;
     int ox, oy;
     public double X => hostX;
+    /// <summary>KirbyNdsProvider's helper speed match (#105).</summary>
+    public bool MatchHelper { get; init; }
+    /// <summary>The original helper's centre x and feet y in host pixels; null while there is none.</summary>
+    public double? HelperX => nds.TryHelper(out var h) ? h.X + ox * 24 : null;
+    public double HelperFeet => nds.TryHelper(out var h) ? h.Y + oy * 24 + 14.5 : double.NaN;
     public Sim(NdsRuntime nds, string seed, int floor = 30, double? feet = null, bool match = true)
     {
         this.nds = nds; this.floor = floor; this.match = match;
@@ -427,9 +471,11 @@ sealed class Sim
             if (next != word[0]) { word[0] = next; nds.Write(count, word[..1]); }
         }
         else walkCycle.Reset();
+        if (MatchHelper) helper.Begin(nds);
         nds.Step(dash.Filter(raw, true, lastVx, lastVy, action));
         NdsState s = nds.State;
         lastVx = s.VxRaw; lastVy = s.VyRaw;
+        if (MatchHelper) helper.Finish(nds, ox, oy, false, TileAt);
         ushort after = nds.Action;
         ushort motion = motionActions.Next(after, s.VxRaw);
         (hostX, feet) = match ? SpeedMatch.Move(motion, motionActions.Direction(direction), s.VxRaw, x0, f0, s.X + ox * 24, s.Y + oy * 24 + 14.5, TileAt)

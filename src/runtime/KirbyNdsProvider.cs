@@ -27,6 +27,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
     private readonly RollZoneGate rollZones = new();
     private readonly StompController stomp = new();
     private readonly SpeedMatch.ActionFilter motionActions = new();
+    private readonly KirbyHelperMatch helperMatch = new();
     private readonly AnimationPacer walkCycle = new();
     private readonly CinematicWalk cinematicWalk = new();
     // The host cell row whose top is the floor of a cinematic walk, and its row in the exported window.
@@ -153,7 +154,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         audio = new NdsAudio(nds);
         LabActivationTrace.Mark("Audio complete");
         pacer.Reset(); dash.Reset(); slideKey.Reset(); rollZones.Reset(); CancelStomp(); previousAbility = nds.State.Ability; window = null;
-        motionActions.Reset();
+        motionActions.Reset(); helperMatch.Reset();
         previousInput = 0; previousDiveButton = false; upJumpClimbs = false; SlideStrike = GrabStrike = false;
         deathFrames = -1; deathAnchor = null; sourceDead = nds.Health == 0;
         session.Hero.radius = 9;
@@ -639,6 +640,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         }
         PaceWalkCycle(action, matched);
         if (fAttack) mask |= 2;
+        helperMatch.Begin(nds);
         nds.Step(mask);
         if (riding is not null) Diagnostic?.Invoke("elevator-stepped", new { action = nds.Action, y = nds.State.YRaw, vy = nds.State.VyRaw });
         int healthAfter = nds.Health;
@@ -680,11 +682,12 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         ushort after = nds.Action;
         ushort motion = motionActions.Next(after, state.VxRaw);
         double x = state.X + originX * 24, feet = state.Y + originY * 24 + 14.5;
+        terrainMap = map; terrainRollThrough = rollThrough;
         if (matched)
-        {
-            terrainMap = map; terrainRollThrough = rollThrough;
             (x, feet) = SpeedMatch.Move(motion, motionActions.Direction(direction), state.VxRaw, hostX, centerY + 14.5, x, feet, terrain ??= MatchTerrain);
-        }
+        // The helper keeps pace with him (#105); a stomp is Kirby's alone.
+        if (config.MatchHostSpeed)
+            helperMatch.Finish(nds, originX, originY, (state.Graphic & 0xFFFF) == 0xFFFF, terrain ??= MatchTerrain);
         hero.setPosPixel(x, feet + lift);
         // The host represents a foot exactly on a floor as yr=1 in the air
         // cell above it. setPosPixel chooses yr=0 inside the solid cell; that
