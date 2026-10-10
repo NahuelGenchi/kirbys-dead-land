@@ -1629,3 +1629,25 @@ the all-ability rendering tests as full gameplay acceptance.
   replacement and save; `20261009-010718` restored the slot from the save. Not run:
   a press lost to a hit, stomp/ladder/water, helper, room change mid-attack, normal play.
 
+## 2026-10-10 — Legendary altars offer ability items, not weapons (#107)
+
+- Owner report (two screenshots): a gold "Spartan Sandals IV-L" (+187% damage,
+  Take / Recycle 600) on an altar in a Kirby run. Dead Cells weapons must never
+  appear (#54).
+- Cause (type scan of `GameProxy.dll`, `hlboot.dat` bytecode via crashlink):
+  `en.inter.LegendaryAltar` is its own `Interactive`, not an `ItemAltar`, and
+  takes its item in its constructor; #61 hooked only `ItemAltar`, `TimedItem`
+  and `ShopBooth`, and the fidelity record listed legendary altars as "not
+  converted". Its `onActivate` hands a short press to the hero's pickup and
+  calls `onPick` to empty the altar. Other item holders checked: `VaniaAltar`
+  calls the hooked `ItemAltar` methods, `HiddenBlock`/`HiddenGroundBlock` later
+  spawn an `ItemDrop`; neither needs a change.
+- `Hook_LegendaryAltar.initGfx` replaces the item (the replaced item's `Legendary`
+  and "+" carry over); `onActivate` runs the host's `onPick` and drops the ability
+  item, a long press still recycles. `LabRewardItemsProbe` covers it.
+- Source: `python3 scripts/check.py` passes (408 core assertions; the runtime
+  builds with one existing warning in `LabAbilityProbe.cs`).
+- Live (`repros/legendary-altar-20261010`): `20261010-145915` passed (see
+  [RUNTIME_LAUNCH](docs/RUNTIME_LAUNCH.md#legendary-altars-107)). Not run: a
+  generator-placed legendary altar, a real Interact press, a level saved before
+  this fix, the locked refusal.
