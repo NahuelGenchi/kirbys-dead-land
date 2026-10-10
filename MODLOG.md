@@ -1629,3 +1629,15 @@ the all-ability rendering tests as full gameplay acceptance.
   replacement and save; `20261009-010718` restored the slot from the save. Not run:
   a press lost to a hit, stomp/ladder/water, helper, room change mid-attack, normal play.
 
+## 2026-10-10 — the helper no longer attacks key-locked doors (#110)
+
+- Owner report (recording): the Homunculus helper attacks key-locked doors
+  endlessly.
+- Cause: `KirbyEnemies.Eligible` pairs every `Door`; the helper's AI attacks any
+  proxy. `LockedDoor : Door` (and `CardLockedDoor`, `MariaDoor`) refuse hits.
+- Change: `KirbyEnemies.Refuses` keeps `LockedDoor` and `Door.locked` out of the
+  pairing and releases one that becomes locked. Breakable doors unchanged (#50).
+- Source: `python3 scripts/check.py` passes (the runtime builds). No test
+  exercises the rule: it needs host entities.
+- Live: none run. Not verified: the recording's door class, other special doors.
+

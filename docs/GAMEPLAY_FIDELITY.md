@@ -1195,6 +1195,25 @@ lunge into doors"): with the change, the lunge broke a real generated door on
 its sixth frame; the control without the door hook bounced off a door the same
 way and left it closed.
 
+### Key doors are not targets (#110)
+
+Owner recording 2026-10-10: the helper made with Homunculus attacked a key-locked
+door again and again, the hit effect playing at the door each time. `KirbyEnemies`
+pairs every host `Door` with a source proxy so copy attacks can burst breakable
+doors (#50), and the helper's AI attacks any proxy as an enemy. A key door takes
+no hit, so the helper never stopped.
+
+A `LockedDoor` (with `CardLockedDoor` and `MariaDoor`, its subclasses) and any
+`Door` whose host `locked` flag is set are no longer paired, and one that becomes
+locked while paired is released. Breakable doors pair as before, so Kirby's copy
+attacks and Suplex's lunge still burst them. The other special doors (timed, boss,
+money, triggered) are unchanged.
+
+Cause found by reading the host classes (`GameProxy`: `LockedDoor : Door`,
+`CardLockedDoor : LockedDoor`) and the pairing code; not reproduced. **No live
+game check was run**, so that this recording's door is a `LockedDoor`, and that
+the helper then leaves it alone, are unverified.
+
 ### Shift slides (#75)
 
 The host binds Dodge to Shift and Ctrl by default (the recorded profile's
