@@ -184,6 +184,7 @@ pub unsafe extern "C" fn kssu_step(handle: *mut std::ffi::c_void, mask: u16, fra
     let b = &mut *(handle as *mut Bridge);
     if !mute_proxy_footsteps(b.nds.main_ram_mut())
         || !keep_proxies_alive_in_water(b.nds.main_ram_mut())
+        || !quicken_helper_reaction(b.nds.main_ram_mut())
     {
         return -6;
     }
@@ -633,6 +634,91 @@ pub unsafe extern "C" fn kssu_move_player(handle: *mut std::ffi::c_void, dx: i32
         r[q + 2..q + 4].copy_from_slice(&y.to_le_bytes());
     }
     for q in [0xbb6b0, 0xbb6f8] {
+        let x = (u32at(r, q) as i32).wrapping_add(dx);
+        let y = (u32at(r, q + 4) as i32).wrapping_add(dy);
+        put32(r, q, x as u32);
+        put32(r, q + 4, y as u32);
+    }
+    0
+}
+/// The original CPU helper (the DS X button's partner) and its controller block.
+/// Like Kirby it is an actor of kind 56 running the player update 0x020B2714, with
+/// its own controller block (Kirby's is at 0x020BAF68). Helpers of every ability
+/// share this block, so there is one helper at a time.
+const HELPER_RECORD: u32 = 0x020bb784;
+#[repr(C)]
+#[derive(Default, Copy, Clone)]
+pub struct KssuHelper {
+    pub x_raw: i32,
+    pub y_raw: i32,
+    pub vx_raw: i16,
+    pub vy_raw: i16,
+    /// The helper controller's action code, in Kirby's codes (`KirbyActions`).
+    pub action: u16,
+    pub reserved: u16,
+}
+fn helper_node(r: &[u8]) -> Option<usize> {
+    actor_nodes(r).into_iter().find(|&p| {
+        r[p + 0x16] == 56
+            && u32at(r, p + 0x40) == HELPER_RECORD
+            && u32at(r, p + 0x30) == PLAYER_UPDATE
+    })
+}
+/// Where the original helper is, in the same 16.16 source coordinates as
+/// `kssu_state`. Returns -2 while Kirby has no helper.
+#[no_mangle]
+pub unsafe extern "C" fn kssu_helper_state(
+    handle: *mut std::ffi::c_void,
+    dest: *mut KssuHelper,
+) -> i32 {
+    if handle.is_null() || dest.is_null() {
+        return -1;
+    }
+    let r = (&*(handle as *mut Bridge)).nds.main_ram();
+    let Some(p) = helper_node(r) else {
+        return -2;
+    };
+    let record = (HELPER_RECORD - BASE) as usize;
+    *dest = KssuHelper {
+        x_raw: u32at(r, p + 0x80) as i32,
+        y_raw: u32at(r, p + 0x84) as i32,
+        vx_raw: u16at(r, p + 0x88) as i16,
+        vy_raw: u16at(r, p + 0x8a) as i16,
+        action: u16at(r, record + 0x18),
+        reserved: 0,
+    };
+    0
+}
+/// Move only the helper by a 16.16 delta, as `kssu_move_player` does for Kirby:
+/// its cached terrain probes and linked position records go with it, and the
+/// original places everything attached to it again next frame. Returns -2
+/// while Kirby has no helper.
+#[no_mangle]
+pub unsafe extern "C" fn kssu_move_helper(handle: *mut std::ffi::c_void, dx: i32, dy: i32) -> i32 {
+    if handle.is_null() {
+        return -1;
+    }
+    let r = (&mut *(handle as *mut Bridge)).nds.main_ram_mut();
+    let Some(p) = helper_node(r) else {
+        return -2;
+    };
+    let old_x = u32at(r, p + 0x80) as i32;
+    let old_y = u32at(r, p + 0x84) as i32;
+    let new_x = old_x.wrapping_add(dx);
+    let new_y = old_y.wrapping_add(dy);
+    put32(r, p + 0x80, new_x as u32);
+    put32(r, p + 0x84, new_y as u32);
+    let record = (HELPER_RECORD - BASE) as usize;
+    let px = (new_x >> 16).wrapping_sub(old_x >> 16) as i16;
+    let py = (new_y >> 16).wrapping_sub(old_y >> 16) as i16;
+    for i in 0..10 {
+        let q = record + 0x14c + i * 28;
+        let x = (u16at(r, q) as i16).wrapping_add(px);
+        let y = (u16at(r, q + 2) as i16).wrapping_add(py);
+        r[q..q + 2].copy_from_slice(&x.to_le_bytes());
+        r[q + 2..q + 4].copy_from_slice(&y.to_le_bytes());
+    }
+    for q in [record + 0x748, record + 0x790] {
         let x = (u32at(r, q) as i32).wrapping_add(dx);
         let y = (u32at(r, q + 4) as i32).wrapping_add(dy);
         put32(r, q, x as u32);
@@ -1642,6 +1728,38 @@ fn keep_proxies_alive_in_water(r: &mut [u8]) -> bool {
         return false;
     }
     put32(r, p, IGNORE);
+    true
+}
+
+// The original CPU helper's AI notices a target and then waits before it
+// approaches: the wait getter 0x020B53C0 returns the global AI block's reaction
+// time (0x020BC038+0x4C, 60 frames by default; the target routine sets it from
+// the distance class and helper type, up to 120 frames and more). Both callers
+// of the notice state take the smaller of the stored timer and this value
+// every frame, so an enemy was first hit two to three seconds after it
+// appeared. The getter's two halfword sign-extension instructions (the value
+// is already sign-extended by its load) become `cmp r0,#6; movgt r0,#6`, which
+// caps that wait at six frames. Nothing else of the helper's AI, its attacks or
+// targeting changes. The user's ROM file is never changed.
+const HELPER_REACTION_CAP: u32 = 6;
+fn quicken_helper_reaction(r: &mut [u8]) -> bool {
+    const GETTER: usize = 0x020b53c0 - BASE as usize;
+    const PREFIX: [u32; 5] = [0xe59f0018, 0xe5901044, 0xe3510000, 0x11d004fc, 0x03a0003c];
+    const SIGN_EXTEND: [u32; 2] = [0xe1a00800, 0xe1a00840];
+    const TAIL: [u32; 2] = [0xe12fff1e, 0x020bc038];
+    let patched = [
+        0xe3500000 | HELPER_REACTION_CAP,
+        0xc3a00000 | HELPER_REACTION_CAP,
+    ];
+    let words: Vec<u32> = (0..9).map(|i| u32at(r, GETTER + i * 4)).collect();
+    if words[..5] != PREFIX || words[7..] != TAIL {
+        return false;
+    }
+    if words[5..7] != SIGN_EXTEND && words[5..7] != patched {
+        return false;
+    }
+    put32(r, GETTER + 20, patched[0]);
+    put32(r, GETTER + 24, patched[1]);
     true
 }
 
