@@ -10,7 +10,8 @@ public sealed unsafe class NdsRuntime : IDisposable
     private readonly int thread = Environment.CurrentManagedThreadId;
     private nint handle;
     private static nint library;
-    private static delegate* unmanaged[Cdecl]<nint, int, int, int> movePlayer;
+    private static delegate* unmanaged[Cdecl]<nint, int, int, int> movePlayer, moveHelper;
+    private static delegate* unmanaged[Cdecl]<nint, NdsHelper*, int> helperState;
     private static delegate* unmanaged[Cdecl]<nint, byte, int> setAbility, setMikeShouts;
     private static delegate* unmanaged[Cdecl]<nint, int> abilityChangePending;
     private bool firstStep = true, firstWorld = true;
@@ -52,6 +53,12 @@ public sealed unsafe class NdsRuntime : IDisposable
             throw new InvalidOperationException("The native bridge does not match this runtime. Rebuild and stage both components together.");
         if (movePlayer == null && NativeLibrary.TryGetExport(library, "kssu_move_player", out nint move))
             movePlayer = (delegate* unmanaged[Cdecl]<nint, int, int, int>)move;
+        if (moveHelper == null && NativeLibrary.TryGetExport(library, "kssu_move_helper", out nint helperMove) &&
+            NativeLibrary.TryGetExport(library, "kssu_helper_state", out nint helperRead))
+        {
+            moveHelper = (delegate* unmanaged[Cdecl]<nint, int, int, int>)helperMove;
+            helperState = (delegate* unmanaged[Cdecl]<nint, NdsHelper*, int>)helperRead;
+        }
         if (setAbility == null && NativeLibrary.TryGetExport(library, "kssu_set_ability", out nint set) &&
             NativeLibrary.TryGetExport(library, "kssu_ability_change_pending", out nint pending) &&
             NativeLibrary.TryGetExport(library, "kssu_set_mike_shouts", out nint shouts))
@@ -178,6 +185,35 @@ public sealed unsafe class NdsRuntime : IDisposable
         if (movePlayer == null) throw new NotSupportedException("The native bridge cannot move Kirby alone. Rebuild and stage it with this runtime.");
         Result(movePlayer(handle, dxRaw, dyRaw));
     }
+    /// <summary>The bridge can read and move the original helper (#105).</summary>
+    public static bool CanMoveHelper => moveHelper != null && helperState != null;
+    /// <summary>The original CPU helper's position, velocity and action; false while Kirby has none (or an older bridge).</summary>
+    public bool TryHelper(out NdsHelper helper)
+    {
+        Check();
+        helper = default;
+        if (helperState == null) return false;
+        fixed (NdsHelper* ptr = &helper)
+        {
+            int result = helperState(handle, ptr);
+            if (result == -2) return false;
+            Result(result);
+        }
+        return true;
+    }
+    /// <summary>
+    /// Move only the original helper by a 16.16 delta, with its cached terrain
+    /// probes (see <see cref="MovePlayer"/>); false while Kirby has none.
+    /// </summary>
+    public bool MoveHelper(int dxRaw, int dyRaw)
+    {
+        Check();
+        if (moveHelper == null) return false;
+        int result = moveHelper(handle, dxRaw, dyRaw);
+        if (result == -2) return false;
+        Result(result);
+        return true;
+    }
     /// <summary>The bridge can change Kirby's copy through the original ability routine (#102).</summary>
     public static bool CanChangeAbility => setAbility != null;
     /// <summary>
@@ -273,6 +309,19 @@ public unsafe struct NdsState
     /// (+0x15) does not change with facing; its 0x10 bit hides the actor.
     /// </summary>
     public readonly bool FacesLeft => (StateWords[11] & 0x8000_0000u) != 0;
+}
+
+/// <summary>The original CPU helper (the DS X button's partner), in source coordinates (16.16).</summary>
+[StructLayout(LayoutKind.Sequential)]
+public struct NdsHelper
+{
+    public int XRaw, YRaw;
+    public short VxRaw, VyRaw;
+    /// <summary>The helper controller's action code, in Kirby's codes (<see cref="Kirby.Core.KirbyActions"/>).</summary>
+    public ushort Action;
+    private ushort reserved;
+    public readonly double X => XRaw / 65536.0;
+    public readonly double Y => YRaw / 65536.0;
 }
 
 [StructLayout(LayoutKind.Sequential)]
