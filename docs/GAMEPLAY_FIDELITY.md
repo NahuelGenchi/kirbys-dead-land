@@ -20,7 +20,7 @@ in [NDS_BRIDGE.md](NDS_BRIDGE.md). The original bootstrap experiment remains in
 | Input | Existing host bindings become original digital buttons; ordinary source directional combinations still apply. A held direction dashes through the original double tap (`AlwaysDash`), re-tapped after a landing only in an original ground action, so Ninja's wall cling keeps its held direction (#97); a light analog tilt walks. A key bound to both Up and jump (W and the Up arrow by default) climbs at a ladder or chain, as in the host, instead of jumping first |
 | Terrain | Nearby host solids, one-way floors, slopes, ladders and water become source collision cells. Vines grown with the Vine rune (`en.inter.VineLadder`) have no collision bits, only level spots (0, where the Beheaded climbs, and 18); their cells become source ladders, and the solid blocks a vine passes through or ends under become one-way ladder tops in that column. A ladder under a solid block stops the original below it, so this deviation lets Kirby climb onto the ledge, as the Beheaded's `exitLadderTop` does; all linked source objects and cached terrain probes move together when the window rebases by whole cells, while effects attached to a parent (Fire's head flame, Plasma's spark, attack effects) keep their offsets from it. Host movement of Kirby (speed match, stomp) moves only him and his terrain probes, so thrown bombs, cutters, effects and the helper keep their original paths |
 | Input | Existing host bindings become original digital buttons; ordinary source directional combinations still apply. A held direction dashes through the original double tap (`AlwaysDash`), re-tapped after a landing only in an original ground action, so Ninja's wall cling keeps its held direction (#97); a light analog tilt walks. A key bound to both Up and jump (W and the Up arrow by default) climbs at a ladder, chain or vine, as in the host, instead of jumping first |
-| Roll | Kirby's original slide is his roll and covers the Beheaded's roll: 131 px at up to 339 px/s. A Shift key bound to Dodge starts it too (see [Shift slides](#shift-slides-75)); Ctrl and the other Dodge bindings guard. Host roll-zone tunnels (collision 65) open while he slides and stay open until he leaves one entered by sliding; walking cannot enter. The slide's fast part counts as a roll for the host's door and breakable-tile checks, and Suplex's grab lunge for its door check (see [Suplex's lunge bursts doors](#suplexs-lunge-bursts-doors-50)) |
+| Roll | Kirby's original slide is his roll and covers the Beheaded's roll: 131 px at up to 339 px/s. A Shift key bound to Dodge starts it too (see [Shift slides](#shift-slides-75)); Ctrl and the other Dodge bindings guard. Host roll-zone tunnels (collision 65) open while he slides and stay open until he leaves one entered by sliding; walking cannot enter. A slide inside a tunnel keeps rolling at full speed to its far end (see [Roll-zone tunnels roll through](#roll-zone-tunnels-roll-through-115)). The slide's fast part counts as a roll for the host's door and breakable-tile checks, and Suplex's grab lunge for its door check (see [Suplex's lunge bursts doors](#suplexs-lunge-bursts-doors-50)) |
 | Dive attack | The player's host dive binding in the air or on a ladder or chain (original jump, fall, float or climb) starts the host `DiveAttack` under its own rules. The original controller keeps its falling or exhaling animation and physics (3.5 px/frame cap) and drops straight down; the host adds 11.5 px/frame of descent through free space, 15 px a frame in all like the Beheaded's dive (about 900 px/s), and leaves the original a full fall step to make the floor contact; the host skill resolves the landing (shockwave, stun, damage, breakable floors with the Ram rune). Only what stops the original fall counts as floor: solids, slopes and one-way platforms from above, never ladders or chains. From a climb the original A kicks him off; climbing down from a ladder or vine top the original ignores A for its first frames, so while it still climbs A is pressed every other frame and the host adds no descent, and the dive passes the ladder top in the row his feet climb in ([#74](#stomp-from-a-vine-top-74)) Enemy touch damage is off while stomping and for 30 frames after landing |
 | Camera | `CameraZoom` (default 1, the host camera) can zoom the host viewport; 2 shows about 200 host pixels of height, close to the DS screen's 192. Host cinematics and host zoom changes keep their framing |
 | Palette flashes | The original hurt and guard flashes of Kirby's first two palette banks are shown at `FlashStrength` (0.35) of their colour change, with original timing; lasting palette changes are adopted after four frames |
@@ -1300,6 +1300,51 @@ Run `20261007-014417` also slid on a Shift tap while running right (velocity
 704 against a wall). Both runs reached their time limit with no fatal log and
 the real saves unchanged. Not run: a controller, a remapped Dodge key, a copy
 ability's slide, a mouthful.
+
+### Roll-zone tunnels roll through (#115)
+
+Owner recording `Screencast From 2026-10-10 18-25-22`: in a long roll-zone tunnel
+Kirby's slide stopped partway, with the same slowdown and stop as on open floor.
+Dead Cells extends the Beheaded's roll until he is out of the zone; the original
+slide is a fixed 36 frames (131 px at the matched speed), shorter than the
+tunnel.
+
+Measured on the original controller (headless, flat floor, base Kirby): the
+slide runs 16 frames at velocity 704, then 16 frames of slowdown (672 down to
+192), then 4 stopped frames. Its controller block (the pointer at player+0x40)
+keeps two counters: steps left at +0x6CB (8 to 5 in the full-speed part, 4 to 1
+in the slowdown, 0 ends the slide) and frames left in the part at +0x6D8 (15 to
+0, twice). Writing both back each frame holds the slide at 704 with its roll
+poses still alternating; leaving them resumes the original sequence. The same
+offsets and values were read from the Beam, Wing and Sword saved states.
+
+`SlideHold` (`src/core/`) and `KirbySlideHold` (`src/runtime/`) use it:
+
+- While the original action is the slide, Kirby moves, and his body overlaps a
+  roll-zone cell, the counters read on entering are written back before every
+  source frame and the velocity is held at 704 (magnitude at +0x98, signed at
+  +0x88), so a tunnel entered during the slowdown is also rolled through at full
+  speed. `SpeedMatch` and the door and tile strikes see full speed meanwhile.
+- When Kirby is clear of the zone, a slide still in its full-speed part is given
+  the last step and no frames left, which is the original's own state before its
+  slowdown: he rolls out and slows to a stop as at the end of any slide.
+- A held frame that does not advance (a wall inside the tunnel) or a hit reaching
+  the original lets the slide go; the original then finishes it, so Kirby is
+  never pinned in the slide pose.
+- Outside roll zones nothing is written, with or without the speed match.
+
+Headless (`tests/speed`, original controller, synthetic 20-cell tunnel one cell
+high): without the hold a slide from 3 cells before it stops at x 431, inside the
+tunnel (ends 816); with it Kirby makes one 116-frame slide at 338 px/s inside
+the tunnel, leaves at 816 and stops at 865. A slide to the left stops at 282 for
+a tunnel starting at 336 (124 slide frames). A wall at cell 22 stops the roll at
+519.5 and the slide ends after 68 frames. `tests/Program.cs` covers the rule.
+
+Not run: **a live check in the game.** The staged private root
+`repros/tube-roll-20261010` was not launched because the owner's own game was
+running. Not verified: a real generated tunnel, a copy ability's slide through
+one with the hold (only the counters were read), vertical or bent tunnels, and a
+tunnel that ends in a door.
 
 ### Cinematic walks (intentional deviation)
 

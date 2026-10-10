@@ -401,6 +401,35 @@ Check(!gate.Update(sliding: false, inside: true), "Re-entering without a slide s
 gate.Update(true, true); gate.Reset();
 Check(!gate.Open && !gate.Update(false, true), "Reset forgets an entered roll zone");
 
+var slideHold = new SlideHold();
+byte readSteps = 8, readPhase = 11;
+(byte, byte) Counters() => (readSteps, readPhase);
+const ushort Slide = KirbyActions.Slide;
+Check(slideHold.Begin(Slide, 704, false, false, Counters) is null && !slideHold.Holding, "A slide on open floor is left to the original");
+Check(slideHold.Begin(KirbyActions.Walk, 704, true, false, Counters) is null && !slideHold.Holding, "Walking in a roll zone is not held");
+Check(slideHold.Begin(Slide, 704, true, false, Counters) is (8, 11) && slideHold.Holding, "A slide entering a tunnel keeps the counters it had");
+readSteps = 7; readPhase = 3;
+Check(slideHold.Begin(Slide, 704, true, false, Counters) is (8, 11), "The held counters stay as they were on entering");
+Check(slideHold.Begin(Slide, 704, false, false, Counters) is (SlideHold.LastFastStep, 0) && !slideHold.Holding,
+    "Leaving the tunnel in the full-speed part goes on to the slowdown");
+Check(slideHold.Begin(Slide, 704, false, false, Counters) is null, "Only the frame the slide is let go changes the counters");
+readSteps = 4; readPhase = 9;
+Check(slideHold.Begin(Slide, 640, true, false, Counters) is (4, 9) && slideHold.Holding, "A slide entering a tunnel in its slowdown is held too");
+Check(slideHold.Begin(Slide, 640, false, false, Counters) is null, "Leaving the tunnel in the slowdown resumes the original's own counts");
+readSteps = 8; readPhase = 11;
+slideHold.Begin(Slide, 704, true, false, Counters); slideHold.Finish(moved: false);
+Check(slideHold.Begin(Slide, 704, true, false, Counters) is null && !slideHold.Holding, "A slide that stops advancing is against a wall and is let go");
+Check(slideHold.Begin(Slide, 704, true, false, Counters) is null, "A let-go slide is not taken up again inside the same tunnel");
+Check(slideHold.Begin(KirbyActions.Standing, 0, true, false, Counters) is null &&
+      slideHold.Begin(Slide, 704, true, false, Counters) is (8, 11), "A new slide in the tunnel is held again");
+Check(slideHold.Begin(Slide, 704, true, true, Counters) is null && !slideHold.Holding, "A hit during a held slide goes to the original");
+Check(slideHold.Begin(Slide, 0, true, false, Counters) is null, "The stopped frames of a slide's end are not held");
+slideHold.Begin(KirbyActions.Standing, 0, false, false, Counters); readSteps = 8;
+slideHold.Begin(Slide, 704, true, false, Counters); slideHold.Finish(moved: true);
+Check(slideHold.Holding, "A held slide that advances stays held");
+slideHold.Reset();
+Check(!slideHold.Holding && slideHold.Begin(Slide, 704, false, false, Counters) is null, "Reset forgets a held slide");
+
 // Elevator at centre column 10, four cells wide, cell row 10; its solid row is 11 (top 264).
 Check(ElevatorRide.Over(10, 264, 10, 4, 10, 1, 0, false) is { Lift: 0, Raise: 0, Carrying: false }, "An elevator at rest needs no lift and carries nothing");
 Check(ElevatorRide.Over(10, 264, 10, 4, 10, 1, 0.5, false) is { Lift: 0, Carrying: true }, "An elevator that arrived this frame still carried Kirby");
