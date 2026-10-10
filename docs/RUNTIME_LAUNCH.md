@@ -1080,3 +1080,45 @@ failed only in probe phases: duplicated spawns (the test input runs twice per ho
 frame), a focus on other floor items, and a stale Interact press.
 `tools/nds_tests.py` passed all 78 cases, including `f_slot` and `f_slot_save`.
 
+## F slot and fountain (2026-10-10)
+
+Issue #109. `--input-plan healing` (`LabHealingProbe`) now owns Health Flask I
+from the start of the run (a `hasUnlockedItem` hook, as a profile that already has
+it), stores Mike in the F slot, and logs the slot's rules state and the HUD slot's
+visibility and icon tile each time they change (`healing-events.txt`, and `slot`
+in `healing.json`). It also logs `HUD.setHealings`, `HUD.refreshItems` and the
+HUD slot's `setIcon` calls, and calls the host's flask refill
+(`Heal.onFountainRefill`) and `HUD.refreshItems` itself. Two switches add
+`KIRBY_LAB_HEALING_SWORD=1` (Sword through the original inhale first, so the HUD
+overlay is active) and `KIRBY_LAB_HEALING_EXIT=1` (take the level's real exit
+150 frames after the heal). Data root `repros/fountain-109-20261010` (a copy of
+`repros/fslot-102-20261009`), outfit pack `outfit-build-sync/res.pak`:
+
+```sh
+python3 scripts/stage_runtime.py --data-root ~/.local/share/kirby-dead-cells/repros/fountain-109-20261010 \
+  --original-runtime --outfit-pack "$HOME/.local/share/kirby-dead-cells/outfit-build-sync/res.pak"
+KIRBY_LAB_HEALING_SWORD=1 KIRBY_LAB_HEALING_EXIT=1 python3 scripts/launch_runtime.py \
+  --data-root ~/.local/share/kirby-dead-cells/repros/fountain-109-20261010 \
+  --seconds 100 --start-game --outfit KirbySuperStarUltra --input-plan healing --capture-fps 1
+```
+
+Results (every run ended at its time limit with no fatal log):
+
+- `20261010-151727`, `152037`: base Kirby with Mike stored; the fountain heal
+  (16 → 54) left `stored=Mike uses=2`, the HUD slot visible and its icon tile
+  unchanged (flask unlocked mid-run, then owned from the start).
+- `20261010-152400`: the same after the host flask refill (`HUD.setHealings(1,1)`,
+  `setIcon`); the slot was redrawn in the same frame.
+- `20261010-152558` (Sword) and `20261010-152847` (Sword plus a probe
+  `HUD.refreshItems`): slot, count and icon intact before and after the heal; the
+  capture shows the Mike icon with count 2 at 15/76 and at 53/76.
+- `20261010-153057` (Sword, exit, before the fix): after the exit to
+  `T_Courtyard` the rules held `Mike` × 2 but the HUD slot was not visible, and
+  stayed so for the rest of the run (capture `frame-004097`).
+- `20261010-153428` (same, after the fix): after the exit the slot is visible with
+  a redrawn icon and the capture shows Mike with count 2 in the new level.
+
+Not run: a fountain placed by the level generator, other stored abilities after a
+level change, Collector or merchant HUD refreshes, and normal play with
+`./play-kirby`.
+

@@ -873,7 +873,10 @@ the stored one.
   stored ability's item icon, with Mike's remaining shouts as its count. The Kirby
   save keeps the slot, its item's level, quality and affixes, and any F press in
   progress; the bridge keeps a switch that was loading in its own savestate
-  trailer.
+  trailer. The host hides or rebuilds that slot without any flask call when a new
+  level starts (#109), so the slot is checked as drawn each frame (same skill
+  object, visible, same icon tile) and drawn again when the host changed it, not
+  only after `HUD.setHealings`.
 
 Evidence: core tests pin the slot, the enemy draw and the press (a simulated
 machine with load time, reverts, a refusing state, a hit before the attack, a
@@ -888,6 +891,16 @@ a replaced Paint back on the floor, and restored the slot from a host save. Not
 run: a press lost to a hit (the live hit during the switch did no damage), F
 during a stomp, on a ladder or under water, the helper, a room change during the
 attack, Elite or Boss targets, and normal play with `./play-kirby`.
+
+Issue #109 (owner report: the F ability disappears after healing at a fountain).
+The fountain itself does not clear the slot: with Mike stored, the host flask
+refill, `HUD.refreshItems` and a real fountain heal (16 → 54) left the slot, its
+count and its icon unchanged, with and without a main Sword. The defect was the
+next level: after taking the exit, the rules still held Mike with two shouts but
+the host's HUD showed no F slot, because the host hid it with no hooked call and
+the slot was only redrawn on `HUD.setHealings`. Fixed by the per-frame check
+above; live evidence is in
+[RUNTIME_LAUNCH.md](RUNTIME_LAUNCH.md#f-slot-and-fountain-2026-10-10).
 
 ### Host elevators (deviation)
 

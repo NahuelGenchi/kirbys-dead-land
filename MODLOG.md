@@ -1629,3 +1629,21 @@ the all-ability rendering tests as full gameplay acceptance.
   replacement and save; `20261009-010718` restored the slot from the save. Not run:
   a press lost to a hit, stomp/ladder/water, helper, room change mid-attack, normal play.
 
+## 2026-10-10 — F slot icon lost after a level change (#109)
+
+- Owner report: the F ability seems to disappear as soon as health is recovered at
+  the fountain. Repro with the healing probe (Mike stored; real fountain, host
+  flask refill, `HUD.refreshItems`, with and without a main Sword): the slot, its
+  count and its icon are unchanged by the heal. Taking the level exit after it
+  hid the F slot in the next level's HUD while the rules still held Mike × 2; the
+  host does that without any hooked call (no `setHealings`, `setIcon` or
+  `refreshItems`), and `KirbyFSlot` only redrew on `HUD.setHealings`.
+- Fix: `KirbyFSlot.DrawHud` checks the host slot as drawn each frame (same skill
+  object, visible, same icon tile) and redraws it when it changed.
+- Healing probe extended (flask owned from the start, Mike stored, optional
+  Sword and exit); `RUNTIME_LAUNCH.md` lists the runs.
+- Source: `python3 scripts/check.py` passes. Live (`repros/fountain-109-20261010`):
+  `20261010-153057` before the fix lost the slot after the exit, `20261010-153428`
+  after it kept it. Not run: a generated fountain, other abilities across levels,
+  normal play.
+
