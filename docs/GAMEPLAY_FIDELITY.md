@@ -889,6 +889,38 @@ run: a press lost to a hit (the live hit during the switch did no damage), F
 during a stomp, on a ladder or under water, the helper, a room change during the
 attack, Elite or Boss targets, and normal play with `./play-kirby`.
 
+### Helper reacts at once and keeps pace with Kirby (#105, intentional deviation)
+
+Owner report: the helper made with Homunculus (DS X) took too long to notice and
+attack enemies and was much slower than Kirby.
+
+- **Reaction.** The ROM's CPU helper waits 60 to 120 frames or more after an
+  enemy comes into view before it reacts (the getter at `0x020B53C0` feeds the
+  brain's notice timer at `0x020BC038`+`0x4C`). The bridge patches the getter's
+  two clamp instructions each `kssu_step` so the wait never exceeds 6 frames
+  (`HELPER_REACTION_CAP`); the table, the state machine and its choice of attack
+  stay original. The patch is validated word by word and refuses to apply to any
+  other code, like the other RAM patches. The ROM file is untouched.
+- **Speed.** Kirby's motion is scaled to the Beheaded's run by the speed match;
+  the helper received none, so he ran away from it. `KirbyHelperMatch` applies
+  the same match to the helper: each frame it measures how far the original
+  helper moved and adds the host-speed difference through `kssu_move_helper`,
+  which moves the helper and its terrain probes and linked records together
+  (same pattern as `kssu_move_player`). It uses Kirby's own terrain, so it stops
+  at walls, ceilings and floors like his added motion. It follows `MatchHostSpeed`.
+- **Not changed.** The helper's vision stays the DS screen (enemy proxies only
+  exist about 150 px from Kirby, so widening it found nothing more). The
+  Wheelie helper keeps its original speed while Kirby rides it (his motion is
+  the helper's; a stomp is Kirby's alone). The helper's follow distance stays the
+  ROM's 60 px, so it trails Kirby by that much at any speed.
+- **Evidence.** Source: `helper_reaction` (patched words; first hit 14 frames at
+  60 px and 36 at 110 px, where the ROM took about 30 and 185) and `helper_move`
+  in `tools/nds_tests.py`; `tests/speed` replays `KirbyNdsProvider.Step` with and
+  without the helper match (steady 60 px gap against more than 200 px natively,
+  peak speed the run's, stops at a wall). **No live game check was run**, so the
+  feel in the running host game, other abilities' helpers and a helper in water
+  or on a ladder are unverified.
+
 ### Host elevators (deviation)
 
 Dead Cells elevators (`en.inter.Elevator` and its `SimpleElevator`,
@@ -1410,7 +1442,13 @@ addition built from host items and the original inhale and swallow.
   with `ShopBooth.buy` (price taken, booth removed). Without enough gold the host
   shows its own message. A booth's price is the one the host set for the item it
   replaced. A shop mimic is not triggered by an ability item. A long press still
-  sells or recycles. Legendary altars are not converted.
+  sells or recycles. Legendary altars (`LegendaryAltar`, its own entity and not
+  an `ItemAltar`) are converted the same way (#107): the weapon or skill becomes
+  a Legendary ability item in `initGfx`, and a short press runs the host's own
+  `onPick` (the altar empties and its link is disabled) before the item drops on
+  the floor to be inhaled. A locked altar (enemies nearby) keeps the host's own
+  refusal. `VaniaAltar` reuses `ItemAltar.initGfx` and `ItemAltar.onActivate`, so
+  it is covered by the altar hooks.
 - **Quality (#56).** A floor ability item keeps the host's quality roll of the
   item it replaces: each "+" (`QualityUp`) and `Legendary` carry over with its
   level, so the name shows "Beam II+", "++" or a gold legendary name. The item's

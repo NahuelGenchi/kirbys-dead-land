@@ -1629,6 +1629,46 @@ the all-ability rendering tests as full gameplay acceptance.
   replacement and save; `20261009-010718` restored the slot from the save. Not run:
   a press lost to a hit, stomp/ladder/water, helper, room change mid-attack, normal play.
 
+## 2026-10-10 — helper reacts quickly and keeps pace with Kirby (#105)
+
+- Owner report: the Homunculus (X) helper took too long to detect and attack
+  enemies and was much slower than Kirby.
+- Research (private oracle bridge, ARM disassembly): the ROM brain's notice timer
+  is clamped by the getter at `0x020B53C0` (60 to 120+ frames); the helper got no
+  host speed match, Kirby does. Widening the helper's vision was tried and
+  dropped: enemy proxies only spawn ~150 px from Kirby.
+- Bridge: `quicken_helper_reaction` (wait capped at 6 frames, validated RAM
+  patch), `kssu_helper_state`, `kssu_move_helper`. Runtime: `KirbyHelperMatch`
+  applies `SpeedMatch` to the helper after Kirby's own match.
+- Source: `python3 scripts/check.py` passes; `tests/speed` passes with the new
+  helper checks; `python3 tools/nds_tests.py` passes 80 cases including `helper_reaction` and
+  `helper_move`. `tests/nds` does not build (missing `FarObject` include, same
+  before this change; not touched).
+- Live: none run. Not verified: the feel in the running game, a helper in water or
+  on a ladder, and the Wheelie helper (left at the original speed).
+
+## 2026-10-10 — Legendary altars offer ability items, not weapons (#107)
+
+- Owner report (two screenshots): a gold "Spartan Sandals IV-L" (+187% damage,
+  Take / Recycle 600) on an altar in a Kirby run. Dead Cells weapons must never
+  appear (#54).
+- Cause (type scan of `GameProxy.dll`, `hlboot.dat` bytecode via crashlink):
+  `en.inter.LegendaryAltar` is its own `Interactive`, not an `ItemAltar`, and
+  takes its item in its constructor; #61 hooked only `ItemAltar`, `TimedItem`
+  and `ShopBooth`, and the fidelity record listed legendary altars as "not
+  converted". Its `onActivate` hands a short press to the hero's pickup and
+  calls `onPick` to empty the altar. Other item holders checked: `VaniaAltar`
+  calls the hooked `ItemAltar` methods, `HiddenBlock`/`HiddenGroundBlock` later
+  spawn an `ItemDrop`; neither needs a change.
+- `Hook_LegendaryAltar.initGfx` replaces the item (the replaced item's `Legendary`
+  and "+" carry over); `onActivate` runs the host's `onPick` and drops the ability
+  item, a long press still recycles. `LabRewardItemsProbe` covers it.
+- Source: `python3 scripts/check.py` passes (408 core assertions; the runtime
+  builds with one existing warning in `LabAbilityProbe.cs`).
+- Live (`repros/legendary-altar-20261010`): `20261010-145915` passed (see
+  [RUNTIME_LAUNCH](docs/RUNTIME_LAUNCH.md#legendary-altars-107)). Not run: a
+  generator-placed legendary altar, a real Interact press, a level saved before
+  this fix, the locked refusal.
 ## 2026-10-10 — the helper no longer attacks key-locked doors (#110)
 
 - Owner report (recording): the Homunculus helper attacks key-locked doors

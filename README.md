@@ -38,9 +38,9 @@ preserved; generated assets and native dependencies remain in the private data r
   Dead Cells' own "Can't use that right now" message and stay on the ground; a
   long press still recycles them.
 - In a Kirby run, every new floor weapon other than a shield, and every skill,
-  on the floor, on challenge-room altars and timed pedestals, or in a shop,
-  becomes a colorless **ability item**: one of the 24 copy abilities, shown with
-  its original icon. Walking near one shows its name, description and colorless
+  on the floor, on challenge-room and legendary altars and timed pedestals, or in
+  a shop, becomes a colorless **ability item**: one of the 24 copy abilities,
+  shown with its original icon. Walking near one shows its name, description and colorless
   rarity. It cannot be picked up: inhale it and swallow it to copy that ability;
   spitting it out puts it back. While copied, the ability's item fills a weapon
   slot and the HUD. Its passives (affixes such as bleed or the arrow shot) act on
@@ -175,7 +175,7 @@ Existing Dead Cells bindings are used:
 | Skill 1 | Inhale / spit / copy ability attack |
 | Down with a mouthful | Swallow and transform |
 | Skill 2 | Discard the current copy ability |
-| Homunculus | Create / return the original helper |
+| Homunculus | Create / return the original helper; it reacts within 6 frames and moves at Kirby's speed (#105) |
 | Weapon buttons other than a shield (left-click by default), base form | Inhale / spit (original B) |
 | Weapon buttons other than a shield, copied form | Copy attack (original B) |
 | Shield button | Host shield parry and original guard; while copied, only the retained shield |
@@ -232,6 +232,8 @@ limited-use ability; Kirby has no health flask (#101).
   `20261007-005031`, `004842`, `004639`; see
   [Screen-wide attacks](docs/GAMEPLAY_FIDELITY.md#screen-wide-attacks-69)).
 - Original ladder, Suplex, Cook, helper and Wheel helper riding have source tests.
+- The helper's quick reaction and Kirby's speed have source tests only; no live game check
+  yet (see [Helper](docs/GAMEPLAY_FIDELITY.md#helper-reacts-at-once-and-keeps-pace-with-kirby-105-intentional-deviation)).
 - Kirby rides a real host `SimpleElevator` up and down in isolated live runs,
   standing on its surface at full speed both ways, and can jump on a rising one
   and land on it again.
