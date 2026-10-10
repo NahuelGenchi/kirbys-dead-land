@@ -1423,7 +1423,13 @@ addition built from host items and the original inhale and swallow.
   with `ShopBooth.buy` (price taken, booth removed). Without enough gold the host
   shows its own message. A booth's price is the one the host set for the item it
   replaced. A shop mimic is not triggered by an ability item. A long press still
-  sells or recycles. Legendary altars are not converted.
+  sells or recycles. Legendary altars (`LegendaryAltar`, its own entity and not
+  an `ItemAltar`) are converted the same way (#107): the weapon or skill becomes
+  a Legendary ability item in `initGfx`, and a short press runs the host's own
+  `onPick` (the altar empties and its link is disabled) before the item drops on
+  the floor to be inhaled. A locked altar (enemies nearby) keeps the host's own
+  refusal. `VaniaAltar` reuses `ItemAltar.initGfx` and `ItemAltar.onActivate`, so
+  it is covered by the altar hooks.
 - **Quality (#56).** A floor ability item keeps the host's quality roll of the
   item it replaces: each "+" (`QualityUp`) and `Legendary` carry over with its
   level, so the name shows "Beam II+", "++" or a gold legendary name. The item's

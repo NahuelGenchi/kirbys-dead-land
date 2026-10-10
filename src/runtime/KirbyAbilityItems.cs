@@ -229,12 +229,13 @@ internal static class KirbyAbilityItems
 
     /// <summary>
     /// Challenge rewards (item altars, including pick-one groups, and timed
-    /// items) and shop booths take their item in their own constructors, not
-    /// through ItemDrop (#61). Their item is replaced before their graphics are
-    /// built, which also converts those in a saved level. Taking or buying an
-    /// ability item follows the host's own step for that entity (the altar's
-    /// disable, the timed item's emptying, the booth's buy) and drops the item on
-    /// the floor, to be inhaled and swallowed like any floor ability item.
+    /// items), legendary altars (#107) and shop booths take their item in their
+    /// own constructors, not through ItemDrop (#61). Their item is replaced
+    /// before their graphics are built, which also converts those in a saved
+    /// level. Taking or buying an ability item follows the host's own step for
+    /// that entity (the altar's disable, the timed item's emptying, the
+    /// legendary altar's onPick, the booth's buy) and drops the item on the
+    /// floor, to be inhaled and swallowed like any floor ability item.
     /// </summary>
     private static void InstallRewards()
     {
@@ -252,6 +253,12 @@ internal static class KirbyAbilityItems
         {
             if (booth.item is { } item && Replacement(item) is { } ability) booth.item = ability;
             orig(booth);
+        };
+        // A legendary altar is its own entity, not an ItemAltar (#107).
+        Hook_LegendaryAltar.initGfx += (orig, altar) =>
+        {
+            if (altar.item is { } item && Replacement(item) is { } ability) altar.item = ability;
+            orig(altar);
         };
         Hook_ItemAltar.onActivate += (orig, altar, by, longPress) =>
         {
@@ -276,6 +283,22 @@ internal static class KirbyAbilityItems
             if (timed.icon is { } icon) { icon.parent?.removeChild(icon); timed.icon = null!; }
             timed.updateRender();
             Drop(timed._level, item, timed.cx, timed.cy, pop: true);
+        };
+        Hook_LegendaryAltar.onActivate += (orig, altar, by, longPress) =>
+        {
+            // A long press recycles it for gold, as the host does. While the
+            // room's enemies live the host refuses with its own message.
+            if (longPress || altar.locked || altar.item is not { } item || !IsAbilityItem(item) || !IsKirby(by))
+            {
+                orig(altar, by, longPress);
+                return;
+            }
+            int cx = altar.cx, cy = altar.cy;
+            var level = altar._level;
+            altar.removeLargeTip(Ref<bool>.In(true));
+            // The host's own take step (onPick) empties the altar and its link.
+            altar.onPick();
+            Drop(level, item, cx, cy, pop: true);
         };
         Hook_ShopBooth.onActivate += (orig, booth, by, longPress) =>
         {
