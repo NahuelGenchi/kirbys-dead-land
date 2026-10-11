@@ -47,7 +47,7 @@ The optional `KIRBY_LAB_REPRO_HEALTH=1` fixture changes only the copied test cha
 
 The second recording investigation added further opt-in diagnostics. `KIRBY_LAB_CAPTURE_ALL=1` keeps `--capture-fps` capturing during host cinematics and death, and adds the hero animation, cinematic and visibility state to `captures.jsonl`. `KIRBY_LAB_REPRO_HIT_AT` and `KIRBY_LAB_REPRO_LETHAL_AT` deliver a real host Zombie attack (20 damage, or 10 damage at 3 HP) through the normal attack path at that repro time; `KIRBY_LAB_REPRO_HIT_SIDE=-1` places the 20-damage attacker on Kirby's left instead of his right. `KIRBY_LAB_DUMP_PHASES`, for example `rebirth:20,headPopLoop:5`, writes the scroller render tree near the hero when its animation reaches that frame. In `repro` runs, `repro-events.jsonl` also records host attacks entering the source and source health changes, and `repro-trace.jsonl` records the source palette flash entry and Kirby's palette bank.
 
-The third recording investigation added more opt-in diagnostics. `repro` runs also record `host-motion.jsonl` (host position, animation and viewport zoom on every host frame), and drive the normal outfit too, without a source machine, so movement can be compared. `KIRBY_LAB_VISIBILITY=1` writes `visibility.jsonl` with the hero's visibility, sprite alpha, hero light and the body bitmap's alpha on every host frame. `KIRBY_LAB_MOB_SCALING=1` writes `mob-scaling.json` with every mob's life, elite flag, `trueLifeTier` and the host tier scale. `KIRBY_LAB_ZOOM_SCHEDULE`, for example `1:1.5u,10:2u`, sets the host viewport zoom once at each repro time (`u` also updates its size). `KIRBY_LAB_TOGGLES`, for example `30:nolight,34:none,38:nohead,46:blendnone`, switches the hero light, host head parts or the body bitmap's blend for A/B captures. `KIRBY_LAB_DUMP_PHASES` also accepts `@<lab ms>`. The render tree dump includes the scene lighting parameters and layer membership. The ability probe is run with `--probe-ability` source IDs: 18 Sword, 19 Hammer, 20 Parasol.
+The third recording investigation added more opt-in diagnostics. `repro` runs also record `host-motion.jsonl` (host position, animation and viewport zoom on every host frame), and drive the normal outfit too, without a source machine, so movement can be compared. `KIRBY_LAB_VISIBILITY=1` writes `visibility.jsonl` with the hero's visibility, sprite alpha, hero light and the body bitmap's alpha on every host frame. `KIRBY_LAB_MOB_SCALING=1` writes `mob-scaling.json` with every mob's life, elite flag, `trueLifeTier` and the host tier scale. `KIRBY_LAB_ZOOM_SCHEDULE`, for example `1:1.5u,10:2u`, sets the host viewport zoom once at each repro time (`u` also updates its size). `KIRBY_LAB_TOGGLES`, for example `30:nolight,34:none,38:nohead,46:blendnone`, switches the hero light, host head parts or the body bitmap's blend for A/B captures. `KIRBY_LAB_DUMP_PHASES` also accepts `@<lab ms>`. The render tree dump includes the scene lighting parameters and layer membership. The body-over-terrain investigation (#116) added `KIRBY_LAB_GHOSTS`, either `layers` (one copy of Kirby's body bitmap in every render layer, left to right below his feet, with `layer-census.json` listing each layer's visible children and the `DP_*` constants in `repro-events.jsonl`) or a list of `dx:dy:alpha|none[:layers above his]` copies at host-pixel offsets, and `KIRBY_LAB_TELEPORT=from:until:dx:dy`, which holds the hero at that host-pixel offset from where he was at `from` seconds (repro time) until `until`, for example inside a solid mass. The ability probe is run with `--probe-ability` source IDs: 18 Sword, 19 Hammer, 20 Parasol.
 
 ## Linux dependency repair
 
@@ -1141,3 +1141,35 @@ Not run: a fountain placed by the level generator, other stored abilities after 
 level change, Collector or merchant HUD refreshes, and normal play with
 `./play-kirby`.
 
+## Carnivorous plants (#113)
+
+`LabMovesProbe` has a `plant` scenario for `KIRBY_LAB_MOVES_SETUP`: it takes the
+level's first `CarnivorousPlant` (else builds one on open floor) and drops Kirby
+onto it. `moves-events.jsonl` logs every `CarnivorousPlant.onTouch` for the hero
+(his cell, foot, `dy` and body as `onTouch` sees them, `heroWasInside`,
+`announced`), `bumpEntity`, `open` and `close`. Data root
+`repros/plant-20261010` (a copy of `repros/elevator-20261006`), outfit pack
+`outfit-build-sync/res.pak`. `plan-empty.json` in the data root is `[]`; the lab
+reads the plan from inside its sandbox, so it must live there.
+
+```sh
+python3 scripts/stage_runtime.py --data-root ~/.local/share/kirby-dead-cells/repros/plant-20261010 \
+  --original-runtime --outfit-pack "$HOME/.local/share/kirby-dead-cells/outfit-build-sync/res.pak"
+KIRBY_LAB_REPRO_PLAN=$HOME/.local/share/kirby-dead-cells/repros/plant-20261010/plan-empty.json \
+KIRBY_LAB_MOVES_SETUP=plant@2.5 python3 scripts/launch_runtime.py \
+  --data-root ~/.local/share/kirby-dead-cells/repros/plant-20261010 \
+  --seconds 40 --start-game --outfit KirbySuperStarUltra --input-plan repro --capture-fps 10
+```
+
+| Run | Build | Result |
+| :--- | :--- | :--- |
+| `20261010-182526` | control: `onTouch` hook removed | 40 logged touches, each with the body projected (`yr` 0.625, radius 6, height 12); `announced` never true, no `close`, no `bump`, no plant damage |
+| `20261010-182428` | #113 | Touch with the foot at `yr` 1, `announced` true from the 8th touch, `close` and `bump` fired; two host hits from `CarnivorousPlant` (dmg 22 each), Kirby 76 → 59 → 42 |
+
+Both ran to their time limit with no fatal log and unchanged real saves. The two
+runs generated different levels, so the plants differ. A first attempt with the
+older `outfit-build/res.pak` died at start on `Invalid ItemKind:
+KirbyAbilityYoYo`; use `outfit-build-sync`.
+
+Not run: a plant under a copied attack, Kirby walking onto it, Gardener-boss
+plants, and normal play with `./play-kirby`.

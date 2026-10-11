@@ -69,6 +69,42 @@ double Speed(List<Row> r, int a, int b) => (r[b].X - r[a].X) / (b - a) * 60;
     Check(wall.Run(P(R(128, 3), new ushort[] { 129 }, R(128, 50))).Max(x => x.X) <= 399.5 + 1e-6, "A slide into a wall stops at the original contact");
 }
 {
+    // A roll-zone tunnel is open to a slide (its cells reach the original as free space, under a ceiling
+    // one cell above the floor) and longer than the 36-frame slide: one roll must reach the far end (#115).
+    const int From = 14, To = 33;
+    double entry = From * 24, exit = (To + 1) * 24;
+    Sim Tube(bool hold, double x, int? wall = null)
+    {
+        var sim = new Sim(nds, seed, x: x) { Tunnel = (From, To), HoldSlides = hold };
+        for (int c = From - 1; c <= To + 1; c++) sim.Tiles[(c, 28)] = SpeedMatch.Solid;
+        if (wall is { } w) sim.Tiles[(w, 29)] = SpeedMatch.Solid;
+        return sim;
+    }
+    int Run(List<Row> r, int from) => Range(from, r.Count - from).TakeWhile(i => r[i].Action == KirbyActions.Slide).Count();
+    var plain = Tube(false, 300).Run(P(R(0, 5), R(128, 3), new ushort[] { 129 }, R(128, 3), R(0, 120)));
+    Check(plain[^1].X < exit - 100 && plain[^1].Action == KirbyActions.Standing, $"Without the hold the slide stops inside a long tunnel (x {plain[^1].X:0}, tunnel ends {exit:0})");
+    var rows = Tube(true, 300).Run(P(R(0, 5), R(128, 3), new ushort[] { 129 }, R(128, 3), R(0, 120)));
+    int begin = rows.FindIndex(x => x.Action == KirbyActions.Slide);
+    int length = Run(rows, begin);
+    int inTunnel = Range(begin, length).Count(i => rows[i].X > entry && rows[i].X < exit);
+    var full = Range(begin + 1, length - 1).Where(i => rows[i].X > entry + 20 && rows[i].X < exit - 20).ToList();
+    Check(rows.Skip(begin).Take(length + 4).Count(x => x.Action == KirbyActions.Slide) == length && rows[^1].Action == KirbyActions.Standing,
+        $"One slide rolls through the tunnel ({length} frames) and Kirby stands afterwards");
+    Check(full.Count > 40 && full.All(i => Math.Abs(rows[i].Vx) >= SpeedMatch.SlideFullVelocity && Math.Abs(rows[i].X - rows[i - 1].X - 2.75 * SpeedMatch.SlideFastScale) < 0.1),
+        $"He rolls at full speed the whole way ({full.Count} frames inside, {2.75 * SpeedMatch.SlideFastScale * 60:0} px/s)");
+    Check(rows[^1].X > exit + 8 && rows[^1].X < exit + 70, $"He is out of the tunnel and slows to a stop beyond its end (x {rows[^1].X:0}, tunnel ends {exit:0})");
+    Check(inTunnel > 60, $"The roll spends {inTunnel} frames inside the tunnel");
+    // The same tunnel to the left: facing and velocity sign follow the slide.
+    var left = Tube(true, (To + 1) * 24 + 78).Run(P(R(32, 3), R(0, 5), R(128, 3), new ushort[] { 129 }, R(128, 3), R(0, 160)));
+    Check(left[^1].X < entry - 8 && left[^1].X > entry - 70 && left[^1].Action == KirbyActions.Standing,
+        $"A slide to the left rolls out of the tunnel's other end (x {left[^1].X:0}, tunnel starts {entry:0}, {left.Count(x => x.Action == KirbyActions.Slide)} slide frames)");
+    // A wall inside the tunnel stops it as it stops any slide, and the slide ends instead of staying pinned.
+    var walled = Tube(true, 300, wall: 22).Run(P(R(0, 5), R(128, 3), new ushort[] { 129 }, R(128, 3), R(0, 160)));
+    int pinned = walled.Count(x => x.Action == KirbyActions.Slide);
+    Check(walled.Max(x => x.X) <= 22 * 24 - SpeedMatch.HalfWidth + 1e-6 && walled[^1].Action == KirbyActions.Standing && pinned < 80,
+        $"A wall in the tunnel stops the roll and releases the slide ({pinned} slide frames, x {walled[^1].X:0})");
+}
+{
     // KirbyNdsProvider.Step: a Shift key bound to Dodge goes through SlideKey before the dash filter.
     List<Row> Keyed(IEnumerable<(ushort Mask, bool Key)> plan)
     {
@@ -363,6 +399,7 @@ sealed class Sim
     readonly SpeedMatch.ActionFilter motionActions = new();
     readonly KirbyHelperMatch helper = new();
     readonly AnimationPacer walkCycle = new();
+    readonly KirbySlideHold slideHold = new();
     public readonly Dictionary<(int, int), ushort> Tiles = [];
     readonly int floor;
     readonly bool match;
@@ -373,14 +410,19 @@ sealed class Sim
     public double X => hostX;
     /// <summary>KirbyNdsProvider's helper speed match (#105).</summary>
     public bool MatchHelper { get; init; }
+    /// <summary>Host cell columns of a roll-zone tunnel: the slide is held while Kirby's body overlaps them (#115).</summary>
+    public (int From, int To)? Tunnel { get; init; }
+    /// <summary>The slide hold of the tunnel; off, a slide runs its 36 frames inside it.</summary>
+    public bool HoldSlides { get; init; } = true;
     /// <summary>The original helper's centre x and feet y in host pixels; null while there is none.</summary>
     public double? HelperX => nds.TryHelper(out var h) ? h.X + ox * 24 : null;
     public double HelperFeet => nds.TryHelper(out var h) ? h.Y + oy * 24 + 14.5 : double.NaN;
-    public Sim(NdsRuntime nds, string seed, int floor = 30, double? feet = null, bool match = true)
+    public Sim(NdsRuntime nds, string seed, int floor = 30, double? feet = null, bool match = true, double? x = null)
     {
         this.nds = nds; this.floor = floor; this.match = match;
         nds.LoadState(seed);
         this.feet = floor * 24;
+        if (x is { } at) hostX = at;
         for (int i = 0; i < 20; i++) Step(0);
         if (feet is { } start) this.feet = start;
     }
@@ -472,13 +514,18 @@ sealed class Sim
         }
         else walkCycle.Reset();
         if (MatchHelper) helper.Begin(nds);
+        // KirbyNdsProvider.Step: a slide inside a roll-zone tunnel keeps rolling (#115).
+        bool inside = Tunnel is { } tunnel && Math.Floor((hostX + 8) / 24) >= tunnel.From && Math.Floor((hostX - 8) / 24) <= tunnel.To;
+        if (HoldSlides) slideHold.Begin(nds, action, lastVx, inside, false);
         nds.Step(dash.Filter(raw, true, lastVx, lastVy, action));
+        if (HoldSlides) slideHold.Finish(nds);
         NdsState s = nds.State;
         lastVx = s.VxRaw; lastVy = s.VyRaw;
+        int vx = slideHold.Holding && s.VxRaw != 0 ? Math.Sign(s.VxRaw) * Math.Max(Math.Abs((int)s.VxRaw), SlideHold.Velocity) : s.VxRaw;
         if (MatchHelper) helper.Finish(nds, ox, oy, false, TileAt);
         ushort after = nds.Action;
         ushort motion = motionActions.Next(after, s.VxRaw);
-        (hostX, feet) = match ? SpeedMatch.Move(motion, motionActions.Direction(direction), s.VxRaw, x0, f0, s.X + ox * 24, s.Y + oy * 24 + 14.5, TileAt)
+        (hostX, feet) = match ? SpeedMatch.Move(motion, motionActions.Direction(direction), vx, x0, f0, s.X + ox * 24, s.Y + oy * 24 + 14.5, TileAt)
             : (s.X + ox * 24, s.Y + oy * 24 + 14.5);
         return new Row(after, hostX, feet, s.VxRaw, s.VyRaw, motion);
     }

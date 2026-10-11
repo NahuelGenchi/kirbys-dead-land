@@ -1697,7 +1697,57 @@ the all-ability rendering tests as full gameplay acceptance.
   `20261010-153057` before the fix lost the slot after the exit, `20261010-153428`
   after it kept it. Not run: a generated fountain, other abilities across levels,
   normal play.
+## 2026-10-10 — Kirby rolls through a whole roll-zone tunnel (#115)
 
+## 2026-10-10 — carnivorous plant ignored Kirby standing on it (#113)
+
+- Owner report (screenshot): Kirby and the helper stood on a host carnivorous
+  plant and it never attacked.
+- Cause (host bytecode of `CarnivorousPlant.onTouch`): the plant closes only on
+  an entity that is on the ground. The `KirbyHurtbox` projection lifts Kirby's
+  host foot about 9 px for the whole `Level.update`, so the test failed; the same
+  cause as the 2026-10-05 pressure plate fix.
+- Fix: `Hook_CarnivorousPlant.onTouch` runs with the physical body
+  (`KirbyHurtbox.PhysicalHero`); the hit-area test keeps the projection.
+- Lab: new `plant` scenario in `LabMovesProbe`.
+- Source: `python3 scripts/check.py` passes (the runtime builds). Live
+  (`repros/plant-20261010`): `20261010-182526` without the hook never closed,
+  `20261010-182428` with it announced, closed and hit Kirby twice, 76 → 59 → 42. Not run: a
+  copied attack on a plant, Kirby walking onto one, Gardener-boss plants, normal
+  play.
+- Owner report (recording): in a long tube the roll makes the same stop it does on
+  open floor; one roll should reach the end of the tube.
+- Cause: roll zones were open to a slide but the original slide is a fixed 36
+  frames (131 px matched), so it ended inside a longer tunnel.
+- Change: `SlideHold` / `KirbySlideHold` write back the slide controller's two
+  counters (+0x6CB steps, +0x6D8 frames) and full velocity while Kirby's body is
+  in a roll zone; leaving it starts the usual slowdown; a wall or hit lets go.
+  Offsets found with a frame trace of the original slide.
+- Source: `python3 scripts/check.py` and `tests/speed` pass (the runtime builds),
+  including a new tunnel case, a left slide and a wall inside the tunnel.
+- Live: none run. The owner's game was running, so the staged root
+  `repros/tube-roll-20261010` was not launched.
+## 2026-10-10 — Kirby's body hidden by solid terrain art (#116)
+
+- Owner report (recording `Screencast From 2026-10-10 18-31-28.mp4`): Kirby appears
+  and disappears. Frame by frame: over the room's brick background the body is
+  drawn; at the black area at the room's edge only a sliver of it, and past the
+  platform end none. Play log: pacing locked 93-98%, no errors.
+- Cause: the body bitmap and equipment were attached beside the hero sprite, in
+  `DP_ROOM_MAIN_HERO` (9). The solid terrain art is a tile group in
+  `DP_FOREGROUND` (15) and covers the hero layer. Live ghosts of the bitmap in
+  every layer: only layers 15-17 showed over the mass; the opaque (`None`) blend
+  did not help; with Kirby inside the mass the whole actor was hidden.
+- Change: `KirbySpriteRenderer.AttachSibling` appends the body and equipment to
+  `DP_FOREGROUND`. New lab diagnostics `KIRBY_LAB_GHOSTS` and
+  `KIRBY_LAB_TELEPORT` (see `RUNTIME_LAUNCH.md`).
+- Source: `python3 scripts/check.py` passes (408 rule assertions, the runtime
+  builds). Live (`repros/body-void-116-20261010`, `--input-plan repro`): before the
+  change the ghosts and a held Kirby were hidden by the mass; after it Kirby is
+  fully visible inside it. `--input-plan combat` (`20261010-184759`): Ice
+  absorbed, shield parry, base and copy frames normal; no fatal log, saves
+  unchanged. Not run: the recording's biome, host props that overlap the hero,
+  other abilities' effects in the layer, normal play.
 ## 2026-10-10 — flip platforms flip under Kirby (#119)
 
 - Owner report (screenshot, first Castlevania level): an iron platform does not

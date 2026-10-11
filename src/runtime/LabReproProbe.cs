@@ -90,6 +90,93 @@ internal static unsafe class LabReproProbe
         // Do not replace source buttons, inventory, tutorials, or weapon-manager queries.
     }
 
+    private static (double X, double Y)? teleportTarget;
+
+    /// <summary>
+    /// Diagnostic: <c>from:until:dx:dy</c> holds the hero at that host-pixel offset
+    /// from where he was at <c>from</c> seconds, until <c>until</c>.
+    /// </summary>
+    private static void Teleport(Hero hero, string spec)
+    {
+        var fields = spec.Split(':');
+        if (fields.Length != 4 || !double.TryParse(fields[0], out double from) || !double.TryParse(fields[1], out double until) ||
+            !double.TryParse(fields[2], out double dx) || !double.TryParse(fields[3], out double dy)) return;
+        if (elapsed < from || elapsed >= until) return;
+        teleportTarget ??= ((hero.cx + hero.xr) * 24 + dx, (hero.cy + hero.yr) * 24 + dy);
+        hero.setPosPixel(teleportTarget.Value.X, teleportTarget.Value.Y);
+    }
+
+    private static readonly List<(dc.h2d.Bitmap Bitmap, double Dx, double Dy)> ghostBitmaps = [];
+
+    /// <summary>
+    /// Diagnostic for the body disappearing over solid dark terrain: copies of
+    /// Kirby's bitmap at fixed offsets, in his layer, with the blend modes
+    /// listed as <c>dx:dy:alpha|none[:layers above his]</c>, so one capture compares them where the
+    /// scene behind them differs.
+    /// </summary>
+    private static void Ghosts(Hero hero, string spec)
+    {
+        var provider = KirbyMod.Instance?.NativeProvider;
+        var renderer = provider is null ? null : RendererField.GetValue(provider) as KirbySpriteRenderer;
+        if (BitmapField.GetValue(renderer!) is not dc.h2d.Bitmap body || body.parent is not dc.h2d.Layers layers) return;
+        if (ghostBitmaps.Count == 0)
+        {
+            int index = layers.getChildIndex(hero.spr), layer = 0;
+            int count = System.Math.Min(layers.layerCount, layers.layersIndexes.length);
+            while (layer < count && index >= System.Runtime.InteropServices.Marshal.ReadInt32(layers.layersIndexes.bytes, layer * 4)) layer++;
+            if (spec == "layers")
+            {
+                // One ghost per render layer, left to right, below Kirby's feet.
+                var map = new List<object>();
+                for (int i = 0; i < layers.layerCount; i++)
+                {
+                    var ghost = new dc.h2d.Bitmap(body.tile, null!) { smooth = false };
+                    layers.addChildAt(ghost, i);
+                    ghostBitmaps.Add((ghost, -420 + i * 36, 90));
+                    map.Add(new { layer = i, dx = -420 + i * 36 });
+                }
+                var census = new List<object>();
+                int begin = 0;
+                for (int i = 0; i < layers.layerCount; i++)
+                {
+                    int end = System.Runtime.InteropServices.Marshal.ReadInt32(layers.layersIndexes.bytes, i * 4);
+                    var kinds = new Dictionary<string, int>();
+                    for (int k = begin; k < end && k < layers.children.length; k++)
+                        if (layers.children.getDyn(k) is dc.h2d.Object child && child.visible)
+                        {
+                            string key = child.GetType().Name + (child is dc.libs.heaps.slib.HSprite hs ? ":" + hs.groupName : "")
+                                + (child is dc.h2d.Drawable d ? ":" + d.blendMode?.GetType().Name : "");
+                            kinds[key] = kinds.GetValueOrDefault(key) + 1;
+                        }
+                    census.Add(new { layer = i, begin, end, kinds = kinds.OrderByDescending(p => p.Value).Take(12).ToDictionary(p => p.Key, p => p.Value) });
+                    begin = end;
+                }
+                File.AppendAllText(Path.Combine(run!, "layer-census.json"), JsonSerializer.Serialize(census, TraceOptions) + "\n");
+                var c = dc.Const.Class;
+                File.AppendAllText(Path.Combine(run!, "repro-events.jsonl"), JsonSerializer.Serialize(new
+                { elapsed, name = "ghost-layers", heroLayer = layer, layers.layerCount, map,
+                  c.DP_ROOM_WALLS_BG, c.DP_ROOM_WALLS, c.DP_ROOM_WALLS_FX, c.DP_ROOM_BACK_DECO, c.DP_ROOM_BACK, c.DP_ROOM_BACK_FX,
+                  c.DP_ROOM_MAIN_BACK, c.DP_ROOM_MAIN, c.DP_ROOM_MAIN_HERO, c.DP_ROOM_FRONT_HERO, c.DP_ROOM_MAIN_FX,
+                  c.DP_ROOM_FRONT, c.DP_ROOM_SMOKE, c.DP_FOREGROUND_BG, c.DP_FOREGROUND, c.DP_FOREGROUND_FX }) + "\n");
+                return;
+            }
+            foreach (string part in spec.Split(','))
+            {
+                var fields = part.Split(':');
+                if (fields.Length < 3 || !double.TryParse(fields[0], out double dx) || !double.TryParse(fields[1], out double dy)) continue;
+                int above = fields.Length > 3 && int.TryParse(fields[3], out int extra) ? extra : 0;
+                var ghost = new dc.h2d.Bitmap(body.tile, null!) { smooth = false };
+                ghost.blendMode = fields[2] == "none" ? new dc.h2d.BlendMode.None() : new dc.h2d.BlendMode.Alpha();
+                layers.addChildAt(ghost, System.Math.Min(layer + above, System.Math.Max(0, layers.layerCount - 1)));
+                ghostBitmaps.Add((ghost, dx, dy));
+            }
+        }
+        foreach (var (ghost, dx, dy) in ghostBitmaps)
+        {
+            ghost.x = body.x + dx; ghost.y = body.y + dy; ghost.visible = body.visible; ghost.posChanged = true;
+        }
+    }
+
     private static void Event(string name, Weapon weapon) => File.AppendAllText(Path.Combine(run!, "repro-events.jsonl"),
         JsonSerializer.Serialize(new { elapsed, name, weapon = weapon.GetType().FullName, item = weapon.item.permanentId }) + "\n");
 
@@ -148,6 +235,8 @@ internal static unsafe class LabReproProbe
                   eyeAlpha = hero.heroHead?.eye?.alpha, heroHasHead = hero.heroHead?.heroHasHead, lightRange = hero.selfLight?.l?.range }) + "\n");
             }
         }
+        if (Environment.GetEnvironmentVariable("KIRBY_LAB_GHOSTS") is { } ghosts) Ghosts(hero, ghosts);
+        if (Environment.GetEnvironmentVariable("KIRBY_LAB_TELEPORT") is { } teleport) Teleport(hero, teleport);
         if (Environment.GetEnvironmentVariable("KIRBY_LAB_ZOOM_SCHEDULE") is { } zooms && hero._level.viewport is { } vp)
         {
             double? wanted = null; bool update = false;
