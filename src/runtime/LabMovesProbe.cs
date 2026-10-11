@@ -13,6 +13,8 @@ namespace Kirby.Runtime;
 /// KIRBY_LAB_MOVES_SCAN=1 maps roll zones and breakables; KIRBY_LAB_MOVES_SETUP
 /// = scenario@seconds teleports Kirby next to one (rollzone, air, breakable,
 /// door, tile, ladder, vine), optionally with a Zombie below (KIRBY_LAB_MOVES_TARGET=1 still, 2 active).
+/// "plant" drops Kirby onto a real carnivorous plant (built if the level has none)
+/// and logs its touch, bump, open and close events.
 /// "elevator-spawn" builds a real host elevator where a level has none,
 /// "elevator" stands Kirby on the first one (or the one at column
 /// KIRBY_LAB_ELEVATOR_CX) and "elevator-use" activates it as
@@ -82,6 +84,20 @@ internal static unsafe class LabMovesProbe
                     hero = new { hero.cx, hero.cy, hero.xr, hero.yr, hero.dy, hero.dx, x = (hero.cx + hero.xr) * 24 } });
             orig(plate);
         };
+        int plantEvents = 0;
+        dc.en.ltrap.Hook_CarnivorousPlant.onTouch += (orig, plant, entity) =>
+        {
+            bool ours = entity?.HashlinkPointer == ModCore.Modules.Game.Instance.HeroInstance?.HashlinkPointer;
+            if (ours && plantEvents++ < 40)
+                Event("plant-touch-before", new { entity!.cx, entity.cy, entity.xr, entity.yr, entity.dy, entity.radius, entity.hei, plant.heroWasInside, plant.announced });
+            orig(plant, entity);
+            if (ours && plantEvents < 40)
+                Event("plant-touch-after", new { plant.heroWasInside, plant.announced });
+        };
+        dc.en.ltrap.Hook_CarnivorousPlant.bumpEntity += (orig, plant, entity) =>
+        { Event("plant-bump", new { type = entity?.GetType().FullName, entity?.cx, entity?.cy, entity?.dy }); orig(plant, entity); };
+        dc.en.ltrap.Hook_CarnivorousPlant.close += (orig, plant) => { Event("plant-close", new { plant.cx, plant.cy }); orig(plant); };
+        dc.en.ltrap.Hook_CarnivorousPlant.open += (orig, plant) => { Event("plant-open", new { plant.cx, plant.cy }); orig(plant); };
         dc.tool.mainSkills.Hook_DiveAttack.onOwnerLand += (orig, dive, height) =>
         { Event("host-dive-land", new { height, active = dive.isActive(), targetLife = target?.life }); orig(dive, height); Event("host-dive-landed", new { targetLife = target?.life }); };
     }
@@ -354,6 +370,38 @@ internal static unsafe class LabMovesProbe
                 {
                     Teleport(hero, (plate.cx + plate.xr) * 24, (plate.cy + 1) * 24);
                     detail = new { plate.cx, plate.cy, plate.xr, plate.yr, type = plate.GetType().FullName };
+                }
+                break;
+            }
+            case "plant":
+            {
+                // A real carnivorous plant (the level's own, else one built the way
+                // the level builds it) on open flat floor near Kirby; he drops onto it.
+                var plant = Entities<dc.en.ltrap.CarnivorousPlant>(hero).FirstOrDefault(p => !p.destroyed);
+                bool spawned = false;
+                if (plant is null)
+                {
+                    int cx = -1, ground = -1;
+                    for (int d = 0; d < 40 && cx < 0; d++)
+                        foreach (int candidate in new[] { hero.cx + d, hero.cx - d })
+                        {
+                            int g = hero.cy + 1;
+                            while (g < map.hei && (Cell(map, candidate, g) & 3) == 0) g++;
+                            if (g < map.hei && Open(map, candidate - 1, g - 6, g - 1) && Open(map, candidate, g - 6, g - 1) && Open(map, candidate + 1, g - 6, g - 1))
+                            { cx = candidate; ground = g; break; }
+                        }
+                    if (cx >= 0)
+                    {
+                        plant = new dc.en.ltrap.CarnivorousPlant(hero._level, cx, ground - 1, null);
+                        plant.init();
+                        spawned = true;
+                    }
+                }
+                if (plant is not null)
+                {
+                    Teleport(hero, (plant.cx + 0.5) * 24, (plant.cy - 3) * 24);
+                    detail = new { plant.cx, plant.cy, plant.placedOnGround, spawned,
+                        cells = Enumerable.Range(-1, 4).Select(dy => $"{plant.cy + dy}: {Cell(map, plant.cx, plant.cy + dy)}").ToArray() };
                 }
                 break;
             }
