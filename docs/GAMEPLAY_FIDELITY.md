@@ -892,7 +892,11 @@ the stored one.
   stored ability's item icon, with Mike's remaining shouts as its count. The Kirby
   save keeps the slot, its item's level, quality and affixes, and any F press in
   progress; the bridge keeps a switch that was loading in its own savestate
-  trailer. The host hides or rebuilds that slot without any flask call when a new
+  trailer. A press in progress also carries on when a new host session starts
+  on the same machine (#121): the original still holds the stored ability, and
+  only the press gives the main copy back. A new run, a restored save and a
+  revival start without one. Source only; a level change during a press was
+  not run live. The host hides or rebuilds that slot without any flask call when a new
   level starts (#109), so the slot is checked as drawn each frame (same skill
   object, visible, same icon tile) and drawn again when the host changed it, not
   only after `HUD.setHealings`.

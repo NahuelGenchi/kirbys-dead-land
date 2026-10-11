@@ -135,10 +135,13 @@ internal static class KirbyFSlot
         shownTile = skill.icon?.tile?.HashlinkPointer ?? 0;
     }
 
-    /// <summary>A new session or machine: no F press is running and the HUD is redrawn.</summary>
-    public static void Reset()
+    /// <summary>
+    /// A new session or machine: the HUD is redrawn and no F press is running, unless
+    /// <paramref name="keepPress"/> leaves one to finish on the machine that started it.
+    /// </summary>
+    public static void Reset(bool keepPress = false)
     {
-        Sequence.Reset();
+        if (!keepPress) Sequence.Reset();
         previousF = Held = false;
         hudDirty = true;
     }

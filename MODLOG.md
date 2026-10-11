@@ -1767,3 +1767,34 @@ the all-ability rendering tests as full gameplay acceptance.
   assertions in `tests/Program.cs`). Live: none run. Not verified: the flip in
   a real Castlevania level, how long the platform stays open, the platform
   re-closing under Kirby, other trap entities that wait on the land signal.
+## 2026-10-11 — source review findings applied (#121)
+
+- A high-effort source review of `main` (77aa909) gave ten findings; the owner
+  asked for them to be applied with the smallest edits.
+- Changed:
+  - `NdsRuntime.Health`/`MaxHealth` return the bridge's -2 (no player health
+    group) instead of throwing, so the provider's existing guards run.
+  - `KirbyMod.Synchronize` drops a session whose activation threw (ROM, bridge,
+    seed state or snapshot), logs it once and leaves that hero to the host.
+  - The `Kirby pacing` line counts only normally stepped frames: its clock
+    stops for loading, pauses, cinematics, deaths and deactivation.
+  - An F press in progress carries on in a new session on the same machine; a
+    new run resets it.
+  - `RuntimeConfig.RomPath` and `SeedStatePath` have no default; enabling the
+    original runtime without them fails at startup with a message.
+  - `KirbySpriteRenderer` keeps the uploaded texture when no decoder input
+    changed. The per-byte VRAM read in `kssu_read_gpu` is unchanged.
+  - The bridge refreshes proxy records once per change, not on every read
+    (see `docs/NDS_BRIDGE.md`).
+  - `KirbyEnemies.Controls` and the pairing loops use plain loops; the mutation
+    attack is made only when an enemy is paired.
+- Not changed: screen attacks keep no mutation factor or crit (already recorded
+  in `docs/GAMEPLAY_FIDELITY.md`); the proxy birth frame needs no contact fix
+  (`proxy_birth_contact` passes).
+- Source: `python3 scripts/check.py` passes (26 + 6 Python tests, 433 rule
+  assertions, the runtime builds). Bridge: built under another crate name
+  against the pinned vendor tree; all 80 `tools/nds_tests.py` cases pass and
+  match the previous bridge's results case by case. Live: none run. Not
+  verified: any of these changes in the game, the failed-activation fallback
+  with a real missing ROM or bad snapshot, a level change during an F press,
+  the pacing line in play, the time saved by the bridge and renderer changes.

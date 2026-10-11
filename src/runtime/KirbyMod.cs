@@ -24,6 +24,8 @@ public sealed class KirbyMod(ModInfo info) : ModBase(info), IOnHeroUpdate,
     private KirbySession? session;
     private RuntimeConfig config = new();
     private bool warnedNoProvider;
+    // The hero whose activation threw; it plays as the host character instead of retrying every frame.
+    private nint failedHero;
     private KirbyCamera? camera;
     public static KirbyMod? Instance { get; private set; }
     public KirbySession? ActiveSession => session;
@@ -49,6 +51,8 @@ public sealed class KirbyMod(ModInfo info) : ModBase(info), IOnHeroUpdate,
         dc.en.inter.Hook_Elevator.postUpdate += (orig, elevator) => { orig(elevator); NativeProvider?.AlignToElevator(elevator); };
         if (config.EnableOriginalRuntime)
         {
+            if (string.IsNullOrWhiteSpace(config.RomPath) || string.IsNullOrWhiteSpace(config.SeedStatePath))
+                throw new InvalidDataException("config.json enables the original runtime without RomPath and SeedStatePath; scripts/stage_runtime.py writes both.");
             KirbyTutorials.Install(config.OutfitId);
             KirbyHostVisuals.Install(config.OutfitId);
             KirbyHostSkills.Install();
@@ -146,10 +150,20 @@ public sealed class KirbyMod(ModInfo info) : ModBase(info), IOnHeroUpdate,
         if (session is null || session.Hero.HashlinkPointer != hero.HashlinkPointer)
         {
             Deactivate();
+            if (failedHero == hero.HashlinkPointer) return null;
             session = new KirbySession(hero, provider);
             KirbyHostVisuals.ClearHead(hero);
             CaptureShield(session);
-            provider.OnActivated(session);
+            try { provider.OnActivated(session); }
+            catch (Exception error)
+            {
+                // A missing ROM, bridge or seed state, or an unreadable snapshot. Kept
+                // active, the session pinned the hero with no machine behind it.
+                failedHero = hero.HashlinkPointer;
+                Logger.Error(error, "Kirby could not start; this hero plays as the host character.");
+                try { Deactivate(); } catch (Exception) { session = null; }
+                return null;
+            }
         }
         CaptureShield(session);
         return session;
@@ -271,7 +285,7 @@ public sealed class KirbyMod(ModInfo info) : ModBase(info), IOnHeroUpdate,
             provider!.OnFrame(state, dt);
     }
 
-    void IOnHeroDispose.OnHeroDispose() => Deactivate();
+    void IOnHeroDispose.OnHeroDispose() { Deactivate(); failedHero = 0; }
 
     void IOnFrameUpdate.OnFrameUpdate(double dt)
     {
@@ -286,8 +300,9 @@ public sealed class KirbyMod(ModInfo info) : ModBase(info), IOnHeroUpdate,
 public sealed class RuntimeConfig
 {
     public bool EnableOriginalRuntime { get; set; }
-    public string RomPath { get; set; } = "/home/rayzza/Documents/ROMS/Nintendo DS/Kirby Super Star Ultra (USA).nds";
-    public string SeedStatePath { get; set; } = "/home/rayzza/.local/share/kirby-dead-cells/oracle/ready2/000.state";
+    /// <summary>The owner's ROM and private seed state; scripts/stage_runtime.py writes both.</summary>
+    public string RomPath { get; set; } = "";
+    public string SeedStatePath { get; set; } = "";
     public string OutfitId { get; set; } = "KirbySuperStarUltra";
     public bool LoadDecodedAssetAtlases { get; set; }
     public string[] SwordIds { get; set; } = [];
