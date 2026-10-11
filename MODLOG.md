@@ -1698,3 +1698,19 @@ the all-ability rendering tests as full gameplay acceptance.
   after it kept it. Not run: a generated fountain, other abilities across levels,
   normal play.
 
+## 2026-10-10 — carnivorous plant ignored Kirby standing on it (#113)
+
+- Owner report (screenshot): Kirby and the helper stood on a host carnivorous
+  plant and it never attacked.
+- Cause (host bytecode of `CarnivorousPlant.onTouch`): the plant closes only on
+  an entity that is on the ground. The `KirbyHurtbox` projection lifts Kirby's
+  host foot about 9 px for the whole `Level.update`, so the test failed; the same
+  cause as the 2026-10-05 pressure plate fix.
+- Fix: `Hook_CarnivorousPlant.onTouch` runs with the physical body
+  (`KirbyHurtbox.PhysicalHero`); the hit-area test keeps the projection.
+- Lab: new `plant` scenario in `LabMovesProbe`.
+- Source: `python3 scripts/check.py` passes (the runtime builds). Live
+  (`repros/plant-20261010`): `20261010-182526` without the hook never closed,
+  `20261010-182428` with it announced, closed and hit Kirby twice, 76 → 59 → 42. Not run: a
+  copied attack on a plant, Kirby walking onto one, Gardener-boss plants, normal
+  play.

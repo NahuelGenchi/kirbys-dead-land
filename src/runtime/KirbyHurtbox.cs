@@ -55,6 +55,9 @@ internal static unsafe class KirbyHurtbox
         // must see the physical body, as they see the Beheaded's.
         dc.en.inter.Hook_PressurePlate.fixedUpdate += (orig, plate) => PhysicalHero(() => orig(plate));
         dc.en.inter.Hook_HiddenTrigger.fixedUpdate += (orig, trigger) => PhysicalHero(() => orig(trigger));
+        // A carnivorous plant finds its victims by hit area (projected body), then
+        // only closes on one that is on the ground, which needs the physical foot.
+        dc.en.ltrap.Hook_CarnivorousPlant.onTouch += (orig, plant, entity) => PhysicalHero(() => orig(plant, entity));
     }
 
     private static bool IsActive(Hero hero) => !hero.destroyed && hero.life > 0 &&

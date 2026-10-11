@@ -1141,3 +1141,35 @@ Not run: a fountain placed by the level generator, other stored abilities after 
 level change, Collector or merchant HUD refreshes, and normal play with
 `./play-kirby`.
 
+## Carnivorous plants (#113)
+
+`LabMovesProbe` has a `plant` scenario for `KIRBY_LAB_MOVES_SETUP`: it takes the
+level's first `CarnivorousPlant` (else builds one on open floor) and drops Kirby
+onto it. `moves-events.jsonl` logs every `CarnivorousPlant.onTouch` for the hero
+(his cell, foot, `dy` and body as `onTouch` sees them, `heroWasInside`,
+`announced`), `bumpEntity`, `open` and `close`. Data root
+`repros/plant-20261010` (a copy of `repros/elevator-20261006`), outfit pack
+`outfit-build-sync/res.pak`. `plan-empty.json` in the data root is `[]`; the lab
+reads the plan from inside its sandbox, so it must live there.
+
+```sh
+python3 scripts/stage_runtime.py --data-root ~/.local/share/kirby-dead-cells/repros/plant-20261010 \
+  --original-runtime --outfit-pack "$HOME/.local/share/kirby-dead-cells/outfit-build-sync/res.pak"
+KIRBY_LAB_REPRO_PLAN=$HOME/.local/share/kirby-dead-cells/repros/plant-20261010/plan-empty.json \
+KIRBY_LAB_MOVES_SETUP=plant@2.5 python3 scripts/launch_runtime.py \
+  --data-root ~/.local/share/kirby-dead-cells/repros/plant-20261010 \
+  --seconds 40 --start-game --outfit KirbySuperStarUltra --input-plan repro --capture-fps 10
+```
+
+| Run | Build | Result |
+| :--- | :--- | :--- |
+| `20261010-182526` | control: `onTouch` hook removed | 40 logged touches, each with the body projected (`yr` 0.625, radius 6, height 12); `announced` never true, no `close`, no `bump`, no plant damage |
+| `20261010-182428` | #113 | Touch with the foot at `yr` 1, `announced` true from the 8th touch, `close` and `bump` fired; two host hits from `CarnivorousPlant` (dmg 22 each), Kirby 76 → 59 → 42 |
+
+Both ran to their time limit with no fatal log and unchanged real saves. The two
+runs generated different levels, so the plants differ. A first attempt with the
+older `outfit-build/res.pak` died at start on `Invalid ItemKind:
+KirbyAbilityYoYo`; use `outfit-build-sync`.
+
+Not run: a plant under a copied attack, Kirby walking onto it, Gardener-boss
+plants, and normal play with `./play-kirby`.
