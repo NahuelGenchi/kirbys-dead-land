@@ -25,6 +25,8 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
     private readonly DashAssist dash = new();
     private readonly SlideKey slideKey = new();
     private readonly RollZoneGate rollZones = new();
+    private readonly KirbySlideHold slideHold = new();
+    private bool slideHeld;
     private readonly StompController stomp = new();
     private readonly SpeedMatch.ActionFilter motionActions = new();
     private readonly KirbyHelperMatch helperMatch = new();
@@ -153,7 +155,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         LabActivationTrace.Mark("Audio begin");
         audio = new NdsAudio(nds);
         LabActivationTrace.Mark("Audio complete");
-        pacer.Reset(); dash.Reset(); slideKey.Reset(); rollZones.Reset(); CancelStomp(); previousAbility = nds.State.Ability; window = null;
+        pacer.Reset(); dash.Reset(); slideKey.Reset(); rollZones.Reset(); slideHold.Reset(); CancelStomp(); previousAbility = nds.State.Ability; window = null;
         motionActions.Reset(); helperMatch.Reset();
         previousInput = 0; previousDiveButton = false; upJumpClimbs = false; SlideStrike = GrabStrike = false;
         deathFrames = -1; deathAnchor = null; sourceDead = nds.Health == 0;
@@ -462,7 +464,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
     private void ReviveSource(KirbySession session)
     {
         sourceDead = false; deathFrames = -1; deathAnchor = null; pacer.Reset(); dash.Reset();
-        rollZones.Reset(); CancelStomp();
+        rollZones.Reset(); slideHold.Reset(); CancelStomp();
         incoming.Clear();
         enemies.Clear(nds!);
         nds!.LoadState(config.SeedStatePath);
@@ -491,6 +493,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
             window = null;
             CancelStomp();
             rollZones.Reset();
+            slideHold.Reset();
         }
         sourceLevel = level;
     }
@@ -583,7 +586,8 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         // frame: open roll zones for it already, or the slide would hit them.
         bool sliding = action == KirbyActions.Slide ||
             (!stomp.Active && KirbyActions.CanSlide(action) && (raw & 128) != 0 && jumpPressed);
-        bool rollThrough = rollZones.Update(sliding, TouchesRollZone(map, hostX, centerY + 14.5));
+        bool inRollZone = TouchesRollZone(map, hostX, centerY + 14.5);
+        bool rollThrough = rollZones.Update(sliding, inRollZone);
         int originX = (int)Math.Floor(hostX / 24) - 16;
         int originY = (int)Math.Floor(centerY / 24) - 4;
         ExportTerrain(hero, originX, originY, rollThrough);
@@ -641,7 +645,15 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         PaceWalkCycle(action, matched);
         if (fAttack) mask |= 2;
         helperMatch.Begin(nds);
+        // A slide inside a roll-zone tunnel keeps rolling until Kirby is out (#115).
+        slideHold.Begin(nds, action, lastVx, inRollZone, hurt);
         nds.Step(mask);
+        slideHold.Finish(nds);
+        if (slideHold.Holding != slideHeld)
+        {
+            slideHeld = slideHold.Holding;
+            Diagnostic?.Invoke("slide-hold", new { holding = slideHeld, x = hostX, action = nds.Action, vx = nds.State.VxRaw });
+        }
         if (riding is not null) Diagnostic?.Invoke("elevator-stepped", new { action = nds.Action, y = nds.State.YRaw, vy = nds.State.VyRaw });
         int healthAfter = nds.Health;
         if (healthBefore >= 0 && healthAfter >= 0 && healthAfter < healthBefore)
@@ -679,12 +691,15 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         enemies.Swallowed.Clear();
         NdsState state = nds.State;
         lastVx = state.VxRaw; lastVy = state.VyRaw;
+        // A held slide runs at full speed whichever part it was entered in.
+        int slideVx = slideHold.Holding && state.VxRaw != 0
+            ? Math.Sign(state.VxRaw) * Math.Max(Math.Abs((int)state.VxRaw), SlideHold.Velocity) : state.VxRaw;
         ushort after = nds.Action;
         ushort motion = motionActions.Next(after, state.VxRaw);
         double x = state.X + originX * 24, feet = state.Y + originY * 24 + 14.5;
         terrainMap = map; terrainRollThrough = rollThrough;
         if (matched)
-            (x, feet) = SpeedMatch.Move(motion, motionActions.Direction(direction), state.VxRaw, hostX, centerY + 14.5, x, feet, terrain ??= MatchTerrain);
+            (x, feet) = SpeedMatch.Move(motion, motionActions.Direction(direction), slideVx, hostX, centerY + 14.5, x, feet, terrain ??= MatchTerrain);
         // The helper keeps pace with him (#105); a stomp is Kirby's alone.
         if (config.MatchHostSpeed)
             helperMatch.Finish(nds, originX, originY, (state.Graphic & 0xFFFF) == 0xFFFF, terrain ??= MatchTerrain);
@@ -706,7 +721,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         hero.dir = state.FacesLeft ? -1 : 1;
         hero.bodyHei = 29.0 / 24; hero.hei = 29;
         if (stomp.Active) FinishStompFrame(hero, map, after, healthAfter < healthBefore);
-        SlideStrike = HostStrikes.Slide(after, state.VxRaw);
+        SlideStrike = HostStrikes.Slide(after, slideVx);
         GrabStrike = HostStrikes.Grab(state.Ability, motion, state.VxRaw);
         // An F press switches the original copy and back; the rules keep the main copy.
         if (fBusy) previousAbility = state.Ability;

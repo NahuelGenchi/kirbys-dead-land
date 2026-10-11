@@ -1697,6 +1697,7 @@ the all-ability rendering tests as full gameplay acceptance.
   `20261010-153057` before the fix lost the slot after the exit, `20261010-153428`
   after it kept it. Not run: a generated fountain, other abilities across levels,
   normal play.
+## 2026-10-10 — Kirby rolls through a whole roll-zone tunnel (#115)
 
 ## 2026-10-10 — carnivorous plant ignored Kirby standing on it (#113)
 
@@ -1714,3 +1715,15 @@ the all-ability rendering tests as full gameplay acceptance.
   `20261010-182428` with it announced, closed and hit Kirby twice, 76 → 59 → 42. Not run: a
   copied attack on a plant, Kirby walking onto one, Gardener-boss plants, normal
   play.
+- Owner report (recording): in a long tube the roll makes the same stop it does on
+  open floor; one roll should reach the end of the tube.
+- Cause: roll zones were open to a slide but the original slide is a fixed 36
+  frames (131 px matched), so it ended inside a longer tunnel.
+- Change: `SlideHold` / `KirbySlideHold` write back the slide controller's two
+  counters (+0x6CB steps, +0x6D8 frames) and full velocity while Kirby's body is
+  in a roll zone; leaving it starts the usual slowdown; a wall or hit lets go.
+  Offsets found with a frame trace of the original slide.
+- Source: `python3 scripts/check.py` and `tests/speed` pass (the runtime builds),
+  including a new tunnel case, a left slide and a wall inside the tunnel.
+- Live: none run. The owner's game was running, so the staged root
+  `repros/tube-roll-20261010` was not launched.
