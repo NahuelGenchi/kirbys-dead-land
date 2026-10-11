@@ -25,6 +25,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
     private readonly DashAssist dash = new();
     private readonly SlideKey slideKey = new();
     private readonly RollZoneGate rollZones = new();
+    private readonly HostLanding hostLanding = new();
     private readonly KirbySlideHold slideHold = new();
     private bool slideHeld;
     private readonly StompController stomp = new();
@@ -155,7 +156,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         LabActivationTrace.Mark("Audio begin");
         audio = new NdsAudio(nds);
         LabActivationTrace.Mark("Audio complete");
-        pacer.Reset(); dash.Reset(); slideKey.Reset(); rollZones.Reset(); slideHold.Reset(); CancelStomp(); previousAbility = nds.State.Ability; window = null;
+        pacer.Reset(); dash.Reset(); slideKey.Reset(); rollZones.Reset(); hostLanding.Reset(); slideHold.Reset(); CancelStomp(); previousAbility = nds.State.Ability; window = null;
         motionActions.Reset(); helperMatch.Reset();
         previousInput = 0; previousDiveButton = false; upJumpClimbs = false; SlideStrike = GrabStrike = false;
         deathFrames = -1; deathAnchor = null; sourceDead = nds.Health == 0;
@@ -713,6 +714,8 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         // the elevator sets for its cell, and the host then lands the hero again.
         if (riding?.Tracked is { Sunk: false, Elevator: var carrier } && Math.Abs(feet + lift - ElevatorRide.Surface(carrier.cy, carrier.yr)) < 1e-6)
         { hero.cy = carrier.cy; hero.yr = carrier.yr; }
+        // Host flip platforms flip on the hero's landing, which the host does not see here.
+        if (hostLanding.Update(after, state.VyRaw)) KirbyFlipPlatforms.Land(hero);
         // Kirby standing on an elevator is drawn with its platform (AlignToElevator);
         // off it, that offset eases back over a few frames instead of jumping.
         standingOn = riding?.Tracked is { } on && Math.Abs(feet + lift - on.Surface) < 0.01 ? on.Elevator : null;

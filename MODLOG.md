@@ -1748,3 +1748,22 @@ the all-ability rendering tests as full gameplay acceptance.
   absorbed, shield parry, base and copy frames normal; no fatal log, saves
   unchanged. Not run: the recording's biome, host props that overlap the hero,
   other abilities' effects in the layer, normal play.
+## 2026-10-10 — flip platforms flip under Kirby (#119)
+
+- Owner report (screenshot, first Castlevania level): an iron platform does not
+  flip with Kirby on it.
+- Cause, from the host bytecode: `FlipPF.init` listens to `heroSignals.landSignal`
+  and `onHeroLand` needs the platform closed, the hero's column in
+  `xLeft..xRight` and `hero.cy == cy - 1`. Only `Hero.onLand` raises the signal, and
+  only host physics calls it; the mod holds `dx`, `dy` and gravity at zero and
+  places Kirby from the original, so the host never lands him. The other
+  listeners (`DiveAttack`, `DodgeRoll`, `pow.Wings`) are left alone: the stomp ends
+  through `onOwnerLand`, and `Hero.onLand` adds a stun and fall damage.
+- Change: `HostLanding` (core) reports the source frame where the original
+  reaches the ground after moving downward since it left it (a ladder or chain
+  resets it). `KirbyFlipPlatforms.Land` then calls `onHeroLand` on each live
+  `FlipPF` after Kirby's host position is set.
+- Source: `python3 scripts/check.py` passes (the runtime builds; new landing
+  assertions in `tests/Program.cs`). Live: none run. Not verified: the flip in
+  a real Castlevania level, how long the platform stays open, the platform
+  re-closing under Kirby, other trap entities that wait on the land signal.
