@@ -32,7 +32,7 @@ in [NDS_BRIDGE.md](NDS_BRIDGE.md). The original bootstrap experiment remains in
 | Star projectiles | The ROM moves Kirby's spit, big spit and discarded ability stars through host terrain (spit stars burst on walls, the ability star bounces). Each star strikes host enemies once and staggers them with the host dive's stun and bump; paired enemies take spit-star damage through their source object, all others from the host (see below) |
 | Screen-wide attacks | Paint, Mike and Crash hit every enemy in the Dead Cells view: enemies the original cannot reach (no live source object, or one outside the original's window) take the attack's original damage from the host (see [Screen-wide attacks](#screen-wide-attacks-69)) |
 | Boss collision | Original resistance bits prevent inhale, Suplex capture and Cook; damage still uses original collision/debounce, while the host retains boss AI and phases |
-| Host triggers | Pressure plates (trap plates and pulley points too) and hidden triggers test Kirby's physical foot on the ground, as for the Beheaded; enemy attacks still test the projected original hurtbox |
+| Host triggers | Pressure plates (trap plates and pulley points too), hidden triggers and carnivorous plants (`CarnivorousPlant.onTouch`, see [Carnivorous plants](#carnivorous-plants-113)) test Kirby's physical foot on the ground, as for the Beheaded; enemy attacks and the plant's hit area still test the projected original hurtbox |
 | Facing | The host hero's direction follows the original facing (bit 31 of player+0x6C) every source frame, so host shields block the way Kirby faces |
 | Incoming damage | Host shield/parry resolves first; remaining damage, converted to the same fraction of Kirby's 76 HP as of the host's current maximum, enters the next original collision tick, preserving original guard, recoil and invulnerability |
 | Touching enemies | As in Dead Cells, touching an enemy hurts neither Kirby nor the enemy: the original body-contact damage is excluded for every paired enemy, while Kirby's inhale, slide and copy attacks still hit, and the host's own touch attacks (spiked or electric enemies) still reach him as incoming damage. `OriginalTouchDamage: true` restores the original rule (7 of 76 HP to Kirby, and weak enemies destroyed by the bump) |
@@ -160,6 +160,25 @@ contact left the wall at 3 life, unopened.
 
 Not run: a live R-key press beside a wall as a parity control, copy forms other
 than Sword, and rewards other than food.
+
+### Carnivorous plants (#113)
+
+Owner report 2026-10-10: Kirby stood on a host `en.ltrap.CarnivorousPlant` and it
+never closed on him. `CarnivorousPlant.fixedUpdate` finds the hero in its 72 × 48
+`hitArea` and calls `onTouch`, which starts the announce-and-close sequence only
+when the entity is on the ground (the cell below solid, the foot at the ground
+height, `dy` 0). `KirbyHurtbox` projects Kirby's original body onto the host hero
+for the whole `Level.update`, so `onTouch` saw the foot at `yr` 0.625 instead of
+1, the same cause as the pressure plate fix. `onTouch` now runs with the physical
+body (`Hook_CarnivorousPlant.onTouch`); the hit-area test in `fixedUpdate` keeps
+the projected hurtbox, as do the plant's own attacks on Kirby.
+
+Live (`docs/RUNTIME_LAUNCH.md`, "Carnivorous plants (#113)"): with the change
+Kirby dropped onto a plant, the plant announced, closed and bit him twice, 76 →
+59 → 42 HP; without it the same setup saw 40 touches at `yr` 0.625
+and no close, bump or damage. Not run: a plant under a copied attack, Kirby
+walking onto one, plants spawned by the Gardener boss (`fromGardenerBoss`), and
+normal play.
 
 ### Star projectiles
 
