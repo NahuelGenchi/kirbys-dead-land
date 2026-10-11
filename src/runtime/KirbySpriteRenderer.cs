@@ -292,24 +292,28 @@ public sealed unsafe class KirbySpriteRenderer : IDisposable
         AttachSibling(bitmap, hero.spr, ref bitmapLayer, false);
     }
 
+    /// <summary>
+    /// Kirby's body and equipment are drawn at the end of the host's
+    /// <c>DP_FOREGROUND</c> layer, not beside the hero sprite. The level's solid
+    /// terrain art is a tile group in that layer, drawn over the hero layer, so
+    /// any part of Kirby overlapping it (his sprite is larger than the cells he
+    /// occupies, and he floats along walls and ceilings) was hidden: he looked
+    /// like a sliver at an edge and vanished inside it (#116). Appended last,
+    /// he draws over the terrain art but below the layer's fog and effects.
+    /// </summary>
     private void AttachSibling(dc.h2d.Object child, HSprite host, ref int priorLayer, bool beneathBody)
     {
         dc.h2d.Object parent = host.parent;
-        int hostIndex = parent.getChildIndex(host);
         if (parent is Layers layers)
         {
-            // Layers.addChildAt receives a layer ID, unlike Object.addChildAt.
-            // Find the host's layer using the engine's exclusive end indices.
-            int layer = 0;
-            int count = System.Math.Min(layers.layerCount, layers.layersIndexes.length);
-            while (layer < count && hostIndex >= Marshal.ReadInt32(layers.layersIndexes.bytes, layer * 4)) layer++;
-            if (layer >= count) throw new InvalidOperationException("The host sprite has no render layer.");
+            int layer = System.Math.Min(dc.Const.Class.DP_FOREGROUND, layers.layerCount - 1);
             if (child.parent?.HashlinkPointer != parent.HashlinkPointer || priorLayer != layer)
                 layers.addChildAt(child, layer);
             priorLayer = layer;
         }
         else if (child.parent?.HashlinkPointer != parent.HashlinkPointer)
         {
+            int hostIndex = parent.getChildIndex(host);
             parent.addChildAt(child, beneathBody && bitmap?.parent?.HashlinkPointer == parent.HashlinkPointer
                 ? parent.getChildIndex(bitmap) : hostIndex + 1);
             priorLayer = -1;
