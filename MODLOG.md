@@ -1838,3 +1838,23 @@ the all-ability rendering tests as full gameplay acceptance.
   are: the interpreter's 2.6 ms, the 6 ms original frame with 30 stacked
   enemies, the `HSprite.draw` hook, the whole-texture upload, the host's
   first-use shader link.
+
+## 2026-10-11 — camera looks far below Kirby after arriving in the Ossuary (#126)
+
+- Report: the camera is wrong on arrival in the Ossuary, then corrects itself;
+  only that level. A screenshot showed Kirby at the top edge of the screen.
+- Cause (recorded, `--input-plan arrival`, Ossuary): the level starts a host
+  `ForcedDiveAttack` as the hero arrives. The host camera leads 150 px below a
+  diving hero, and the host ends the dive from the hero's landing, which never
+  comes while the source machine owns Kirby's physics. The view stayed 134
+  host pixels below Kirby for the whole 25 s run, in two separate levels.
+- Fix: `KirbyNdsProvider.FinishForcedDive` delivers `onOwnerLand` when the
+  source machine puts Kirby on the ground. Live, three Ossuary runs: the dive
+  ends, the lead returns to −5 and the offset settles at +18 px; the movement
+  plan ran 45 s without a fatal log.
+- Source: `python3 scripts/check.py` passes. Not run: arrival through the
+  `T_Ossuary` passage in a played run, other biomes that start a forced dive,
+  the landing shockwave against enemies near the arrival.
+- Lab: `arrival` input plan and `KIRBY_LAB_ARRIVAL_LEVEL`, run from
+  `repros/ossuary-camera-20261011`; the shared lab was not restaged.
+

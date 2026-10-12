@@ -37,6 +37,8 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
     private int? cinematicFloor;
     private const int CinematicFloorRow = 5;
     private dc.tool.mainSkills.DiveAttack? activeDive;
+    // The feet row where a dive the level started was first seen, or NaN (#126).
+    private double forcedDiveStartFeetY = double.NaN;
     // One-way platforms and ladder tops the host dive passes through, down to this row.
     private int stompIgnoreRow = int.MinValue;
     private ushort previousInput;
@@ -751,6 +753,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         hero.dir = state.FacesLeft ? -1 : 1;
         hero.bodyHei = 29.0 / 24; hero.hei = 29;
         if (stomp.Active) FinishStompFrame(hero, map, after, healthAfter < healthBefore);
+        else FinishForcedDive(hero, map, after);
         SlideStrike = HostStrikes.Slide(after, slideVx);
         GrabStrike = HostStrikes.Grab(state.Ability, motion, state.VxRaw);
         // An F press switches the original copy and back; the rules keep the main copy.
@@ -1080,8 +1083,32 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
                 break;
         }
     }
+    /// <summary>
+    /// A level can start a dive of its own as the hero arrives (the Ossuary
+    /// drops him in), and the host ends it from the hero's own landing. His
+    /// physics here belong to the source machine, so that landing never comes:
+    /// the dive stays active and its camera keeps looking far below him (#126).
+    /// Deliver the landing when the source machine puts Kirby on the ground,
+    /// as for his own stomp.
+    /// </summary>
+    private void FinishForcedDive(Hero hero, dc.level.LevelMap map, ushort action)
+    {
+        var skills = hero.mainSkillsManager?.skills;
+        dc.tool.mainSkills.ForcedDiveAttack? dive = null;
+        for (int i = 0; skills is not null && i < skills.length; i++)
+            if (skills.getDyn(i) is dc.tool.mainSkills.ForcedDiveAttack forced && forced.isActive()) { dive = forced; break; }
+        if (dive is null) { forcedDiveStartFeetY = double.NaN; return; }
+        double hostX = (hero.cx + hero.xr) * 24, feetY = (hero.cy + hero.yr) * 24 - lift;
+        if (double.IsNaN(forcedDiveStartFeetY)) forcedDiveStartFeetY = feetY;
+        if (!KirbyActions.OnGround(action) && FreeBelow(map, hostX, feetY, waterStops: false) > 0.5) return;
+        double height = Math.Max(0, (feetY - forcedDiveStartFeetY) / 24);
+        forcedDiveStartFeetY = double.NaN;
+        Diagnostic?.Invoke("forced-dive-land", new { height, feetY, action });
+        dive.onOwnerLand(height);
+    }
     private void CancelStomp()
     {
+        forcedDiveStartFeetY = double.NaN;
         var dive = activeDive;
         if (stomp.Active || dive is not null) dash.Reset();
         stomp.Reset();
