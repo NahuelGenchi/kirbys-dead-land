@@ -28,7 +28,7 @@ The skip of the decode and upload on a frame whose inputs did not change belongs
 
 ## Measurements
 
-Three builds were run with the same probe marks: `main` (`77aa909`) with the bridge it has now, #121 alone (PR #122, `dd58ee3`, with its bridge), and #123 on top of #121. Each run is one `launch_runtime.py --start-game --outfit KirbySuperStarUltra --input-plan <plan>` with `KIRBY_LAB_PERF=1` in its own private data root. Every run ended by its time limit with no fatal log and the real saves unchanged.
+Three builds were run with the same probe marks: `main` (`77aa909`) with the bridge it has now, #121 alone (PR #122, `dd58ee3`, with its bridge), and #123 on top of #121. Each run is one `launch_runtime.py --start-game --outfit KirbySuperStarUltra --input-plan <plan>` with `KIRBY_LAB_PERF=1` in its own private data root. Every run ended by its time limit with no fatal log and the real saves unchanged. The run folders, each with its `perf.json`, are under `repros/perf-123-base` (`main`), `repros/perf-123-mid` (#121) and `repros/perf-123` (#123) in the private data root, runs `20261011-213121` to `20261011-220348`.
 
 Movement plan, 118–120 s of stepped frames a run. The first block is the mod's own time for one original frame, which does not depend on how fast the lab draws.
 
