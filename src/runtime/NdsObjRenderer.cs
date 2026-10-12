@@ -25,6 +25,14 @@ public static class NdsObjRenderer
     [ThreadStatic] public static int LastBodyPixels;
     /// <summary>Canvas bounds of those pixels relative to the canvas centre (empty when none were drawn).</summary>
     [ThreadStatic] public static (int Left, int Top, int Right, int Bottom) LastBodyBounds;
+    /// <summary>A canvas rectangle; right and bottom are exclusive, and the default is empty.</summary>
+    public readonly record struct Area(int Left, int Top, int Right, int Bottom)
+    {
+        public static Area Canvas => new(0, 0, CanvasWidth, CanvasHeight);
+        public bool IsEmpty => Right <= Left || Bottom <= Top;
+        public Area Include(Area other) => other.IsEmpty ? this : IsEmpty ? other :
+            new(Math.Min(Left, other.Left), Math.Min(Top, other.Top), Math.Max(Right, other.Right), Math.Max(Bottom, other.Bottom));
+    }
     /// <summary>
     /// Draw OAM plus the pieces the original builder culled. The builder keeps
     /// pieces at screen x -63..256 and y -63..192, so OAM is read over that
@@ -33,18 +41,38 @@ public static class NdsObjRenderer
     public static (int Rendered, int Unsupported) Render(uint display, byte[] oam, byte[] vram,
         byte[] palette, byte[] rgba, int sourceX, int sourceY, int lastPaletteBank = 7, ReadOnlySpan<FarObject> far = default)
     {
+        Area drawn = Area.Canvas;
+        return Render(display, oam, vram, palette, rgba, ref drawn, sourceX, sourceY, lastPaletteBank, far);
+    }
+    /// <summary>
+    /// The same drawing onto a canvas kept between calls. <paramref name="drawn"/>
+    /// holds the only part of it that may not be transparent: that part is
+    /// cleared, and the part this call's pieces cover is returned in it, so a
+    /// small sprite costs its own pixels instead of the whole canvas.
+    /// </summary>
+    public static (int Rendered, int Unsupported) Render(uint display, byte[] oam, byte[] vram,
+        byte[] palette, Span<byte> rgba, ref Area drawn, int sourceX, int sourceY, int lastPaletteBank = 7, ReadOnlySpan<FarObject> far = default)
+    {
         int bodyPixels = 0;
         int bodyLeft = int.MaxValue, bodyTop = int.MaxValue, bodyRight = int.MinValue, bodyBottom = int.MinValue;
         if (oam.Length != 1024 || palette.Length != 512 || vram.Length != 256 * 1024 || rgba.Length != CanvasWidth * CanvasHeight * 4)
             throw new ArgumentException("Unexpected DS graphics buffer dimensions.");
-        Array.Clear(rgba);
+        if (drawn.Left < 0 || drawn.Top < 0 || drawn.Right > CanvasWidth || drawn.Bottom > CanvasHeight)
+            throw new ArgumentOutOfRangeException(nameof(drawn));
+        if (!drawn.IsEmpty)
+            for (int row = drawn.Top; row < drawn.Bottom; row++)
+                rgba.Slice((row * CanvasWidth + drawn.Left) * 4, (drawn.Right - drawn.Left) * 4).Clear();
+        drawn = default;
         int rendered = 0, unsupported = 0;
         bool mapping1D = (display & 0x10) != 0;
         int tileUnit = 32 << (int)((display >> 20) & 3);
         // Original OAM order: on-screen entry k at 2k+1, a far piece just before
         // the entry its Order names; later pieces draw behind earlier ones.
         int farCount = far.Length;
-        var pieces = new (int Key, ushort A0, ushort A1, ushort A2, int X, int Y)[128 + farCount];
+        // The bridge keeps at most 256 culled pieces a frame.
+        Span<(int Key, ushort A0, ushort A1, ushort A2, int X, int Y)> pieces = farCount <= 256
+            ? stackalloc (int Key, ushort A0, ushort A1, ushort A2, int X, int Y)[128 + farCount]
+            : new (int Key, ushort A0, ushort A1, ushort A2, int X, int Y)[128 + farCount];
         for (int index = 0; index < 128; index++)
         {
             ushort a0 = Word(oam, index * 8), a1 = Word(oam, index * 8 + 2), a2 = Word(oam, index * 8 + 4);
@@ -56,7 +84,8 @@ public static class NdsObjRenderer
             FarObject piece = far[i];
             pieces[128 + i] = ((2 * piece.Order << 10) | i, piece.Attr0, piece.Attr1, piece.Attr2, piece.X, piece.Y);
         }
-        Array.Sort(pieces, (a, b) => b.Key.CompareTo(a.Key));
+        // Every key is distinct, so the order does not depend on the sort used.
+        pieces.Sort(static (a, b) => b.Key.CompareTo(a.Key));
         for (int priority = 3; priority >= 0; priority--)
         foreach (var (key, a0, a1, a2, x, y) in pieces)
         {
@@ -85,6 +114,9 @@ public static class NdsObjRenderer
             int pd = affine ? (short)Word(oam, matrix + 30) : 256;
             int baseByte = (a2 & 1023) * (mapping1D ? tileUnit : 32);
             int paletteBase = (a2 >> 12) * 32;
+            int boxLeft = CenterX + x - sourceX, boxTop = CenterY + y - sourceY;
+            drawn = drawn.Include(new(Math.Max(0, boxLeft), Math.Max(0, boxTop),
+                Math.Min(CanvasWidth, boxLeft + boxWidth), Math.Min(CanvasHeight, boxTop + boxHeight)));
             for (int dy = 0; dy < boxHeight; dy++)
             for (int dx = 0; dx < boxWidth; dx++)
             {

@@ -377,14 +377,25 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         input = KirbyInput.Read(session);
         int steps = pacer.Steps(delta);
         long started = System.Diagnostics.Stopwatch.GetTimestamp();
+        var mark = LabPerfProbe.Start();
         for (int i = 0; i < steps && h.life > 0; i++)
             Step(session, input);
+        LabPerfProbe.Stop(LabPerfProbe.Section.Step, mark);
         long stepped = System.Diagnostics.Stopwatch.GetTimestamp();
+        mark = LabPerfProbe.Start();
         RenderSource();
+        LabPerfProbe.Stop(LabPerfProbe.Section.Render, mark);
+        mark = LabPerfProbe.Start();
         KirbyAbilityItems.Sync(session, mouthfulItems, pendingCopy);
         KirbyFSlot.Update(session);
+        LabPerfProbe.Stop(LabPerfProbe.Section.Items, mark);
+        mark = LabPerfProbe.Start();
         KirbyHud.Update(session, nds);
+        LabPerfProbe.Stop(LabPerfProbe.Section.Hud, mark);
+        mark = LabPerfProbe.Start();
         PumpAudio();
+        LabPerfProbe.Stop(LabPerfProbe.Section.Audio, mark);
+        LabPerfProbe.Stepped(steps);
         RecordPacing(steps, stepped - started, System.Diagnostics.Stopwatch.GetTimestamp() - stepped);
     }
     /// <summary>
@@ -555,6 +566,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
             nds.SetHealth((ushort)Math.Clamp(hero.life, 0, sourceMaxLife), (ushort)sourceMaxLife);
         }
         var map = hero._level.map;
+        var mark = LabPerfProbe.Start();
         double hostX = (hero.cx + hero.xr) * 24;
         double centerY = (hero.cy + hero.yr) * 24 - 14.5;
         // Over a moving host elevator the original works in a window lifted to
@@ -613,12 +625,15 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
                 elevator = new { riding.Value.Tracked.Elevator.cy, riding.Value.Tracked.Elevator.yr, riding.Value.Tracked.Sunk } });
         }
         if (stompShield > 0 && !stomp.Active) stompShield--;
+        LabPerfProbe.Stop(LabPerfProbe.Section.Terrain, mark);
+        mark = LabPerfProbe.Start();
         session.Rules.Critical.BaseChance = config.CopyCriticalChance;
         session.Rules.Critical.BaseDamageMultiplier = config.CopyCriticalDamage;
         session.Rules.Mutations.Tuning = config.CriticalMutations;
         enemies.FiringItem = KirbyFSlot.Sequence.Active ? KirbyFSlot.Item : null;
         enemies.Prepare(session, nds, originX * 24, originY * 24 + lift, SourceDamageScale,
             bodyContact: config.OriginalTouchDamage && !stomp.Active && stompShield == 0);
+        LabPerfProbe.Stop(LabPerfProbe.Section.Prepare, mark);
         int healthBefore = nds.Health;
         dc.Entity? damageSource = null;
         bool hurt = false;
@@ -656,7 +671,9 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         helperMatch.Begin(nds);
         // A slide inside a roll-zone tunnel keeps rolling until Kirby is out (#115).
         slideHold.Begin(nds, action, lastVx, inRollZone, hurt);
+        mark = LabPerfProbe.Start();
         nds.Step(mask);
+        LabPerfProbe.Stop(LabPerfProbe.Section.Native, mark);
         slideHold.Finish(nds);
         if (slideHold.Holding != slideHeld)
         {
@@ -695,7 +712,9 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
                 finally { applyingNativeDamage = false; KirbyHostVisuals.SuppressHitBlink = false; }
             }
         }
+        mark = LabPerfProbe.Start();
         if (enemies.Complete(session, nds, originX * 24, originY * 24 + lift, SourceDamageScale) is not null) pendingCopy = true;
+        LabPerfProbe.Stop(LabPerfProbe.Section.Complete, mark);
         foreach (var swallowed in enemies.Swallowed) mouthfulItems.Add(swallowed, KirbyAbilityItems.AbilityOf(swallowed.Item)!);
         enemies.Swallowed.Clear();
         NdsState state = nds.State;

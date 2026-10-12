@@ -1798,3 +1798,43 @@ the all-ability rendering tests as full gameplay acceptance.
   verified: any of these changes in the game, the failed-activation fallback
   with a real missing ROM or bad snapshot, a level change during an F press,
   the pacing line in play, the time saved by the bridge and renderer changes.
+
+## 2026-10-11 — the mod's per-frame cost (#123)
+
+- The owner asked for the mod to be as cheap as possible: steady 60 fps, even
+  frames, no flicker and no new bugs. Measured first with a new opt-in lab
+  probe (`KIRBY_LAB_PERF=1`, `LabPerfProbe`), then changed what the numbers
+  pointed at. Record: `docs/PERFORMANCE.md`.
+- Changed:
+  - `kssu_read_gpu` copies engine A's OBJ VRAM as a block (1.28 ms to 0.04 ms a
+    frame); a second stage of the checked vendor patches adds `Copy_ObjVram`.
+  - New `kssu_main_screen_only`: the lower screen, which the mod never shows,
+    is not drawn (`kssu_step` 2.77 ms to 2.26 ms in the bridge alone).
+  - `KirbyEnemyHooks` installs its six host hooks only while the original
+    engine holds an enemy, projectile or item, and removes them 30 host frames
+    after. A hooked host function costs about 2 µs and 920 bytes of garbage a
+    call with a handler installed; the host made 616 such calls a frame.
+  - `NdsObjRenderer` draws into the texture's own pixels and clears only what
+    the last drawing covered (a decode 0.15 ms to 0.015 ms).
+  - Enabling fixes: `tests/background` links `NdsObjRenderer.cs` (it did not
+    build on `main`), and `tools/nds_tests.py` starts a case's result on its
+    own line.
+- Lab, offscreen and software-drawn, `main` against this branch (which also
+  holds #121): the mod's work for one original frame 5.56 ms to 3.20 ms,
+  garbage 54.9 MB to 16.0 MB a second, time in collections 2.3% to 0.6%, host
+  63.6–66.6 fps to 89.4–99.6 fps on the movement plan; `crowd` 36.8 to
+  57.7 fps. #121 alone is 4.87 ms and 68.3 fps.
+- Source: `python3 scripts/check.py` passes (26 + 6 Python tests, 435 rule
+  assertions, the runtime builds). Bridge, built against a private copy of the
+  vendor tree: all 82 `tools/nds_tests.py` cases pass, the 80 older ones equal
+  to the previous bridge's recorded results. `verify_renderer.py` 29 cases and
+  3,046,706 pixels, `verify_background.py` 4 cases, `verify_native_init.py`
+  64 cycles: no mismatch. Live: 15 lab runs (`movement`, `combat`, `crowd`,
+  `hazard`, `items`) in private data roots, with equal probe outcomes on
+  `main` and the branch. The shared bridge binary, its evidence files and the
+  shared vendor checkout were not replaced.
+- Not verified: play in a window on the GPU, 60 fps in play, long sessions,
+  the hooks next to another mod's hooks on the same functions. Left as they
+  are: the interpreter's 2.6 ms, the 6 ms original frame with 30 stacked
+  enemies, the `HSprite.draw` hook, the whole-texture upload, the host's
+  first-use shader link.
