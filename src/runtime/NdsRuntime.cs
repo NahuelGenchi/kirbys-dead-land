@@ -12,7 +12,7 @@ public sealed unsafe class NdsRuntime : IDisposable
     private static nint library;
     private static delegate* unmanaged[Cdecl]<nint, int, int, int> movePlayer, moveHelper;
     private static delegate* unmanaged[Cdecl]<nint, NdsHelper*, int> helperState;
-    private static delegate* unmanaged[Cdecl]<nint, byte, int> setAbility, setMikeShouts;
+    private static delegate* unmanaged[Cdecl]<nint, byte, int> setAbility, setMikeShouts, mainScreenOnly;
     private static delegate* unmanaged[Cdecl]<nint, int> abilityChangePending;
     private bool firstStep = true, firstWorld = true;
     // Kirby's original screen position after the latest source frame, taken
@@ -67,10 +67,16 @@ public sealed unsafe class NdsRuntime : IDisposable
             abilityChangePending = (delegate* unmanaged[Cdecl]<nint, int>)pending;
             setMikeShouts = (delegate* unmanaged[Cdecl]<nint, byte, int>)shouts;
         }
+        if (mainScreenOnly == null && NativeLibrary.TryGetExport(library, "kssu_main_screen_only", out nint mainOnly))
+            mainScreenOnly = (delegate* unmanaged[Cdecl]<nint, byte, int>)mainOnly;
         LabActivationTrace.Mark("Native Open begin");
         handle = Native.Open(Path.GetFullPath(rom), Path.GetFullPath(state));
         LabActivationTrace.Mark("Native Open returned");
         if (handle == 0) throw new InvalidOperationException("Original-ROM machine could not load its private seed state.");
+        // The mod never shows the lower screen, so its picture is not drawn.
+        // The machine and the upper screen are unaffected. This only saves
+        // time: an older bridge without the switch, or a refusal, draws both.
+        if (mainScreenOnly != null) mainScreenOnly(handle, 1);
         fixed (byte* pointer = SourceBgPalette)
             Result(Native.ReadGpu(handle, 0x05000000, pointer, (nuint)SourceBgPalette.Length));
         LabActivationTrace.Mark("Source BG palette read");

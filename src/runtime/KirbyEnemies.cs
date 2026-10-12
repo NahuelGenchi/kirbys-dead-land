@@ -102,6 +102,26 @@ public sealed class KirbyEnemies
     /// <summary>Lab and damage-log description of a source slot's host binding.</summary>
     internal string DescribeSlot(uint slot) => slot is < 1 or > Capacity ? "none" :
         detached[slot] ? "detached" : mobs[slot] is { } mob ? $"{mob.GetType().Name}#{mob.__uid}" : "free";
+    /// <summary>Whether the original engine holds a host enemy, or a projectile or item, now.</summary>
+    internal (bool Mob, bool Other) Held
+    {
+        get
+        {
+            bool mob = false, other = false;
+            for (int i = 1; i <= Capacity; i++)
+            {
+                if (!controlled[i] || mobs[i] is not { } entity) continue;
+                if (entity is Mob) mob = true; else other = true;
+            }
+            return (mob, other);
+        }
+    }
+    // The host hooks that stop a held entity are installed from the moment one is held.
+    private void SetControlled(uint i, bool held)
+    {
+        controlled[i] = held;
+        if (held) KirbyEnemyHooks.Hold(mobs[i] is Mob);
+    }
     public bool Controls(Entity mob)
     {
         // Asked for every host entity on every frame: no enumerator or closure.
@@ -150,8 +170,8 @@ public sealed class KirbyEnemies
                     abilities[binding.Slot] = KirbyAbilityItems.IsAbilityDrop(candidate) ? KirbyAbilityItems.CopyByte(candidate) :
                         candidate is not Mob ? (byte)0 :
                         binding.Ability is >= 2 and <= 25 ? binding.Ability : RollAbility(session);
-                    controlled[binding.Slot] = (candidate is Mob and not dc.en.mob.Boss || IsHazard(candidate)) &&
-                        nds.Proxy((uint)binding.Slot).Controlled;
+                    SetControlled((uint)binding.Slot, (candidate is Mob and not dc.en.mob.Boss || IsHazard(candidate)) &&
+                        nds.Proxy((uint)binding.Slot).Controlled);
                     break;
                 }
                 if (mobs[binding.Slot] is null) Release(nds, (uint)binding.Slot);
@@ -371,7 +391,7 @@ public sealed class KirbyEnemies
                 if (enemy.yr == 0) { enemy.cy--; enemy.yr = 1; }
                 enemy.spriteUpdate();
             }
-            controlled[i] = sourceControls;
+            SetControlled(i, sourceControls);
         }
         if (criticalLanded && criticalGuaranteed) session.Rules.Critical.Spend();
         if (criticalLanded) session.Rules.Mutations.CriticalLanded();
@@ -429,7 +449,7 @@ public sealed class KirbyEnemies
                 // Kirby nor detonate while the original suction carries it.
                 projectile.setPosPixel(proxy.XRaw / 65536.0 + ox, proxy.YRaw / 65536.0 + oy + 17);
                 projectile.spriteUpdate();
-                controlled[i] = true;
+                SetControlled(i, true);
                 break;
             default:
                 controlled[i] = false;
@@ -460,7 +480,7 @@ public sealed class KirbyEnemies
         // It follows only the original suction. A hit (a spit star, a slide)
         // gives its proxy an original recoil, which must not move the item.
         bool inhaled = proxy.Controlled && proxy.Inhaling;
-        controlled[i] = inhaled;
+        SetControlled(i, inhaled);
         // Where it lies until the original suction takes hold of it.
         if (!inhaled) itemOrigins[i] = (drop.cx, drop.cy);
         if (inhaled)

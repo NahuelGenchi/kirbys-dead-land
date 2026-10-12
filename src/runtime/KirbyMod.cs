@@ -41,7 +41,6 @@ public sealed class KirbyMod(ModInfo info) : ModBase(info), IOnHeroUpdate,
                 ?? throw new InvalidDataException("Kirby runtime configuration is null.");
         KirbyInput.Install();
         KirbyNdsProvider.Log = message => Logger.Information(message);
-        KirbyEnemyHooks.Install();
         KirbyDamage.Install();
         KirbyMutations.Install();
         KirbyMutationMenu.Install();
@@ -102,6 +101,7 @@ public sealed class KirbyMod(ModInfo info) : ModBase(info), IOnHeroUpdate,
         Hook_HeroWeaponsManager.onLevelChanged += LevelChanged;
         KirbyHurtbox.Install();
         LabLifecycleProbe.Install();
+        LabPerfProbe.Install();
         Logger.Information("Kirby adapter initialized; original ROM provider enabled: {Enabled}.", provider is not null);
     }
 
@@ -293,7 +293,10 @@ public sealed class KirbyMod(ModInfo info) : ModBase(info), IOnHeroUpdate,
         KirbyHostVisuals.OnFrame();
         NativeProvider?.OnHostFrame(dt);
         var native = NativeProvider;
+        var held = native?.Enemies.Held ?? default;
+        KirbyEnemyHooks.Relax(held.Mob, held.Other);
         camera?.Update(session?.Hero._level ?? native?.DeathLevel, session is not null || native?.PlayingDeath == true);
+        LabPerfProbe.Frame();
     }
 }
 

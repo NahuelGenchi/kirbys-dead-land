@@ -38,6 +38,7 @@ Relevant environment variables are used only by the lab helper:
 - `KIRBY_LAB_TEST_LEGENDARY=1`: with `--probe-hud`, exposed as `--probe-legendary`. Once the copy's ability item is in a weapon slot, it gives that item the host `Legendary` affix, calls `Hero.hudInitItems`, and appends the slot and affix result to `hud.jsonl`.
 - `KIRBY_LAB_COMBAT_ELITE=1`: with the `combat` plan, makes the swallowed Zombie an Elite (Elite skills disabled) and records in `combat.json` whether the copy was empowered and the damage that the second Zombie takes from each hit. Set it in the environment of `launch_runtime.py`.
 - `KIRBY_LAB_PLAY=1`: keep outfit selection but disable all smoke capture and automatic input.
+- `KIRBY_LAB_PERF=1` (set in the shell that runs `launch_runtime.py`; ignored in play): write `perf.json` in the run folder with the time and managed bytes of each stage of the mod's frame, host frame intervals and collections. See [Performance](PERFORMANCE.md).
 
 Without these variables the lab helpers do not run. Do not use their successful test as evidence that an ordinary Steam launch uses isolated saves.
 

@@ -720,6 +720,50 @@ def run_case(name):
                 state=b.state();b.world(floor,state['x_raw'],state['y_raw']);b.step(0)
             assert helper() is not None
             return {'moved_raw':[after.x_raw-before,after.y_raw-h.y_raw],'probes_moved_with_helper':True,'helper_alive_after':True}
+        if name=='obj_vram_block':
+            # The host reads engine A's OBJ VRAM whole on every frame, as one block.
+            # A request that is not whole 8-byte words still takes one bus read a byte.
+            b.lib.kssu_read_gpu.argtypes=[C.c_void_p,C.c_uint32,C.c_void_p,C.c_size_t]
+            def gpu(address,length):
+                out=C.create_string_buffer(length);assert b.lib.kssu_read_gpu(b.handle,address,out,length)==0;return out.raw
+            transform(b,18);b.step(2,30)
+            block=gpu(0x06400000,0x40000);slow=gpu(0x06400001,0x40000-2)
+            assert block[1:-1]==slow, 'Block OBJ VRAM read differs from the bus read'
+            assert gpu(0x06404040,4096)==block[0x4040:0x5040], 'Partial block read differs'
+            used=sum(1 for v in block if v);assert used>10000,used
+            return {'bytes':len(block),'nonzero_bytes':used,'equals_bus_read':True}
+        if name=='main_screen_only':
+            # The host shows neither DS screen and reads only engine A. With engine B's
+            # drawing left out, main RAM, the GPU memory, the layer capture, the top
+            # screen and the save state stay the same; the bottom screen is black.
+            import hashlib
+            b.lib.kssu_read_gpu.argtypes=[C.c_void_p,C.c_uint32,C.c_void_p,C.c_size_t]
+            b.lib.kssu_read_layers.argtypes=[C.c_void_p,C.c_void_p,C.c_size_t,C.c_uint32]
+            b.lib.kssu_main_screen_only.argtypes=[C.c_void_p,C.c_bool]
+            floor=[3 if y>=7 else 0 for y in range(9) for x in range(100)]
+            seed=bytes(ROOT/'oracle/ready2/000.state');path=ROOT/'oracle/main-screen-test.state'
+            masks=[0]*20+[16]*60+[17]*10+[16]*30+[2]*60+[32]*40+[1]*20
+            def run(only):
+                assert b.lib.kssu_load_state(b.handle,seed)==0 and b.lib.kssu_main_screen_only(b.handle,only)==0
+                digest=hashlib.sha256();layer=(C.c_uint32*(256*192))();screen=C.create_string_buffer(256*192*4);bottom=set()
+                for i in range(240):
+                    state=b.state();b.world(floor,state['x_raw'],state['y_raw']);b.step(masks[i%len(masks)])
+                    for address,length in ((0x04000000,0x70),(0x05000000,0x800),(0x07000000,0x800),(0x06400000,0x40000)):
+                        out=C.create_string_buffer(length);assert b.lib.kssu_read_gpu(b.handle,address,out,length)==0;digest.update(out.raw)
+                    if i%8==7:digest.update(b.read(0x02000000,0x400000))
+                    if i>=4:
+                        # The first frames after a load still show the run before it.
+                        for plane in range(5):
+                            assert b.lib.kssu_read_layers(b.handle,layer,256*192,plane)==0;digest.update(bytes(layer))
+                        assert b.lib.kssu_framebuffer(b.handle,screen,len(screen),False)==0;digest.update(screen.raw)
+                        assert b.lib.kssu_framebuffer(b.handle,screen,len(screen),True)==0;bottom.add(screen.raw)
+                b.save(path);saved=hashlib.sha256(path.read_bytes()).hexdigest();path.unlink()
+                return digest.hexdigest(),saved,bottom
+            full=run(False);only=run(True);again=run(False)
+            assert full[:2]==only[:2]==again[:2], (full[:2],only[:2],again[:2])
+            black=b'\x00\x00\x00\xff'*(256*192)
+            assert only[2]=={black} and black not in full[2] and full[2]==again[2], 'Bottom screen: black only while engine B is left out'
+            return {'frames':240,'machine_and_engine_a_digest':full[0][:16],'save_state_sha256':full[1][:16],'same_with_engine_b_left_out':True,'bottom_screen_black_only_when_left_out':True}
         raise ValueError(name)
     finally:b.close()
 
@@ -727,8 +771,10 @@ def run_case(name):
 def main():
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--case');parser.add_argument('--skip-abilities',action='store_true');args=parser.parse_args()
     if args.case:
-        print('RESULT '+json.dumps({'case':args.case,'result':run_case(args.case)}),flush=True);return
-    cases=['scene_doors', 'far_shot_draw', 'room_food', 'proxy_birth_contact', 'proxy_birth_inhale', 'proxy_contact', 'proxy_contact_sword', 'proxy_touch_off', 'proxy_swallow_touch_off', 'proxy_suplex_touch_off', 'proxy_ice_detach', 'proxy_ice_release', 'proxy_lethal', 'motion', 'ladder', 'ladder_top', 'ladder_top_stomp', 'one_way', 'solid_ceiling', 'water', 'proxy_water', 'proxy_water_sword', 'proxy_water_below', 'hurt_water', 'proxy_swallow', 'hazard_spit', 'hazard_swallow', 'star_spit', 'star_spit_wall', 'star_big', 'star_ability', 'proxy_sword', 'proxy_reuse', 'proxy_save', 'proxy_mix', 'boss_inhale', 'boss_suplex', 'boss_cook', 'boss_sword', 'proxy_capacity', 'copy_drop_reabsorb', 'wheelie_ride', 'proxy_suplex', 'proxy_cook', 'audio', 'hurt', 'hurt_lethal', 'hurt_cold', 'guard', 'health_invulnerable', 'health_sync', 'proxy_size', 'f_slot', 'f_slot_save', 'helper_reaction', 'helper_move']
+        result=run_case(args.case)
+        # The emulator's log shares stdout and may stop mid-line: start the result on its own line.
+        print('\nRESULT '+json.dumps({'case':args.case,'result':result}),flush=True);return
+    cases=['scene_doors', 'far_shot_draw', 'room_food', 'proxy_birth_contact', 'proxy_birth_inhale', 'proxy_contact', 'proxy_contact_sword', 'proxy_touch_off', 'proxy_swallow_touch_off', 'proxy_suplex_touch_off', 'proxy_ice_detach', 'proxy_ice_release', 'proxy_lethal', 'motion', 'ladder', 'ladder_top', 'ladder_top_stomp', 'one_way', 'solid_ceiling', 'water', 'proxy_water', 'proxy_water_sword', 'proxy_water_below', 'hurt_water', 'proxy_swallow', 'hazard_spit', 'hazard_swallow', 'star_spit', 'star_spit_wall', 'star_big', 'star_ability', 'proxy_sword', 'proxy_reuse', 'proxy_save', 'proxy_mix', 'boss_inhale', 'boss_suplex', 'boss_cook', 'boss_sword', 'proxy_capacity', 'copy_drop_reabsorb', 'wheelie_ride', 'proxy_suplex', 'proxy_cook', 'audio', 'hurt', 'hurt_lethal', 'hurt_cold', 'guard', 'health_invulnerable', 'health_sync', 'proxy_size', 'f_slot', 'f_slot_save', 'helper_reaction', 'helper_move', 'obj_vram_block', 'main_screen_only']
     if not args.skip_abilities:cases += [f'ability-{i}' for i in range(2,26)]
     results=[]
     for name in cases:

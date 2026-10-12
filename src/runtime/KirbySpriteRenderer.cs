@@ -32,7 +32,8 @@ public sealed unsafe class KirbySpriteRenderer : IDisposable
     private uint shownDisplay;
     private (int X, int Y) shownOrigin;
     private readonly byte[] registers = new byte[4];
-    private readonly byte[] rgba = new byte[CanvasWidth * CanvasHeight * 4];
+    // The part of the texture's pixels that may not be transparent; all of it before the first drawing.
+    private NdsObjRenderer.Area drawn = NdsObjRenderer.Area.Canvas;
     // The bridge keeps at most 256 culled pieces per frame.
     private readonly FarObject[] farBuffer = new FarObject[256];
     private Pixels? pixels;
@@ -86,7 +87,9 @@ public sealed unsafe class KirbySpriteRenderer : IDisposable
         ObjectDisposedException.ThrowIf(disposed, this);
         if (detached || hero.destroyed || hero.spr?.parent is null) return;
         NdsState state = nds.State;
+        var mark = LabPerfProbe.Start();
         backgroundEffects.Render(nds);
+        LabPerfProbe.Stop(LabPerfProbe.Section.Background, mark);
         EnsureTexture();
         UpdateTexture(nds, state);
         HSprite hostSprite = hero.spr;
@@ -102,8 +105,10 @@ public sealed unsafe class KirbySpriteRenderer : IDisposable
         bitmap.alpha = hostSprite.alpha;
         bitmap.visible = hero.visible && hostSprite.visible && !arriving;
         bitmap.posChanged = true;
+        mark = LabPerfProbe.Start();
         RenderEquipment(hostSprite, state.Ability == 1);
         KeepBodyInFront();
+        LabPerfProbe.Stop(LabPerfProbe.Section.Equipment, mark);
     }
 
     /// <summary>
@@ -155,6 +160,7 @@ public sealed unsafe class KirbySpriteRenderer : IDisposable
     {
         if (lastSourceFrame != state.Frame)
         {
+            var mark = LabPerfProbe.Start();
             ReadGpu(nds, 0x04000000, registers);
             uint display = BinaryPrimitives.ReadUInt32LittleEndian(registers);
             ReadGpu(nds, 0x07000000, oam);
@@ -167,6 +173,7 @@ public sealed unsafe class KirbySpriteRenderer : IDisposable
             (int originX, int originY) = nds.DisplayedOrigin;
             // Pieces the original culled outside its screen, for the same OAM (#67).
             int farCount = nds.ReadFarObjects(farBuffer);
+            LabPerfProbe.Stop(LabPerfProbe.Section.Read, mark);
             lastSourceFrame = state.Frame;
             // The decoder is pure, so the same inputs draw the same canvas: a frame
             // that changed none of them (Kirby holding a pose) keeps the texture
@@ -175,14 +182,20 @@ public sealed unsafe class KirbySpriteRenderer : IDisposable
                 oam.AsSpan().SequenceEqual(shownOam) && palette.AsSpan().SequenceEqual(shownPalette) &&
                 MemoryMarshal.AsBytes(farBuffer.AsSpan(0, farCount)).SequenceEqual(MemoryMarshal.AsBytes(shownFar.AsSpan(0, farCount))) &&
                 vram.AsSpan().SequenceEqual(shownVram)) return;
-            (int rendered, int unsupported) = NdsObjRenderer.Render(display, oam, vram, palette, rgba, originX, originY,
+            mark = LabPerfProbe.Start();
+            // Drawn straight into the texture's own pixels, clearing only what the last drawing covered.
+            var rgba = new Span<byte>((void*)pixels!.bytes.b, CanvasWidth * CanvasHeight * 4);
+            (int rendered, int unsupported) = NdsObjRenderer.Render(display, oam, vram, palette, rgba, ref drawn, originX, originY,
                 far: farBuffer.AsSpan(0, farCount));
+            LabPerfProbe.Stop(LabPerfProbe.Section.Decode, mark);
+            mark = LabPerfProbe.Start();
             RenderedObjects = rendered;
             UnsupportedObjects = unsupported;
             BodyPixels = NdsObjRenderer.LastBodyPixels;
             BodyBounds = NdsObjRenderer.LastBodyBounds;
-            Marshal.Copy(rgba, 0, pixels!.bytes.b, rgba.Length);
             texture!.uploadPixels(pixels, Ref<int>.In(0), Ref<int>.In(0));
+            LabPerfProbe.Stop(LabPerfProbe.Section.Upload, mark);
+            LabPerfProbe.Uploaded();
             (oam, shownOam) = (shownOam, oam); (vram, shownVram) = (shownVram, vram); (palette, shownPalette) = (shownPalette, palette);
             farBuffer.AsSpan(0, farCount).CopyTo(shownFar);
             (shownFarCount, shownDisplay, shownOrigin) = (farCount, display, (originX, originY));

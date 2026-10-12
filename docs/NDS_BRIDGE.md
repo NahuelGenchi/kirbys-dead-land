@@ -48,7 +48,8 @@ All calls use a single owning thread. Pointer arguments must reference valid cal
 | `kssu_save_state(handle,path)` | Writes full emulator snapshot plus bridge proxy metadata trailer. |
 | `kssu_load_state(handle,path)` | Restores the existing machine, including in-progress source capture states when saved by this bridge. |
 | `kssu_read_audio(handle,i16*,sampleCapacity)` | Drains signed16-bit interleaved stereo at48000Hz; count is interleaved samples, always even. Queue bounded to65536 samples. The original BGM-only player volume at0x0205EBE4 can be set to0 while leaving jump/attack sounds intact. |
-| `kssu_read_gpu(handle,address,u8*,length)` | Reads ARM9-visible GPU registers, palettes, VRAM and OAM. |
+| `kssu_read_gpu(handle,address,u8*,length)` | Reads ARM9-visible GPU registers, palettes, VRAM and OAM. An 8-byte-aligned read inside engine A's OBJ VRAM (`0x06400000`, 256 KiB) is copied eight bytes at a time; any other read goes one bus byte at a time. |
+| `kssu_main_screen_only(handle,bool)` | While on, engine B (the lower screen) is not drawn and its half of the framebuffer is black. The machine, engine A's picture and layer capture, saved states and audio do not change. Off by default; kept across `kssu_load_state`. Returns −2 if the renderer has no such switch. |
 | `kssu_far_objs(handle,FarObj*,capacity)` | Copies the main-screen OBJ pieces the original OAM builder culled from the OAM the hardware shows now, at most 256, in original OAM order; returns the count. `FarObj`: `i16 x,y; u16 attr0,attr1,attr2,order`. `x`,`y` are full screen positions; `order` is the number of on-screen OAM entries written before the piece. Empty when the frame could not be validated. |
 | `kssu_read_layers(handle,u32*,49152,u32 plane)` | Original engine-A scanout planes:0 top RGB6/layer flags,1 underneath,2 valid/blend/window control,3 composite RGB6,4 scanline background palette. |
 | `kssu_framebuffer(handle,u8*,196608,bool bottom)` | Native256×192 BGRA display; useful for verification. |
@@ -142,4 +143,6 @@ Proxy records follow main RAM through a freshness flag (#121). `refresh_proxies`
 
 `kssu_health` and `kssu_max_health` return -2 while the player has no health group. `NdsRuntime.Health` and `MaxHealth` pass that value on instead of throwing, and the provider skips its health sync for that frame (#121; source only, no frame without a health group was reproduced).
 
-Left as they are (#121): `kssu_read_gpu` still reads OBJ VRAM one bus byte at a time, because a block copy needs an addition to the pinned wrapper patch; and a proxy born on top of Kirby with contact off does not hurt him on its birth frame (`proxy_birth_contact`, `proxy_touch_off`).
+Left as it is (#121): a proxy born on top of Kirby with contact off does not hurt him on its birth frame (`proxy_birth_contact`, `proxy_touch_off`).
+
+The per-byte OBJ VRAM read and the lower screen's drawing were removed from the live path in #123. Both need a second stage of the checked vendor patches (`tools/nds_graphics_patch.py`, `tools/nds_vendor.py`), which accept a tree with or without it and add it. `Copy_ObjVram` reads through `GPU::ReadVRAM_AOBJ` after `SyncVRAM_AOBJ` for each 16 KiB VRAM unit, the path the ARM9 bus read takes. `MainScreenOnly` skips `Rend2D_B` scanlines and sprites in the software renderer. The cases `obj_vram_block` and `main_screen_only` hold both to the previous behavior; measurements and the checks run are in [Performance](PERFORMANCE.md).

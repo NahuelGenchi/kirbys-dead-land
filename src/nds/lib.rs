@@ -54,6 +54,8 @@ struct Bridge {
     far_pending: Option<(Vec<FarObj>, Vec<u8>)>,
     /// Off-screen OBJ pieces of the OAM the hardware shows now.
     far_shown: Vec<FarObj>,
+    /// The host asked for the main screen only (see `kssu_main_screen_only`).
+    main_screen_only: bool,
     /// `proxies` already describes main RAM as it is now. Every call that can
     /// change main RAM or a proxy record clears it, so reads between two such
     /// calls share one walk of the actor lists.
@@ -169,6 +171,7 @@ pub unsafe extern "C" fn kssu_open(
             anchors: HashMap::new(),
             far_pending: None,
             far_shown: Vec::new(),
+            main_screen_only: false,
             proxies_fresh: false,
         })) as *mut std::ffi::c_void)
     });
@@ -399,10 +402,39 @@ pub unsafe extern "C" fn kssu_read_gpu(
         return -2;
     }
     let b = &mut *(handle as *mut Bridge);
-    for i in 0..len {
-        *dest.add(i) = b.nds.bus_read8(address + i as u32);
+    // The host reads all of engine A's OBJ VRAM on every source frame. Whole
+    // 8-byte words inside it are copied as a block (the same accessors as the
+    // bus read, see tools/nds_graphics_patch.py) instead of one bus read a byte.
+    let end = address + len as u32;
+    let block = address >= OBJ_VRAM
+        && end <= OBJ_VRAM + OBJ_VRAM_SIZE
+        && (address | end) & 7 == 0
+        && b.nds.obj_vram(address - OBJ_VRAM, std::slice::from_raw_parts_mut(dest, len));
+    if !block {
+        for i in 0..len {
+            *dest.add(i) = b.nds.bus_read8(address + i as u32);
+        }
     }
     native_trace_once(8, "GPU: first read completed");
+    0
+}
+const OBJ_VRAM: u32 = 0x06400000;
+const OBJ_VRAM_SIZE: u32 = 0x40000;
+/// Leave engine B's 2D drawing out of every frame; its half of the framebuffer
+/// is black. The host shows neither DS screen and reads only engine A (OBJ
+/// tiles, OAM, palettes and the layer capture), so it turns this on. Tools and
+/// tests that read the framebuffer keep the default. The emulated machine, its
+/// save states and audio are the same either way (bridge test `main_screen_only`).
+#[no_mangle]
+pub unsafe extern "C" fn kssu_main_screen_only(handle: *mut std::ffi::c_void, enabled: bool) -> i32 {
+    if handle.is_null() {
+        return -1;
+    }
+    let b = &mut *(handle as *mut Bridge);
+    if !b.nds.set_main_screen_only(enabled) {
+        return -2;
+    }
+    b.main_screen_only = enabled;
     0
 }
 fn put32(r: &mut [u8], p: usize, v: u32) {
@@ -1053,6 +1085,9 @@ pub unsafe extern "C" fn kssu_load_state(
         b.far_pending = None;
         b.far_shown.clear();
         restore_hook(hook);
+        if b.main_screen_only {
+            b.nds.set_main_screen_only(true);
+        }
         0
     } else {
         -5

@@ -764,6 +764,54 @@ Check(SpeedMatch.RiseVelocity(KirbyActions.Jump, -2682) == -2682 && SpeedMatch.R
     Check(rgba[At(200, 100)] == 255 && rgba[At(200, 100) + 2] == 0, "A culled piece written after OAM entry 0 draws behind it");
 }
 {
+    // The runtime keeps one canvas and clears only what the last drawing covered (#123).
+    // Every frame of a changing scene must equal a drawing onto a fully cleared canvas.
+    var random = new Random(123);
+    byte[] oam = new byte[1024], vram = new byte[256 * 1024], palette = new byte[512];
+    int size = Kirby.Runtime.NdsObjRenderer.CanvasWidth * Kirby.Runtime.NdsObjRenderer.CanvasHeight * 4;
+    byte[] clearedCanvas = new byte[size], keptCanvas = new byte[size];
+    random.NextBytes(vram); random.NextBytes(palette);
+    var drawn = Kirby.Runtime.NdsObjRenderer.Area.Canvas;
+    bool same = true, partial = false, affine = false, emptied = false;
+    int drew = 0;
+    for (int frame = 0; frame < 300 && same; frame++)
+    {
+        random.NextBytes(oam); // Also the affine matrices, which share OAM.
+        for (int index = 0; index < 128; index++) oam.AsSpan(index * 8, 6).Clear();
+        for (int index = 0; index < 128; index++) oam[index * 8 + 1] = 0x02; // Hidden.
+        int pieces = frame % 7 == 0 ? 0 : random.Next(1, 14);
+        for (int n = 0; n < pieces; n++)
+        {
+            int index = random.Next(128);
+            ushort a0 = (ushort)(random.Next(256) | (random.Next(4) == 0 ? 0x100 | random.Next(2) << 9 : 0) |
+                (random.Next(8) == 0 ? 0x400 : 0) | random.Next(3) << 14);
+            ushort a1 = (ushort)(random.Next(512) | random.Next(32) << 9 | random.Next(4) << 14);
+            ushort a2 = (ushort)(random.Next(1024) | random.Next(4) << 10 | random.Next(8) << 12);
+            affine |= (a0 & 0x100) != 0;
+            System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(oam.AsSpan(index * 8), a0);
+            System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(oam.AsSpan(index * 8 + 2), a1);
+            System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(oam.AsSpan(index * 8 + 4), a2);
+        }
+        var far = new Kirby.Runtime.FarObject[frame % 5 == 0 ? random.Next(1, 6) : 0];
+        for (int n = 0; n < far.Length; n++)
+            far[n] = new() { X = (short)random.Next(-700, 900), Y = (short)random.Next(-400, 500), Attr0 = (ushort)(random.Next(3) << 14),
+                Attr1 = (ushort)(random.Next(4) << 14 | random.Next(4) << 12), Attr2 = (ushort)(random.Next(1024) | random.Next(8) << 12),
+                Order = (ushort)random.Next(129) };
+        int x = random.Next(-40, 300), y = random.Next(-40, 230);
+        uint display = (uint)(random.Next(2) << 4 | random.Next(4) << 20);
+        var expected = Kirby.Runtime.NdsObjRenderer.Render(display, oam, vram, palette, clearedCanvas, x, y, far: far);
+        var expectedBody = (Kirby.Runtime.NdsObjRenderer.LastBodyPixels, Kirby.Runtime.NdsObjRenderer.LastBodyBounds);
+        var actual = Kirby.Runtime.NdsObjRenderer.Render(display, oam, vram, palette, keptCanvas.AsSpan(), ref drawn, x, y, far: far);
+        same = expected == actual && expectedBody == (Kirby.Runtime.NdsObjRenderer.LastBodyPixels, Kirby.Runtime.NdsObjRenderer.LastBodyBounds) &&
+            clearedCanvas.AsSpan().SequenceEqual(keptCanvas);
+        partial |= !drawn.IsEmpty && (drawn.Right - drawn.Left) * (drawn.Bottom - drawn.Top) < size / 16;
+        emptied |= drawn.IsEmpty;
+        if (clearedCanvas.AsSpan().ContainsAnyExcept((byte)0)) drew++;
+    }
+    Check(same, "A kept canvas cleared only where it was drawn equals a fully cleared one on every frame");
+    Check(drew > 200 && partial && affine && emptied, "The keptCanvas-canvas comparison covers drawn, partly covered, affine and empty frames");
+}
+{
     // Same IDs and order as KirbyNdsProvider.Abilities (original abilities 2..25).
     string[] abilityIds = ["Cutter", "Mirror", "Beam", "Fighter", "Suplex", "YoYo", "Wheel", "Bomb", "Ice", "Fire", "Plasma", "Ninja",
         "Stone", "Wing", "Jet", "Copy", "Sword", "Hammer", "Parasol", "Paint", "Mike", "Crash", "Cook", "Sleep"];

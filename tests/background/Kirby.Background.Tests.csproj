@@ -1,4 +1,4 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><AllowUnsafeBlocks>true</AllowUnsafeBlocks></PropertyGroup>
-  <ItemGroup><Compile Include="../../src/runtime/LabActivationTrace.cs" Link="LabActivationTrace.cs" /><Compile Include="../../src/runtime/NdsRuntime.cs" Link="NdsRuntime.cs" /><Compile Include="../../src/runtime/NdsBackgroundEffectDecoder.cs" Link="NdsBackgroundEffectDecoder.cs" /></ItemGroup>
+  <ItemGroup><Compile Include="../../src/runtime/LabActivationTrace.cs" Link="LabActivationTrace.cs" /><Compile Include="../../src/runtime/NdsRuntime.cs" Link="NdsRuntime.cs" /><Compile Include="../../src/runtime/NdsBackgroundEffectDecoder.cs" Link="NdsBackgroundEffectDecoder.cs" /><Compile Include="../../src/runtime/NdsObjRenderer.cs" Link="NdsObjRenderer.cs" /></ItemGroup>
 </Project>
