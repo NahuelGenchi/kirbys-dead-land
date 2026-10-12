@@ -102,7 +102,14 @@ public sealed class KirbyEnemies
     /// <summary>Lab and damage-log description of a source slot's host binding.</summary>
     internal string DescribeSlot(uint slot) => slot is < 1 or > Capacity ? "none" :
         detached[slot] ? "detached" : mobs[slot] is { } mob ? $"{mob.GetType().Name}#{mob.__uid}" : "free";
-    public bool Controls(Entity mob) => Enumerable.Range(1, Capacity).Any(i => controlled[i] && mobs[i]?.HashlinkPointer == mob.HashlinkPointer);
+    public bool Controls(Entity mob)
+    {
+        // Asked for every host entity on every frame: no enumerator or closure.
+        nint pointer = mob.HashlinkPointer;
+        for (int i = 1; i <= Capacity; i++)
+            if (controlled[i] && mobs[i]?.HashlinkPointer == pointer) return true;
+        return false;
+    }
     public void Clear(NdsRuntime nds)
     {
         for (uint i = 1; i <= Capacity; i++) Release(nds, i);
@@ -133,7 +140,7 @@ public sealed class KirbyEnemies
                 for (int j = 0; j < hero._level.entities.length; j++)
                 {
                     if (hero._level.entities.getDyn(j) is not Entity candidate || !Live(candidate) ||
-                        Kind(candidate) != binding.Type || mobs.Any(m => m?.HashlinkPointer == candidate.HashlinkPointer)) continue;
+                        Kind(candidate) != binding.Type || Pairs(candidate)) continue;
                     double x = (candidate.cx + candidate.xr) * 24, y = (candidate.cy + candidate.yr) * 24;
                     // Hxbit may regenerate __uid when loading. The host's saved
                     // type and exact world position identify the restored object.
@@ -164,7 +171,8 @@ public sealed class KirbyEnemies
         // hit is lethal in the host too. One source frame is 1/60 s.
         var crit = session.Rules.Critical;
         var mutations = session.Rules.Mutations;
-        var hostBonuses = KirbyHostBonuses.Begin(hero);
+        // Made for the first paired enemy: most ticks pair none.
+        KirbyHostBonuses? hostBonuses = null;
         mutations.SetOwned(KirbyMutations.Owned(hero));
         crit.Advance(1.0 / 60);
         criticalFactor = crit.DamageMultiplier;
@@ -205,15 +213,16 @@ public sealed class KirbyEnemies
             if (KirbyAbilityItems.IsAbilityDrop(mob) ? !session.Rules.IsBaseForm :
                 IsHazard(mob) ? !MouthfulHazards.CanPair(mob.isOpponent(hero), live: true, mob is Bullet { disabled: true })
                 : !Eligible(mob) || !mob.canBeHitBy(hero)) continue;
-            if (mobs.Any(m => m?.HashlinkPointer == mob.HashlinkPointer) || TestUnpaired?.Invoke(mob) == true) continue;
+            if (Pairs(mob) || TestUnpaired?.Invoke(mob) == true) continue;
             var (x, y) = Distance(mob, hx, hy);
             if (x <= 300 && y <= 96) candidates.Add((mob, x * x + y * y));
         }
         candidates.Sort((a, b) => a.Distance.CompareTo(b.Distance));
+        int slot = 0;
         foreach (var candidate in candidates)
         {
-            int slot = Enumerable.Range(1, Capacity).FirstOrDefault(i => mobs[i] is null && !detached[i], -1);
-            if (slot < 0) break;
+            do slot++; while (slot <= Capacity && (mobs[slot] is not null || detached[slot]));
+            if (slot > Capacity) break;
             mobs[slot] = candidate.Mob;
             abilities[slot] = candidate.Mob is Mob ? RollAbility(session) : KirbyAbilityItems.CopyByte(candidate.Mob);
             itemOrigins[slot] = (candidate.Mob.cx, candidate.Mob.cy);
@@ -237,7 +246,7 @@ public sealed class KirbyEnemies
             // the colorless scroll multiplier apply on top.
             // A floor ability item takes no damage: its proxy keeps full HP.
             bool item = KirbyAbilityItems.IsAbilityDrop(mob);
-            bonus[i] = mob is Mob && !item && !IsHazard(mob) ? hostBonuses.Factor(mob) : 1;
+            bonus[i] = mob is Mob && !item && !IsHazard(mob) ? (hostBonuses ??= KirbyHostBonuses.Begin(hero)).Factor(mob) : 1;
             critical[i] = mob is Mob && !item && !IsHazard(mob) &&
                 crit.Roll(Random.Shared.NextDouble, mutations.TargetChance(KirbyMutations.HeartOfIceTarget(hero, mob)));
             assignedHp[i] = IsHazard(mob) ? 1 : item ? MaxSourceHp :

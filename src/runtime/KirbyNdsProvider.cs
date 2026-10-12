@@ -110,7 +110,8 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
     internal static Action<string, object>? Diagnostic;
     /// <summary>Host log for the periodic frame-pacing summary.</summary>
     internal static Action<string>? Log;
-    private readonly System.Diagnostics.Stopwatch paceClock = System.Diagnostics.Stopwatch.StartNew();
+    // Runs only across normally stepped frames: loading, pauses, cinematics and deaths are not pacing.
+    private readonly System.Diagnostics.Stopwatch paceClock = new();
     private long paceStepTicks, paceRenderTicks;
     private int paceFrames, paceSteps, paceLocked, paceIdle, paceDoubled;
     private double paceStarted;
@@ -130,8 +131,10 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         LabActivationTrace.Mark("Native runtime ready");
         session.Rules.Restore(lastSession?.Rules.AbilityId, lastSession?.Rules.RetainedShieldId ?? session.Rules.RetainedShieldId,
             lastSession?.Rules.AbilityEmpowered ?? false, lastSession?.Rules.PendingEmpowerment);
-        // The F slot carries over like the copy; a press in progress does not (#102).
-        KirbyFSlot.Reset();
+        // The F slot carries over like the copy. So does a press in progress while the
+        // machine stays alive: the original still holds the stored ability, and only the
+        // press can give the main copy back. A new machine has no press (#102).
+        KirbyFSlot.Reset(keepPress: !firstActivation);
         if (lastSession is not null && !ReferenceEquals(lastSession, session))
             session.Rules.Stored.Restore(lastSession.Rules.Stored.Ability, lastSession.Rules.Stored.Uses);
         lastSession = session;
@@ -146,7 +149,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
                 (ushort)sourceMaxLife);
         importHostHealth = false;
         session.Hero.maxLife = sourceMaxLife;
-        session.Hero.life = Math.Clamp(nds.Health, 0, sourceMaxLife);
+        if (nds.Health is >= 0 and int sourceHealth) session.Hero.life = Math.Clamp(sourceHealth, 0, sourceMaxLife);
         session.Hero.curRally *= sourceMaxLife / hostMaxLife;
         session.Hero.bonusLife = (int)Math.Round(session.Hero.bonusLife * sourceMaxLife / hostMaxLife);
         InitializeHealthDisplay(session.Hero);
@@ -169,6 +172,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
     public void OnDeactivated(KirbySession session)
     {
         KirbyHud.Clear(session);
+        paceClock.Stop();
         CancelStomp();
         standingOn = null;
         SlideStrike = GrabStrike = false;
@@ -210,6 +214,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         mouthfulItems.Clear();
         deathFrames = -1; deathAnchor = null; sourceDead = false;
         if (nds is not null) { enemies.Clear(nds); nds.LoadState(config.SeedStatePath); }
+        KirbyFSlot.Reset();
         window = null;
     }
     private (bool Restored, bool WasKirby) BindSave(KirbySession session)
@@ -346,6 +351,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         var h = session.Hero;
         double delta = Math.Clamp(engineDelta, 0, 0.25);
         bool paused = h._level.game.paused || h._level.paused;
+        if (h.life <= 0 || paused || !h.awake || h._level.game.hasCinematic()) paceClock.Stop();
         if (h.life <= 0)
         {
             if (deathFrames < 0) BeginDeath(session);
@@ -387,6 +393,8 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
     /// </summary>
     private void RecordPacing(int steps, long stepTicks, long renderTicks)
     {
+        // The frame that resumes the clock is not counted: no time has passed for it yet.
+        if (!paceClock.IsRunning) { paceClock.Start(); return; }
         paceFrames++; paceSteps += steps; paceStepTicks += stepTicks; paceRenderTicks += renderTicks;
         if (pacer.Locked) paceLocked++;
         if (steps == 0) paceIdle++; else if (steps > 1) paceDoubled++;

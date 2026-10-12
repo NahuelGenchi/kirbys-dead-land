@@ -139,8 +139,9 @@ public sealed unsafe class NdsRuntime : IDisposable
         fixed (byte* ptr = source) Result(Native.Write(handle, address, ptr, (nuint)source.Length));
     }
     public int ActionFlags { get { Check(); int value = Native.ActionFlags(handle); Result(value); return value; } }
-    public int Health { get { Check(); int value = Native.Health(handle); Result(value); return value; } }
-    public int MaxHealth { get { Check(); int value = Native.MaxHealth(handle); Result(value); return value; } }
+    /// <summary>Kirby's original HP; -2 while the original has no player health group (callers skip that frame).</summary>
+    public int Health { get { Check(); int value = Native.Health(handle); if (value != -2) Result(value); return value; } }
+    public int MaxHealth { get { Check(); int value = Native.MaxHealth(handle); if (value != -2) Result(value); return value; } }
     public void SetHealth(ushort current, ushort maximum) { Check(); Result(Native.SetHealth(handle, current, maximum)); }
     public void Hurt(ushort damage, int direction) { Check(); Result(Native.Hurt(handle, damage, direction)); }
     public bool Owns(uint entity) { Check(); int value = Native.Owns(handle, entity); Result(value); return value != 0; }

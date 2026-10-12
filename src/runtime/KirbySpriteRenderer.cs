@@ -22,9 +22,15 @@ public sealed unsafe class KirbySpriteRenderer : IDisposable
     private const int CanvasWidth = NdsObjRenderer.CanvasWidth, CanvasHeight = NdsObjRenderer.CanvasHeight;
     private readonly Hero hero;
     private readonly NdsBackgroundEffects backgroundEffects;
-    private readonly byte[] oam = new byte[1024];
-    private readonly byte[] vram = new byte[256 * 1024];
-    private readonly byte[] palette = new byte[512];
+    private byte[] oam = new byte[1024];
+    private byte[] vram = new byte[256 * 1024];
+    private byte[] palette = new byte[512];
+    // The inputs of the canvas now in the texture (see UpdateTexture).
+    private byte[] shownOam = new byte[1024], shownVram = new byte[256 * 1024], shownPalette = new byte[512];
+    private readonly FarObject[] shownFar = new FarObject[256];
+    private int shownFarCount = -1;
+    private uint shownDisplay;
+    private (int X, int Y) shownOrigin;
     private readonly byte[] registers = new byte[4];
     private readonly byte[] rgba = new byte[CanvasWidth * CanvasHeight * 4];
     // The bridge keeps at most 256 culled pieces per frame.
@@ -161,6 +167,14 @@ public sealed unsafe class KirbySpriteRenderer : IDisposable
             (int originX, int originY) = nds.DisplayedOrigin;
             // Pieces the original culled outside its screen, for the same OAM (#67).
             int farCount = nds.ReadFarObjects(farBuffer);
+            lastSourceFrame = state.Frame;
+            // The decoder is pure, so the same inputs draw the same canvas: a frame
+            // that changed none of them (Kirby holding a pose) keeps the texture
+            // as uploaded instead of redrawing and uploading 2 MB again.
+            if (farCount == shownFarCount && display == shownDisplay && (originX, originY) == shownOrigin &&
+                oam.AsSpan().SequenceEqual(shownOam) && palette.AsSpan().SequenceEqual(shownPalette) &&
+                MemoryMarshal.AsBytes(farBuffer.AsSpan(0, farCount)).SequenceEqual(MemoryMarshal.AsBytes(shownFar.AsSpan(0, farCount))) &&
+                vram.AsSpan().SequenceEqual(shownVram)) return;
             (int rendered, int unsupported) = NdsObjRenderer.Render(display, oam, vram, palette, rgba, originX, originY,
                 far: farBuffer.AsSpan(0, farCount));
             RenderedObjects = rendered;
@@ -169,7 +183,9 @@ public sealed unsafe class KirbySpriteRenderer : IDisposable
             BodyBounds = NdsObjRenderer.LastBodyBounds;
             Marshal.Copy(rgba, 0, pixels!.bytes.b, rgba.Length);
             texture!.uploadPixels(pixels, Ref<int>.In(0), Ref<int>.In(0));
-            lastSourceFrame = state.Frame;
+            (oam, shownOam) = (shownOam, oam); (vram, shownVram) = (shownVram, vram); (palette, shownPalette) = (shownPalette, palette);
+            farBuffer.AsSpan(0, farCount).CopyTo(shownFar);
+            (shownFarCount, shownDisplay, shownOrigin) = (farCount, display, (originX, originY));
         }
     }
 
