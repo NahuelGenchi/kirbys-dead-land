@@ -1175,3 +1175,17 @@ KirbyAbilityYoYo`; use `outfit-build-sync`.
 
 Not run: a plant under a copied attack, Kirby walking onto it, Gardener-boss
 plants, and normal play with `./play-kirby`.
+
+#132 (the throw after the bite), same command with a fresh data root
+`repros/plant-20261013` (built as in the recipe: `research`, `oracle`, `rom`
+and `dotnet` linked from the private data root, then staged). `bump-launch`
+is logged in `repro-events.jsonl`, the positions in `source-trace.jsonl`.
+
+| Run | Build | Result |
+| :--- | :--- | :--- |
+| `20261013-124519` | #132 | `plant-close` f4384, bite 76 → 59; `plant-bump` and `bump-launch` (1.5 cells a step) f4414 from standing: feet 2328 → 2212.5 px at f4428 (115.5 px up), back near the plant at f4452 where a second bump and launch from a full-speed fall carried him 58 px; landed f4482; `plant-open`, second close f4546, 59 → 42. Captures show Kirby above the closed plant |
+
+Ran to its time limit, no fatal log, real saves unchanged. No control run
+without the change was made this time; the owner's screencast and the #113 run
+(bump fired, Kirby stayed down) are the before state. Not run: a ceiling above
+the plant, input during the launch, the Beheaded on the same plant.

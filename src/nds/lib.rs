@@ -238,6 +238,7 @@ pub unsafe extern "C" fn kssu_step(handle: *mut std::ffi::c_void, mask: u16, fra
         apply_proxy_shapes(b);
         native_trace_once(3, "step: executing source frame");
         b.anchors = actor_anchors(b.nds.main_ram_mut());
+        remove_stray_plasma_aura(b);
         b.nds.run_frame();
         if pass_unfinished(b.nds.main_ram()) {
             b.unfinished_passes = b.unfinished_passes.saturating_add(1);
@@ -2158,6 +2159,53 @@ pub unsafe extern "C" fn kssu_set_mike_shouts(handle: *mut std::ffi::c_void, sho
     }
     r[MIKE_SHOUTS] = shouts;
     0
+}
+// ---- Plasma's charge aura after an ability change (#135) ----
+// Plasma's charge aura is an effect of class 9, type 20, sub-type 1 (update
+// 0x020C838C). The original's charge-level routine 0x020ABFD4 creates it
+// whenever it is missing (0x020FB914), whatever Kirby's copy is. SetAbility
+// runs Plasma's exit handler, which removes the aura, but a Plasma pose handler
+// (0x020FBCCC) still installed for that frame asks for the level once more, so
+// the aura returns while another copy's graphics are loaded. Given back, Plasma
+// creates a second aura, and the first draws invalid OBJ pieces on a charge or
+// makes the OAM builder read invalid memory. The original only leaves Plasma
+// once that pose has ended. The bridge removes a stray aura with the exit
+// handler's own call, 0x020CC3B8(actor, type 20, sub-type 1, no filter), at the
+// player's next update: any aura while Kirby is not Plasma, and all of them
+// when Plasma has more than one (the level routine then creates one again).
+const ABILITY_PLASMA: u8 = 12;
+const PLASMA_AURA_UPDATE: u32 = 0x020c838c;
+const PLASMA_AURA_TYPE: u8 = 20;
+const REMOVE_EFFECTS: u32 = 0x020cc3b8;
+/// The player actor when it carries a charge aura the original would not.
+fn stray_plasma_aura(r: &[u8]) -> Option<u32> {
+    let actor = u32at(r, PLAYER_SLOT);
+    let a = off(actor, 0x44)?;
+    if u32at(r, a + 0x30) != PLAYER_UPDATE || u32at(r, a + 0x40) != PLAYER_RECORD {
+        return None;
+    }
+    let auras = actor_nodes(r)
+        .into_iter()
+        .filter(|&p| {
+            u32at(r, p + 4) == actor
+                && u32at(r, p + 0x30) == PLASMA_AURA_UPDATE
+                && r[p + 0x44] == PLASMA_AURA_TYPE
+                && r[p + 0x45] == 1
+        })
+        .count();
+    let plasma = r[(PLAYER_RECORD - BASE) as usize + 0x13] == ABILITY_PLASMA;
+    (auras > plasma as usize).then_some(actor)
+}
+unsafe fn remove_stray_plasma_aura(b: &Bridge) {
+    if matches!(kssu_hook_state, 1 | 2) {
+        return;
+    }
+    if let Some(actor) = stray_plasma_aura(b.nds.main_ram()) {
+        kssu_hook_args = [actor, PLASMA_AURA_TYPE as u32, 1, 0];
+        kssu_hook_fn = REMOVE_EFFECTS;
+        kssu_hook_at = PLAYER_UPDATE;
+        kssu_hook_state = 1;
+    }
 }
 // The hook state belongs to the machine: a snapshot taken while a change loads
 // must resume it, and any other snapshot clears it.

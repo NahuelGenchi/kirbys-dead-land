@@ -684,6 +684,49 @@ def run_case(name):
             assert ability()==1 and frame<200,frame
             assert l.kssu_set_mike_shouts(b.handle,1)==-2
             return {'refused_during_attack':refused,'switch_frames':switch,'crash_revert_frame':revert,'restore_frames':restore,'mike_one_shout_revert':frame}
+        if name=='f_slot_plasma':
+            # #135: Plasma's charge aura (effect type 20, update 0x020C838C) after an F press and back.
+            l=b.lib;l.kssu_set_ability.argtypes=[C.c_void_p,C.c_uint8];l.kssu_ability_change_pending.argtypes=[C.c_void_p]
+            l.kssu_read_gpu.argtypes=[C.c_void_p,C.c_uint32,C.c_void_p,C.c_size_t]
+            ability=lambda:b.read(0x020baf7b,1)[0]
+            def auras():
+                ram=b.read(0x02000000,0x400000);actor=struct.unpack_from('<I',ram,0x49df0)[0];count=0
+                while actor:
+                    p=actor-0x02000000;count+=struct.unpack_from('<I',ram,p+0x30)[0]==0x020c838c;actor=struct.unpack_from('<I',ram,p)[0]
+                return count
+            def change(target):
+                for _ in range(600):  # refused until Kirby is free again after the stored attack
+                    if l.kssu_set_ability(b.handle,target)==0:break
+                    b.step()
+                else:raise AssertionError('ability change stayed refused')
+                for _ in range(20):
+                    b.step()
+                    if not l.kssu_ability_change_pending(b.handle):
+                        assert ability()==target,(ability(),target);return
+                raise AssertionError('ability change never returned')
+            def charge():
+                # Direction taps build Plasma's charge; a stray aura drew OBJ pieces of the prohibited shape 3.
+                invalid=0;oam=C.create_string_buffer(1024)
+                for frame in range(120):
+                    b.step(32 if frame%6<2 else 0)
+                    assert l.kssu_read_gpu(b.handle,0x07000000,oam,1024)==0
+                    words=[struct.unpack_from('<H',oam.raw,i*8)[0] for i in range(128)]
+                    invalid+=any(w&0x300!=0x200 and w>>14==3 for w in words)
+                return invalid
+            transform(b,12);b.step(0,60)
+            assert auras()==1 and charge()==0
+            after={}
+            for stored in (23,21):
+                b.step(0,120);change(stored);b.step(2,3)
+                for frame in range(4,1200):
+                    b.step()
+                    if ability()==1:break
+                assert ability()==1 and auras()==0,(stored,ability(),auras())
+                change(12);b.step(0,60)
+                assert auras()==1,(stored,auras())
+                invalid=charge();assert invalid==0 and auras()==1,(stored,invalid,auras())
+                after[stored]={'auras':auras(),'invalid_obj_frames':invalid}
+            return {'plasma_after_stored_ability':after}
         if name in ('helper_reaction','helper_move','helper_owns'):
             # The original CPU helper (DS X). The bridge caps its reaction wait and can move it alone.
             class Helper(C.Structure):_fields_=[('x_raw',C.c_int32),('y_raw',C.c_int32),('vx_raw',C.c_int16),('vy_raw',C.c_int16),('action',C.c_uint16),('reserved',C.c_uint16)]
@@ -897,7 +940,7 @@ def main():
         result=run_case(args.case)
         # The emulator's log shares stdout and may stop mid-line: start the result on its own line.
         print('\nRESULT '+json.dumps({'case':args.case,'result':result}),flush=True);return
-    cases=['scene_doors', 'far_shot_draw', 'room_food', 'proxy_birth_contact', 'proxy_birth_inhale', 'proxy_contact', 'proxy_contact_sword', 'proxy_touch_off', 'proxy_swallow_touch_off', 'proxy_suplex_touch_off', 'proxy_ice_detach', 'proxy_ice_release', 'proxy_lethal', 'motion', 'ladder', 'ladder_top', 'ladder_top_stomp', 'one_way', 'solid_ceiling', 'water', 'proxy_water', 'proxy_water_sword', 'proxy_water_below', 'hurt_water', 'proxy_swallow', 'hazard_spit', 'hazard_swallow', 'star_spit', 'star_spit_wall', 'star_big', 'star_ability', 'proxy_sword', 'proxy_reuse', 'proxy_save', 'proxy_mix', 'boss_inhale', 'boss_suplex', 'boss_cook', 'boss_sword', 'proxy_capacity', 'copy_drop_reabsorb', 'wheelie_ride', 'proxy_suplex', 'proxy_cook', 'audio', 'hurt', 'hurt_lethal', 'hurt_cold', 'guard', 'health_invulnerable', 'health_sync', 'proxy_size', 'f_slot', 'f_slot_save', 'helper_reaction', 'helper_move', 'helper_owns', 'obj_vram_block', 'main_screen_only', 'step_between_passes']
+    cases=['scene_doors', 'far_shot_draw', 'room_food', 'proxy_birth_contact', 'proxy_birth_inhale', 'proxy_contact', 'proxy_contact_sword', 'proxy_touch_off', 'proxy_swallow_touch_off', 'proxy_suplex_touch_off', 'proxy_ice_detach', 'proxy_ice_release', 'proxy_lethal', 'motion', 'ladder', 'ladder_top', 'ladder_top_stomp', 'one_way', 'solid_ceiling', 'water', 'proxy_water', 'proxy_water_sword', 'proxy_water_below', 'hurt_water', 'proxy_swallow', 'hazard_spit', 'hazard_swallow', 'star_spit', 'star_spit_wall', 'star_big', 'star_ability', 'proxy_sword', 'proxy_reuse', 'proxy_save', 'proxy_mix', 'boss_inhale', 'boss_suplex', 'boss_cook', 'boss_sword', 'proxy_capacity', 'copy_drop_reabsorb', 'wheelie_ride', 'proxy_suplex', 'proxy_cook', 'audio', 'hurt', 'hurt_lethal', 'hurt_cold', 'guard', 'health_invulnerable', 'health_sync', 'proxy_size', 'f_slot', 'f_slot_save', 'f_slot_plasma', 'helper_reaction', 'helper_move', 'helper_owns', 'obj_vram_block', 'main_screen_only', 'step_between_passes']
     if not args.skip_abilities:cases += [f'ability-{i}' for i in range(2,26)]
     results=[]
     for name in cases:

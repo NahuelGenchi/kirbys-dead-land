@@ -29,6 +29,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
     private readonly KirbySlideHold slideHold = new();
     private bool slideHeld;
     private readonly StompController stomp = new();
+    private readonly BumpLaunch launch = new();
     private readonly SpeedMatch.ActionFilter motionActions = new();
     private readonly KirbyHelperMatch helperMatch = new();
     private readonly AnimationPacer walkCycle = new();
@@ -105,6 +106,17 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
     public bool GrabStrike { get; private set; }
     /// <summary>True while Kirby's stomp drives the host dive attack.</summary>
     public bool Stomping => stomp.Active;
+    /// <summary>
+    /// A host bump threw the hero upward at <paramref name="cellsPerStep"/> cells
+    /// a fixed step. The original machine owns Kirby's motion, so the bump is
+    /// replayed around it as added ascent (see BumpLaunch).
+    /// </summary>
+    public void Launch(double cellsPerStep)
+    {
+        if (nds is null || stomp.Active) return;
+        launch.Start(cellsPerStep * 24);
+        Diagnostic?.Invoke("bump-launch", new { cellsPerStep, active = launch.Active, action = nds.Action });
+    }
     /// <summary>True while the original death animation finishes after the host destroyed the hero.</summary>
     public bool PlayingDeath => deathLevel is not null;
     public dc.pr.Level? DeathLevel => deathLevel;
@@ -611,6 +623,13 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         previousInput = raw;
         previousDiveButton = diveButton;
         if (stomp.Active) centerY += stomp.Descent(FreeBelow(map, hostX, centerY + 14.5), action);
+        // A host bump carries Kirby up before the original frame; a stomp or a ladder ends it.
+        if (stomp.Active || action == KirbyActions.Climb) launch.Reset();
+        else if (launch.Active)
+        {
+            terrainMap = map; terrainRollThrough = rollZones.Open;
+            centerY -= launch.Ascent(SpeedMatch.FreeAbove(terrain ??= MatchTerrain, hostX, centerY + 14.5));
+        }
         // The stomp moves at the Beheaded's dive speed on its own.
         bool matched = config.MatchHostSpeed && !stomp.Active;
         // Down + jump on the ground starts the original slide during this
@@ -1132,6 +1151,8 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
     private void CancelStomp()
     {
         forcedDiveStartFeetY = double.NaN;
+        // Whatever ends a stomp (death, a cinematic, a new level or run) ends a bump launch too.
+        launch.Reset();
         var dive = activeDive;
         if (stomp.Active || dive is not null) dash.Reset();
         stomp.Reset();
