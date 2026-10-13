@@ -43,6 +43,7 @@
   "AlwaysDash": true,
   "MatchHostSpeed": true,
   "OriginalTouchDamage": false,
-  "CopyDamageScale": 3.5,
+  "CopyDamageScale": 2.625,
+  "HelperCopyDamageScale": 1.75,
   "FlashStrength": 0.35
 }

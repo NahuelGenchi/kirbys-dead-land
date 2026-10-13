@@ -826,6 +826,35 @@ pub unsafe extern "C" fn kssu_player_owns(handle: *mut std::ffi::c_void, address
         .iter()
         .any(|&(p, owned)| owned && BASE + p as u32 == address) as i32
 }
+/// Whether an original object is the CPU helper or descends from it (a thrown
+/// bomb, a cutter, an attack effect). `kssu_player_owns` counts the helper as
+/// Kirby's, so this is how a hit is told apart. Returns 0 while Kirby has no
+/// helper.
+#[no_mangle]
+pub unsafe extern "C" fn kssu_helper_owns(handle: *mut std::ffi::c_void, address: u32) -> i32 {
+    if handle.is_null() {
+        return -1;
+    }
+    let r = (&*(handle as *mut Bridge)).nds.main_ram();
+    let Some(root) = helper_node(r).map(|p| BASE + p as u32) else {
+        return 0;
+    };
+    // Each object stores its parent at +4; attack effects nest only a few levels.
+    let mut at = address;
+    for _ in 0..9 {
+        if at == root {
+            return 1;
+        }
+        let Some(p) = off(at, 8) else {
+            break;
+        };
+        at = u32at(r, p + 4);
+        if at == 0 {
+            break;
+        }
+    }
+    0
+}
 fn proxy_slot_for(r: &[u8], p: usize) -> Option<usize> {
     if r[p + 0x16] != 72 {
         return None;

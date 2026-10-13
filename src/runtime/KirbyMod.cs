@@ -341,9 +341,16 @@ public sealed class RuntimeConfig
     /// <summary>
     /// Host damage per original damage point against a tier-1 enemy, before
     /// the host's own per-tier life scaling. The original game kills a basic
-    /// 16-18 HP enemy with one ability hit; 3.5 makes a 120-life Zombie take two.
+    /// 16-18 HP enemy with one ability hit. 2.625 (the earlier 3.5 less 25%,
+    /// #128) makes a 120-life Zombie take three Sword hits.
     /// </summary>
-    public double CopyDamageScale { get; set; } = 3.5;
+    public double CopyDamageScale { get; set; } = 2.625;
+    /// <summary>
+    /// The same scale for hits the original CPU helper lands (#128): half of the
+    /// earlier 3.5, so a Sword helper needs four hits on a 120-life Zombie. Zero
+    /// or less gives the helper Kirby's scale.
+    /// </summary>
+    public double HelperCopyDamageScale { get; set; } = 1.75;
     /// <summary>
     /// Critical hits of copy attacks (#88, a mod addition). Kirby has no base
     /// crit chance; mutations add timed chance. A crit multiplies the hit by

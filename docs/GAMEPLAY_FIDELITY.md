@@ -36,7 +36,7 @@ in [NDS_BRIDGE.md](NDS_BRIDGE.md). The original bootstrap experiment remains in
 | Facing | The host hero's direction follows the original facing (bit 31 of player+0x6C) every source frame, so host shields block the way Kirby faces |
 | Incoming damage | Host shield/parry resolves first; remaining damage, converted to the same fraction of Kirby's 76 HP as of the host's current maximum, enters the next original collision tick, preserving original guard, recoil and invulnerability |
 | Touching enemies | As in Dead Cells, touching an enemy hurts neither Kirby nor the enemy: the original body-contact damage is excluded for every paired enemy, while Kirby's inhale, slide and copy attacks still hit, and the host's own touch attacks (spiked or electric enemies) still reach him as incoming damage. `OriginalTouchDamage: true` restores the original rule (7 of 76 HP to Kirby, and weak enemies destroyed by the bump) |
-| Outgoing damage | Paired original enemies hold the host life in original units: host life ÷ (`CopyDamageScale` 3.5 × the host's per-tier life scale). Original HP deltas are multiplied back, so both games agree on the lethal hit; the result is then scaled like Dead Cells colorless gear (see below), and the deliberate Elite Sword bonus below multiplies it again; no other host hero multiplier alters copy attacks |
+| Outgoing damage | Paired original enemies hold the host life in original units: host life ÷ (`CopyDamageScale` 2.625 × the host's per-tier life scale; the CPU helper's hits use `HelperCopyDamageScale` 1.75, see [Damage balance](#damage-balance-128-intentional-deviation)). Original HP deltas are multiplied back, so both games agree on the lethal hit; the result is then scaled like Dead Cells colorless gear (see below), and the deliberate Elite Sword bonus below multiplies it again; no other host hero multiplier alters copy attacks |
 | Player health | Original full health is 76. Host and source health are synchronized, including host healing and original food |
 | Saves | A versioned, ROM-checked native machine snapshot and physical shield/enemy bindings travel with the private host save slot |
 | Arrival and death | Kirby appears in the host arrival flash rather than standing in its corpse sequence. On death the original lethal recoil and spin-away play over the host death sequence |
@@ -956,6 +956,49 @@ attack enemies and was much slower than Kirby.
   peak speed the run's, stops at a wall). **No live game check was run**, so the
   feel in the running host game, other abilities' helpers and a helper in water
   or on a ladder are unverified.
+
+### Damage balance (#128, intentional deviation)
+
+Owner report 2026-10-12: Kirby's copy abilities and the helper are too strong.
+Kirby's damage drops by 25% and the helper's by 50%, both against the earlier
+`CopyDamageScale` of 3.5.
+
+- **Kirby.** `CopyDamageScale` 3.5 → 2.625 (host damage per original point
+  against a tier-1 enemy). Everything that uses the scale follows: copy attacks,
+  spit and discarded stars, the screen attacks, with the item bonus, crit,
+  mutation and colorless factors on top. An 18-damage Sword hit deals 47 (was
+  63), and a 120-life Zombie takes three hits (was two).
+- **Helper.** `HelperCopyDamageScale` 1.75 (zero or less gives the helper
+  Kirby's scale). The helper's hit reaches a paired enemy as the same source HP
+  drop as Kirby's, so it is attributed from the original collision records of
+  that frame: new bridge export `kssu_helper_owns` is true for the helper object
+  and anything descending from it (`kssu_player_owns` counts the helper as
+  Kirby's). A drop is the helper's when a damaging, non-body record
+  (hit-list slot other than 14) owned by it touches the enemy's source body (the
+  same body the star strikes use) and none of Kirby's does; a frame with both is
+  counted as Kirby's. An 18-damage hit deals 31, and a Zombie takes four Sword
+  hits. A helper's Crash, Paint or Mike wave strikes the enemies off the source
+  window at the helper's scale.
+- **Lethality (known limit).** A source-lethal hit still kills, whoever lands it,
+  so the original defeat reaction (star, freeze) stays in the host's tick. The
+  paired source HP is set before the step from Kirby's scale, when the hitter is
+  not yet known, so a helper hit that Kirby's scale would have made lethal
+  kills even though its own damage would not: the helper's last hit reaches
+  1.5 times as far. Its chip damage is exactly half; its kills come one hit
+  sooner for about half of all enemy life values (192 of 1–400 for an
+  18-damage hit, simulated in the same way as the unit test). Enemies up to 47
+  life still die to one helper Sword hit, as to Kirby's, and a 120-life Zombie
+  takes four. Making the threshold exact needs the source object to survive a
+  hit it would die from, whose original death and star reaction is unverified.
+- **Evidence.** Source: `tests/Program.cs` (hits to kill, ratio, attribution
+  rule, lethality across the new scales) and `helper_owns` in
+  `tools/nds_tests.py`, which on the Sword helper shows its damaging records
+  (slot 7, damage 18 and 16) owned by the helper only, Kirby's own Sword
+  records (slots 7 and 13) never, and bodies (slot 14, word 2 for both) set
+  apart. **No live game check was run**: the helper's hits against a host
+  enemy in the running game, the Wheelie rider (whose attacks may be owned by
+  the helper, so would take the helper's scale), and an older bridge without
+  the export (the helper then keeps Kirby's scale) are unverified.
 
 ### Host elevators (deviation)
 

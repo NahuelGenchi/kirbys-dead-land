@@ -35,14 +35,16 @@ internal sealed unsafe class KirbyScreenAttacks
             int damage = -(short)hit.Words[2];
             if (!ScreenAttacks.IsScreenWide(hit.Slot, damage, box, state.CameraX, state.CameraY) || !nds.Owns(hit.Owner)) continue;
             present.Add(hit.Address);
-            StrikeView(hero, nds, enemies, hit.Address, damage, state, sourceHit, scale);
+            // Owns also covers the helper's records; its wave is weaker (#128).
+            double ratio = enemies.HelperRatio != 1 && nds.HelperOwns(hit.Owner) ? enemies.HelperRatio : 1;
+            StrikeView(hero, nds, enemies, hit.Address, damage, state, sourceHit, scale, ratio);
         }
         // A wave's record lasts one frame; a reused address is a new wave.
         strikes.Retain(present);
     }
 
     private void StrikeView(Hero hero, NdsRuntime nds, KirbyEnemies enemies, uint record, int sourceDamage, NdsState state,
-        IReadOnlySet<nint> sourceHit, Func<Entity, double> scale)
+        IReadOnlySet<nint> sourceHit, Func<Entity, double> scale, double ratio)
     {
         // Viewport.getNormalizeScreenPos: the view is wid × hei level pixels centred on realX, realY.
         if (hero._level.viewport is not { destroyed: false } viewport) return;
@@ -59,7 +61,7 @@ internal sealed unsafe class KirbyScreenAttacks
             if (!ScreenAttacks.HostStrikes(source is not null, reaches, sourceHit.Contains(mob.HashlinkPointer)) ||
                 !strikes.TryStrike(record, mob.HashlinkPointer)) continue;
             // The same conversion a paired enemy's HP drop would get.
-            double multiplier = enemies.HostMultiplier(scale, mob);
+            double multiplier = enemies.HostMultiplier(scale, mob) * ratio;
             int life = mob.life;
             int damage = Math.Max(1, ColorlessDamage.HostDamage(sourceDamage,
                 ColorlessDamage.SourceHp(life, multiplier, KirbyEnemies.MaxSourceHp), life, multiplier));

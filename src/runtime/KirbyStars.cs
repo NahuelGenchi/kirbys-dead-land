@@ -102,6 +102,33 @@ internal sealed unsafe class KirbyStars
     }
 
     /// <summary>
+    /// A paired enemy just lost source HP: was it the helper's hit (#128)? Its
+    /// damaging original records are tested against the enemy's source body, the
+    /// same body <see cref="SourceStrike"/> uses (a lethal hit removes the source
+    /// body's own records, so the host-sized box counts too). Only evaluated when
+    /// an enemy lost HP, never per frame. False with a bridge that cannot tell
+    /// the helper from Kirby.
+    /// </summary>
+    public bool HelperStrike(NdsRuntime nds, uint sourceEntity, Entity target, int ox, double oy)
+    {
+        if (!NdsRuntime.CanTellHelper || count == 0) return false;
+        var body = HostBody(target).Offset(-ox, -(int)Math.Round(oy));
+        if (bodies.TryGetValue(sourceEntity, out var source)) body = body.Union(source);
+        bool helper = false, kirby = false;
+        for (int i = 0; i < count; i++)
+        {
+            ref NdsHit hit = ref records[i];
+            // Bodies carry a touch word; only attack records count.
+            if (hit.Slot == HelperDamage.BodySlot || -(short)hit.Words[2] <= 0) continue;
+            if (!new StarBox(hit.Bounds[0], hit.Bounds[1], hit.Bounds[2], hit.Bounds[3]).Overlaps(body)) continue;
+            // Owns counts the helper as Kirby's, so the helper is asked first.
+            if (nds.HelperOwns(hit.Owner)) helper = true;
+            else if (nds.Owns(hit.Owner)) kirby = true;
+        }
+        return HelperDamage.IsHelperHit(helper, kirby);
+    }
+
+    /// <summary>
     /// Strike the host enemies the source cannot: those with no source object, and
     /// every enemy the ability star crosses. Damage is the star's source damage,
     /// scaled like any other copy hit on that enemy.

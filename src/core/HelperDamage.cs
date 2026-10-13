@@ -1,0 +1,34 @@
+namespace Kirby.Core;
+
+/// <summary>
+/// The original CPU helper's damage to host enemies (#128, a mod balance choice,
+/// not original behavior). The helper's hits arrive as the same source HP drop
+/// as Kirby's, so they are told apart by the original attack records that touch
+/// the enemy and scaled by a separate, lower host-damage-per-original-point
+/// scale than Kirby's copy attacks.
+/// </summary>
+public static class HelperDamage
+{
+    /// <summary>
+    /// Hit-list slot of an object's own body (hurtbox). Its damage word is a touch
+    /// value, not an attack: Kirby's and the helper's bodies both carry 2.
+    /// </summary>
+    public const uint BodySlot = 14;
+
+    /// <summary>
+    /// The helper's strength relative to Kirby's, from the two host-damage-per-point
+    /// scales. 1 (no difference) when either scale is unset or not positive.
+    /// </summary>
+    public static double Ratio(double kirbyScale, double helperScale) =>
+        double.IsFinite(kirbyScale) && double.IsFinite(helperScale) && kirbyScale > 0 && helperScale > 0
+            ? helperScale / kirbyScale
+            : 1;
+
+    /// <summary>
+    /// An enemy's source HP drop is the helper's only when one of its damaging
+    /// records touches the enemy and none of Kirby's does. When both touch it in
+    /// one frame the hit counts as Kirby's.
+    /// </summary>
+    public static bool IsHelperHit(bool helperRecordTouches, bool kirbyRecordTouches) =>
+        helperRecordTouches && !kirbyRecordTouches;
+}
