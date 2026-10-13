@@ -15,6 +15,10 @@ int compared = 0, mismatched = 0, unsupported = 0;
 int[] paletteObjects = new int[16], modes = new int[4];
 int affineObjects = 0, flippedObjects = 0;
 var records = new List<object>();
+// A state does not hold the picture the emulator has drawn. One saved where a
+// step ends, as VBlank begins (#134), has its 192 lines drawn already: the
+// first framebuffer after loading it is not of this run. Step once first.
+nds.Step(buttons);
 for (int frame = 0; frame < frames; frame++)
 {
     Read(0x07000000, oam); Read(0x06400000, vram); Read(0x05000200, palette); Read(0x04000000, display);

@@ -69,7 +69,7 @@ The same runs show the behaviour held. `crowd`: the same 30 hits and 1,260 damag
 
 `KIRBY_LAB_PERF=1` in the shell that runs `launch_runtime.py` makes `LabPerfProbe` write `perf.json` in the run folder every two seconds: host frame intervals, the time and managed bytes of each stage, original steps, texture uploads, calls of the held-entity hooks, collections and their pause. It counts only host frames that stepped Kirby, after the first one. It is off in play, where each mark costs one static test.
 
-The `Kirby pacing:` log line, once a minute in any run including play, gives host and original fps and the mean time of the original step and of the drawing. Check `powerprofilesctl get` first: the power-saver profile alone took the game well below 60 fps on 2026-10-10.
+The `Kirby pacing:` log line, once a minute in any run including play, gives host and original fps, the mean time of the original step and of the drawing, and how many original frames ended inside a logic pass (#134): a few at each ability or helper load, otherwise none. More than that means Kirby can be drawn a terrain cell off for single frames again (docs/NDS_BRIDGE.md, Where a source frame ends). Check `powerprofilesctl get` first: the power-saver profile alone took the game well below 60 fps on 2026-10-10.
 
 ## Checks run
 

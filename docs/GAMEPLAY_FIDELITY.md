@@ -905,7 +905,10 @@ Evidence: core tests pin the slot, the enemy draw and the press (a simulated
 machine with load time, reverts, a refusing state, a hit before the attack, a
 stored ability that never fires and a saved press). Bridge cases `f_slot` and
 `f_slot_save` (`tools/nds_tests.py`) cover the refusal during an attack, the
-switch, Crash's revert on frame 266, the restore and a save taken mid-switch.
+switch, Crash's revert, the restore and a save taken mid-switch. Since #134 a
+source frame ends as VBlank begins and the same machine is seen a frame apart:
+Crash's switch returns within its first frame and it reverts on frame 267
+(before: 2 and 266; 268 frames after arming either way).
 Live runs `20261009-010357` and `20261009-010718` (see
 [RUNTIME_LAUNCH.md](RUNTIME_LAUNCH.md#f-slot-2026-10-09)) took and fired all four
 abilities with real Interact and F presses from a swallowed Sword, killed real

@@ -115,7 +115,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
     // Runs only across normally stepped frames: loading, pauses, cinematics and deaths are not pacing.
     private readonly System.Diagnostics.Stopwatch paceClock = new();
     private long paceStepTicks, paceRenderTicks;
-    private int paceFrames, paceSteps, paceLocked, paceIdle, paceDoubled;
+    private int paceFrames, paceSteps, paceLocked, paceIdle, paceDoubled, paceUnfinished;
     private double paceStarted;
     public void OnActivated(KirbySession session)
     {
@@ -414,9 +414,14 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         double now = paceClock.Elapsed.TotalSeconds, span = now - paceStarted;
         if (span < 60) return;
         double ms = 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+        // Stays at zero while every original frame ends between two logic passes (#134).
+        int unfinished = nds?.UnfinishedPasses ?? paceUnfinished;
+        // A new source session counts from zero again.
+        if (unfinished < paceUnfinished) paceUnfinished = 0;
         Log?.Invoke(string.Create(System.Globalization.CultureInfo.InvariantCulture,
-            $"Kirby pacing: host {paceFrames / span:0.0} fps, original {paceSteps / span:0.0} fps, locked {100.0 * paceLocked / paceFrames:0}%, frames without a step {paceIdle}, with several {paceDoubled}, original step {paceStepTicks * ms / Math.Max(1, paceSteps):0.00} ms, render {paceRenderTicks * ms / paceFrames:0.00} ms."));
+            $"Kirby pacing: host {paceFrames / span:0.0} fps, original {paceSteps / span:0.0} fps, locked {100.0 * paceLocked / paceFrames:0}%, frames without a step {paceIdle}, with several {paceDoubled}, original step {paceStepTicks * ms / Math.Max(1, paceSteps):0.00} ms, render {paceRenderTicks * ms / paceFrames:0.00} ms, original frames ended inside a pass {unfinished - paceUnfinished}."));
         paceStarted = now;
+        paceUnfinished = unfinished;
         paceFrames = paceSteps = paceLocked = paceIdle = paceDoubled = 0;
         paceStepTicks = paceRenderTicks = 0;
     }
@@ -538,8 +543,11 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         double centerY = floor * 24 - 14.5;
         int originX = (int)Math.Floor(hostX / 24) - 16;
         int originY = floor - CinematicFloorRow;
-        cells.AsSpan(0, CinematicFloorRow * 100).Clear();
-        cells.AsSpan(CinematicFloorRow * 100).Fill(3);
+        HoldWindow(ref originX, ref originY);
+        // The floor's row in the window, which a held window can leave elsewhere.
+        int floorRow = Math.Clamp(floor - originY, 0, 9);
+        cells.AsSpan(0, floorRow * 100).Clear();
+        cells.AsSpan(floorRow * 100).Fill(3);
         PlaceSource(originX, originY, checked((int)Math.Round((hostX - originX * 24) * 65536)),
             checked((int)Math.Round((centerY - originY * 24) * 65536)), carried: false);
         PaceWalkCycle(nds!.Action, config.MatchHostSpeed);
@@ -613,6 +621,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         bool rollThrough = rollZones.Update(sliding, inRollZone);
         int originX = (int)Math.Floor(hostX / 24) - 16;
         int originY = (int)Math.Floor(centerY / 24) - 4;
+        HoldWindow(ref originX, ref originY);
         ExportTerrain(hero, originX, originY, rollThrough);
         int? beforeY = riding is not null && Diagnostic is not null ? nds!.State.YRaw : null;
         PlaceSource(originX, originY, checked((int)Math.Round((hostX - originX * 24) * 65536)),
@@ -925,13 +934,26 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
             {
                 nds.World(cells, (int)frameX, (int)frameY);
                 // One raw unit is host floating-point rounding, not movement.
-                if (Math.Abs(dx) > 1 || Math.Abs(dy) > 1) nds.MovePlayer((int)dx, (int)dy);
+                // Not inside an unfinished pass either (HoldWindow); the next frame makes it up.
+                if ((Math.Abs(dx) > 1 || Math.Abs(dy) > 1) && !nds.PassUnfinished) nds.MovePlayer((int)dx, (int)dy);
                 window = (originX, originY);
                 return;
             }
         }
         nds!.World(cells, targetX, targetY);
         window = (originX, originY);
+    }
+    /// <summary>
+    /// Keep the terrain window where it is while the original is inside a logic
+    /// pass that takes it longer than a frame (it loads an ability or a helper).
+    /// That pass has already moved Kirby and the camera and has not yet built
+    /// the sprites: a window moved under it draws him a terrain cell off for a
+    /// frame (#134). Kirby is at least four cells inside the window, and the
+    /// original does not move him until the pass ends.
+    /// </summary>
+    private void HoldWindow(ref int originX, ref int originY)
+    {
+        if (nds!.PassUnfinished && window is { } held) (originX, originY) = held;
     }
     // Terrain for SpeedMatch: the cells the original saw this frame.
     private SpeedMatch.Terrain? terrain;
