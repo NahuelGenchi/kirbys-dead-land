@@ -646,14 +646,15 @@ def run_case(name):
             b.step(0,60)
             if name=='f_slot_save':
                 import tempfile,os
-                assert l.kssu_set_ability(b.handle,23)==0;b.step()
+                # Mike is still loading when the first frame ends; Crash has returned by then.
+                assert l.kssu_set_ability(b.handle,22)==0;b.step()
                 assert l.kssu_ability_change_pending(b.handle)==1
                 path=os.path.join(tempfile.mkdtemp(),'mid.state').encode();b.save(path)
                 assert l.kssu_load_state(b.handle,path)==0;assert l.kssu_ability_change_pending(b.handle)==1
                 for _ in range(20):
                     b.step()
                     if not l.kssu_ability_change_pending(b.handle):break
-                assert ability()==23 and b.action_flags()&1==0
+                assert ability()==22 and b.action_flags()&1==0 and l.kssu_set_mike_shouts(b.handle,1)==0
                 b.step(2,3)
                 for frame in range(400):
                     b.step()
@@ -665,7 +666,9 @@ def run_case(name):
             for frame in range(4,400):
                 b.step()
                 if ability()==1:revert=frame;break
-            assert revert==266,revert
+            # Crash returns within its first frame and reverts 268 frames after it was armed.
+            # A frame that ended 71 scanlines after VBlank saw both a frame apart (2 and 266, #134).
+            assert (switch,revert)==(1,267),(switch,revert)
             restore=change(18)
             hit=False
             for frame in range(20):
@@ -858,6 +861,75 @@ def run_case(name):
             black=b'\x00\x00\x00\xff'*(256*192)
             assert only[2]=={black} and black not in full[2] and full[2]==again[2], 'Bottom screen: black only while engine B is left out'
             return {'frames':240,'machine_and_engine_a_digest':full[0][:16],'save_state_sha256':full[1][:16],'same_with_engine_b_left_out':True,'bottom_screen_black_only_when_left_out':True}
+        if name=='step_between_passes':
+            # #134: a source frame ends as VBlank begins, between two logic passes of the
+            # original. Replayed as the runtime places Kirby (the terrain window rebased
+            # every frame, host movement added), his body OBJ in the hardware OAM stays
+            # where the state of the frame before puts it. A frame that ended 71 scanlines
+            # later was inside the pass whenever a helper made it longer, and a window
+            # moved under it drew Kirby a terrain cell off for one frame.
+            import math
+            l=b.lib;l.kssu_read_gpu.argtypes=[C.c_void_p,C.c_uint32,C.c_void_p,C.c_size_t]
+            l.kssu_move_player.argtypes=[C.c_void_p,C.c_int32,C.c_int32];l.kssu_unfinished_passes.argtypes=[C.c_void_p]
+            oam=C.create_string_buffer(1024)
+            def body():
+                assert l.kssu_read_gpu(b.handle,0x07000000,oam,1024)==0;xs=[];ys=[]
+                for k in range(128):
+                    a0,a1,a2=struct.unpack_from('<3H',oam.raw,k*8)
+                    if (a0==0xf8 and a1==0) or (a0&0x300)==0x200 or a2>>12:continue
+                    x=a1&511;y=a0&255;xs.append(x-512 if x>256 else x);ys.append(y-256 if y>192 else y)
+                return (min(xs),min(ys)) if xs else None
+            origin=lambda s:(math.floor(s['x_raw']/65536)-s['camera_x'],math.floor(s['y_raw']/65536)-s['camera_y'])
+            def replay(masks,feeds={},nudge=False):
+                hx=20*24+12.0;hy=30*24-14.5;window=None;stepped=origin(b.state());offsets=[];moves=held=bias=0;late=False
+                count=l.kssu_unfinished_passes(b.handle)
+                for n,mask in enumerate(masks):
+                    if n in feeds:assert b.feed(feeds[n])==0
+                    # The host moves the window a cell just when the original is inside a long pass.
+                    if nudge and late:bias^=1
+                    ox=math.floor(hx/24)-16+bias;oy=math.floor(hy/24)-4
+                    # KirbyNdsProvider.HoldWindow: neither the window nor Kirby moves until that pass ends.
+                    if late and window:ox,oy=window;held+=1
+                    cells=[3 if row+oy>=30 else 0 for row in range(9) for column in range(100)]
+                    tx=round((hx-ox*24)*65536);ty=round((hy-oy*24)*65536);state=b.state()
+                    if window:
+                        fx=state['x_raw']+(window[0]-ox)*24*65536;fy=state['y_raw']+(window[1]-oy)*24*65536;b.world(cells,fx,fy)
+                        if (abs(tx-fx)>1 or abs(ty-fy)>1) and not late:assert l.kssu_move_player(b.handle,tx-fx,ty-fy)==0
+                    else:b.world(cells,tx,ty)
+                    moves+=window not in (None,(ox,oy));window=(ox,oy)
+                    state=b.step(mask);shown=stepped;stepped=origin(state);at=body()
+                    offsets.append(at and (at[0]-shown[0],at[1]-shown[1]))
+                    now=l.kssu_unfinished_passes(b.handle);late=now!=count;count=now
+                    hx+=(state['x_raw']/65536+ox*24-hx)*3.71;hy+=(state['y_raw']/65536+oy*24-hy)*1.91
+                far=lambda a,c:max(abs(a[0]-c[0]),abs(a[1]-c[1]))>=12
+                # Off for one frame and back: a pose change stays where it went.
+                jumps=[(i,offsets[i-1],offsets[i]) for i in range(1,len(offsets)-1) if all(offsets[i-1:i+2]) and far(offsets[i],offsets[i-1]) and not far(offsets[i+1],offsets[i-1])]
+                return jumps,moves,held
+            # The first frames from the seed state, which was saved at the end of a frame.
+            assert l.kssu_unfinished_passes(b.handle)==0
+            jumps,moves,_=replay([0]*20+[16]*60);assert not jumps and moves and l.kssu_unfinished_passes(b.handle)==0,(jumps,moves)
+            b.step(0,30);transform(b,18);b.step(1024,1);b.step(0,150)
+            assert b.state()['ability']==1 and l.kssu_unfinished_passes(b.handle)>=3, 'The original takes longer than a frame to load an ability or a helper'
+            # Kirby copies Sword again beside the helper while the window moves under the load.
+            before=l.kssu_unfinished_passes(b.handle)
+            jumps,nudged,held=replay([18]*20+[2,0,128]+[16]*120,{20:18},nudge=True)
+            loading=l.kssu_unfinished_passes(b.handle)
+            assert b.state()['ability']==18 and loading>before and held==loading-before and not jumps,(jumps,held,before,loading)
+            flap=lambda direction,frames:[(1 if i%16<8 else 0)|direction for i in range(frames)]
+            masks=[0]*40+[1]*6+[0]*6+flap(16,180)+flap(32,180)+[16]*60+[32]*60+[2]*30+flap(16,60)
+            jumps,moves,_=replay(masks)
+            assert not jumps and moves>=60,(jumps,moves)
+            assert l.kssu_unfinished_passes(b.handle)==loading, 'A frame ended inside a logic pass with only Kirby and his helper'
+            # A state saved where a frame now ends continues from there.
+            path=ROOT/'oracle/step-test.state';b.save(path)
+            def run():
+                trace=[]
+                for mask in [16]*20+[1]*10:
+                    state=b.state();b.world([3 if y>=7 else 0 for y in range(9) for x in range(100)],state['x_raw'],state['y_raw']);state=b.step(mask);trace.append((state['x_raw'],state['y_raw'],body()))
+                return trace
+            first=run();assert l.kssu_load_state(b.handle,bytes(path))==0;path.unlink();assert run()==first, 'The saved state did not continue the same'
+            assert l.kssu_unfinished_passes(b.handle)==loading
+            return {'frames':80+143+len(masks),'window_moves':moves+nudged,'frames_ended_inside_a_pass':{'with_kirby_and_helper':0,'while_original_loads':loading},'frames_held_for_a_load':held,'one_frame_body_excursions_of_12px':0,'state_saved_at_vblank_continues_the_same':True}
         raise ValueError(name)
     finally:b.close()
 
@@ -868,7 +940,7 @@ def main():
         result=run_case(args.case)
         # The emulator's log shares stdout and may stop mid-line: start the result on its own line.
         print('\nRESULT '+json.dumps({'case':args.case,'result':result}),flush=True);return
-    cases=['scene_doors', 'far_shot_draw', 'room_food', 'proxy_birth_contact', 'proxy_birth_inhale', 'proxy_contact', 'proxy_contact_sword', 'proxy_touch_off', 'proxy_swallow_touch_off', 'proxy_suplex_touch_off', 'proxy_ice_detach', 'proxy_ice_release', 'proxy_lethal', 'motion', 'ladder', 'ladder_top', 'ladder_top_stomp', 'one_way', 'solid_ceiling', 'water', 'proxy_water', 'proxy_water_sword', 'proxy_water_below', 'hurt_water', 'proxy_swallow', 'hazard_spit', 'hazard_swallow', 'star_spit', 'star_spit_wall', 'star_big', 'star_ability', 'proxy_sword', 'proxy_reuse', 'proxy_save', 'proxy_mix', 'boss_inhale', 'boss_suplex', 'boss_cook', 'boss_sword', 'proxy_capacity', 'copy_drop_reabsorb', 'wheelie_ride', 'proxy_suplex', 'proxy_cook', 'audio', 'hurt', 'hurt_lethal', 'hurt_cold', 'guard', 'health_invulnerable', 'health_sync', 'proxy_size', 'f_slot', 'f_slot_save', 'f_slot_plasma', 'helper_reaction', 'helper_move', 'helper_owns', 'obj_vram_block', 'main_screen_only']
+    cases=['scene_doors', 'far_shot_draw', 'room_food', 'proxy_birth_contact', 'proxy_birth_inhale', 'proxy_contact', 'proxy_contact_sword', 'proxy_touch_off', 'proxy_swallow_touch_off', 'proxy_suplex_touch_off', 'proxy_ice_detach', 'proxy_ice_release', 'proxy_lethal', 'motion', 'ladder', 'ladder_top', 'ladder_top_stomp', 'one_way', 'solid_ceiling', 'water', 'proxy_water', 'proxy_water_sword', 'proxy_water_below', 'hurt_water', 'proxy_swallow', 'hazard_spit', 'hazard_swallow', 'star_spit', 'star_spit_wall', 'star_big', 'star_ability', 'proxy_sword', 'proxy_reuse', 'proxy_save', 'proxy_mix', 'boss_inhale', 'boss_suplex', 'boss_cook', 'boss_sword', 'proxy_capacity', 'copy_drop_reabsorb', 'wheelie_ride', 'proxy_suplex', 'proxy_cook', 'audio', 'hurt', 'hurt_lethal', 'hurt_cold', 'guard', 'health_invulnerable', 'health_sync', 'proxy_size', 'f_slot', 'f_slot_save', 'f_slot_plasma', 'helper_reaction', 'helper_move', 'helper_owns', 'obj_vram_block', 'main_screen_only', 'step_between_passes']
     if not args.skip_abilities:cases += [f'ability-{i}' for i in range(2,26)]
     results=[]
     for name in cases:

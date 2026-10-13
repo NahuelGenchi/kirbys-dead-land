@@ -54,6 +54,8 @@ struct Bridge {
     far_pending: Option<(Vec<FarObj>, Vec<u8>)>,
     /// Off-screen OBJ pieces of the OAM the hardware shows now.
     far_shown: Vec<FarObj>,
+    /// Source frames that ended inside an original logic pass (see `kssu_unfinished_passes`).
+    unfinished_passes: u32,
     /// The host asked for the main screen only (see `kssu_main_screen_only`).
     main_screen_only: bool,
     /// `proxies` already describes main RAM as it is now. Every call that can
@@ -158,11 +160,14 @@ pub unsafe extern "C" fn kssu_open(
             nds.setup_direct_boot("KSSU_BRIDGE".to_owned());
         }
         nds.start();
+        // A diagnostic can keep the frame-end step to compare the two (#134).
+        kssu_vblank_step = std::env::var_os("KSSU_STEP_AT_FRAME_END").is_none() as u32;
         native_trace("open: NDS started; loading snapshot");
         if !nds.read_savestate_bytes(&mut saved) {
             return None;
         }
         restore_hook(hook);
+        align_to_vblank(&mut nds);
         native_trace("open: snapshot loaded; returning handle");
         Some(Box::into_raw(Box::new(Bridge {
             nds,
@@ -171,6 +176,7 @@ pub unsafe extern "C" fn kssu_open(
             anchors: HashMap::new(),
             far_pending: None,
             far_shown: Vec::new(),
+            unfinished_passes: 0,
             main_screen_only: false,
             proxies_fresh: false,
         })) as *mut std::ffi::c_void)
@@ -182,6 +188,32 @@ pub unsafe extern "C" fn kssu_close(handle: *mut std::ffi::c_void) {
     if !handle.is_null() {
         drop(Box::from_raw(handle as *mut Bridge));
     }
+}
+// The checked melonDS step patch (tools/nds_step_patch.py). The original waits
+// for VBlank, then runs one logic pass: buttons, every actor, the camera, the
+// sprite records and the shadow OAM. An emulator frame ends 71 scanlines after
+// VBlank, inside that pass whenever it is longer (a helper or many objects make
+// it so): Kirby and the camera were already updated and the sprites not yet
+// built, and the terrain window was moved under them (#134). With the switch
+// set (1) a source frame ends as VBlank begins instead, so everything between
+// two frames meets the original between two passes. A state saved at either
+// point loads and continues correctly (2: `align_to_vblank`).
+extern "C" {
+    static mut kssu_vblank_step: u32;
+}
+/// Bring a machine just loaded from a state to where a step ends. A state saved
+/// at the end of a frame (the seed, or one from before #134) has 192 scanlines
+/// left before its VBlank, in which the original only waits; one saved by this
+/// bridge is there already and stays as it is. Every step is then one whole
+/// frame. The sound of those scanlines goes with the rest from before the load.
+unsafe fn align_to_vblank(nds: &mut Nds) {
+    if kssu_vblank_step == 0 {
+        return;
+    }
+    kssu_vblank_step = 2;
+    nds.run_frame();
+    kssu_vblank_step = 1;
+    while !nds.read_audio_output().is_empty() {}
 }
 #[no_mangle]
 pub unsafe extern "C" fn kssu_step(handle: *mut std::ffi::c_void, mask: u16, frames: u32) -> i32 {
@@ -208,6 +240,9 @@ pub unsafe extern "C" fn kssu_step(handle: *mut std::ffi::c_void, mask: u16, fra
         b.anchors = actor_anchors(b.nds.main_ram_mut());
         remove_stray_plasma_aura(b);
         b.nds.run_frame();
+        if pass_unfinished(b.nds.main_ram()) {
+            b.unfinished_passes = b.unfinished_passes.saturating_add(1);
+        }
         native_trace_once(20, "step: source frame returned; building off-screen OBJ");
         update_far_objects(b);
         native_trace_once(4, "step: source frame returned; reading PCM");
@@ -603,6 +638,16 @@ pub unsafe extern "C" fn kssu_world(
     let camera = (u16at(r, 0x9f3a8) as i16 as i32).wrapping_add(dx.wrapping_add(0x8000) >> 16);
     let camera = if (96..=160).contains(&(kirby_x - camera)) { camera } else { kirby_x - 128 };
     r[0x9f3a8..0x9f3aa].copy_from_slice(&(camera as i16).to_le_bytes());
+    // The original draws from its own copy of the camera (i16 x at 0x0204222E,
+    // y at 0x0204222A), which a logic pass sets after it has moved the camera
+    // and `kssu_state` reports. A pass that leaves the scene as it is (the
+    // original holds it while Kirby takes an ability) does not set it again:
+    // moved with everything else, Kirby stays where he was drawn, and the
+    // position the host reads for him stays the one on screen (#134).
+    for (q, d) in [(0x4222e, dx), (0x4222a, dy)] {
+        let copy = (u16at(r, q) as i16).wrapping_add((d.wrapping_add(0x8000) >> 16) as i16);
+        r[q..q + 2].copy_from_slice(&copy.to_le_bytes());
+    }
     // Terrain probes cache absolute sample positions across frames (ten 28-byte records).
     for i in 0..10 {
         let q = 0xbb0b4 + i * 28;
@@ -1118,6 +1163,7 @@ pub unsafe extern "C" fn kssu_load_state(
         if b.main_screen_only {
             b.nds.set_main_screen_only(true);
         }
+        align_to_vblank(&mut b.nds);
         0
     } else {
         -5
@@ -1984,6 +2030,31 @@ fn build_far_objects(r: &[u8]) -> Option<(Vec<FarObj>, Vec<u8>)> {
         return None;
     }
     Some((far, r[shadow..shadow + 1024].to_vec()))
+}
+/// The original empties its sprite lists as a logic pass begins and fills them
+/// near its end, just before it builds the shadow OAM from them. Empty lists
+/// beside a shadow OAM that still has entries mean a pass is under way: the
+/// actors and the camera may already be updated, the sprites are not built.
+fn pass_unfinished(r: &[u8]) -> bool {
+    let Some(m) = off(OBJ_MANAGER, 0x98) else {
+        return false;
+    };
+    let Some(shadow) = off(u32at(r, m), 1024) else {
+        return false;
+    };
+    (0..16).all(|list| u32at(r, m + 0x18 + list * 4) == 0)
+        && (0..128).any(|k| u16at(r, shadow + k * 8) != 0xf8 || u16at(r, shadow + k * 8 + 2) != 0)
+}
+/// Source frames since `kssu_open` that ended inside an original logic pass.
+/// The step ends at VBlank so that none does (see `kssu_step`); it counts up
+/// only when a pass takes longer than a whole frame, and such a frame may draw
+/// Kirby a terrain cell off if the window moves under it (#134).
+#[no_mangle]
+pub unsafe extern "C" fn kssu_unfinished_passes(handle: *mut std::ffi::c_void) -> i32 {
+    if handle.is_null() {
+        return -1;
+    }
+    (&*(handle as *mut Bridge)).unfinished_passes.min(i32::MAX as u32) as i32
 }
 fn update_far_objects(b: &mut Bridge) {
     let oam: Vec<u8> = (0..1024).map(|i| b.nds.bus_read8(0x07000000 + i)).collect();

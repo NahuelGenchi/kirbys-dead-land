@@ -1936,3 +1936,39 @@ the all-ability rendering tests as full gameplay acceptance.
   binary and its evidence file were not replaced). `python3 scripts/check.py`
   passes. Not run: any live game check, `tools/nds_build.py`, a restage of the
   owner's lab.
+
+## 2026-10-13 — Kirby flickers a cell off beside a helper (#134)
+
+- The owner's recording of 12:39 shows Kirby a terrain cell (24 px) off his
+  path for single frames, six times in 12.9 s, with a helper beside him; the
+  play log shows steady 60 fps (docs/RECORDING_REVIEW_2026-10-13_1239.md).
+- Cause: an emulator frame ended 71 scanlines after VBlank, inside the
+  original's logic pass whenever a helper made it longer; the terrain window
+  was then moved under a pass that had moved Kirby and the camera and not yet
+  built the sprites.
+- A source frame now ends as VBlank begins (`tools/nds_step_patch.py`, a
+  checked addition to the pinned melonDS frame loop applied by both build
+  scripts; the machine runs the same). A state saved at the end of a frame is
+  brought there once when it is loaded. While the original takes longer than
+  a frame over a load the window and Kirby wait (`NdsRuntime.PassUnfinished`,
+  `KirbyNdsProvider.HoldWindow`); `kssu_world` moves the original's drawing
+  copy of the camera with the window; `kssu_unfinished_passes` feeds a count
+  in the `Kirby pacing` log line (docs/NDS_BRIDGE.md, Where a source frame
+  ends).
+- Tests follow the new boundary: `step_between_passes` is new; `f_slot` sees
+  Crash's switch after 1 frame and its revert on frame 267 (2 and 266 before,
+  the same 268 after arming); `f_slot_save` saves during a Mike change, since
+  Crash's has returned by the first frame; `tests/render` steps once after a
+  load and `tests/background` compares each capture with the next framebuffer.
+- Private build under `repros/flicker-134`, shared bridge untouched:
+  `nds_tests.py` 84 cases, `verify_renderer.py` 29 cases, `verify_background.py`
+  4, `verify_native_init.py`, `tests/speed` 47 checks and `scripts/check.py`
+  pass. Live, isolated profile, helper beside Kirby: 5 frames ended inside a
+  pass in a minute and no capture with Kirby a cell off (run
+  `20261013-135009`); the old boundary on the same build: 118 and 10 captures
+  (`20261013-192904`).
+- Not run: the owner's play launcher, a controller, many host enemies, an
+  elevator during a load. `tests/nds` and `tests/audio` do not build on `main`
+  (their projects lack `NdsObjRenderer.cs`); private copies with that file
+  pass on the new bridge. The shared bridge needs `tools/nds_build.py` and a
+  new staging after the merge.

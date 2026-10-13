@@ -6,6 +6,7 @@ if (args.Length < 5) throw new ArgumentException("native-library ROM source-read
 using var nds = new NdsRuntime(args[0], args[1], args[2]);
 uint[][] capture = Enumerable.Range(0, 5).Select(_ => new uint[NdsBackgroundEffectDecoder.PixelCount]).ToArray();
 byte[] screen = new byte[NdsBackgroundEffectDecoder.PixelCount * 4];
+uint[] drawn = new uint[NdsBackgroundEffectDecoder.PixelCount];
 long compared = 0, mismatches = 0;
 int unsupported = 0, active = 0;
 var frames = new List<object>();
@@ -20,14 +21,17 @@ for (int frame = 0; frame < int.Parse(args[3]); frame++)
             if (Native.Framebuffer(nds.Handle, pointer, (nuint)screen.Length, false) != 0) throw new Exception("Original framebuffer read failed.");
     }
     // Validate the captured compositor output against the independent original
-    // final framebuffer, including exact melonDS RGB6-to-BGRA expansion.
-    for (int i = 0; i < capture[3].Length; i++) for (int c = 0; c < 3; c++)
+    // final framebuffer, including exact melonDS RGB6-to-BGRA expansion. A step
+    // ends as VBlank begins (#134): the capture is of the 192 lines just drawn,
+    // and the emulator presents them when their frame ends, inside the next step.
+    if (frame > 0) for (int i = 0; i < drawn.Length; i++) for (int c = 0; c < 3; c++)
     {
-        int six = (int)((capture[3][i] >> (c * 8)) & 63);
+        int six = (int)((drawn[i] >> (c * 8)) & 63);
         int eight = (six << 2) | (six >> 4);
         if (screen[i * 4 + 2 - c] != eight) mismatches++;
         compared++;
     }
+    capture[3].CopyTo(drawn, 0);
     var effect = NdsBackgroundEffectDecoder.Decode(nds.SourceBgPalette, capture[4], capture[0], capture[2]);
     if (!effect.Supported) unsupported++;
     if (effect.Active) active++;

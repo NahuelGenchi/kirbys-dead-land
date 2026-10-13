@@ -14,7 +14,7 @@ public sealed unsafe class NdsRuntime : IDisposable
     private static delegate* unmanaged[Cdecl]<nint, NdsHelper*, int> helperState;
     private static delegate* unmanaged[Cdecl]<nint, uint, int> helperOwns;
     private static delegate* unmanaged[Cdecl]<nint, byte, int> setAbility, setMikeShouts, mainScreenOnly;
-    private static delegate* unmanaged[Cdecl]<nint, int> abilityChangePending;
+    private static delegate* unmanaged[Cdecl]<nint, int> abilityChangePending, unfinishedPasses;
     private bool firstStep = true, firstWorld = true;
     // Kirby's original screen position after the latest source frame, taken
     // before the next World call rebases his coordinates.
@@ -72,6 +72,8 @@ public sealed unsafe class NdsRuntime : IDisposable
         }
         if (mainScreenOnly == null && NativeLibrary.TryGetExport(library, "kssu_main_screen_only", out nint mainOnly))
             mainScreenOnly = (delegate* unmanaged[Cdecl]<nint, byte, int>)mainOnly;
+        if (unfinishedPasses == null && NativeLibrary.TryGetExport(library, "kssu_unfinished_passes", out nint unfinished))
+            unfinishedPasses = (delegate* unmanaged[Cdecl]<nint, int>)unfinished;
         LabActivationTrace.Mark("Native Open begin");
         handle = Native.Open(Path.GetFullPath(rom), Path.GetFullPath(state));
         LabActivationTrace.Mark("Native Open returned");
@@ -109,10 +111,31 @@ public sealed unsafe class NdsRuntime : IDisposable
             Result(Native.Step(handle, buttons, 1));
             DisplayedOrigin = steppedOrigin;
             steppedOrigin = ScreenOrigin(State);
+            int unfinished = UnfinishedPasses;
+            PassUnfinished = unfinished != countedPasses;
+            countedPasses = unfinished;
         }
         if (firstStep) { LabActivationTrace.Mark("First native Step complete"); firstStep = false; }
     }
     public NdsState State { get { Check(); Result(Native.State(handle, out NdsState state)); return state; } }
+    /// <summary>
+    /// Source frames so far that ended while the original was inside a logic
+    /// pass: its actors already moved, its sprites not yet built. The bridge
+    /// ends each frame at VBlank so that none does; such a frame can draw Kirby
+    /// a terrain cell off when the window moves under it (#134). Zero with an
+    /// older bridge, which cannot tell.
+    /// </summary>
+    public int UnfinishedPasses
+    {
+        get { Check(); if (unfinishedPasses == null) return 0; int value = unfinishedPasses(handle); Result(value); return value; }
+    }
+    private int countedPasses;
+    /// <summary>
+    /// The last frame ended inside a logic pass: the original takes longer than
+    /// a frame over it, as it does when it loads an ability or a helper. Kirby
+    /// and the terrain window must stay where they are until it has finished.
+    /// </summary>
+    public bool PassUnfinished { get; private set; }
     public int ReadHits(Span<NdsHit> hits)
     {
         Check(); fixed (NdsHit* ptr = hits) { int count = Native.Hits(handle, ptr, (nuint)hits.Length); Result(count); return count; }

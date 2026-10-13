@@ -470,6 +470,8 @@ sealed class Sim
     {
         double centerY = feet - 14.5;
         ox = (int)Math.Floor(hostX / 24) - 16; oy = (int)Math.Floor(centerY / 24) - 4;
+        // KirbyNdsProvider.HoldWindow: nothing moves under a logic pass the original has not finished.
+        if (nds.PassUnfinished && window is { } held) (ox, oy) = held;
         var cells = new ushort[900];
         for (int y = 0; y < 9; y++) for (int x = 0; x < 100; x++) cells[y * 100 + x] = TileAt(ox + x, oy + y);
         // KirbyNdsProvider.PlaceSource: the window moves every object by whole
@@ -480,7 +482,7 @@ sealed class Sim
         {
             int fx = before.XRaw + (previous.X - ox) * 24 * 65536, fy = before.YRaw + (previous.Y - oy) * 24 * 65536;
             nds.World(cells, fx, fy);
-            if (Math.Abs(tx - fx) > 1 || Math.Abs(ty - fy) > 1) nds.MovePlayer(tx - fx, ty - fy);
+            if ((Math.Abs(tx - fx) > 1 || Math.Abs(ty - fy) > 1) && !nds.PassUnfinished) nds.MovePlayer(tx - fx, ty - fy);
         }
         else nds.World(cells, tx, ty);
         window = (ox, oy);

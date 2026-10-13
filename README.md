@@ -122,7 +122,9 @@ recordings were reviewed after the initial release; see the
 [third](docs/RECORDING_REVIEW_2026-10-04_1109.md),
 [fourth](docs/RECORDING_REVIEW_2026-10-04_2108.md) and
 [fifth](docs/RECORDING_REVIEW_2026-10-04_2143.md) recording reviews for observed
-problems, corrections and the scope of subsequent live checks. Kirby now appears
+problems, corrections and the scope of subsequent live checks. The
+[2026-10-13 review](docs/RECORDING_REVIEW_2026-10-13_1239.md) covers Kirby
+flickering a terrain cell off beside a helper. Kirby now appears
 in the arrival flash, keeps host weapons behind his body, plays his original
 death animation, steps one original frame per frame on a ~60 Hz display, and takes
 host damage scaled to his 76 HP. He no longer blinks out when hit, a held
