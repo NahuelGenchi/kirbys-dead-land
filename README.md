@@ -152,9 +152,11 @@ As in Dead Cells, touching an enemy does not hurt Kirby: only enemy attacks do
 (and the few Dead Cells enemies whose bodies are spiked or electric). Bumping
 into enemies does not hurt them either; inhaling, sliding and copy attacks do.
 
-Seven options in the staged `config.json` tune the adaptation: `CameraZoom`
+Eight options in the staged `config.json` tune the adaptation: `CameraZoom`
 (1 keeps the Beheaded's camera; 2 shows about the DS screen's height),
 `AlwaysDash` (a held direction dashes; a light analog tilt still walks),
+`ControllerLayout` (true: the [controller layout](docs/GAMEPLAY_FIDELITY.md#controller-layout-130-intentional-deviation);
+false reads a controller like the keyboard),
 `MatchHostSpeed` (true: the Beheaded's speeds; false keeps the DS speeds; the
 stomp always moves at the dive's speed),
 `OriginalTouchDamage` (false: Dead Cells' rules; true restores the original
@@ -173,7 +175,7 @@ Existing Dead Cells bindings are used:
 | Down + jump on the ground | Original slide; passes roll-zone tunnels and bursts doors like a roll |
 | A Shift key bound to Dodge (Shift by default), on the ground | The same original slide, once per press |
 | Dive attack binding in the air or on a chain (Down + jump by default) | Stomp through the host dive attack; a floating Kirby exhales first, a climbing Kirby kicks off the chain |
-| Dodge, any other key or button (Ctrl and the controller's dodge by default) | Original Kirby guard |
+| Dodge, any other key (Ctrl by default) | Original Kirby guard |
 | Skill 1 | Inhale / spit / copy ability attack |
 | Down with a mouthful | Swallow and transform |
 | Skill 2 | Discard the current copy ability |
@@ -183,6 +185,16 @@ Existing Dead Cells bindings are used:
 | Shield button | Host shield parry and original guard; while copied, only the retained shield |
 | Interact (R by default) on a Crash, Paint, Mike or Cook item | Take it into the F slot |
 | Heal (F by default) | Fire the stored limited-use ability; Kirby keeps his copy ability |
+
+A controller uses the same actions with four differences (`ControllerLayout`,
+no controller run recorded; Xbox names for Dead Cells' default layout):
+
+| Controller | Kirby action |
+|---|---|
+| Left stick | 8-way: Up and Down need a clearly vertical tilt, so a sideways stick that drifts down still runs |
+| Dodge (B), on the ground | Original slide, once per press |
+| Skill 1 (LT) | Original Kirby guard |
+| Skill 2 (RT), held 0.3 s | Discard the current copy ability; a tap does nothing |
 
 Shared bindings remain shared: if W is assigned to both Up and Jump, it sends
 both actions. Change either binding in the game's controls menu to separate them.

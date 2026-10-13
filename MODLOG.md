@@ -1881,3 +1881,18 @@ the all-ability rendering tests as full gameplay acceptance.
   `proxy_lethal` and `wheelie_ride` pass. Not run: the rest of the
   `nds_tests.py` set, any live game check, the helper against a host enemy in
   play.
+
+## 2026-10-13 — controller layout (#130)
+
+- The owner reported Kirby's controls as not suited to an Xbox controller and
+  asked the agent to choose the layout. The adapter read a controller like the
+  keyboard and no controller run is recorded.
+- Controller bindings only (`ControllerLayout`, default true): the movement
+  stick is 8-way (`PadStick`), so a sideways stick drifting down no longer
+  holds Down; Dodge slides; Skill 1 guards; Skill 2 discards the copy ability
+  only after a 0.3 s hold (`HeldButton`). Keyboard unchanged
+  (docs/GAMEPLAY_FIDELITY.md, Controller layout).
+- Source: `python3 scripts/check.py` passes (449 rule assertions, the runtime
+  builds). Not run: any live game check, any controller, `nds_tests.py`
+  (bridge untouched). The default Xbox button names are from memory, not a
+  recorded binding dump.

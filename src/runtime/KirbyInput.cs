@@ -25,6 +25,14 @@ internal static unsafe class KirbyInput
     public static bool JumpFromUpOnly { get; private set; }
     /// <summary>A Shift key bound to Dodge is held: Kirby's original slide instead of the guard.</summary>
     public static bool SlideButton { get; private set; }
+    /// <summary>
+    /// Controller bindings follow Kirby's controller layout (#130): an 8-way
+    /// stick, Dodge slides, Skill 1 guards and Skill 2 discards only when held.
+    /// False reads the controller exactly like the keyboard.
+    /// </summary>
+    public static bool ControllerLayout { get; set; } = true;
+    private const double DiscardHold = 0.3;
+    private static readonly HeldButton discard = new(DiscardHold);
     private const double AnalogDashTilt = 0.75;
     private sealed record Suppression(ControllerAccess Access, ArrayBytes_Int[] Arrays, int[] Saved, Suppression? Parent);
     private static Suppression? suppressed;
@@ -58,7 +66,8 @@ internal static unsafe class KirbyInput
     }
     private static int Get(ArrayBytes_Int? a, int index) => a is not null && (uint)index < (uint)a.length
         ? ((int*)a.bytes)[index] : -1;
-    public static bool Down(ControllerAccess access, int action)
+    public static bool Down(ControllerAccess access, int action) => KeyDown(access, action) || PadDown(access, action);
+    private static bool KeyDown(ControllerAccess access, int action)
     {
         Controller c = access.parent;
         BindingProfiles b = c.get_bindings();
@@ -68,6 +77,12 @@ internal static unsafe class KirbyInput
                 int key = Get(a, action);
                 if (key >= 0 && dc.hxd.Key.Class.isDown(key)) return true;
             }
+        return false;
+    }
+    private static bool PadDown(ControllerAccess access, int action)
+    {
+        Controller c = access.parent;
+        BindingProfiles b = c.get_bindings();
         if ((c.mode & Controller.Class.ENABLE_PAD) != 0)
             foreach (var a in new[] { b.padA, b.padB, b.padC })
             {
@@ -78,7 +93,8 @@ internal static unsafe class KirbyInput
     }
     /// <summary>
     /// Dodge splits by key: a Shift key slides (Kirby's roll), and every other
-    /// key or button bound to Dodge (Ctrl by default) guards.
+    /// key bound to Dodge (Ctrl by default) guards. The controller's Dodge
+    /// button slides in the controller layout and guards without it.
     /// </summary>
     private static (bool Guard, bool Slide) DodgeDown(ControllerAccess access)
     {
@@ -96,7 +112,8 @@ internal static unsafe class KirbyInput
             foreach (var a in new[] { b.padA, b.padB, b.padC })
             {
                 int key = Get(a, DodgeAction);
-                if (key >= 0 && c.padIsDown(key)) guard = true;
+                if (key < 0 || !c.padIsDown(key)) continue;
+                if (ControllerLayout) slide = true; else guard = true;
             }
         return (guard, slide);
     }
@@ -147,8 +164,12 @@ internal static unsafe class KirbyInput
         (bool guard, bool slide) = DodgeDown(c);
         if (guard) keys |= 512; // DS L: original guard.
         SlideButton = slide; // Down + A on the ground: original slide (KirbyNdsProvider.Step).
-        if (Down(c, 4)) keys |= 2; // Skill 1: original inhale/ability/spit.
-        if (Down(c, 5)) keys |= 4; // DS SELECT: original copy discard, verified against the ROM.
+        if (KeyDown(c, 4)) keys |= 2; // Skill 1: original inhale/ability/spit.
+        // The weapon buttons already attack on a controller: its Skill 1 guards.
+        if (PadDown(c, 4)) keys |= (ushort)(ControllerLayout ? 512 : 2);
+        // DS SELECT: original copy discard, verified against the ROM. A controller's Skill 2 must be held.
+        bool padDiscard = PadDown(c, 5);
+        if (KeyDown(c, 5) || (ControllerLayout ? discard.Update(padDiscard, Lib_std.sys_time()) : padDiscard)) keys |= 4;
         if (Down(c, 28)) keys |= 1024; // DS X: create/return the original CPU helper.
         if (Down(c, 11)) keys |= 32;
         if (Down(c, 13)) keys |= 16;
@@ -160,6 +181,8 @@ internal static unsafe class KirbyInput
         // and existing dead zone when turning host analog input into DS directions.
         if (c.parent.gc?.device is { } device && (c.parent.mode & Controller.Class.ENABLE_PAD) != 0)
         {
+            // The strongest tilt and its dead zone on each axis; host GamePad movement Y is positive upward.
+            Span<double> tilt = stackalloc double[2], deadZone = stackalloc double[2];
             for (int direction = 0; direction < 2; direction++)
             {
                 var sticks = c.getMovementSticks(direction == 1);
@@ -171,15 +194,13 @@ internal static unsafe class KirbyInput
                     double? configuredDeadZone = axis >= 24 ? c.rightDeadZone : c.leftDeadZone;
                     double dead = configuredDeadZone is double configured ? Math.Clamp(configured, 0, 1) : c.parent.gc.deadZone;
                     double value = ((double*)device.values.bytes)[mapped];
-                    if (direction == 0)
-                    {
-                        if (value < -dead) keys |= 32; else if (value > dead) keys |= 16;
-                        if (Math.Abs(value) > dead) stickX = Math.Max(stickX, Math.Abs(value));
-                    }
-                    // Host GamePad movement Y is positive upward.
-                    else { if (value < -dead) keys |= 128; else if (value > dead) keys |= 64; }
+                    if (Math.Abs(value) <= dead || Math.Abs(value) <= Math.Abs(tilt[direction])) continue;
+                    tilt[direction] = value; deadZone[direction] = dead;
                 }
             }
+            ushort stick = PadStick.Directions(tilt[0], tilt[1], deadZone[0], deadZone[1], ControllerLayout);
+            keys |= stick;
+            if ((stick & 48) != 0) stickX = Math.Abs(tilt[0]);
         }
         AnalogWalk = !digitalHorizontal && stickX > 0 && stickX < AnalogDashTilt;
         JumpFromUpOnly = (keys & 1) != 0 && JumpOnlyFromUp(c);

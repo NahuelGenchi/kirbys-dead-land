@@ -538,6 +538,20 @@ Check(slideKey.Filter(1, true, KirbyActions.Standing, 1) == 128 && slideKey.Filt
     "With jump already held, the slide key releases it for a frame so the jump is a new press");
 slideKey.Reset();
 Check(slideKey.Filter(64, true, KirbyActions.Standing, 0) == 129, "The slide key's Down replaces a held Up");
+Check(PadStick.Directions(0.9, -0.3, 0.2, 0.2, true) == 16 && PadStick.Directions(0.9, -0.3, 0.2, 0.2, false) == 144,
+    "A sideways stick that drifts down only runs; read axis by axis it also held Down");
+Check(PadStick.Directions(0.7, -0.7, 0.2, 0.2, true) == 144 && PadStick.Directions(-0.7, 0.7, 0.2, 0.2, true) == 96,
+    "A diagonal stick sends both directions");
+Check(PadStick.Directions(0.2, -0.9, 0.1, 0.1, true) == 128 && PadStick.Directions(-0.2, 0.9, 0.1, 0.1, true) == 64,
+    "A vertical stick that drifts sideways does not turn or walk");
+Check(PadStick.Directions(0, -0.4, 0.2, 0.2, true) == 0 && PadStick.Directions(0, -0.6, 0.2, 0.2, true) == 128 &&
+      PadStick.Directions(0.15, 0, 0.2, 0.2, true) == 0 && PadStick.Directions(-0.3, 0, 0.2, 0.2, true) == 32,
+    "Vertical needs a clear tilt; horizontal keeps the host dead zone, so a light tilt still walks");
+var discardHold = new HeldButton(0.3);
+Check(!discardHold.Update(true, 10) && !discardHold.Update(true, 10.2) && discardHold.Update(true, 10.3) && discardHold.Update(true, 11),
+    "A held button acts once it has been held long enough");
+Check(!discardHold.Update(false, 11.1) && !discardHold.Update(true, 11.2) && !discardHold.Update(false, 11.3) && !discardHold.Update(true, 11.6),
+    "A released button starts its hold again, so taps never add up");
 Check(HostStrikes.Slide(KirbyActions.Slide, -704) && !HostStrikes.Slide(KirbyActions.Slide, 384) && !HostStrikes.Slide(KirbyActions.Dash, 704),
     "Only the slide's fast part strikes like a roll");
 Check(HostStrikes.Grab(HostStrikes.Suplex, SpeedMatch.Carry, -1766) && !HostStrikes.Grab(HostStrikes.Suplex, SpeedMatch.Carry, 300) &&
