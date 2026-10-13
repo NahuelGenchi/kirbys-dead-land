@@ -12,7 +12,8 @@ namespace Kirby.Runtime;
 /// Lab-only pickup check. KIRBY_LAB_ITEM=kind@seconds drops an item next to
 /// Kirby through the host ItemDrop: "weapon" picks a host weapon Kirby's rules
 /// do not allow, "sword" an allowed sword, "shield" a shield kind not yet
-/// dropped or equipped. The normal-binding repro plan then presses the host
+/// dropped or equipped, and "state" drops nothing and records the inventory,
+/// the retained shield and the item drops on the level. The normal-binding repro plan then presses the host
 /// interact action; this probe records refusals, pickups, equips, the resulting
 /// inventory and Kirby's retained shield. KIRBY_LAB_REPLACE_SIDE=right replaces
 /// the right-hand item in the replace dialog.
@@ -113,6 +114,7 @@ internal static class LabItemProbe
             if (dropped.Contains(spec) || spec.Split('@') is not [var kind, var at] ||
                 !double.TryParse(at, out double time) || clock.Elapsed.TotalSeconds - began < time) continue;
             dropped.Add(spec);
+            if (kind == "state") { Event("state", new { inventory = Inventory(hero), rules = Rules(hero), drops = Drops(hero) }); continue; }
             string? id = kind switch { "sword" => "BroadSword", "sword2" => "Katana", "shield" => PickShield(hero), _ => PickDisallowedWeapon() };
             if (id is null) { Event("no-item", new { kind }); continue; }
             var item = new InventItem(new InventItemKind.Weapon(id.AsHaxeString()));

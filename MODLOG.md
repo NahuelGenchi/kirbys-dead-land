@@ -1972,3 +1972,23 @@ the all-ability rendering tests as full gameplay acceptance.
   (their projects lack `NdsObjRenderer.cs`); private copies with that file
   pass on the new bridge. The shared bridge needs `tools/nds_build.py` and a
   new staging after the merge.
+
+## 2026-10-13 — Kirby holds one shield (#139)
+
+- Owner report with a screenshot: base Kirby with a shield in each weapon slot
+  after buying a second one. Owner decision: one shield only.
+- Cause: base form has an empty weapon slot once the copy's item leaves, and the
+  host equips a taken or bought shield into an empty slot instead of swapping.
+  Nothing limited shields to one; the fidelity record listed two as allowed.
+- Fix: `AbilityItems.SpareShields` (core) names every shield slot but the
+  retained one, and `KirbyAbilityItems.Sync` drops those shields to the floor
+  each host frame, before it places the copy's item. The newly taken shield is
+  the retained one, so it stays and the old one drops, as in the host's swap.
+- `LabItemProbe` gained `state@seconds` (records inventory, retained shield and
+  level drops without dropping anything).
+- `scripts/check.py` passes (459 core assertions, runtime build). Live, isolated
+  root `repros/one-shield-139`, run `20261013-203959`: discard Sword, take two
+  shields in base form; the second stayed equipped and the first lay on the
+  floor.
+- Not run: a shop purchase, a resumed save with two shields, a parry with the
+  kept shield, the HUD on screen, the owner's play launcher.
