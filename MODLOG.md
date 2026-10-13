@@ -1914,3 +1914,25 @@ the all-ability rendering tests as full gameplay acceptance.
   bumped a second time. Not run: a ceiling above the plant, input during the
   launch, the Beheaded's height on the same plant, `nds_tests.py` (bridge
   untouched), normal play.
+
+## 2026-10-13 — Plasma's charge after an F-slot ability (#135)
+
+- Owner recording `Screencast From 2026-10-13 12-45-59.mp4`: Plasma main copy,
+  Crash fired from F, then every direction tap drew Kirby as a white and orange
+  ball and a row of scrambled tiles for one frame.
+- Reproduced headless from the machine in the owner's Kirby save and from the
+  seed; the original's own screen shows it. Cause: the original's charge-level
+  routine creates Plasma's charge aura whenever it is missing, and a Plasma pose
+  handler still asks for it after `SetAbility` has switched copies, so a stray
+  aura survives and Plasma gets a second one when it comes back. Only Plasma is
+  affected; Paint, Mike and Cook gave ARM9 data aborts instead of visible
+  garbage.
+- Fix in the bridge (`src/nds/lib.rs`): before each source frame a stray aura is
+  removed with the original's own removal call through the call hook
+  (docs/NDS_BRIDGE.md, Plasma's charge aura after a change). A save that already
+  holds the extra aura is repaired on its first frame.
+- Source: new bridge case `f_slot_plasma`; all 84 `nds_tests.py` cases passed
+  one at a time against the bridge built in an isolated crate (the shared
+  binary and its evidence file were not replaced). `python3 scripts/check.py`
+  passes. Not run: any live game check, `tools/nds_build.py`, a restage of the
+  owner's lab.
