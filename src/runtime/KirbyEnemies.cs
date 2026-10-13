@@ -44,6 +44,11 @@ public sealed class KirbyEnemies
     internal readonly List<KirbyAbilityItems.Held> Swallowed = [];
     /// <summary>The stored limited-use ability's item while F fires it (#102), else null.</summary>
     internal dc.tool.InventItem? FiringItem { get; set; }
+    /// <summary>
+    /// The helper's hit strength relative to Kirby's (#128), set from the config
+    /// each source tick. A hit the helper lands is scaled by this on top of Kirby's.
+    /// </summary>
+    internal double HelperRatio { get; set; } = 1;
     /// <summary>Highest scroll tier sampled for the current source tick.</summary>
     internal int ColorlessTier { get; private set; } = 1;
     /// <summary>The host's colorless damage multiplier for <see cref="ColorlessTier"/>.</summary>
@@ -329,7 +334,11 @@ public sealed class KirbyEnemies
                 var star = mob is Mob ? stars.SourceStrike(proxy.Entity, mob, ox, oy, out direction) : StarKind.None;
                 // A spit star never crits; only the copy attack's own hits do.
                 bool crit = star == StarKind.None && critical[i];
-                int hostDamage = Math.Max(1, ColorlessDamage.HostDamage(damage, assignedHp[i], mob.life, CopyMultiplier(i, scale, mob, star == StarKind.None)));
+                // The helper's hits share this HP drop; its records tell them apart (#128).
+                // A source-lethal hit still kills, so the original death reactions stay in the host tick.
+                double helper = star == StarKind.None && HelperRatio != 1 && stars.HelperStrike(nds, proxy.Entity, mob, ox, oy) ? HelperRatio : 1;
+                int hostDamage = Math.Max(1, ColorlessDamage.HostDamage(damage, assignedHp[i], mob.life,
+                    CopyMultiplier(i, scale, mob, star == StarKind.None) * helper));
                 TestObserver?.Invoke(mob, damage, hostDamage);
                 // A copy attack that reaches a secret wall opens it as the R key does: the host activation drops its reward.
                 // Base-form contact leaves the wall alone, as the original game does.

@@ -633,6 +633,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         session.Rules.Critical.BaseDamageMultiplier = config.CopyCriticalDamage;
         session.Rules.Mutations.Tuning = config.CriticalMutations;
         enemies.FiringItem = KirbyFSlot.Sequence.Active ? KirbyFSlot.Item : null;
+        enemies.HelperRatio = HelperDamage.Ratio(config.CopyDamageScale > 0 ? config.CopyDamageScale : 1, config.HelperCopyDamageScale);
         enemies.Prepare(session, nds, originX * 24, originY * 24 + lift, SourceDamageScale,
             bodyContact: config.OriginalTouchDamage && !stomp.Active && stompShield == 0);
         LabPerfProbe.Stop(LabPerfProbe.Section.Prepare, mark);

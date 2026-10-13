@@ -152,15 +152,17 @@ As in Dead Cells, touching an enemy does not hurt Kirby: only enemy attacks do
 (and the few Dead Cells enemies whose bodies are spiked or electric). Bumping
 into enemies does not hurt them either; inhaling, sliding and copy attacks do.
 
-Six options in the staged `config.json` tune the adaptation: `CameraZoom`
+Seven options in the staged `config.json` tune the adaptation: `CameraZoom`
 (1 keeps the Beheaded's camera; 2 shows about the DS screen's height),
 `AlwaysDash` (a held direction dashes; a light analog tilt still walks),
 `MatchHostSpeed` (true: the Beheaded's speeds; false keeps the DS speeds; the
 stomp always moves at the dive's speed),
 `OriginalTouchDamage` (false: Dead Cells' rules; true restores the original
 game's touch damage, which hurts Kirby and weak enemies on contact),
-`CopyDamageScale` (3.5: a Zombie takes about two Sword hits) and
-`FlashStrength` (0.35; 1 restores the original full flash).
+`CopyDamageScale` (2.625: a Zombie takes three Sword hits), `HelperCopyDamageScale`
+(1.75, the CPU helper's own scale: four Sword hits; see
+[Damage balance](docs/GAMEPLAY_FIDELITY.md#damage-balance-128-intentional-deviation))
+and `FlashStrength` (0.35; 1 restores the original full flash).
 
 Existing Dead Cells bindings are used:
 

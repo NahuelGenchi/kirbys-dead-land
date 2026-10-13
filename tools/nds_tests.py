@@ -681,7 +681,7 @@ def run_case(name):
             assert ability()==1 and frame<200,frame
             assert l.kssu_set_mike_shouts(b.handle,1)==-2
             return {'refused_during_attack':refused,'switch_frames':switch,'crash_revert_frame':revert,'restore_frames':restore,'mike_one_shout_revert':frame}
-        if name in ('helper_reaction','helper_move'):
+        if name in ('helper_reaction','helper_move','helper_owns'):
             # The original CPU helper (DS X). The bridge caps its reaction wait and can move it alone.
             class Helper(C.Structure):_fields_=[('x_raw',C.c_int32),('y_raw',C.c_int32),('vx_raw',C.c_int16),('vy_raw',C.c_int16),('action',C.c_uint16),('reserved',C.c_uint16)]
             b.lib.kssu_helper_state.argtypes=[C.c_void_p,C.POINTER(Helper)];b.lib.kssu_move_helper.argtypes=[C.c_void_p,C.c_int32,C.c_int32]
@@ -709,6 +709,57 @@ def run_case(name):
                     assert hit is not None and hit<=60,(distance,hit)
                     frames[distance]=hit
                 return {'cap_words':[hex(w) for w in getter],'first_hit_frames_by_distance':frames}
+            if name=='helper_owns':
+                # The helper and what it attacks with are told apart from Kirby's (#128): kssu_player_owns counts both.
+                b.lib.kssu_helper_owns.argtypes=[C.c_void_p,C.c_uint32]
+                def helper_nodes():
+                    found=[]
+                    for slot in range(7):
+                        a=struct.unpack('<I',b.read(0x02049dec+slot*4,4))[0];seen=set()
+                        while a and a not in seen and len(seen)<256:
+                            seen.add(a);node=b.read(a,0x44)
+                            if node[0x16]==56 and struct.unpack('<I',node[0x40:0x44])[0]==0x020bb784:found.append(a)
+                            a=struct.unpack('<I',node[0:4])[0]
+                    return found
+                nodes=helper_nodes();assert len(nodes)==1,nodes
+                player=b.state()['player']
+                assert b.lib.kssu_helper_owns(b.handle,nodes[0])==1,'The helper owns itself'
+                assert b.lib.kssu_helper_owns(b.handle,player)==0,'Kirby is not the helper'
+                assert b.lib.kssu_helper_owns(b.handle,0)==0 and b.lib.kssu_helper_owns(b.handle,0x12345678)==0
+                assert b.owns(player) and b.owns(nodes[0]),'kssu_player_owns still counts both'
+                # The helper's attack records, with an enemy where it will hit.
+                q=Proxy();helper_attack=kirby_attack=0;hit=None
+                b.lib.kssu_proxy_set(b.handle,1,0,0,100,False);b.step(0,60)
+                for i in range(240):
+                    state=b.state();b.world(floor,state['x_raw'],state['y_raw'])
+                    b.lib.kssu_proxy_state(b.handle,1,C.byref(q))
+                    if i==0 or not q.flags&12:b.lib.kssu_proxy_set(b.handle,1,int((state['x_raw']/65536+60)*65536),151*65536,100,True)
+                    b.step(0)
+                    for record in b.hits():
+                        # Slot 14 is a body (damage word 2 for Kirby and the helper alike), not an attack.
+                        if record['slot']==14 or -struct.unpack('<h',struct.pack('<H',record['words'][2]))[0]<=0 or not b.owns(record['owner']):continue
+                        if b.lib.kssu_helper_owns(b.handle,record['owner'])==1:helper_attack+=1
+                        else:kirby_attack+=1
+                    b.lib.kssu_proxy_state(b.handle,1,C.byref(q))
+                    if q.hp<100:hit=i;break
+                assert hit is not None and helper_attack>0 and kirby_attack==0,(hit,helper_attack,kirby_attack)
+                # Kirby's own attack: his records are owned, damaging and never the helper's.
+                # Making the helper took his copy, so he copies Sword again; his Sword and the
+                # helper's both sit in slot 7, so only the owner tells them apart.
+                b.lib.kssu_proxy_set(b.handle,1,0,0,100,False);b.step(0,60)
+                transform(b,18)
+                slots=set();kirby_swing=helper_in_swing=0
+                for i in range(40):
+                    state=b.state();b.world(floor,state['x_raw'],state['y_raw'])
+                    b.lib.kssu_proxy_state(b.handle,1,C.byref(q))
+                    if i==0 or not q.flags&12:b.lib.kssu_proxy_set(b.handle,1,int((state['x_raw']/65536+44)*65536),151*65536,32767,True)
+                    b.step(2 if i<20 else 0)
+                    for record in b.hits():
+                        if record['slot']==14 or -struct.unpack('<h',struct.pack('<H',record['words'][2]))[0]<=0 or not b.owns(record['owner']):continue
+                        if record['owner']==player or b.lib.kssu_helper_owns(b.handle,record['owner'])==0:
+                            kirby_swing+=1;slots.add(record['slot'])
+                assert kirby_swing>0,'Kirby produced no damaging record of his own'
+                return {'helper_nodes':1,'first_hit_frame':hit,'helper_damaging_records':helper_attack,'kirby_damaging_records_while_idle':kirby_attack,'kirby_damaging_records_attacking':kirby_swing,'kirby_attack_slots':sorted(slots)}
             before=h.x_raw
             def probe_cells():return [struct.unpack('<hh',b.read(0x020bb784+0x14c+i*28,4)) for i in range(10)]
             was=probe_cells()
@@ -774,7 +825,7 @@ def main():
         result=run_case(args.case)
         # The emulator's log shares stdout and may stop mid-line: start the result on its own line.
         print('\nRESULT '+json.dumps({'case':args.case,'result':result}),flush=True);return
-    cases=['scene_doors', 'far_shot_draw', 'room_food', 'proxy_birth_contact', 'proxy_birth_inhale', 'proxy_contact', 'proxy_contact_sword', 'proxy_touch_off', 'proxy_swallow_touch_off', 'proxy_suplex_touch_off', 'proxy_ice_detach', 'proxy_ice_release', 'proxy_lethal', 'motion', 'ladder', 'ladder_top', 'ladder_top_stomp', 'one_way', 'solid_ceiling', 'water', 'proxy_water', 'proxy_water_sword', 'proxy_water_below', 'hurt_water', 'proxy_swallow', 'hazard_spit', 'hazard_swallow', 'star_spit', 'star_spit_wall', 'star_big', 'star_ability', 'proxy_sword', 'proxy_reuse', 'proxy_save', 'proxy_mix', 'boss_inhale', 'boss_suplex', 'boss_cook', 'boss_sword', 'proxy_capacity', 'copy_drop_reabsorb', 'wheelie_ride', 'proxy_suplex', 'proxy_cook', 'audio', 'hurt', 'hurt_lethal', 'hurt_cold', 'guard', 'health_invulnerable', 'health_sync', 'proxy_size', 'f_slot', 'f_slot_save', 'helper_reaction', 'helper_move', 'obj_vram_block', 'main_screen_only']
+    cases=['scene_doors', 'far_shot_draw', 'room_food', 'proxy_birth_contact', 'proxy_birth_inhale', 'proxy_contact', 'proxy_contact_sword', 'proxy_touch_off', 'proxy_swallow_touch_off', 'proxy_suplex_touch_off', 'proxy_ice_detach', 'proxy_ice_release', 'proxy_lethal', 'motion', 'ladder', 'ladder_top', 'ladder_top_stomp', 'one_way', 'solid_ceiling', 'water', 'proxy_water', 'proxy_water_sword', 'proxy_water_below', 'hurt_water', 'proxy_swallow', 'hazard_spit', 'hazard_swallow', 'star_spit', 'star_spit_wall', 'star_big', 'star_ability', 'proxy_sword', 'proxy_reuse', 'proxy_save', 'proxy_mix', 'boss_inhale', 'boss_suplex', 'boss_cook', 'boss_sword', 'proxy_capacity', 'copy_drop_reabsorb', 'wheelie_ride', 'proxy_suplex', 'proxy_cook', 'audio', 'hurt', 'hurt_lethal', 'hurt_cold', 'guard', 'health_invulnerable', 'health_sync', 'proxy_size', 'f_slot', 'f_slot_save', 'helper_reaction', 'helper_move', 'helper_owns', 'obj_vram_block', 'main_screen_only']
     if not args.skip_abilities:cases += [f'ability-{i}' for i in range(2,26)]
     results=[]
     for name in cases:

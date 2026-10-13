@@ -44,6 +44,7 @@ All calls use a single owning thread. Pointer arguments must reference valid cal
 | `kssu_hurt(handle,u16 damage,i32 direction)` | Queues a source contact hit on the next frame after carrier initialization; direction−1 means attacker left, +1 means right. Native guard, invulnerability, recoil and copy-drop decide its result. |
 | `kssu_proxy_state(handle,slot,Proxy*)` | Copies24-byte source enemy state. |
 | `kssu_helper_state(handle,Helper*)` | Copies the original CPU helper (kind56, controller `0x020BB784`): raw 16.16 x/y, raw velocity, action code. Returns -2 when none exists. |
+| `kssu_helper_owns(handle,address)` | 1 when the address is the original CPU helper or descends from it (parent at `+4`, up to 9 levels); 0 otherwise or without a helper. `kssu_player_owns` counts the helper as Kirby's, so this separates their attack records (#128). |
 | `kssu_move_helper(handle,i32 dx,i32 dy)` | Moves only the helper by a signed16.16 delta, with its ten terrain probes and linked records (as `kssu_move_player`). Used by the helper speed match (#105). |
 | `kssu_save_state(handle,path)` | Writes full emulator snapshot plus bridge proxy metadata trailer. |
 | `kssu_load_state(handle,path)` | Restores the existing machine, including in-progress source capture states when saved by this bridge. |

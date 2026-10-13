@@ -12,6 +12,7 @@ public sealed unsafe class NdsRuntime : IDisposable
     private static nint library;
     private static delegate* unmanaged[Cdecl]<nint, int, int, int> movePlayer, moveHelper;
     private static delegate* unmanaged[Cdecl]<nint, NdsHelper*, int> helperState;
+    private static delegate* unmanaged[Cdecl]<nint, uint, int> helperOwns;
     private static delegate* unmanaged[Cdecl]<nint, byte, int> setAbility, setMikeShouts, mainScreenOnly;
     private static delegate* unmanaged[Cdecl]<nint, int> abilityChangePending;
     private bool firstStep = true, firstWorld = true;
@@ -59,6 +60,8 @@ public sealed unsafe class NdsRuntime : IDisposable
             moveHelper = (delegate* unmanaged[Cdecl]<nint, int, int, int>)helperMove;
             helperState = (delegate* unmanaged[Cdecl]<nint, NdsHelper*, int>)helperRead;
         }
+        if (helperOwns == null && NativeLibrary.TryGetExport(library, "kssu_helper_owns", out nint ownsHelper))
+            helperOwns = (delegate* unmanaged[Cdecl]<nint, uint, int>)ownsHelper;
         if (setAbility == null && NativeLibrary.TryGetExport(library, "kssu_set_ability", out nint set) &&
             NativeLibrary.TryGetExport(library, "kssu_ability_change_pending", out nint pending) &&
             NativeLibrary.TryGetExport(library, "kssu_set_mike_shouts", out nint shouts))
@@ -220,6 +223,20 @@ public sealed unsafe class NdsRuntime : IDisposable
         if (result == -2) return false;
         Result(result);
         return true;
+    }
+    /// <summary>The bridge can tell the original helper's objects from Kirby's (#128).</summary>
+    public static bool CanTellHelper => helperOwns != null;
+    /// <summary>
+    /// The object is the original CPU helper or descends from it. False while Kirby
+    /// has no helper, and always with an older bridge (its hits then count as Kirby's).
+    /// </summary>
+    public bool HelperOwns(uint entity)
+    {
+        Check();
+        if (helperOwns == null) return false;
+        int result = helperOwns(handle, entity);
+        Result(result);
+        return result != 0;
     }
     /// <summary>The bridge can change Kirby's copy through the original ability routine (#102).</summary>
     public static bool CanChangeAbility => setAbility != null;

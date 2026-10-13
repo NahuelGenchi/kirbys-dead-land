@@ -1858,3 +1858,26 @@ the all-ability rendering tests as full gameplay acceptance.
 - Lab: `arrival` input plan and `KIRBY_LAB_ARRIVAL_LEVEL`, run from
   `repros/ossuary-camera-20261011`; the shared lab was not restaged.
 
+## 2026-10-12 — Kirby's damage −25%, the helper's −50% (#128)
+
+- Request: Kirby and the ally (the Homunculus CPU helper) are too strong.
+- `CopyDamageScale` 3.5 → 2.625 for Kirby; new `HelperCopyDamageScale` 1.75.
+  The helper's hits are told apart by owner in the frame's original collision
+  records (new bridge export `kssu_helper_owns`; `kssu_player_owns` counts the
+  helper as Kirby's), so a hit that only the helper's records touch is scaled
+  at the helper's scale; a frame with both is Kirby's. Helper screen attacks use
+  it too.
+- Found while testing: Kirby's and the helper's Sword records are both in
+  hit-list slot 7, and their bodies in slot 14 with the same damage word, so
+  the owner, not the slot, is what tells them apart.
+- Known limit: a source-lethal helper hit still kills (source HP is set from
+  Kirby's scale before the hitter is known), so its chip damage is half but
+  its kills come one hit sooner for about half of all enemy life values;
+  enemies up to 47 life still die to one helper Sword hit
+  (docs/GAMEPLAY_FIDELITY.md, Damage balance).
+- Source: `python3 scripts/check.py` passes (443 rule assertions, the runtime
+  builds). Bridge built in an isolated crate, shared binary untouched:
+  `helper_owns` (new), `helper_move`, `helper_reaction`, `proxy_sword`,
+  `proxy_lethal` and `wheelie_ride` pass. Not run: the rest of the
+  `nds_tests.py` set, any live game check, the helper against a host enemy in
+  play.

@@ -223,7 +223,7 @@ foreach (double invalid in new[] { 0, -1, double.NaN, double.PositiveInfinity })
     try { _ = ColorlessDamage.HostDamage(1, 2, 2, invalid); throw new Exception("Invalid colorless multiplier accepted"); }
     catch (ArgumentOutOfRangeException) { Check(true, "Reject invalid colorless multiplier"); }
 }
-foreach (double m in new[] { 3.5, 3.5 * 1.7, 3.5 * 2 * Math.Pow(1.15, 3), 3.5 * 3.2 * 2 * Math.Pow(1.15, 8) })
+foreach (double m in new[] { 3.5, 2.625, 1.75, 2.625 * 1.7, 2.625 * 2 * Math.Pow(1.15, 3), 1.75 * 3.2 * 2 * Math.Pow(1.15, 8) })
 for (int hostLife = 1; hostLife <= 400; hostLife++)
 {
     int sourceHp = ColorlessDamage.SourceHp(hostLife, m, 32760);
@@ -232,6 +232,33 @@ for (int hostLife = 1; hostLife <= 400; hostLife++)
             throw new Exception($"Combined lethality differs at x{m}, life {hostLife}, hit {hit}");
 }
 Check(true, "Lethality agrees with unit scale, item bonus and colorless tier combined");
+
+// Kirby ×0.75 and the helper ×0.5 of the earlier 3.5 (#128).
+int HitsToKill(int life, int hit, double kirbyScale, double hitScale)
+{
+    int hits = 0;
+    while (life > 0)
+    {
+        // Source HP is re-derived from the host life each tick, at Kirby's scale.
+        int sourceHp = ColorlessDamage.SourceHp(life, kirbyScale, 32760);
+        life -= Math.Max(1, ColorlessDamage.HostDamage(hit, sourceHp, life, hitScale));
+        hits++;
+    }
+    return hits;
+}
+Check(HitsToKill(120, 18, 3.5, 3.5) == 2, "Before #128 a Zombie took two Sword hits");
+Check(HitsToKill(120, 18, 2.625, 2.625) == 3, "Kirby's Sword needs three hits on a Zombie at 2.625");
+Check(HitsToKill(120, 18, 2.625, 1.75) == 4, "The helper's Sword needs four hits on a Zombie at 1.75");
+Check(Math.Abs(HelperDamage.Ratio(2.625, 1.75) - 2.0 / 3) < 1e-12, "Helper ratio is 1.75 / 2.625");
+Check(HelperDamage.Ratio(2.625, 0) == 1 && HelperDamage.Ratio(2.625, -1) == 1 && HelperDamage.Ratio(0, 1.75) == 1 &&
+      HelperDamage.Ratio(double.NaN, 1.75) == 1 && HelperDamage.Ratio(2.625, double.PositiveInfinity) == 1,
+    "An unset or invalid helper scale gives the helper Kirby's strength");
+Check(HelperDamage.IsHelperHit(true, false) && !HelperDamage.IsHelperHit(true, true) &&
+      !HelperDamage.IsHelperHit(false, true) && !HelperDamage.IsHelperHit(false, false),
+    "A hit is the helper's only when no record of Kirby's touches the enemy");
+Check(ColorlessDamage.HostDamage(18, 46, 120, 2.625) == 47 && ColorlessDamage.HostDamage(18, 46, 120, 1.75) == 31,
+    "One Sword hit deals 47 for Kirby and 31 for the helper against 120 life");
+Check(ColorlessDamage.HostDamage(18, 11, 27, 1.75) == 31, "A source-lethal helper hit still kills, as the original defeat is shared");
 
 var elite = new KirbyRules(["fire", "sword"], _ => 0);
 Check(elite.ConfirmAbsorption(1, "sword", elite: true) == "sword" && elite.PendingEmpowerment == "sword" &&
