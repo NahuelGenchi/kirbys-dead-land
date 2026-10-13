@@ -63,10 +63,11 @@ preserved; generated assets and native dependencies remain in the private data r
   Flask I. See
   [health flask and fountains](docs/GAMEPLAY_FIDELITY.md#health-flask-and-fountains-intentional-deviation).
 - Crash, Paint, Mike and Cook are limited-use abilities (#102). They are never
-  swallowed: no enemy gives them, and their floor item is taken with Interact
-  (R by default) into the F slot, replacing (and dropping) any stored one. F
-  fires the original attack while Kirby keeps his copy ability; Mike has three
-  shouts, the others one use. See
+  swallowed: no enemy gives them, the Mix roulette of a mouthful of several
+  enemies no longer stops on them (#141), and their floor item is taken with
+  Interact (R by default) into the F slot, replacing (and dropping) any stored
+  one. F fires the original attack while Kirby keeps his copy ability; Mike has
+  three shouts, the others one use. See
   [F slot](docs/GAMEPLAY_FIDELITY.md#f-slot-limited-use-abilities-intentional-deviation).
 - Original inhale, mouthful, Down-to-swallow, spit, flight, guard, slide and copy
   discard are executed by the ROM. All 24 original copy forms load through the
