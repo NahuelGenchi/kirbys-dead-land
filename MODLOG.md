@@ -1897,6 +1897,24 @@ the all-ability rendering tests as full gameplay acceptance.
   (bridge untouched). The default Xbox button names are from memory, not a
   recorded binding dump.
 
+## 2026-10-13 — carnivorous plant did not throw Kirby (#132)
+
+- Owner report (screencast): the plant closes on Kirby and bites him, then he
+  is dropped in place instead of being thrown upward.
+- Cause (host bytecode): `CarnivorousPlant.bumpEntity` calls `bump(0, -1.5)`
+  on the hero; the provider zeroes the host hero's velocities every step, as the
+  original machine owns Kirby's motion.
+- Fix: `KirbyBumps` reads the bump the host left on the hero and
+  `KirbyNdsProvider.Launch` replays it as decaying ascent before each original
+  frame (`BumpLaunch`, 200 px before gravity, stopped by ceilings). Intentional
+  deviation, recorded in docs/GAMEPLAY_FIDELITY.md ("The plant's throw").
+- Source: `python3 scripts/check.py` passes (455 rule assertions, the runtime
+  builds). Live (`repros/plant-20261013`, run `20261013-124519`): bitten 76 → 59, launched
+  115.5 px; with no input he fell back within the plant's bump window and was
+  bumped a second time. Not run: a ceiling above the plant, input during the
+  launch, the Beheaded's height on the same plant, `nds_tests.py` (bridge
+  untouched), normal play.
+
 ## 2026-10-13 — Plasma's charge after an F-slot ability (#135)
 
 - Owner recording `Screencast From 2026-10-13 12-45-59.mp4`: Plasma main copy,

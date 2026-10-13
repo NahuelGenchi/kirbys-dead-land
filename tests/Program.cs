@@ -557,6 +557,21 @@ Check(HostStrikes.Slide(KirbyActions.Slide, -704) && !HostStrikes.Slide(KirbyAct
 Check(HostStrikes.Grab(HostStrikes.Suplex, SpeedMatch.Carry, -1766) && !HostStrikes.Grab(HostStrikes.Suplex, SpeedMatch.Carry, 300) &&
       !HostStrikes.Grab(HostStrikes.Suplex, KirbyActions.Dash, 528) && !HostStrikes.Grab(18, SpeedMatch.Carry, 1766),
     "Only Suplex's fast grab lunge bursts doors");
+var plantLaunch = new BumpLaunch();
+Check(!plantLaunch.Active && plantLaunch.Ascent(100) == 0, "No ascent without a bump");
+plantLaunch.Start(1.5 * 24);
+double launched = 0; int launchFrames = 0;
+while (plantLaunch.Active && launchFrames++ < 600) launched += plantLaunch.Ascent(double.PositiveInfinity);
+Check(Math.Abs(BumpLaunch.Reach(1.5 * 24) - 200) < 1e-9 && launched > 197 && launched <= 200,
+    "The plant's bump carries Kirby the Beheaded's 200 px before gravity");
+Check(launchFrames < 60, "The launch is over within a second");
+plantLaunch.Start(1.5 * 24);
+Check(Math.Abs(plantLaunch.Ascent(5) - (5 - BumpLaunch.CeilingMargin)) < 1e-9 && !plantLaunch.Active && plantLaunch.Ascent(100) == 0,
+    "A ceiling stops the launch a margin short and ends it");
+plantLaunch.Start(1.5 * 24); plantLaunch.Reset();
+Check(!plantLaunch.Active, "A reset ends the launch");
+plantLaunch.Start(0.01);
+Check(!plantLaunch.Active, "A negligible bump does not launch");
 var stompRun = new StompController();
 Check(!stompRun.TryStart(KirbyActions.Standing, 480), "A grounded Kirby cannot stomp");
 Check(stompRun.TryStart(KirbyActions.Fall, 400) && stompRun.Active, "A falling Kirby stomps");
