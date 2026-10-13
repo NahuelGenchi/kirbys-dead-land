@@ -180,6 +180,34 @@ and no close, bump or damage. Not run: a plant under a copied attack, Kirby
 walking onto one, plants spawned by the Gardener boss (`fromGardenerBoss`), and
 normal play.
 
+#### The plant's throw (#132)
+
+Owner report 2026-10-13 (screencast): the plant closed on Kirby and bit him, but
+he was dropped in place instead of being thrown upward. After closing,
+`onTouch` calls `bumpEntity`, which clears the entity's velocities and calls
+`bump(0, -1.5)`: 1.5 cells a fixed step, decaying by `Entity.bumpFrict` (0.82)
+each step while gravity pulls the hero back. The provider holds the host hero's
+velocities at zero, because the original machine owns Kirby's motion, so the
+bump was discarded.
+
+Intentional deviation: the original has no such impulse, so the host replays it
+(`KirbyBumps`, `BumpLaunch`). The bump the host left on the hero is read after
+`bumpEntity` (so its bump window, immunity and resistance still apply) and
+becomes ascent added before each original frame: 18.9 px on the first, decaying
+by √0.82 a frame, 200 px in all before gravity, the same distance as the host's
+bump. The original controller finds itself in the air and falls on its own;
+Kirby keeps control and can float. A ceiling ends the launch, as the host clears
+a bump there; so do a stomp, a ladder, death, a cinematic and a level change.
+
+Live (`docs/RUNTIME_LAUNCH.md`, "Carnivorous plants"): Kirby rose 115.5 px (4.8
+cells) in 14 frames. With no input he fell back onto the still closed plant
+0.63 s after the first bump and was bumped again (58 px, from a full-speed
+fall), then bitten when it reopened. The Beheaded's own height and air time on
+this plant were not measured, so whether he also returns inside the bump
+window is unknown. Only this plant's bump is replayed; other host bumps of the
+hero are still discarded. Not run: a launch under a ceiling, with input, while
+floating or copied, and normal play.
+
 ### Star projectiles
 
 Issue #20. Kirby's stars act as host projectiles. The ROM still spawns, moves and
