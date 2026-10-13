@@ -915,6 +915,18 @@ run: a press lost to a hit (the live hit during the switch did no damage), F
 during a stomp, on a ladder or under water, the helper, a room change during the
 attack, Elite or Boss targets, and normal play with `./play-kirby`.
 
+Issue #135 (owner recording `Screencast From 2026-10-13 12-45-59.mp4`: Plasma as
+the main copy drew garbage on every charge tap after Crash was fired from F).
+The original only leaves Plasma once its pose has ended; the F press switches
+copies in the middle of it, and the original then keeps a second charge aura
+bound to the wrong sprite data. The bridge removes the stray aura with the
+original's own removal call (see
+[NDS_BRIDGE.md](NDS_BRIDGE.md#plasmas-charge-aura-after-a-change-135)). This is
+a correction of a state the original cannot reach by itself, not a change to
+Plasma: with one aura the bridge does nothing. Bridge case `f_slot_plasma`
+covers Crash and Paint, and the machine from the owner's save draws cleanly
+after one step. **No live game check was run.**
+
 Issue #109 (owner report: the F ability disappears after healing at a fountain).
 The fountain itself does not clear the slot: with Mike stored, the host flask
 refill, `HUD.refreshItems` and a real fountain heal (16 → 54) left the slot, its
