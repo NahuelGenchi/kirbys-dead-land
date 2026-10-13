@@ -1332,7 +1332,8 @@ binding arrays: action 1 is key 16 in `primary` and 17 in `secondary`), and
 both sent the original guard. At the owner's request a keyboard Dodge binding
 whose key is Shift (`hxd.Key` 16, with or without the left or right location
 flag) now starts the slide instead; Ctrl, any other Dodge key and the
-controller's Dodge button still guard, as does a held shield.
+controller's Dodge button still guard, as does a held shield. (Since #130 the
+controller's Dodge slides too; see [Controller layout](#controller-layout-130-intentional-deviation).)
 
 `SlideKey` turns a new press on the ground (original standing, landing, walk
 or dash) into Down + A for one source frame, the input S + Space gives, and the
@@ -1366,6 +1367,40 @@ Run `20261007-014417` also slid on a Shift tap while running right (velocity
 704 against a wall). Both runs reached their time limit with no fatal log and
 the real saves unchanged. Not run: a controller, a remapped Dodge key, a copy
 ability's slide, a mouthful.
+
+### Controller layout (#130, intentional deviation)
+
+The adapter read a controller exactly like the keyboard, action by action, and
+no controller run is recorded. Four things differ for controller bindings while
+`ControllerLayout` is true (the default); false restores the previous reading.
+The keyboard is unchanged, and bindings are still read per Dead Cells action,
+so a remapped controller follows. Button names are Dead Cells' default Xbox
+layout as the agent recalls it; no binding dump of a controller profile exists.
+
+| Controller binding | Before | Now |
+| :--- | :--- | :--- |
+| Movement stick | Each axis alone against its dead zone | 8-way (`PadStick`): vertical needs a tilt above 0.5 and at least 0.7 of the horizontal tilt (about 35 degrees off the horizontal); horizontal needs the dead zone and at least 0.4 of the vertical tilt |
+| Dodge (B) | Guard | The slide, through `SlideKey` as for Shift (#75) |
+| Skill 1 (LT) | Inhale / attack, like both weapon buttons | Guard (DS L) |
+| Skill 2 (RT) | Discard on a tap | Discard (DS SELECT) once held 0.3 s (`HeldButton`); a release restarts the hold |
+
+Why: a thumb pushing sideways drifts off the horizontal, and read axis by axis
+that drift was a held Down. Down crouches, swallows a mouthful, switches the
+dash assist off (`DashAssist` keeps Down combinations exact) and starts a stomp
+when the dive is bound to Down. Dodge is the host's roll and the slide is
+Kirby's (tunnels, doors), which had no controller button. The weapon buttons
+already attack, so Skill 1 was a third attack button while guard had only
+Dodge. A trigger is easy to brush, and the original discards at once.
+
+The original is digital: its d-pad has no drift, L or R guards and SELECT
+discards on the press. The hold delays the discard by 0.3 s and the original
+then sees a new SELECT press. A light sideways tilt still walks.
+
+Source (`python3 scripts/check.py`): the stick cases (drift, diagonals,
+vertical with sideways drift, thresholds) and the hold pass. **No live game
+check was run**, with or without a controller: the stick thresholds, the
+default button names, the slide from the controller's Dodge, guard on Skill 1
+and the held discard in play are unverified.
 
 ### Roll-zone tunnels roll through (#115)
 

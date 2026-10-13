@@ -39,6 +39,7 @@ public sealed class KirbyMod(ModInfo info) : ModBase(info), IOnHeroUpdate,
         if (File.Exists(path))
             config = JsonSerializer.Deserialize<RuntimeConfig>(File.ReadAllText(path))
                 ?? throw new InvalidDataException("Kirby runtime configuration is null.");
+        KirbyInput.ControllerLayout = config.ControllerLayout;
         KirbyInput.Install();
         KirbyNdsProvider.Log = message => Logger.Information(message);
         KirbyDamage.Install();
@@ -324,6 +325,12 @@ public sealed class RuntimeConfig
     public double FlashStrength { get; set; } = 0.35;
     /// <summary>A held direction dashes through the original double-tap; a light analog tilt walks.</summary>
     public bool AlwaysDash { get; set; } = true;
+    /// <summary>
+    /// Controller bindings use Kirby's layout: an 8-way stick, Dodge slides,
+    /// Skill 1 guards and Skill 2 discards the copy ability only when held.
+    /// False reads the controller like the keyboard. The keyboard is unaffected.
+    /// </summary>
+    public bool ControllerLayout { get; set; } = true;
     /// <summary>
     /// Kirby runs, rolls, jumps, falls, floats and climbs at the Beheaded's
     /// measured speeds, and stops and turns as promptly. False keeps the

@@ -41,6 +41,7 @@
   "LoadDecodedAssetAtlases": false,
   "CameraZoom": 1,
   "AlwaysDash": true,
+  "ControllerLayout": true,
   "MatchHostSpeed": true,
   "OriginalTouchDamage": false,
   "CopyDamageScale": 2.625,
