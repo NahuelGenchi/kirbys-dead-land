@@ -238,7 +238,7 @@ Static, with the spawner located by a read watchpoint on a proxy's spawn record.
 | Lovely | `lovely` | 11 | 47 | 4 | not found | not found | not found |
 | Flotzo | `flotzo` | 3D | 50 | 4 | 32 | none | 6 |
 
-Blade Knight and Sword Knight are the same code at the same addresses with different numbers. Types 22 to 25 are the Meta-Knights (Axe, Trident, Javelin, Mace) in overlay 117 with health 50 to 80. Types 3C and 41 to 4F are the seven mid-bosses in overlay 87 (files `ironmom`, `jukid`, `poppysr`, `cook`, `frosty`, `bonkers`, `bugzzy`), and types 50 to 6A are 27 boss entries in overlay 91; their health records were not found by this scan. Types 80 to 97 are common objects in overlay 28, and 78 to 7F, 99 and BA are stage objects (truck, cannon, catapult, spring, switch, save floor).
+Blade Knight and Sword Knight are overlays of the same size, 9,024 bytes, with their records at the same addresses; 2,761 of those bytes differ, so they are close relatives and not one program with other numbers. Types 22 to 25 are the Meta-Knights (Axe, Trident, Javelin, Mace) in overlay 117 with health 50 to 80. Types 3C and 41 to 4F are the seven mid-bosses in overlay 87 (files `ironmom`, `jukid`, `poppysr`, `cook`, `frosty`, `bonkers`, `bugzzy`), and types 50 to 6A are 27 boss entries in overlay 91; their health records were not found by this scan. Types 80 to 97 are common objects in overlay 28, and 78 to 7F, 99 and BA are stage objects (truck, cannon, catapult, spring, switch, save floor).
 
 ## Random numbers and sound
 
