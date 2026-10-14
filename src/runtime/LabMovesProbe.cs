@@ -14,7 +14,8 @@ namespace Kirby.Runtime;
 /// = scenario@seconds teleports Kirby next to one (rollzone, air, breakable,
 /// door, tile, ladder, vine), optionally with a Zombie below (KIRBY_LAB_MOVES_TARGET=1 still, 2 active).
 /// "plant" drops Kirby onto a real carnivorous plant (built if the level has none)
-/// and logs its touch, bump, open and close events.
+/// and logs its touch, bump, open and close events; "plant:26" drops him 26 px
+/// to the side of its centre. KIRBY_LAB_MOVES_ANY=1 places the Beheaded too.
 /// "elevator-spawn" builds a real host elevator where a level has none,
 /// "elevator" stands Kirby on the first one (or the one at column
 /// KIRBY_LAB_ELEVATOR_CX) and "elevator-use" activates it as
@@ -242,6 +243,9 @@ internal static unsafe class LabMovesProbe
     private static void Place(Hero hero, dc.level.LevelMap map, string scenario)
     {
         object? detail = null;
+        // "plant:26" drops him 26 px to the side of the plant's centre.
+        double side = 0;
+        if (scenario.Split(':') is ["plant", var offset] && double.TryParse(offset, System.Globalization.CultureInfo.InvariantCulture, out side)) scenario = "plant";
         switch (scenario)
         {
             case "rollzone":
@@ -399,8 +403,10 @@ internal static unsafe class LabMovesProbe
                 }
                 if (plant is not null)
                 {
-                    Teleport(hero, (plant.cx + 0.5) * 24, (plant.cy - 3) * 24);
-                    detail = new { plant.cx, plant.cy, plant.placedOnGround, spawned,
+                    Teleport(hero, (plant.cx + 0.5) * 24 + side, (plant.cy - 3) * 24);
+                    detail = new { plant.cx, plant.cy, plant.placedOnGround, spawned, side,
+                        plantBody = new { plant.xr, plant.yr, plant.radius, plant.hei, plant.useRectHitbox, plant.colLayer },
+                        heroBody = new { hero.radius, hero.hei, hero.useRectHitbox, hero.colLayer },
                         cells = Enumerable.Range(-1, 4).Select(dy => $"{plant.cy + dy}: {Cell(map, plant.cx, plant.cy + dy)}").ToArray() };
                 }
                 break;

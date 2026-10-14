@@ -2040,3 +2040,30 @@ the all-ability rendering tests as full gameplay acceptance.
 - Not run: a live game check, `scripts/check.py` (it does not cover the bridge
   or its tests). A Cook already held as the main copy stays until used. The
   shared bridge needs `tools/nds_build.py` and a new staging after the merge.
+
+## 2026-10-13 — the plant throws Kirby as it throws the Beheaded (#138)
+
+- Owner report (screencast) after #132: the throw is not the Beheaded's. Kirby
+  was thrown high, hopped, or sat on the closed plant.
+- Measured the Beheaded on generated plants with the mod inactive
+  (`KIRBY_LAB_MOVES_ANY=1`): 242.2 px in 17 fixed steps from `bump(0, -1.5)`,
+  reproduced to five decimals by gravity 0.065, gravity friction 0.9 and bump
+  friction 0.94 a step; a 34 px hop from the bite; thrown 0.5 s after the bite
+  anywhere on the plant; a shut plant does not hold him; an air jump just above
+  a shut plant throws him.
+- #132 used the wrong decay (0.82) on top of the original's own speed (115 px,
+  58 px from a fall), tested the touch with Kirby's small hurtbox, kept the
+  shut plant solid and dropped the bite's hop.
+- Fix: `BumpLaunch` replays the host's steps with the original's vertical speed
+  held; `KirbyHurtbox.AsBeheaded` gives the plant's `fixedUpdate` and `close`
+  the Beheaded's body at Kirby's foot, on the floor during the original's
+  landing hop; `KirbyBumps` adds the closed plant's touch, the bite's hop and
+  the air-press throw; the bite's hurt recoil is held to the vertical; `TileAt`
+  needs a solid bit for a one-way platform. Deviations and remaining
+  differences: docs/GAMEPLAY_FIDELITY.md ("The plant's throw").
+- Source: `python3 scripts/check.py` passes (463 rule assertions, the runtime
+  builds). Live (`repros/plant-138`, runs in docs/RUNTIME_LAUNCH.md): hop 34 px,
+  throw 242.2 px, bite then throw every cycle at 0, 13, 26, 30 and 34 px from
+  the centre, jump-off and air-press throws. Not run: a ceiling above the plant,
+  ground plants, Gardener-boss plants, a float or copy ability on a plant,
+  normal play.

@@ -55,8 +55,14 @@ internal static unsafe class KirbyHurtbox
         // must see the physical body, as they see the Beheaded's.
         dc.en.inter.Hook_PressurePlate.fixedUpdate += (orig, plate) => PhysicalHero(() => orig(plate));
         dc.en.inter.Hook_HiddenTrigger.fixedUpdate += (orig, trigger) => PhysicalHero(() => orig(trigger));
-        // A carnivorous plant finds its victims by hit area (projected body), then
-        // only closes on one that is on the ground, which needs the physical foot.
+        // A carnivorous plant is a platform built around the Beheaded: it closes
+        // on a hero standing on it, bites what is inside and throws what touches
+        // it while closed. Kirby's hurtbox is far smaller and sits above his foot,
+        // so a plant would ignore him over half its width and lose him after one
+        // bite (#113, #138). Its own update and bite see the Beheaded's body at
+        // Kirby's foot; onTouch tests the foot on the ground.
+        dc.en.ltrap.Hook_CarnivorousPlant.fixedUpdate += (orig, plant) => AsBeheaded(() => { orig(plant); KirbyBumps.TouchClosed(plant); });
+        dc.en.ltrap.Hook_CarnivorousPlant.close += (orig, plant) => AsBeheaded(() => KirbyBumps.Close(plant, () => orig(plant)));
         dc.en.ltrap.Hook_CarnivorousPlant.onTouch += (orig, plant, entity) => PhysicalHero(() => orig(plant, entity));
     }
 
@@ -110,6 +116,29 @@ internal static unsafe class KirbyHurtbox
         value.Restore();
         try { original(); }
         finally { if (IsActive(value.Hero)) value.Apply(); }
+    }
+
+    /// <summary>
+    /// Run host code with the Beheaded's body where Kirby's foot is; on the floor,
+    /// while Kirby is in the original's landing hop (the Beheaded has none).
+    /// </summary>
+    private static void AsBeheaded(Action original)
+    {
+        if (KirbyMod.Instance is not { ActiveSession.Hero: { } hero, NativeProvider: { } provider } || !IsActive(hero))
+        { original(); return; }
+        PhysicalHero(() =>
+        {
+            double radius = hero.radius, height = hero.hei, yr = hero.yr;
+            int cy = hero.cy;
+            hero.radius = Kirby.Core.BumpLaunch.BeheadedRadius; hero.hei = Kirby.Core.BumpLaunch.BeheadedHeight;
+            if (provider.BounceFloor is double floor)
+            {
+                // A foot exactly on a floor is the bottom of the cell above it (yr 1).
+                hero.cy = (int)Math.Ceiling(floor / 24) - 1; hero.yr = floor / 24 - hero.cy;
+            }
+            try { original(); }
+            finally { hero.radius = radius; hero.hei = height; hero.cy = cy; hero.yr = yr; }
+        });
     }
 
     private sealed class Projection(Hero hero, (int Left, int Top, int Right, int Bottom) box,
