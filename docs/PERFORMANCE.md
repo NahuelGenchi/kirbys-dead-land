@@ -117,7 +117,7 @@ The shared bridge binary, its provenance and `oracle/bridge-test-results.json` w
 Measured or seen in #123 and not changed.
 
 - **The original frame, about 2.6 ms.** The bridge runs melonDS's interpreter. A recompiler was left out of #123: it changes the emulated timing that the recorded bridge evidence rests on.
-- **A pile of enemies in recoil.** With the 30 fixture targets of the `crowd` plan stacked on one spot, the original frame takes about 6 ms. Thirty proxies spread over the room cost about 0.9 ms together, so the time is the original game's own code for overlapping actors, not the bridge.
+- **A pile of enemies in recoil.** With the 30 fixture targets of the `crowd` plan stacked on one spot, the original frame takes about 6 ms. #150 found what that is: the first swing hits all of them and stops the original for good (#151), and the time is an ARM9 that never rests again, not the original's code for overlapping actors. Twenty stacked targets, which it survives, cost about 3.6 ms (the table above). Thirty proxies spread over the room cost about 0.9 ms together.
 - **`HSprite.draw`.** `KirbyHostVisuals` hooks it to keep the Beheaded's graphics away from Kirby, and the host calls it 77–140 times a frame. It is needed on every frame while the outfit is on. At the per-call figure above that is 70–130 KB of the 166 KB a frame still allocated; this share is an estimate, not a measurement.
 - **The texture upload.** A drawn frame still uploads the whole 1024×512 texture, about 0.6 ms in the lab.
 - **The garbage collector mode** comes from DCCM's `runtimeconfig.json`. Overriding it from the environment (`DOTNET_gcServer=0`, `DOTNET_gcConcurrent=1`) changed nothing measurable.
