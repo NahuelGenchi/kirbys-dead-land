@@ -16,6 +16,7 @@ public sealed unsafe class NdsRuntime : IDisposable
     private static delegate* unmanaged[Cdecl]<nint, byte, int> setAbility, setMikeShouts, mainScreenOnly;
     private static delegate* unmanaged[Cdecl]<nint, int> abilityChangePending, unfinishedPasses, mainFrame;
     private static delegate* unmanaged[Cdecl]<nint, byte*, nuint, int> skipIdleMain;
+    private static delegate* unmanaged[Cdecl]<nint, uint, int> arm9Clock;
     private bool firstStep = true, firstWorld = true;
     // Kirby's original screen position after the latest source frame, taken
     // before the next World call rebases his coordinates.
@@ -81,6 +82,8 @@ public sealed unsafe class NdsRuntime : IDisposable
             skipIdleMain = (delegate* unmanaged[Cdecl]<nint, byte*, nuint, int>)skipIdle;
             mainFrame = (delegate* unmanaged[Cdecl]<nint, int>)frameDrawn;
         }
+        if (arm9Clock == null && NativeLibrary.TryGetExport(library, "kssu_arm9_clock", out nint clock))
+            arm9Clock = (delegate* unmanaged[Cdecl]<nint, uint, int>)clock;
         LabActivationTrace.Mark("Native Open begin");
         handle = Native.Open(Path.GetFullPath(rom), Path.GetFullPath(state));
         LabActivationTrace.Mark("Native Open returned");
@@ -162,6 +165,21 @@ public sealed unsafe class NdsRuntime : IDisposable
     {
         get { Check(); return mainFrame == null ? 0 : Math.Max(0, mainFrame(handle)); }
     }
+    /// <summary>
+    /// The original's main processor at twice the DS clock (#150, a deliberate
+    /// departure from the hardware). The DS slows down when a logic pass does
+    /// not fit in a frame, as with many enemies at once; at twice the clock
+    /// fewer passes overflow or none. Frames whose pass already fit are the
+    /// same frames, and a load from the cartridge takes as long.
+    /// Takes effect at the next step. An older bridge keeps the DS clock.
+    /// </summary>
+    public void DoubleClock(bool enabled)
+    {
+        Check();
+        ClockMultiple = arm9Clock != null && arm9Clock(handle, enabled ? 2u : 1u) == 0 && enabled ? 2 : 1;
+    }
+    /// <summary>1 at the DS clock, 2 when <see cref="DoubleClock"/> took effect.</summary>
+    public int ClockMultiple { get; private set; } = 1;
     /// <summary>
     /// The last frame ended inside a logic pass: the original takes longer than
     /// a frame over it, as it does when it loads an ability or a helper. Kirby

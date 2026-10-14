@@ -171,6 +171,8 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
             nds.SkipIdleScreen(true);
         }
         LabActivationTrace.Mark("Native runtime ready");
+        // #150: the owner's choice of clock for the original's processor.
+        nds.DoubleClock(config.DoubleArm9Clock);
         session.Rules.Restore(lastSession?.Rules.AbilityId, lastSession?.Rules.RetainedShieldId ?? session.Rules.RetainedShieldId,
             lastSession?.Rules.AbilityEmpowered ?? false, lastSession?.Rules.PendingEmpowerment);
         // The F slot carries over like the copy. So does a press in progress while the
@@ -459,7 +461,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         // A new source session counts from zero again.
         if (unfinished < paceUnfinished) paceUnfinished = 0;
         Log?.Invoke(string.Create(System.Globalization.CultureInfo.InvariantCulture,
-            $"Kirby pacing: host {paceFrames / span:0.0} fps, original {paceSteps / span:0.0} fps, locked {100.0 * paceLocked / paceFrames:0}%, frames without a step {paceIdle}, with several {paceDoubled}, original step {paceStepTicks * ms / Math.Max(1, paceSteps):0.00} ms, render {paceRenderTicks * ms / paceFrames:0.00} ms, original frames ended inside a pass {unfinished - paceUnfinished}."));
+            $"Kirby pacing: host {paceFrames / span:0.0} fps, original {paceSteps / span:0.0} fps, locked {100.0 * paceLocked / paceFrames:0}%, frames without a step {paceIdle}, with several {paceDoubled}, original step {paceStepTicks * ms / Math.Max(1, paceSteps):0.00} ms, render {paceRenderTicks * ms / paceFrames:0.00} ms, original frames ended inside a pass {unfinished - paceUnfinished}, original clock x{nds?.ClockMultiple ?? 1}."));
         paceStarted = now;
         paceUnfinished = unfinished;
         paceFrames = paceSteps = paceLocked = paceIdle = paceDoubled = 0;
