@@ -1158,6 +1158,54 @@ Kirby's damage drops by 25% and the helper's by 50%, both against the earlier
   the helper, so would take the helper's scale), and an older bridge without
   the export (the helper then keeps Kirby's scale) are unverified.
 
+### The original on the recompiler (#153, intentional deviation)
+
+The mod ran the original on the emulator's interpreter, one instruction at a
+time. With `Recompiler` (default `true`) it runs on the emulator's recompiler,
+which translates the original's code to host code once and then runs that.
+The original's code, data and frame rate are the same. What differs is timing
+below the frame: an interrupt or a scheduled event is taken at the end of a
+translated block instead of after the very instruction, and the cost of a
+block is counted when it is translated.
+
+What that was seen to change, on a private build:
+
+- **Play traces.** 600 frames of Sword Kirby swinging, alone, among 8 and
+  among 31 proxies: the same position, speed, pose and ability on every frame
+  as on the interpreter.
+- **The recorded bridge cases.** 83 of 85 return exactly what the interpreter
+  recorded. The other two pass their own checks and differ in load timing and
+  in the original's sound capture buffers (docs/NDS_BRIDGE.md, The
+  recompiler).
+- **Loads.** A load from the cartridge can end one original frame later:
+  swallowing Sword held 4 frames instead of 3 and Wheel 3 instead of 2; Fire,
+  Ice, a helper and the `SetAbility` changes were the same. During those
+  frames Kirby stays where he is, as before (#134).
+- **Sound.** The capture buffers differ, so the samples the original mixes
+  are not bit-identical. Nobody listened to it.
+- **Memory protection.** The console stops a data access its protection unit
+  denies, and so does the interpreter. The recompiler lets it through. The
+  one known case is #151: an attack that hits 24 or more enemies freezes the
+  original for good on the interpreter. On the recompiler play goes on, with
+  one hit effect missing and six bytes of an original routine overwritten
+  that 1,003 frames of play never ran. That is not a fix for #151.
+- **Saved states.** Loading a state discards the translated blocks, so the
+  machine does not continue byte for byte as the run that went on; on the
+  interpreter it does. A state saved after 120 frames among 8 proxies
+  continued with the same trace on either.
+- **With the doubled clock (#150).** A block's cost depends on the clock, so
+  a clock change discards the translated blocks too. All 89 bridge cases on
+  the recompiler at twice the clock: 85 return what the interpreter recorded
+  at the DS clock, two differ in digests, and two fail their own checks:
+  `f_slot` as at twice the clock alone, and the byte-for-byte check of a
+  saved state above (docs/NDS_BRIDGE.md, The recompiler).
+
+`Recompiler: false` in the staged `config.json` puts the interpreter back; a
+bridge built before #153 keeps the interpreter whatever the option says, and
+the log line `Kirby original machine:` names which one runs. Tools, tests and
+verifiers use the interpreter. Not verified: play in a window, bosses, a long
+session, and how it sounds.
+
 ### Host elevators (deviation)
 
 Dead Cells elevators (`en.inter.Elevator` and its `SimpleElevator`,

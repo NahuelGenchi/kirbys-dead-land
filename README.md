@@ -173,6 +173,11 @@ game's touch damage, which hurts Kirby and weak enemies on contact),
 it lags less among many enemies; false keeps the DS clock, see
 [The original's processor at twice the DS clock](docs/GAMEPLAY_FIDELITY.md#the-originals-processor-at-twice-the-ds-clock-150-intentional-deviation)).
 
+`Recompiler` (true) in the same file runs the original on the emulator's
+recompiler, which takes about three fifths of the interpreter's time; a load
+can end one original frame later. `false` puts the interpreter back. See
+[The original on the recompiler](docs/GAMEPLAY_FIDELITY.md#the-original-on-the-recompiler-153-intentional-deviation).
+
 Existing Dead Cells bindings are used:
 
 | Dead Cells action | Kirby action |

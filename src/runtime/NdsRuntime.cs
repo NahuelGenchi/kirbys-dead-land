@@ -10,6 +10,7 @@ public sealed unsafe class NdsRuntime : IDisposable
     private readonly int thread = Environment.CurrentManagedThreadId;
     private nint handle;
     private static nint library;
+    private static delegate* unmanaged[Cdecl]<nint, byte, int> recompiler;
     private static delegate* unmanaged[Cdecl]<nint, int, int, int> movePlayer, moveHelper;
     private static delegate* unmanaged[Cdecl]<nint, NdsHelper*, int> helperState;
     private static delegate* unmanaged[Cdecl]<nint, uint, int> helperOwns;
@@ -64,6 +65,8 @@ public sealed unsafe class NdsRuntime : IDisposable
         }
         if (helperOwns == null && NativeLibrary.TryGetExport(library, "kssu_helper_owns", out nint ownsHelper))
             helperOwns = (delegate* unmanaged[Cdecl]<nint, uint, int>)ownsHelper;
+        if (recompiler == null && NativeLibrary.TryGetExport(library, "kssu_recompiler", out nint compile))
+            recompiler = (delegate* unmanaged[Cdecl]<nint, byte, int>)compile;
         if (setAbility == null && NativeLibrary.TryGetExport(library, "kssu_set_ability", out nint set) &&
             NativeLibrary.TryGetExport(library, "kssu_ability_change_pending", out nint pending) &&
             NativeLibrary.TryGetExport(library, "kssu_set_mike_shouts", out nint shouts))
@@ -127,6 +130,20 @@ public sealed unsafe class NdsRuntime : IDisposable
         }
         if (firstStep) { LabActivationTrace.Mark("First native Step complete"); firstStep = false; }
     }
+    /// <summary>
+    /// Runs the original on the emulator's recompiler instead of its
+    /// interpreter (#153): the same work in about three fifths of the time.
+    /// Its timing between instructions is not exactly the interpreter's (a
+    /// load can end a frame later), so tools and tests keep the interpreter.
+    /// Takes effect at the next step. An older bridge has only the interpreter.
+    /// </summary>
+    public void Recompile(bool enabled)
+    {
+        Check();
+        Recompiled = recompiler != null && recompiler(handle, (byte)(enabled ? 1 : 0)) == 0 && enabled;
+    }
+    /// <summary>True when <see cref="Recompile"/> took effect.</summary>
+    public bool Recompiled { get; private set; }
     public NdsState State { get { Check(); Result(Native.State(handle, out NdsState state)); return state; } }
     /// <summary>
     /// Source frames so far that ended while the original was inside a logic

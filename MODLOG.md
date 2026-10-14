@@ -2149,3 +2149,63 @@ the all-ability rendering tests as full gameplay acceptance.
 - Not run: windowed play, a controller, the sound by ear, the shared bridge
   build. On the private build `nds_tests.py` (86 cases), the three verifiers
   and `scripts/check.py` pass.
+
+## 2026-10-14 — the original on the emulator's recompiler (#153)
+
+- Owner decision of 2026-10-13: the recompiler last of the three speed fixes
+  of #146, on by default (`Recompiler`), the interpreter kept behind the
+  switch and in tools and tests.
+- `tools/nds_jit_patch.py` builds the pinned core with its recompiler, fast
+  memory off, and without the process-wide SIGSEGV handler (the library
+  imports neither `sigaction` nor `signal`). `tools/nds_call_patch.py` second
+  stage: each ARM9/ARM7 slice runs on the interpreter unless the bridge sets
+  `kssu_recompile`; the ARM9 also while a call is armed; prefetch refilled on
+  the way back; compiled blocks dropped after the bridge's RAM patches change
+  code. Exports `kssu_recompiler`, `kssu_code_changed`; `KSSU_RECOMPILER=1`
+  starts every machine on it. Runtime logs `Kirby original machine:`.
+- Private build `repros/jit-153`, shared bridge untouched: `nds_tests.py` 86
+  cases, the 85 older equal to the recorded results; new case `recompiler`;
+  each of the 85 on the recompiler: 83 equal, 2 different and passing (load
+  timing, sound capture buffers). Renderer and background verifiers 0
+  mismatches on both paths; `verify_native_init.py` 64 cycles;
+  `scripts/check.py` passes.
+- Bridge, median step: 2.85 → 1.80 ms alone, 3.71 → 2.06 ms with 31 proxies,
+  same traces. Some loads end a frame later (Sword swallow 3 → 4, Wheel
+  2 → 3). Live, one run each: `movement` 2.82 → 1.81 ms, 103.1 → 110.3 fps;
+  `crowd` 6.42 → 2.37 ms, 61.8 → 91.2 fps.
+- Found: the recompiler skips the protection unit's data aborts. #151's null
+  write then lands in six bytes of the original's ITCM (a routine that did
+  not run in 1,003 frames of play) and play continues; the interpreter
+  freezes. Recorded in docs/NDS_BRIDGE.md and docs/GAMEPLAY_FIDELITY.md; #151
+  still needs its fix.
+- Not run: the owner's play launcher, a controller, a window on the GPU,
+  bosses, a long session, listening, and the recompiler with #148 or #150.
+  The shared bridge needs `tools/nds_build.py` and a new stage after the
+  merge. The native-init verifier's shared record was rewritten through the
+  private root's `research` link and restored by rerunning it on the shared
+  bridge.
+
+## 2026-10-14 — the recompiler with the doubled clock and the idle-screen skip (#153)
+
+- The open work merged together for the owner (#141, #144, #138, #139,
+  #146, #148, #150, #153). One interaction found: a compiled block counts
+  its cycles at the ARM9 clock it was compiled at, so a clock change left
+  stale costs. `kssu_arm9_clock` now sets `kssu_recompile_flush` when the
+  asked clock changes. Case `recompiler`: 31 proxies at twice the clock,
+  then the DS clock from the same frame, end in the state a state saved at
+  the switch reaches; without the flush the same trace but other states.
+- Private build of the merged tree `repros/merge-20261014` (bridge
+  `82e81174…`), shared bridge untouched: 89 cases pass; 85 equal to recorded
+  results; `main_screen_only` and `skip_idle_main` digests change only
+  through #141's wheel patch (equal with it skipped). On the recompiler at
+  twice the clock: 85 equal, 2 digests, `f_slot` as at twice the clock
+  alone, `arm9_clock`'s byte-exact save/load fails (loading drops the
+  compiled blocks; equal when the straight run drops them too). Verifiers 0
+  mismatches, `verify_native_init.py` 64 cycles (private report),
+  `scripts/check.py` passes.
+- Live, all three on, one run each: `movement` 1.45 ms, 117.8 fps, 0 late
+  frames; 20 Zombies 1.84 ms, 99.2 fps, 5; 31 Zombies 2.08 ms, 92.7 fps, 5.
+  #144's wade (`SwampHeart`): no swimming. #138's plant: four bites, each
+  followed by a throw; the three not cut short rose 242.2 px.
+- Not run: the owner's play launcher, a controller, a window on the GPU,
+  bosses, a long session, listening.

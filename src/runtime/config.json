@@ -46,6 +46,7 @@
   "DoubleArm9Clock": true,
   "OriginalTouchDamage": false,
   "CopyDamageScale": 2.625,
+  "Recompiler": true,
   "HelperCopyDamageScale": 1.75,
   "FlashStrength": 0.35
 }

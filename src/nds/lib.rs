@@ -150,6 +150,10 @@ pub unsafe extern "C" fn kssu_open(
             return None;
         }
         native_trace("open: seed read; constructing NDS");
+        // A new machine runs on the interpreter until the host asks otherwise (#153).
+        // A diagnostic starts it on the recompiler, to run a whole tool on it.
+        kssu_recompile = std::env::var_os("KSSU_RECOMPILER").is_some() as u32;
+        kssu_recompile_flush = 0;
         let mut nds = Nds::new();
         native_trace("open: NDS constructed");
         nds.set_audio_output_skew(1.0);
@@ -243,6 +247,11 @@ pub unsafe extern "C" fn kssu_arm9_clock(handle: *mut std::ffi::c_void, multiple
     if handle.is_null() || !(1..=2).contains(&multiple) {
         return -1;
     }
+    // A compiled block counts its cycles at the clock it was compiled at (#153), so
+    // a change discards the blocks; that happens after the clock changes.
+    if kssu_arm9_shift != multiple {
+        kssu_recompile_flush = 1;
+    }
     // The clock shift is the multiple for both: 1 halves a system cycle, 2 quarters it.
     kssu_arm9_shift = multiple;
     0
@@ -275,6 +284,10 @@ pub unsafe extern "C" fn kssu_step(handle: *mut std::ffi::c_void, mask: u16, fra
         || !keep_limited_abilities_off_mix_wheel(b.nds.main_ram_mut())
     {
         return -6;
+    }
+    if CODE_CHANGED {
+        CODE_CHANGED = false;
+        kssu_recompile_flush = 1;
     }
     b.nds.set_key_mask(ButtonMask::from_bits_retain(mask));
     b.nds.release_screen();
@@ -572,6 +585,41 @@ pub unsafe extern "C" fn kssu_main_frame(handle: *mut std::ffi::c_void) -> i32 {
 }
 fn put32(r: &mut [u8], p: usize, v: u32) {
     r[p..p + 4].copy_from_slice(&v.to_le_bytes());
+}
+/// Set when the bridge changed a word of the original's code in RAM. It writes
+/// past the emulated bus, so the recompiler has to be told (#153).
+static mut CODE_CHANGED: bool = false;
+fn code32(r: &mut [u8], p: usize, v: u32) {
+    if u32at(r, p) != v {
+        unsafe { CODE_CHANGED = true };
+        put32(r, p, v);
+    }
+}
+/// Run the original on the emulator's recompiler (`true`) or its interpreter
+/// (`false`, which every machine starts on) from the next source frame on. The
+/// recompiler does the work in about three fifths of the time, but an interrupt
+/// or a scheduled event lands at the end of a compiled block instead of after
+/// the instruction, so its timing is not exactly the interpreter's and a load
+/// can end a frame later (docs/NDS_BRIDGE.md). While a call is armed the ARM9 runs on the
+/// interpreter, where the call hook is. Process-wide, like the hook.
+#[no_mangle]
+pub unsafe extern "C" fn kssu_recompiler(handle: *mut std::ffi::c_void, enabled: bool) -> i32 {
+    if handle.is_null() {
+        return -1;
+    }
+    kssu_recompile = enabled as u32;
+    0
+}
+/// Tell the recompiler that code in RAM changed: `kssu_write` writes past the
+/// emulated bus, and a host that changes instructions with it calls this
+/// before the next step. Data needs no call. The bridge's own patches do it.
+#[no_mangle]
+pub unsafe extern "C" fn kssu_code_changed(handle: *mut std::ffi::c_void) -> i32 {
+    if handle.is_null() {
+        return -1;
+    }
+    kssu_recompile_flush = 1;
+    0
 }
 fn actor_nodes(r: &[u8]) -> Vec<usize> {
     let mut nodes = Vec::new();
@@ -1939,7 +1987,7 @@ fn mute_proxy_footsteps(r: &mut [u8]) -> bool {
         }
     }
     for address in CALLS {
-        put32(r, (address - BASE) as usize, NOP);
+        code32(r, (address - BASE) as usize, NOP);
     }
     true
 }
@@ -1970,7 +2018,7 @@ fn keep_proxies_alive_in_water(r: &mut [u8]) -> bool {
     if handler != DEFEAT && handler != IGNORE {
         return false;
     }
-    put32(r, p, IGNORE);
+    code32(r, p, IGNORE);
     true
 }
 
@@ -2001,8 +2049,8 @@ fn quicken_helper_reaction(r: &mut [u8]) -> bool {
     if words[5..7] != SIGN_EXTEND && words[5..7] != patched {
         return false;
     }
-    put32(r, GETTER + 20, patched[0]);
-    put32(r, GETTER + 24, patched[1]);
+    code32(r, GETTER + 20, patched[0]);
+    code32(r, GETTER + 24, patched[1]);
     true
 }
 
@@ -2223,6 +2271,11 @@ extern "C" {
     static mut kssu_hook_state: u32;
     static mut kssu_hook_args: [u32; 4];
     static mut kssu_hook_saved: [u32; 15];
+    // The same patch's second stage (#153): nonzero runs the emulator's
+    // recompiler instead of its interpreter, and the flush discards the
+    // compiled blocks before the next ARM9 slice.
+    static mut kssu_recompile: u32;
+    static mut kssu_recompile_flush: u32;
 }
 const PLAYER_SLOT: usize = 0x49df0;
 const PLAYER_RECORD: u32 = 0x020baf68;
