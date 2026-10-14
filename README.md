@@ -366,7 +366,7 @@ applied to the host camera. The enemy bridge has 31 simultaneous nearby slots.
 Every host enemy, hazard, item and boss phase has not been individually tested.
 See the detailed fidelity report for measured coverage and these boundaries.
 
-Details: [ROM format](docs/ROM_FORMAT.md), [renderer](docs/RENDERING.md),
+Details: [ROM format](docs/ROM_FORMAT.md), [ROM internals](docs/ROM_INTERNALS.md), [renderer](docs/RENDERING.md),
 [runtime launch](docs/RUNTIME_LAUNCH.md), [gameplay fidelity](docs/GAMEPLAY_FIDELITY.md), [performance](docs/PERFORMANCE.md),
 [tutorial integration](docs/TUTORIALS.md), [work tracking](docs/TRACKING.md), and [work journal](MODLOG.md). Older research notes describe the initial foundation;
 the dated journal records subsequent implementation.
