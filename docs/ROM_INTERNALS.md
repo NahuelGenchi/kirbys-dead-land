@@ -176,6 +176,8 @@ Static and run. A hit group is 0x240 bytes with four 0x8C nodes. `0x02071B38` bu
 
 `0x02071DF8(group, field, value)` sets one attribute later: field 0 the class, 1 the copy ability, 6 and 7 the health words. A breakpoint on `0x02071ADC` while a proxy spawned gave Waddle Dee's vitals at `0x0219C8C0` (class 0, no copy, health 16) and Parasol Waddle Dee's at `0x0219C8F0` (copy 20, health 16).
 
+Groups come from one pool of 48, which `0x02071C00` sets up at each stage load: header `0x02076F00` (used list `+0x80`, free list `+0x84`, count `+0x8C`), groups from `0x02077428` every `0x244` bytes, each with a first word that links it into one of the two lists. `0x020714DC` takes one and `0x02071508` gives it back; `0x020742C8(descriptor, callback, parent)` creates a collision actor with one. Only the setup reads the count or where the groups are. An enemy holds one for its body. Each hit makes the recoil routine `0x02156ACC` (overlay 27) create a companion that holds one more for about 7 frames, and then write the enemy's three health words into the companion's group without checking that it got one. A second pool of 96 (count `+0x8E`, records from `0x0207E0E8`, free list `+0x88`, taken by `0x02071384`) is checked by its callers. Thirty-one proxies and one swing that hit 24 of them ran the first pool out (#151; docs/NDS_BRIDGE.md, The collision pool).
+
 ## Objects, spawning and the enemy catalogue
 
 Static, with the spawner located by a read watchpoint on a proxy's spawn record.

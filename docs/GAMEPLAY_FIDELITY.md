@@ -1111,7 +1111,8 @@ many enemies near Kirby does.
   frame after the change both clocks give the same 533 frames.
 - **What does not.** Passes that wait for the cartridge: a swallowed Sword
   costs three late frames at both clocks. And the freeze of #151, where one
-  attack that hits 24 or more enemies stops the original at either clock.
+  attack that hit 24 or more enemies stopped the original at either clock,
+  until the bridge enlarged the original's collision pool (below).
 - **Sound.** The mixed samples can differ while a sound plays: over 240 frames
   the only memory that differed between the clocks was the original's two
   sound capture buffers (4 KB at `0x02048BE0`, in 11 of 30 samples). Main RAM
@@ -1199,10 +1200,12 @@ What that was seen to change, on a private build:
   are not bit-identical. Nobody listened to it.
 - **Memory protection.** The console stops a data access its protection unit
   denies, and so does the interpreter. The recompiler lets it through. The
-  one known case is #151: an attack that hits 24 or more enemies freezes the
-  original for good on the interpreter. On the recompiler play goes on, with
+  one known case was #151: an attack that hit 24 or more enemies froze the
+  original for good on the interpreter. On the recompiler play went on, with
   one hit effect missing and six bytes of an original routine overwritten
-  that 1,003 frames of play never ran. That is not a fix for #151.
+  that 1,003 frames of play never ran. That was not a fix for #151; the
+  larger collision pool is (below), and with it the pool did not run out in
+  any check.
 - **Saved states.** Loading a state discards the translated blocks, so the
   machine does not continue byte for byte as the run that went on; on the
   interpreter it does. A state saved after 120 frames among 8 proxies
@@ -1219,6 +1222,38 @@ bridge built before #153 keeps the interpreter whatever the option says, and
 the log line `Kirby original machine:` names which one runs. Tools, tests and
 verifiers use the interpreter. Not verified: play in a window, bosses, a long
 session, and how it sounds.
+
+### The original's collision pool (#151, intentional deviation)
+
+The original takes every hit box and health record of an actor, a collision
+group, from a pool of 48. A Kirby room never needs that many; a Dead Cells
+crowd did. Each enemy handed to the original holds one group, and each hit
+holds one more for about 7 frames while the enemy recoils. One Sword swing
+into 31 stacked enemies hit 24, the pool ran out, and the original wrote the
+enemy's health through a group it did not get: the console and the
+interpreter stop there for good, and the recompiler let the write overwrite
+six bytes of another routine.
+
+- **Change.** Whenever the bridge places the room (`kssu_world`) it links 64
+  more groups, two per enemy slot, after the original's free ones, from the
+  scene heap the enemy records already come from. The pool then holds 112.
+  No original instruction changes: the original takes and returns them like
+  its own, and its stage setup starts again from 48.
+- **What was seen.** Bridge case `hit_pool`: a Sword swing and a Crash each
+  hit all 31 stacked enemies, the original keeps running, and Kirby walks
+  away afterwards. Live, 31 Zombies (`crowd` plan): on the interpreter 7
+  frames ended inside a pass after the crowd appeared, against 3,264 before,
+  and 96 hits instead of 30; with the defaults, 2 frames and 66 hits before
+  the Zombies killed Kirby. Details in docs/NDS_BRIDGE.md, The collision
+  pool, and docs/PERFORMANCE.md.
+- **Margin.** Every copy ability, got through the original swallow, attacked
+  31 stacked enemies for 240 frames with B mashed, B held, Up+B and Down+B:
+  at least 44 of the 111 groups stayed free (Beam, mashed), and 70 of the 96
+  runs hit 24 or more enemies. The original kept running in all of them, but
+  up to 189 of 300 frames ended inside a pass (Mirror, mashed): 31 enemies
+  recoiling on one spot are slow on the interpreter at the DS clock.
+- **Not verified.** Bosses, attacks of Kirby's helper, windowed play with a
+  controller, and more than one live run per machine.
 
 ### Host elevators (deviation)
 

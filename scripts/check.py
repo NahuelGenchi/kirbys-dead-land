@@ -24,6 +24,10 @@ def main():
         [str(dotnet), 'run', '--project', 'tests/Kirby.Core.Tests.csproj', '-c', 'Release'],
         [str(dotnet), 'build', 'src/runtime/Kirby.Runtime.csproj', '-c', 'Release', '-v', 'minimal'],
     ]
+    # The other test projects need the bridge, the ROM or generated assets to run,
+    # but each links runtime sources, so building them catches a missing link (#155).
+    for test_project in sorted(project.glob('tests/*/*.csproj')):
+        commands.append([str(dotnet), 'build', str(test_project.relative_to(project)), '-c', 'Release', '-v', 'minimal'])
     if args.assets:
         assets = args.assets.expanduser().resolve()
         commands.extend([
