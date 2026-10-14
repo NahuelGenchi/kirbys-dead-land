@@ -65,6 +65,33 @@ The bridge alone, 900 original frames driven from Python with every call the hos
 
 The same runs show the behaviour held. `crowd`: the same 30 hits and 1,260 damage, the same life and held state for all 31 targets and identical original slots on `main` and #123. `hazard`: all three phases complete on both, with the grenade and the arrow in Kirby's mouth and his life unchanged. `items`: `passed` on both, including the item following the suction and returning to its place. `combat`: the same probe steps succeed on both; the copied ability is random (Yo-Yo and Sleep).
 
+## The upper screen on frames with no effect (#148)
+
+After #123 engine A, the upper screen, was still drawn on every scanline of every original frame. The host reads that drawing in one place: `NdsBackgroundEffects` copies three planes of the layer capture after each frame and decodes them to find a palette or colour effect that covers the whole screen, as Crash's flash does. On almost every frame it finds none.
+
+The bridge can now leave those scanlines undrawn (`kssu_skip_idle_main`, off by default). A scanline is left out only when its capture is already known to read as "no effect": the unit is on and not blanked, no colour effect control is set, and the standard background palette equals the one the decoder compares against. Its sprites are still drawn, and a scanline that a display capture reads is always drawn, so the emulated machine is the same either way. `kssu_main_frame` says how the last frame went. `KirbyNdsProvider` turns the switch on; `NdsBackgroundEffects` and the lab's visual probe take an undrawn frame as the identity effect and a partly drawn one as unsupported, which is what the decoder returns for such frames, and read and decode only a drawn frame. `KSSU_DRAW_EVERY_FRAME=1` in the environment keeps every scanline drawn, for comparison on one build.
+
+Measured 2026-10-13 on a private build of this branch (`repros/skip-148`), power profile `performance`.
+
+The bridge alone, 720 original frames of input driven from Python, median `kssu_step`: 2.77 → 2.44 ms with Kirby alone and 3.05 → 2.72 ms with 28 proxies, 0.33 ms less in both. Leaving the sprites out as well would take another 0.04 ms; they stay drawn so that nothing a display capture could read is ever drawn late.
+
+The lab, movement plan, 60 s of stepped frames a run, two runs each way on the same build (runs `20261013-234130` to `20261013-234605`):
+
+| | Every frame drawn | Idle scanlines left out |
+| :--- | ---: | ---: |
+| Mod work per original frame | 3.41, 3.42 ms | 2.87, 2.89 ms |
+| of it: the original frame | 2.58, 2.58 ms | 2.16, 2.13 ms |
+| of it: the background capture | 0.074, 0.075 ms | 0.003, 0.003 ms |
+| Host frames per second | 89.6, 88.7 | 96.1, 92.2 |
+
+All four runs ended by their time limit with no fatal log and the real saves unchanged. The movement plan raises no screen effect.
+
+That the answer the host gets is the same was checked three ways. Bridge case `skip_idle_main` plays 480 frames (ordinary play, then Crash) with and without the switch and requires the same main RAM, GPU memory and save state and the same effect on every frame: 419 frames are left undrawn and the 61 of the flash are drawn. `tools/verify_background.py` now replays each of its four cases with the switch on and requires the effect of every frame to equal the one decoded from the full capture: 1,200 frames, 888 undrawn, 0 different. In the game, the lab's `visual` plan (Crash, Paint and Mike through the real inhale) recorded no unsupported frame either way and the same effect on each of the 2,093 frames polled in both runs: 134, 301 and 94 polled frames with an active effect with the switch on (`20261013-234736`), 134, 301 and 93 with every frame drawn (`20261013-234846`). The two runs do not poll the same frames, hence the one frame of difference.
+
+Checks on the final tree: `python3 scripts/check.py` passes; on the private build, all 86 `tools/nds_tests.py` cases pass, `tools/verify_renderer.py` 29 cases and 3,065,177 pixels with 0 mismatched, `tools/verify_background.py` 4 cases and 176,357,376 values with 0 mismatches, `tools/verify_native_init.py` 64 cycles. The shared bridge binary and vendor checkout were not replaced: play needs `python3 tools/nds_build.py` and a new stage after the merge. With the older bridge the runtime works as before and draws every frame.
+
+Not established: any change in windowed play on the GPU (not run). No test or run produced a frame the bridge reports as partly drawn, so that answer is unexercised. No display capture ran on any frame left undrawn; whether the game ever starts one was not looked for, so the rule that keeps its scanlines drawn rests on the source alone.
+
 ## The original's processor at twice the DS clock (#150)
 
 The bridge can run the emulated ARM9 at twice the DS clock (`kssu_arm9_clock`, docs/NDS_BRIDGE.md) and the runtime does by default (`DoubleArm9Clock`, docs/GAMEPLAY_FIDELITY.md). The interpreter's work follows the instructions the original executes, not the clock: a pass that fits in a frame costs the same and the ARM9 then rests for longer. The cost is the work of passes that did not fit, now done inside their frame.

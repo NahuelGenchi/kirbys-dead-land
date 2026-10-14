@@ -1973,6 +1973,158 @@ the all-ability rendering tests as full gameplay acceptance.
   pass on the new bridge. The shared bridge needs `tools/nds_build.py` and a
   new staging after the merge.
 
+## 2026-10-13 — ROM internals (#146)
+
+- Read the whole program, not one feature: a private capstone index of the
+  5,996 functions loaded during play, and a private instrumented copy of the
+  bridge (`repros/re-debug`: instruction histogram, watchpoints, a register
+  breakpoint, stage timers, ARM9 clock, 2D renderer and recompiler switches).
+  Record: `docs/ROM_INTERNALS.md`.
+- Found: the overlays present in play and the five addresses enemy overlays
+  share (one species a slot); the frame's call chain and its 34.7% idle load;
+  Kirby's action table `0x02131688`, the move pointer `R+0x808` and the
+  per-ability move tables behind `SetAbility`; actions `0E1B` (ability change)
+  and `1021` (death); the vitals record every hit group is built from; the
+  object type table `0x0209E10C`, file codes and the spawner; health, copy
+  ability and touch damage of 38 enemy species; the 12-bit random routine
+  `0x0200B8A4`; 566 named sound sequences.
+- Measured, headless: with 24 to 31 proxies the original ends 2 to 5 frames in
+  360 inside its logic pass, none with the emulated ARM9 clock doubled;
+  `kssu_step` 2.41 ms idle and 3.71 ms in that crowd on the interpreter, 1.31
+  and 1.71 ms on the recompiler with fast memory off, with byte-identical
+  600-frame traces of Kirby.
+- Changed: documentation only. No bridge, runtime or test change; the fix
+  candidates are listed in the record for their own issues.
+- Not run: `tools/nds_tests.py` or any verifier on the recompiler or the
+  doubled clock, any live game check, the owner's play launcher. Enemy numbers
+  are stored values read statically; only Waddle Dee's were seen applied.
+
+## 2026-10-13 — Kirby holds one shield (#139)
+
+- Owner report with a screenshot: base Kirby with a shield in each weapon slot
+  after buying a second one. Owner decision: one shield only.
+- Cause: base form has an empty weapon slot once the copy's item leaves, and the
+  host equips a taken or bought shield into an empty slot instead of swapping.
+  Nothing limited shields to one; the fidelity record listed two as allowed.
+- Fix: `AbilityItems.SpareShields` (core) names every shield slot but the
+  retained one, and `KirbyAbilityItems.Sync` drops those shields to the floor
+  each host frame, before it places the copy's item. The newly taken shield is
+  the retained one, so it stays and the old one drops, as in the host's swap.
+- `LabItemProbe` gained `state@seconds` (records inventory, retained shield and
+  level drops without dropping anything).
+- `scripts/check.py` passes (459 core assertions, runtime build). Live, isolated
+  root `repros/one-shield-139`, run `20261013-203959`: discard Sword, take two
+  shields in base form; the second stayed equipped and the first lay on the
+  floor.
+- Not run: a shop purchase, a resumed save with two shields, a parry with the
+  kept shield, the HUD on screen, the owner's play launcher.
+
+## 2026-10-13 — the Mix roulette gave Cook as the main copy (#141)
+
+- Owner screenshot (play log `20261013-201446`): Kirby wears Cook's hat and
+  the main copy slot shows Cook after swallowing enemies. Limited abilities
+  (#102) must only come from a floor item and go to the F slot.
+- Cause, reproduced headless on the shared bridge: no enemy carries a limited
+  ability, but a mouthful of two or more runs the original Mix roulette, whose
+  wheel (25 bytes at `0x020BAA8C`, read by `0x020AF1C8`) has Mike, Crash and
+  Cook among its faces. With Sword and Beam proxies, B on frames 111, 139 and
+  167 gave Crash, Cook and Mike.
+- Fix in the bridge (`keep_limited_abilities_off_mix_wheel`, validated and
+  applied each step): each of the three faces shows the next one (Yo-Yo,
+  Stone, Fighter). Order, speed, the 25 positions and the roulette code are
+  the original's. Side effect: left alone on a doubled face the original's
+  turn count stops the roulette after two turns instead of four.
+- New case `mix_no_limited` in `tools/nds_tests.py`; it fails on the unchanged
+  bridge. Bridge built in an isolated crate, shared binary untouched: 86 cases
+  passed one at a time.
+- Not run: a live game check, `scripts/check.py` (it does not cover the bridge
+  or its tests). A Cook already held as the main copy stays until used. The
+  shared bridge needs `tools/nds_build.py` and a new staging after the merge.
+
+## 2026-10-13 — the plant throws Kirby as it throws the Beheaded (#138)
+
+- Owner report (screencast) after #132: the throw is not the Beheaded's. Kirby
+  was thrown high, hopped, or sat on the closed plant.
+- Measured the Beheaded on generated plants with the mod inactive
+  (`KIRBY_LAB_MOVES_ANY=1`): 242.2 px in 17 fixed steps from `bump(0, -1.5)`,
+  reproduced to five decimals by gravity 0.065, gravity friction 0.9 and bump
+  friction 0.94 a step; a 34 px hop from the bite; thrown 0.5 s after the bite
+  anywhere on the plant; a shut plant does not hold him; an air jump just above
+  a shut plant throws him.
+- #132 used the wrong decay (0.82) on top of the original's own speed (115 px,
+  58 px from a fall), tested the touch with Kirby's small hurtbox, kept the
+  shut plant solid and dropped the bite's hop.
+- Fix: `BumpLaunch` replays the host's steps with the original's vertical speed
+  held; `KirbyHurtbox.AsBeheaded` gives the plant's `fixedUpdate` and `close`
+  the Beheaded's body at Kirby's foot, on the floor during the original's
+  landing hop; `KirbyBumps` adds the closed plant's touch, the bite's hop and
+  the air-press throw; the bite's hurt recoil is held to the vertical; `TileAt`
+  needs a solid bit for a one-way platform. Deviations and remaining
+  differences: docs/GAMEPLAY_FIDELITY.md ("The plant's throw").
+- Source: `python3 scripts/check.py` passes (463 rule assertions, the runtime
+  builds). Live (`repros/plant-138`, runs in docs/RUNTIME_LAUNCH.md): hop 34 px,
+  throw 242.2 px, bite then throw every cycle at 0, 13, 26, 30 and 34 px from
+  the centre, jump-off and air-press throws. Not run: a ceiling above the plant,
+  ground plants, Gardener-boss plants, a float or copy ability on a plant,
+  normal play.
+
+## 2026-10-13 — Kirby swam in shallow water (#144)
+
+- Owner report (screenshot, Mama Tick): Kirby swims for the whole fight because
+  the arena floor is under water.
+- Cause: `KirbyNdsProvider.TileAt` exported every free cell with a host water
+  surface as an original water tile. The host surface is in pixels
+  (`getWaterSurfaceY`, marker `cy + yr`), so a partly filled top row counted as
+  a whole tile. The arena has 12 px of water over 82 columns; for the host it
+  is decoration and the Beheaded never swims.
+- Owner decision: Kirby swims only where the water would cover him.
+- Fix: a cell is original water only when the surface is at or above its top
+  (`SpeedMatch.Submerged`). Intentional deviation, recorded in
+  docs/GAMEPLAY_FIDELITY.md ("Shallow host water").
+- Lab: the `water` plan takes `KIRBY_LAB_WATER_LEVEL` and, with
+  `KIRBY_LAB_WATER_WADE=1`, wades and counts the original's actions; it also
+  records every water column's depth. Its Zombie check now needs a level with
+  deep pools (docs/RUNTIME_LAUNCH.md).
+- Source: `python3 scripts/check.py` passes (458 rule assertions, 3 new; the
+  runtime builds).
+- Live (`repros/water-20261013`): old rule in the arena, `0815` after the jump
+  press and the landing (run `20261013-212620`); new rule, none, and the jump
+  starts on the press (`212720`, `213551`). No `0815` in 18 px of water in
+  `Shipwreck`, `Greenhouse` and `SewerShort`; still `0815` in a 42 px pool
+  (`Greenhouse`, `213406`) and a 114 px one (`SewerDepths`, `213103`).
+- The Zombie check in `SewerDepths` (`213902`, `214040`): the Zombie in a
+  42 px pool was never source-controlled; the inhale timed out because the
+  only bank found was three cells above it.
+- Not run: the fight beyond its first seconds, copy abilities and the helper in
+  shallow water, a pool between 18 and 42 px, an inhale of an enemy in deep
+  water on the new rule, `nds_tests.py` (bridge untouched), normal play.
+
+## 2026-10-13 — upper screen left undrawn on frames with no effect (#148)
+
+- Engine A was still drawn on every scanline of every original frame, and the
+  host read it only to find a screen-wide palette or colour effect, which
+  almost no frame has (candidate from the ROM study, #146).
+- The bridge leaves a scanline's backgrounds and composition undrawn when its
+  layer capture would read as "no effect" (unit on, not blanked, no colour
+  effect control, the seed palette), keeps sprites and any scanline a display
+  capture reads, and reports each frame as drawn, undrawn or mixed
+  (`kssu_skip_idle_main`, `kssu_main_frame`; third stage of
+  `tools/nds_graphics_patch.py` and `tools/nds_vendor.py`). The provider turns
+  it on; `NdsBackgroundEffects` and `LabVisualProbe` decode only drawn frames.
+  `KSSU_DRAW_EVERY_FRAME=1` keeps every scanline drawn.
+- Private build under `repros/skip-148`, shared bridge untouched: `kssu_step`
+  2.77 → 2.44 ms from Python; in the lab the original frame 2.58 → 2.15 ms
+  and the background capture 0.07 → 0.003 ms a frame (two runs each way).
+- Same machine and same effect on every frame: new case `skip_idle_main`
+  (480 frames with Crash), `verify_background.py` replaying its four cases
+  with the switch on (1,200 frames, 0 different), and the lab's `visual` plan
+  both ways (2,093 common frames, 0 different). `nds_tests.py` 86 cases,
+  `verify_renderer.py` 29, `verify_native_init.py` and `scripts/check.py`
+  pass.
+- Not run: windowed play, a controller. No run produced a mixed frame or a
+  display capture. The shared bridge needs `tools/nds_build.py` and a new
+  staging after the merge.
+
 ## 2026-10-14 — the original's processor at twice the DS clock (#150)
 
 - Owner decision of 2026-10-13: a deliberate departure from the DS, on by

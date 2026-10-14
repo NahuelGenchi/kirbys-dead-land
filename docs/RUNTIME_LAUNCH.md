@@ -39,6 +39,7 @@ Relevant environment variables are used only by the lab helper:
 - `KIRBY_LAB_TEST_LEGENDARY=1`: with `--probe-hud`, exposed as `--probe-legendary`. Once the copy's ability item is in a weapon slot, it gives that item the host `Legendary` affix, calls `Hero.hudInitItems`, and appends the slot and affix result to `hud.jsonl`.
 - `KIRBY_LAB_COMBAT_ELITE=1`: with the `combat` plan, makes the swallowed Zombie an Elite (Elite skills disabled) and records in `combat.json` whether the copy was empowered and the damage that the second Zombie takes from each hit. Set it in the environment of `launch_runtime.py`.
 - `KIRBY_LAB_ARRIVAL_LEVEL`: the level the `arrival` plan starts a new run in (default `Ossuary`; for example `PrisonStart`). Kirby stands still and `arrival-trace.jsonl` records, every host frame, the hero's host position, the viewport centre, size and zoom, the camera's `vertical` lead and dive state as the host reads them, and the source camera (#126).
+- `KIRBY_LAB_WATER_LEVEL`: the level the `water` plan starts a new run in (default: the normal start), for example `SewerDepths` or `SwampHeart`. `KIRBY_LAB_WATER_WADE=1` makes the plan wade instead of placing a Zombie (see [Shallow water](#shallow-water-144)). Set both in the environment of `launch_runtime.py`.
 - `KIRBY_LAB_PLAY=1`: keep outfit selection but disable all smoke capture and automatic input.
 - `KIRBY_LAB_PERF=1` (set in the shell that runs `launch_runtime.py`; ignored in play): write `perf.json` in the run folder with the time and managed bytes of each stage of the mod's frame, host frame intervals and collections. See [Performance](PERFORMANCE.md).
 
@@ -509,6 +510,34 @@ All three runs reached their time limit without fatal log lines, and real saves
 were unchanged. A first take in base form before copying, then a swap while
 copied (the owner's exact order), and a parry-timed counter with the new shield
 were not run; the shield's existing parry path was not changed.
+
+### One shield (#139)
+
+`KIRBY_LAB_ITEM` also takes `state@seconds`: it drops nothing and records the
+inventory, the retained shield and the item drops on the level. Separate data
+root `repros/one-shield-139`, staged from the #139 branch; the private plan
+presses the copy discard (action 5) at 1.0 s and interact (action 6) at 4.6 and
+7.6 s.
+
+```sh
+KIRBY_LAB_REPRO_ABILITY=18 KIRBY_LAB_REPRO_PLAN=<plan> \
+KIRBY_LAB_ITEM=state@0.5,state@3,shield@4,shield@7,state@7.5,state@9,state@12 \
+python3 scripts/launch_runtime.py --data-root <root> --seconds 70 --start-game \
+  --outfit KirbySuperStarUltra --input-plan repro
+```
+
+Run `20261013-203959`: Sword's item sat in slot 0; the discard left both slots
+empty in base form. The first interact took a Warrior's Shield (permanent ID 277)
+into slot 0, retained 277. The second interact took another shield (item ID `Shield`,
+280): the host equipped it into the empty slot 1 with no replace dialog, so both
+shields were equipped at that instant (the owner's report). At 9.0 s and 12.0 s
+the inventory held only shield 280 in slot 1, retained 280, and the Warrior's
+Shield 277 lay among the level's item drops. The run reached its time limit
+without fatal log lines.
+
+Not run: a shop purchase (it reaches the same `Inventory.equip`, but no shop was
+used), a resumed save that already holds two shields, a parry with the kept
+shield, and the HUD slots on screen (the run is offscreen).
 ## Enemies in water
 
 `--input-plan water` (`LabWaterProbe`) looks for a host pool cell with a floor beside a dry bank (the bank may be up to three cells higher), places Kirby on the bank and creates a real Zombie in the pool, holding its AI so it stays in the water. For 120 source frames it records whether the source claims the Zombie, then it taps toward the pool, holds the original inhale until the Zombie is consumed (600-frame limit) and presses DOWN. `water.json` records the site, the frames the Zombie was source-controlled before any input, consumption and mouthful, the first copy after DOWN, and Kirby's life. A generated level may have no usable pool (`site: null`); launch again. All runs used the separate data root `repros/water-20261005`, whose bridge is built from this branch into its own `target/` so other sessions' builds of the shared oracle bridge cannot replace it.
@@ -530,7 +559,37 @@ python3 scripts/launch_runtime.py --data-root ~/.local/share/kirby-dead-cells/re
 | `20261006-002101` | `4967f6f4ac84` | 1-cell pool | 0 | Consumed 38 frames in, mouthful | Copy at frame 4557; a natural enemy's hit at 4738 knocked it loose |
 | `20261006-002601` | `4967f6f4ac84` | 12-cell pool | 0 | Consumed 37 frames in, mouthful | No copy observed; Kirby kept the inhale pose after consumption (not investigated) |
 
+Since #144 a pool cell is one the runtime exports as original water (a cell the water fills). The start level's pools are 18 px deep and no longer qualify, so this plan needs `KIRBY_LAB_WATER_LEVEL=SewerDepths` (pools 42 px and deeper in the runs so far); `water.json` also lists every water column's depth (`depths`). Two such runs on 2026-10-13 (`20261013-213902`, `214040`, `repros/water-20261013`) found the same site, a 42 px pool whose bank is three cells above its floor: the Zombie stayed in the exported water and was never source-controlled in the 120 frames before input, and its life did not change, but the inhale timed out with the Zombie out of reach below the bank. Consumption of an enemy in exported water was not repeated live on the new rule.
+
 Every run kept the real saves unchanged and logged no fatal errors. Natural enemies near the pool hurt Kirby in some runs; the probe does not control them. Sword or other attacks on an enemy in water, and a walkway-over-pool site with the fixed bridge, were checked only in the native suite (`proxy_water_sword`, `proxy_water_below`), not live.
+
+## Shallow water (#144)
+
+With `KIRBY_LAB_WATER_WADE=1` the `water` plan puts Kirby on the floor in the middle of the widest stretch of water (exported water if the level has any, otherwise host water of any depth) and holds nothing for 60 source frames, right for 60, left for 60, A for 12, nothing until 300 and right until 360. `water.json` records `depths` (host water cells, how many are exported as original water, and the columns by depth in pixels from the surface to the first solid cell below), `wadeSite`, `wadeActions` (the original's action codes counted in each step, two readings a source frame) and `wadeOrder` (each change of action with its frame; `0815` is swimming). The plan is short because a boss wakes when Kirby appears and attacks about eight seconds later; a death sets `wadeInterrupted` and ends it. A new run in a late level starts with 76 health and no scrolls, and one hit killed Kirby in the cut runs listed below.
+
+```sh
+python3 scripts/check.py   # builds; staging copies the existing build
+python3 scripts/stage_runtime.py --data-root ~/.local/share/kirby-dead-cells/repros/water-20261013 \
+  --original-runtime --outfit-pack "$HOME/.local/share/kirby-dead-cells/outfit-build-sync/res.pak"
+KIRBY_LAB_WATER_WADE=1 KIRBY_LAB_WATER_LEVEL=SwampHeart python3 scripts/launch_runtime.py \
+  --data-root ~/.local/share/kirby-dead-cells/repros/water-20261013 \
+  --seconds 45 --start-game --outfit KirbySuperStarUltra --input-plan water --capture-fps 5
+```
+
+All runs on 2026-10-13, DCCM 35.13.6, the shared oracle bridge (not changed by this issue).
+
+| Run | Rule | Level, depth at Kirby | Actions in order (frame and code) |
+| :--- | :--- | :--- | :--- |
+| `20261013-212620` | old (any surface) | `SwampHeart`, 12 px | 0 `0406`, 1 `0815`, 3 `0406`, 61 `060B`, 181 `0815`, 189 `070D`, 221 `070E`, 226 `0815`, 262 `0406`, 301 `060B` |
+| `20261013-212720` | new | `SwampHeart`, 12 px | 0 `0406`, 61 `060B`, 63 `060C`, 98 `0509` (the arena's thorn wall), 104 `0406`, 121 `060B`, 123 `060C`, 181 `070D`, 213 `070E`, 216 `0507`, 221 `0406`, 301 `060B`, 303 `060C` |
+| `20261013-213551` | new, final probe | `SwampHeart`, 12 px | the same; jump at 183, landing at 216 |
+| `20261013-213320` | new | `Shipwreck`, 18 px | 0 `0406`, 62 `060B`, 63 `060C`, 122 `0406`, 123 `060C`, 181 `070D`, 213 `070E`, 215 `0507`, 222 `0406`, 301 `060B`, 303 `060C` |
+| `20261013-213650` | new, final probe | `Greenhouse`, 18 px | 0 `0406`, 62 `060B`, 65 `060C`, 99 `0509`, 105 `0406`, 121 `060B`, 123 `060C`, 182 `070D`, 214 `070E`, 217 `0507`, 223 `0406`, 301 `060B`, 303 `060C` |
+| `20261013-213017` | new | `SewerShort`, 18 px, toxic | no `0815`; hurt recoil `0F1D` at 18, 112, 211 and 330 between standing, dashing and the jump at 181 |
+| `20261013-213406` | new | `Greenhouse`, 42 px (exported) | 0 `0406`, 1 `0815`, 6 `0406`, 65 `060B`, 181 `0815`, 190 `070D`, 222 `070E`, 226 `0815`, 262 `0406`, 301 `060B` |
+| `20261013-213103` | new | `SewerDepths`, 114 px (exported), toxic | 0 `0406`, 61 `060B`, 181 `0815`, then `0815` between hurt recoils to the end |
+
+In all of them `source_saves_unchanged` is true and no fatal log was written. On the new rule the arena's 82 water cells and the start level's 5 (run `20261013-212840`) export none. On the old rule Kirby walked on the arena floor at the original's walk (`060B`); on the new one the held direction dashes (`060C`) as on dry floor. The runs before `213551` used the final rule with an earlier probe (the level variable alone chose wading, and a death did not stop it); a `Swamp` run of that probe (`20261013-213149`, 18 px) was cut by a death at frame 158, before the jump, and is not counted. Two earlier baseline runs with a longer plan (`20261013-212122`, `212246`) ended in the boss's first hit. Not run: the fight beyond those seconds, copy abilities or the helper in shallow water, a pool between 18 and 42 px deep, the owner's play launcher.
 
 ## Ice host freeze (2026-10-06)
 
@@ -1190,3 +1249,47 @@ Ran to its time limit, no fatal log, real saves unchanged. No control run
 without the change was made this time; the owner's screencast and the #113 run
 (bump fired, Kirby stayed down) are the before state. Not run: a ceiling above
 the plant, input during the launch, the Beheaded on the same plant.
+
+#138 (the throw against the Beheaded's). `KIRBY_LAB_MOVES_SETUP` takes
+`plant:<px>` to drop the hero that many pixels to the side of the plant's
+centre, and the `placed` event logs both bodies (`plantBody`, `heroBody`).
+`KIRBY_LAB_MOVES_ANY=1` lets the probe place the Beheaded, in a run without
+`--outfit`. Use a fresh data root for him: a root that has run Kirby keeps the
+outfit in its save. Jump presses come from the plan (`"actions": [0]`). A Kirby
+run boots for about 27 s, so `--seconds` is 27 plus the lab time wanted.
+`stage_runtime.py` copies the existing build: run `scripts/check.py` first.
+
+```sh
+R=~/.local/share/kirby-dead-cells/repros/plant-138   # Kirby; plant-138-beheaded for the Beheaded
+python3 scripts/stage_runtime.py --data-root $R --original-runtime \
+  --outfit-pack "$HOME/.local/share/kirby-dead-cells/outfit-build-sync/res.pak"
+KIRBY_LAB_REPRO_PLAN=$R/plan-empty.json KIRBY_LAB_MOVES_SETUP=plant@8.5,plant:30@16.5 \
+  python3 scripts/launch_runtime.py --data-root $R --seconds 51 --start-game \
+  --outfit KirbySuperStarUltra --input-plan repro --capture-fps 10
+# The Beheaded: KIRBY_LAB_MOVES_ANY=1, no --outfit, --data-root .../plant-138-beheaded
+```
+
+Each level is generated, so plants and coordinates differ between runs; heights
+are given from the plant's surface. All plants were hanging ones
+(`placedOnGround` false).
+
+| Run | Hero, build | Setup | Result |
+| :--- | :--- | :--- | :--- |
+| `plant-138/20261013-202552` | Beheaded, mod inactive | centre, no input; then jump at 15.0 and 15.45 | Per-step rise after `plant-bump` 34.44, 30.88, 27.58 … 0.38 px: 242.2 px in 17 steps. Bite hop 34.4 px. Close 0.5–0.85 s after landing, bump 0.5 s after close, open 1.25 s after close, landed about 2.0 s after close. Jump off: plant shut about 26 px up, no bite; air jump 12 px above it gave two `plant-bump`s in one step and a 262 px rise |
+| `plant-138-beheaded/20261013-203833` | Beheaded, mod inactive | `plant:13`, `plant:26`, `plant:34` | Bitten and thrown at each offset, his x unchanged by the bite. At 34 px the touch came with his feet between 3.3 and 14.5 px below the surface; while the plant was shut he fell through it |
+| `plant-138/20261013-203206` | Kirby, #138 with the host's steps only | centre | 231.3 px: the original's gravity still shortened each step, before the height was taken from the host during a launch |
+| `plant-138/20261013-204351` | Kirby, #138 before the recoil hold | centre, 13, 26 | Centre: hop 34 px, throw 901.2 → 659.0 (242.2 px). At 13 and 26 px the hurt recoil carried him 26 px sideways in 0.5 s, he was not thrown and fell through the shut plant |
+| `plant-138/20261013-205316` | Kirby, with the recoil hold, body from the saved host body | `plant:34`, `plant:-30` | −30: bitten and thrown. 34: not thrown; the `placed` event shows the saved body was Kirby's (9, 29), not the Beheaded's |
+| `plant-138/20261013-205759` | Kirby, body fixed at 16.8 / 54, before the landing-hop change | centre, 13 | Bite cycles alternate with cycles where the plant shuts with Kirby 22.6 px up in his landing hop, no bite, then throws him |
+| `plant-138/20261013-205955` | Kirby, #138 final | centre, `plant:30` | Every cycle bite then throw: closes f4754, f4897, f5040 (2.38 s apart), throws 29–33 frames after each close; at 30 px likewise, x unchanged |
+| `plant-138/20261013-205511` | Kirby, before the landing-hop change | `plant:34`, `plant:-30` | 34: bitten, hop, thrown with feet 8.9 px below the surface (within the Beheaded's bracket); x unchanged |
+| `plant-138/20261013-210402` | Kirby, #138 final | centre, jump at 9.6 and 10.08 | Jumped off after landing: plant shut with Kirby 26.8 px up, no bite; the second press 5 px above the shut plant gave two `plant-bump`s in one step, no float, rise 738.9 → 496.7 (242.2 px) |
+| `plant-138/20261013-205136` | Kirby, before the last three changes | centre, jump at 9.6 and 10.05 | The second press 28 px above the shut plant (beyond touch) threw him 242.2 px; the original stayed in its jump action (no float) |
+| `plant-138/20261013-210105`, `-210308` | Kirby, #138 final | same, other timings | The press came 47 px above the plant, out of the host's reach: an ordinary float, no throw |
+
+Every run ended at its time limit or the hero's death, `fatal_log` false and
+`source_saves_unchanged` true in `report.json`. Kirby has 76 HP and loses 17 a
+bite, so a run holds four bites. The plan's times are wall-clock and drift a few
+frames against the original's frames, which is why the air-press runs differ.
+Not run: a ceiling above the plant, a `placedOnGround` plant, Gardener-boss
+plants, a float or a copy ability on a plant, walking onto one, normal play.

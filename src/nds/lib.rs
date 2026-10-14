@@ -58,6 +58,9 @@ struct Bridge {
     unfinished_passes: u32,
     /// The host asked for the main screen only (see `kssu_main_screen_only`).
     main_screen_only: bool,
+    /// The palette of an idle scanline, while the host asked for those to be
+    /// left undrawn (see `kssu_skip_idle_main`).
+    idle_palette: Option<[u8; 512]>,
     /// `proxies` already describes main RAM as it is now. Every call that can
     /// change main RAM or a proxy record clears it, so reads between two such
     /// calls share one walk of the actor lists.
@@ -182,6 +185,7 @@ pub unsafe extern "C" fn kssu_open(
             far_shown: Vec::new(),
             unfinished_passes: 0,
             main_screen_only: false,
+            idle_palette: None,
             proxies_fresh: false,
         })) as *mut std::ffi::c_void)
     });
@@ -268,6 +272,7 @@ pub unsafe extern "C" fn kssu_step(handle: *mut std::ffi::c_void, mask: u16, fra
     if !mute_proxy_footsteps(b.nds.main_ram_mut())
         || !keep_proxies_alive_in_water(b.nds.main_ram_mut())
         || !quicken_helper_reaction(b.nds.main_ram_mut())
+        || !keep_limited_abilities_off_mix_wheel(b.nds.main_ram_mut())
     {
         return -6;
     }
@@ -519,6 +524,51 @@ pub unsafe extern "C" fn kssu_main_screen_only(handle: *mut std::ffi::c_void, en
     }
     b.main_screen_only = enabled;
     0
+}
+/// Leave engine A's backgrounds and composition out of every scanline the host
+/// would learn nothing from. The host reads that drawing only through
+/// `kssu_read_layers`, to find a palette or colour effect over the whole frame;
+/// a scanline of an enabled, unblanked unit with no colour effect control whose
+/// standard BG palette equals `palette` (512 bytes, the palette the host
+/// compares against) reads as "no effect" there. Sprites, and a scanline a
+/// display capture reads, are always drawn, so the emulated machine and its
+/// save states are the same either way (bridge test `skip_idle_main`). Null
+/// turns it off, which is the default.
+/// The top framebuffer is black on such scanlines and the layer capture keeps
+/// what an earlier frame drew: ask `kssu_main_frame` before reading either.
+/// `KSSU_DRAW_EVERY_FRAME` in the environment keeps every scanline drawn.
+#[no_mangle]
+pub unsafe extern "C" fn kssu_skip_idle_main(
+    handle: *mut std::ffi::c_void,
+    palette: *const u8,
+    len: usize,
+) -> i32 {
+    if handle.is_null() || (!palette.is_null() && len != 512) {
+        return -1;
+    }
+    let b = &mut *(handle as *mut Bridge);
+    let mut reference = None;
+    if !palette.is_null() && std::env::var_os("KSSU_DRAW_EVERY_FRAME").is_none() {
+        let mut copy = [0u8; 512];
+        copy.copy_from_slice(std::slice::from_raw_parts(palette, 512));
+        reference = Some(copy);
+    }
+    if !b.nds.set_skip_idle_main(reference.as_ref()) {
+        return -2;
+    }
+    b.idle_palette = reference;
+    0
+}
+/// How engine A's last frame was drawn (the frame whose 192 scanlines ended
+/// at the latest VBlank): 0 every scanline, so `kssu_read_layers` holds that
+/// frame; 1 none, the frame has no effect; 2 some of each, which is a frame
+/// whose palette or colour effect changed part of the way down.
+#[no_mangle]
+pub unsafe extern "C" fn kssu_main_frame(handle: *mut std::ffi::c_void) -> i32 {
+    if handle.is_null() {
+        return -1;
+    }
+    (*(handle as *mut Bridge)).nds.main_frame() as i32
 }
 fn put32(r: &mut [u8], p: usize, v: u32) {
     r[p..p + 4].copy_from_slice(&v.to_le_bytes());
@@ -1211,6 +1261,9 @@ pub unsafe extern "C" fn kssu_load_state(
         restore_hook(hook);
         if b.main_screen_only {
             b.nds.set_main_screen_only(true);
+        }
+        if let Some(palette) = b.idle_palette {
+            b.nds.set_skip_idle_main(Some(&palette));
         }
         align_to_vblank(&mut b.nds);
         0
@@ -1950,6 +2003,36 @@ fn quicken_helper_reaction(r: &mut [u8]) -> bool {
     }
     put32(r, GETTER + 20, patched[0]);
     put32(r, GETTER + 24, patched[1]);
+    true
+}
+
+// A mouthful of two or more objects runs the original Mix roulette. Its wheel
+// is the 25-byte table at 0x020BAA8C: the setup 0x020AF140 derives the start
+// and auto-stop positions from the two swallowed copies, and 0x020AF1C8 reads
+// the face shown, the stop and the result from it. Three faces are limited-use
+// abilities (Mike, Crash and Cook; Paint is not on the wheel), which Kirby
+// never gets from a swallow (#102): a stop there made one his main copy
+// (#141). Each of those faces shows the next face instead, so the wheel keeps
+// its original order, speed and length and those three last twice as long.
+// The roulette code and its other faces are untouched. The user's ROM file is
+// never changed.
+fn keep_limited_abilities_off_mix_wheel(r: &mut [u8]) -> bool {
+    const WHEEL: usize = 0x020baa8c - BASE as usize;
+    const FACES: [u8; 25] = [
+        11, 2, 22, 7, 13, 18, 15, 8, 16, 36, 4, 6, 25, 23, 14, 12, 20, 10, 3, 19, 24, 5, 17, 32, 9,
+    ];
+    const LIMITED: std::ops::RangeInclusive<u8> = 21..=24;
+    for (i, &face) in FACES.iter().enumerate() {
+        let allowed = if LIMITED.contains(&face) { FACES[i + 1] } else { face };
+        if r[WHEEL + i] != face && r[WHEEL + i] != allowed {
+            return false;
+        }
+    }
+    for (i, &face) in FACES.iter().enumerate() {
+        if LIMITED.contains(&face) {
+            r[WHEEL + i] = FACES[i + 1];
+        }
+    }
     true
 }
 
