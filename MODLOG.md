@@ -2232,4 +2232,6 @@ the all-ability rendering tests as full gameplay acceptance.
   played the same fight (66 hits, 2,046 damage, 31 destroyed).
 - Left: the host's own per-target damage queries (most of the crowd's
   `Prepare` and its 35 KB a step) and the per-byte OAM and palette reads.
+  Timed and left: `kssu_world` 1.7 µs a call, `kssu_state` 0.3 µs (a bare
+  Python call is 0.4 µs), under 2 µs a step together.
   Not run: the owner's play launcher, a window on the GPU, a long session.

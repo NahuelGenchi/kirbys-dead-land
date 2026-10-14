@@ -178,6 +178,8 @@ Runs `20261014-130811`, `131343`, `132819` (`movement`) and `131022`, `131546`, 
 
 What is left of `Prepare` in the crowd is the host's own per-target work, which must run on every step: its damage bonuses, status checks and `canBeHitBy` for each paired enemy. Its garbage, about 35 KB a step, is that work's, so the crowd's garbage per second did not fall.
 
+The other two items the fix candidate named (docs/ROM_INTERNALS.md) were timed and left. Driven from Python with 31 proxies, median of 2,000 calls: `kssu_world` 1.7 µs (1.2 µs with none), `kssu_state` 0.3 µs, `kssu_hits` 0.6 µs, against 0.4 µs for a call that returns at once. The small vectors `kssu_world` allocates and the dozen `kssu_state` reads of a step are worth under 2 µs a step together.
+
 ## Checks run
 
 On the final tree, 2026-10-11:
