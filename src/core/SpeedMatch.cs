@@ -59,6 +59,15 @@ public static class SpeedMatch
     public const ushort Free = 0, Solid = 3, Water = 130, OneWay = 131, SlopeUpRight = 132, SlopeUpLeft = 133, Ladder = 134;
     public delegate ushort Terrain(int cx, int cy);
 
+    /// <summary>
+    /// Whether a free host cell is original water. The host gives the water
+    /// surface of a cell in pixels (0 for none), and the top row of a pool can
+    /// be only partly filled. The original has whole water tiles, so a cell is
+    /// water only when the surface is at or above its top: Kirby swims where
+    /// the water covers him and walks through anything shallower (#144).
+    /// </summary>
+    public static bool Submerged(double surfaceY, int cy) => surfaceY > 0 && surfaceY <= cy * 24 + Edge;
+
     public enum Motion { None, Ground, Air, Float, Slide, Carry, Climb }
 
     /// <summary>

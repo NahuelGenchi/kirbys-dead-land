@@ -8,7 +8,7 @@ namespace Kirby.Core;
 public static class KirbyActions
 {
     public const ushort Standing = 0x0406, Landing = 0x0507, Skid = 0x060A, Walk = 0x060B, Dash = 0x060C,
-        Jump = 0x070D, Fall = 0x070E, Float = 0x070F, Slide = 0x0B18, Climb = 0x0916;
+        Jump = 0x070D, Fall = 0x070E, Float = 0x070F, Slide = 0x0B18, Climb = 0x0916, Hurt = 0x0F1D;
 
     /// <summary>
     /// Ability use: inhaling, exhaling and spitting, and every copy-ability

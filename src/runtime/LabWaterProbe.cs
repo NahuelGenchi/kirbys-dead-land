@@ -1,7 +1,10 @@
 using System.Text.Json;
 using dc.en;
 using dc.en.mob;
+using HaxeProxy.Runtime;
+using ModCore.Utilities;
 using Path = System.IO.Path;
+using LevelInfo = Hashlink.Virtuals.virtual_baseLootLevel_biome_bonusTripleScrollAfterBC_cellBonus_dlc_doubleUps_eliteRoomChance_eliteWanderChance_flagsProps_group_icon_id_index_loreDescriptions_mapDepth_minGold_mobDensity_mobs_name_nextLevels_parallax_props_quarterUpsBC3_quarterUpsBC4_specificLoots_specificSubBiome_transitionTo_tripleUps_worldDepth_;
 
 namespace Kirby.Runtime;
 
@@ -12,6 +15,16 @@ namespace Kirby.Runtime;
 /// enemy and ignored inhale and attacks. The probe records whether the source
 /// claims the Zombie before any input, then holds the original inhale until it
 /// is consumed and swallows it with DOWN.
+/// <para>
+/// With <c>KIRBY_LAB_WATER_LEVEL</c> the new run starts in that level. With
+/// <c>KIRBY_LAB_WATER_WADE=1</c> the probe wades instead (#144): Kirby is put on
+/// the floor in the middle of the widest stretch of water (deep water if the
+/// level has any), stands, walks right and left, jumps and walks again, and
+/// the original's action codes are counted for each step and listed in order
+/// (<c>0815</c> is swimming). The plan is short because a boss that wakes up
+/// attacks about eight seconds later, and it stops if Kirby dies. Both modes
+/// record how deep every host water column is.
+/// </para>
 /// </summary>
 internal static unsafe class LabWaterProbe
 {
@@ -29,21 +42,112 @@ internal static unsafe class LabWaterProbe
     private static uint? firstCopyFrame;
     private static string? copyAbilityAfter;
     private static uint lastReportFrame;
+    private static readonly string? level = Environment.GetEnvironmentVariable("KIRBY_LAB_WATER_LEVEL");
+    private static readonly bool wade = Environment.GetEnvironmentVariable("KIRBY_LAB_WATER_WADE") == "1";
+    private static object? depths, wadeSite;
+    private static nint wadeHero;
+    private static bool wadeInterrupted;
+    // Step, the source frame it ends at and the DS keys held (A 1, right 16, left 32).
+    private static readonly (string Name, uint Until, ushort Keys)[] WadePlan =
+        [("stand", 60, 0), ("walk", 120, 16), ("walk", 180, 32), ("jump", 192, 1), ("jump", 300, 0), ("walkAfterJump", 360, 16)];
+    private static readonly SortedDictionary<string, SortedDictionary<string, int>> wadeActions = [];
+    private static readonly List<string> wadeOrder = [];
 
     internal static void Install(string output)
     {
         run = output;
         dc.tool.Hook_Tutorial.tryToStart += (_, _, _) => false;
+        if (level is not null)
+            dc.Hook_User.newGame += (orig, user, seed, info, custom, scoring, mode) =>
+                orig(user, seed, ((HaxeProxyBase)dc.Data.Class.level.resolve(level.AsHaxeString(), false)).ToVirtual<LevelInfo>(),
+                    custom, scoring, mode);
         KirbyInput.TestOverride = Input;
     }
 
     private static int Cell(dc.level.LevelMap map, int cx, int cy) =>
         cx < 0 || cy < 0 || cx >= map.wid || cy >= map.hei ? 3 : ((int*)map.collisions.bytes)[cy * map.wid + cx];
 
-    private static bool Water(dc.level.LevelMap map, int cx, int cy) =>
+    /// <summary>A free cell with host water in it, however shallow.</summary>
+    private static bool HostWater(dc.level.LevelMap map, int cx, int cy) =>
         (Cell(map, cx, cy) & 3) == 0 && map.getRoomAt(cx, cy) is not null && map.getWaterSurfaceY(cx, cy) > 0;
 
+    /// <summary>A cell the runtime exports as original water.</summary>
+    private static bool Water(dc.level.LevelMap map, int cx, int cy) =>
+        HostWater(map, cx, cy) && Kirby.Core.SpeedMatch.Submerged(map.getWaterSurfaceY(cx, cy), cy);
+
     private static bool Floor(dc.level.LevelMap map, int cx, int cy) => (Cell(map, cx, cy + 1) & 3) != 0;
+
+    /// <summary>
+    /// Host water columns by depth in pixels (surface to the first solid cell
+    /// below), and how many of their cells the runtime exports as original water.
+    /// </summary>
+    private static object Survey(dc.level.LevelMap map)
+    {
+        var columns = new SortedDictionary<double, int>();
+        int hostCells = 0, exported = 0;
+        for (int y = 1; y < map.hei; y++)
+        for (int x = 0; x < map.wid; x++)
+        {
+            if (!HostWater(map, x, y)) continue;
+            hostCells++;
+            if (Water(map, x, y)) exported++;
+            if (HostWater(map, x, y - 1)) continue;
+            int floor = y;
+            while (floor < map.hei && (Cell(map, x, floor) & 3) == 0) floor++;
+            double depth = Math.Round(floor * 24 - map.getWaterSurfaceY(x, y), 1);
+            columns[depth] = columns.GetValueOrDefault(depth) + 1;
+        }
+        return new { hostCells, exported, columnsByDepth = columns.ToDictionary(pair => pair.Key.ToString("0.#"), pair => pair.Value) };
+    }
+
+    /// <summary>
+    /// The floor in the middle of the widest stretch of water with two free
+    /// cells above it: exported water if the level has any, otherwise host water.
+    /// </summary>
+    private static bool Wade(Hero hero)
+    {
+        var map = hero._level.map;
+        (int X, int Y, int Width) best = default;
+        foreach (bool deep in new[] { true, false })
+        {
+            for (int y = 3; y < map.hei - 1; y++)
+            for (int x = 0, run = 0; x < map.wid; x++)
+            {
+                bool open = (deep ? Water(map, x, y) : HostWater(map, x, y)) && Floor(map, x, y) &&
+                    (Cell(map, x, y - 1) & 3) == 0 && (Cell(map, x, y - 2) & 3) == 0;
+                run = open ? run + 1 : 0;
+                if (run > best.Width) best = (x - run / 2, y, run);
+            }
+            if (best.Width > 0) break;
+        }
+        if (best.Width == 0) return false;
+        hero.setPosPixel(best.X * 24 + 12, (best.Y + 1) * 24);
+        if (hero.yr == 0) { hero.cy--; hero.yr = 1; }
+        hero.dx = hero.dy = hero.bdx = hero.bdy = 0;
+        wadeHero = hero.HashlinkPointer;
+        double surface = map.getWaterSurfaceY(best.X, best.Y);
+        wadeSite = new { cell = new[] { best.X, best.Y }, width = best.Width, surface, floor = (best.Y + 1) * 24,
+            depth = (best.Y + 1) * 24 - surface, exported = Water(map, best.X, best.Y) };
+        return true;
+    }
+
+    private static ushort WadeInput(NdsRuntime machine, Hero hero, uint frame)
+    {
+        // A death starts a new run with another hero somewhere else.
+        if (hero.HashlinkPointer != wadeHero || hero.life <= 0) { wadeInterrupted = true; finishedAt = frame; return 0; }
+        uint t = frame - placedAt!.Value;
+        foreach (var (name, until, keys) in WadePlan)
+        {
+            if (t >= until) continue;
+            if (!wadeActions.TryGetValue(name, out var counts)) wadeActions[name] = counts = [];
+            string action = machine.Action.ToString("X4");
+            counts[action] = counts.GetValueOrDefault(action) + 1;
+            if (wadeOrder.Count == 0 || !wadeOrder[^1].EndsWith(action)) wadeOrder.Add($"{t} {action}");
+            return keys;
+        }
+        finishedAt = frame;
+        return 0;
+    }
 
     /// <summary>
     /// A pool floor cell beside a dry bank cell with a floor and two free cells
@@ -99,11 +203,13 @@ internal static unsafe class LabWaterProbe
         if (!searched)
         {
             searched = true;
-            if (!Place(hero)) { finishedAt = frame; return 0; }
+            depths = Survey(hero._level.map);
+            if (wade ? !Wade(hero) : !Place(hero)) { finishedAt = frame; return 0; }
             placedAt = frame;
             kirbyLifeBefore = hero.life;
             return 0;
         }
+        if (wadeSite is not null) return WadeInput(machine, hero, frame);
         if (zombie is null) return 0;
         uint t = frame - placedAt!.Value;
         if (!zombie.destroyed && zombie.life > 0)
@@ -165,6 +271,7 @@ internal static unsafe class LabWaterProbe
         {
             frame = lastReportFrame,
             searched, waterCells, poolFloorCells, surroundings,
+            depths, wadeSite, wadeActions, wadeOrder, wadeInterrupted,
             site,
             placedAt, inhaleAt, consumedAt, swallowAt, finishedAt, timedOut,
             framesControlledBeforeInhale,
