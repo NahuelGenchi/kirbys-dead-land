@@ -21,6 +21,15 @@ already. The bridge makes that call once after it loads a state, so every step
 is one whole frame from VBlank to VBlank and runs one logic pass, as before.
 The emulated machine executes exactly the same; only where a call returns
 changes. While the switch is zero a call ends with its frame as before.
+
+A second stage (#150) lets the bridge choose the ARM9's clock. The DS runs it at
+67 MHz (``ARM9ClockShift`` 1); the core already knows 134 MHz (shift 2), which it
+uses for a DSi. With ``kssu_arm9_shift`` set, ``RunFrame`` brings the machine to
+that shift before it runs: the ARM9's timestamps are rescaled, upward without
+loss, and the bus timings derived again. A savestate does not record the shift
+its ARM9 timestamps count in, so ``kssu_arm9_state`` carries it: the core writes
+it when it saves and takes it, when set, as it loads. With both left at zero the
+machine runs and loads exactly as before.
 """
 import subprocess
 from pathlib import Path
@@ -35,6 +44,51 @@ melonDS::u32 kssu_vblank_reached = 0;
 }
 
 '''
+
+CLOCK = '''// Checked addition (tools/nds_step_patch.py, #150): the ARM9's clock.
+extern "C" {
+// Set by the bridge: the shift RunFrame brings the ARM9 clock to. 1 is the DS's
+// 67 MHz, 2 twice that; 0 leaves the machine as it is.
+melonDS::u32 kssu_arm9_shift = 0;
+// The shift a savestate's ARM9 timestamps count in, which the state does not say.
+// Written when a state is saved; set by the bridge before one is loaded.
+melonDS::u32 kssu_arm9_state = 0;
+}
+
+'''
+
+# Second stage (#150), applied on top of the edits below.
+CORE_EDITS_2 = {
+    "src/NDS.cpp": [
+        ("melonDS::u32 kssu_vblank_reached = 0;\n}\n\n", "melonDS::u32 kssu_vblank_reached = 0;\n}\n\n" + CLOCK),
+        ("    file->VarArray(MainRAM, MainRAMMaxSize);\n",
+         "    // Checked addition (tools/nds_step_patch.py): the timings below are derived\n"
+         "    // from the clock the state's ARM9 timestamps count in.\n"
+         "    if (file->Saving) kssu_arm9_state = ARM9ClockShift;\n"
+         "    else if (kssu_arm9_state) ARM9ClockShift = kssu_arm9_state;\n\n"
+         "    file->VarArray(MainRAM, MainRAMMaxSize);\n"),
+        ("    Current = this;\n\n    // Checked addition (tools/nds_step_patch.py): a call that finds the machine\n",
+         "    Current = this;\n\n"
+         "    // Checked addition (tools/nds_step_patch.py): the clock the bridge asked for,\n"
+         "    // changed as DSi::Set_SCFG_Clock9 changes it but keeping the fraction when it rises.\n"
+         "    if (kssu_arm9_shift && kssu_arm9_shift != ARM9ClockShift)\n"
+         "    {\n"
+         "        if (kssu_arm9_shift > ARM9ClockShift)\n"
+         "        {\n"
+         "            ARM9Timestamp <<= kssu_arm9_shift - ARM9ClockShift;\n"
+         "            ARM9Target <<= kssu_arm9_shift - ARM9ClockShift;\n"
+         "        }\n"
+         "        else\n"
+         "        {\n"
+         "            ARM9Timestamp >>= ARM9ClockShift - kssu_arm9_shift;\n"
+         "            ARM9Target >>= ARM9ClockShift - kssu_arm9_shift;\n"
+         "        }\n"
+         "        ARM9ClockShift = kssu_arm9_shift;\n"
+         "        ARM9.UpdateRegionTimings(0x00000, 0x100000);\n"
+         "    }\n\n"
+         "    // Checked addition (tools/nds_step_patch.py): a call that finds the machine\n"),
+    ],
+}
 
 CORE_EDITS = {
     "src/NDS.cpp": [
@@ -81,19 +135,24 @@ STEP_CORE_FILES = tuple(CORE_EDITS)
 
 
 def check_step_patch(vendor: Path, core_revision: str, apply=False):
-    """Accept exactly pristine or this known patch; apply only after all checks."""
+    """Accept exactly pristine or a known stage of this patch; apply only after all checks."""
     writes = []
     root = vendor / "melonDS"
     for relative, replacements in CORE_EDITS.items():
         original = subprocess.check_output(["git", "-C", str(root), "show", f"{core_revision}:{relative}"], text=True)
-        patched = original
+        first = original
         for before, after in replacements:
-            if patched.count(before) != 1:
+            if first.count(before) != 1:
                 raise SystemExit(f"Step patch precondition failed: {relative}")
+            first = first.replace(before, after)
+        patched = first
+        for before, after in CORE_EDITS_2.get(relative, []):
+            if patched.count(before) != 1:
+                raise SystemExit(f"Step patch second-stage precondition failed: {relative}")
             patched = patched.replace(before, after)
         target = root / relative
         actual = target.read_text()
-        if actual not in (original, patched):
+        if actual not in (original, first, patched):
             raise SystemExit(f"Unexpected step patch edits: {relative}; left untouched.")
         if actual != patched:
             writes.append((target, patched))

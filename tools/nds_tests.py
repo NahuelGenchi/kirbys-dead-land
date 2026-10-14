@@ -15,8 +15,11 @@ def transform(b,ability):
     assert b.state()['ability']==ability
 
 
-def run_case(name):
+def run_case(name,clock=1):
     b=Bridge();bind_proxy_api(b)
+    if clock!=1:
+        # #150: the same case with the ARM9 at twice the DS clock (see --arm9-clock).
+        b.lib.kssu_arm9_clock.argtypes=[C.c_void_p,C.c_uint32];assert b.lib.kssu_arm9_clock(b.handle,clock)==0
     try:
         if name=='scene_doors':
             registry=struct.unpack('<64H',b.read(0x0209fbec,128))
@@ -347,6 +350,33 @@ def run_case(name):
                 b.step(0,wait);assert b.lib.kssu_hurt(b.handle,7,1)==0;b.step(0,3);health.append(b.lib.kssu_health(b.handle))
             assert health==[76,69,62],health
             return {'swimming_health':health}
+        if name=='mix_no_limited':
+            # The Mix wheel never shows or gives a limited-use ability (#141): the stops that
+            # gave Crash, Mike and Cook give the next face (Stone, Yo-Yo, Fighter).
+            wheel=[11,2,7,7,13,18,15,8,16,36,4,6,25,14,14,12,20,10,3,19,5,5,17,32,9]
+            floor=[3 if y>=7 else 0 for y in range(9) for x in range(100)];seed=str(ROOT/'oracle/ready2/000.state').encode();given={};lap=None
+            for press in (111,167,239):
+                assert b.lib.kssu_load_state(b.handle,seed)==0
+                qs=[Proxy(),Proxy()];previous=[0,0];faces=[]
+                b.world(floor,43*65536,int(153.5*65536));b.step(0,60)
+                for i in range(press+40):
+                    state=b.state();b.world(floor,state['x_raw'],state['y_raw'])
+                    for index in range(2):
+                        if previous[index]&12:continue
+                        assert b.lib.kssu_proxy_set(b.handle,index+1,(85+index*8)*65536,151*65536,32760,True)==0
+                        assert b.lib.kssu_proxy_options(b.handle,index+1,18 if index==0 else 4,False)==0
+                    b.step(2 if 5<=i<75 else (128 if i==90 else (2 if i==press else 0)))
+                    for index in range(2):
+                        b.lib.kssu_proxy_state(b.handle,index+1,C.byref(qs[index]));previous[index]=qs[index].flags
+                    if 100<=i<=press:faces.append(b.read(0x020bb213,1)[0])
+                assert list(b.read(0x020baa8c,25))==wheel
+                assert not any(21<=face<=24 for face in faces),faces
+                given[press]=b.state()['ability'];lap=[face for n,face in enumerate(faces) if n==0 or faces[n-1]!=face]
+            assert given=={111:14,167:7,239:5},given
+            # One full turn in the original order: the doubled faces appear once, for twice as long.
+            turn=[face for n,face in enumerate(wheel) if wheel[n-1]!=face]
+            start=turn.index(lap[1]);assert lap[1:1+len(turn)]==turn[start:]+turn[:start],lap
+            return {'wheel':wheel,'ability_by_stop_frame':given,'faces_in_one_turn':len(turn)}
         if name in ('proxy_mix','boss_inhale','boss_suplex','boss_cook','boss_sword'):
             ability={'boss_suplex':6,'boss_cook':24,'boss_sword':18}.get(name,1)
             if ability!=1:transform(b,ability)
@@ -861,6 +891,93 @@ def run_case(name):
             black=b'\x00\x00\x00\xff'*(256*192)
             assert only[2]=={black} and black not in full[2] and full[2]==again[2], 'Bottom screen: black only while engine B is left out'
             return {'frames':240,'machine_and_engine_a_digest':full[0][:16],'save_state_sha256':full[1][:16],'same_with_engine_b_left_out':True,'bottom_screen_black_only_when_left_out':True}
+        if name=='skip_idle_main':
+            # #148: the host reads engine A's drawing only to find a screen-wide palette or
+            # colour effect. With idle scanlines left undrawn, main RAM, the GPU memory and
+            # the save state stay the same, and every frame gives the host the same answer:
+            # the bridge's word for an undrawn frame, the same capture for a drawn one.
+            import hashlib,collections
+            l=b.lib;l.kssu_read_gpu.argtypes=[C.c_void_p,C.c_uint32,C.c_void_p,C.c_size_t]
+            l.kssu_read_layers.argtypes=[C.c_void_p,C.c_void_p,C.c_size_t,C.c_uint32]
+            l.kssu_skip_idle_main.argtypes=[C.c_void_p,C.c_char_p,C.c_size_t];l.kssu_main_frame.argtypes=[C.c_void_p]
+            l.kssu_set_ability.argtypes=[C.c_void_p,C.c_uint8]
+            def gpu(address,length):
+                out=C.create_string_buffer(length);assert l.kssu_read_gpu(b.handle,address,out,length)==0;return out.raw
+            palette=gpu(0x05000000,512);seed16=struct.unpack('<256H',palette);layer=(C.c_uint32*(256*192))()
+            assert l.kssu_skip_idle_main(b.handle,palette,511)==-1 and l.kssu_main_frame(b.handle)==0
+            def plane(index):
+                assert l.kssu_read_layers(b.handle,layer,256*192,index)==0;return bytes(layer)
+            def effect():
+                # As NdsBackgroundEffectDecoder: one palette on every scanline, every pixel valid
+                # with no colour effect control, then that palette against the seed's. Any other
+                # palette is named by the planes the decoder reads.
+                lines=plane(4);control=plane(2)
+                if lines!=lines[:1024]*192 or min(control[3::4])<0x80 or any(control[1::4]) or any(control[2::4]):return 'unsupported'
+                if all((a^b)&0x7fff==0 for a,b in zip(struct.unpack('<256I',lines[:1024]),seed16)):return 'identity'
+                return hashlib.sha256(plane(0)+control+lines).hexdigest()[:16]
+            floor=[3 if y>=7 else 0 for y in range(9) for x in range(100)]
+            seed=bytes(ROOT/'oracle/ready2/000.state');path=ROOT/'oracle/skip-idle-test.state'
+            masks=[0]*20+[16]*60+[17]*10+[16]*30+[2]*60+[32]*40+[1]*20
+            def run(skip):
+                assert l.kssu_load_state(b.handle,seed)==0 and l.kssu_skip_idle_main(b.handle,palette if skip else None,512 if skip else 0)==0
+                digest=hashlib.sha256();effects=[];drawn=[]
+                for i in range(480):
+                    state=b.state();b.world(floor,state['x_raw'],state['y_raw'])
+                    # Ordinary play, then Crash: its flash recolours the whole background.
+                    if i==250:assert l.kssu_set_ability(b.handle,23)==0
+                    b.step(masks[i] if i<240 else 2 if 270<=i<274 else 0)
+                    for address,length in ((0x04000000,0x70),(0x05000000,0x800),(0x07000000,0x800),(0x06400000,0x40000)):digest.update(gpu(address,length))
+                    if i%8==7:digest.update(b.read(0x02000000,0x400000))
+                    drawn.append(l.kssu_main_frame(b.handle))
+                    effects.append({1:'identity',2:'unsupported'}.get(drawn[-1]) or effect())
+                b.save(path);saved=hashlib.sha256(path.read_bytes()).hexdigest();path.unlink()
+                return digest.hexdigest(),saved,effects,collections.Counter(drawn)
+            full=run(False);skip=run(True);again=run(False)
+            assert full[:3]==skip[:3]==again[:3], 'Leaving idle scanlines undrawn changed the machine or an effect'
+            kinds=collections.Counter(e if e in ('identity','unsupported') else 'changed' for e in full[2])
+            assert full[3]==again[3]=={0:480} and skip[3][0]==kinds['changed']>30 and skip[3][1]==kinds['identity']>400 and skip[3][2]==0,(skip[3],kinds)
+            assert all(e=='identity' for e in full[2][:240]), 'Ordinary play must be idle'
+            return {'frames':480,'machine_digest':full[0][:16],'save_state_sha256':full[1][:16],'same_with_idle_scanlines_undrawn':True,'undrawn_frames':skip[3][1],'drawn_effect_frames':skip[3][0],'partly_drawn_frames':skip[3][2],'unsupported_frames':kinds['unsupported']}
+        if name=='arm9_clock':
+            # #150: the host may run the ARM9 at twice the DS clock. Where the original
+            # finishes its pass inside a DS frame nothing changes; in a crowd, where it
+            # does not, every pass now ends in its frame. A state remembers its clock.
+            import hashlib
+            l=b.lib;l.kssu_arm9_clock.argtypes=[C.c_void_p,C.c_uint32];l.kssu_unfinished_passes.argtypes=[C.c_void_p]
+            assert l.kssu_arm9_clock(b.handle,0)==-1 and l.kssu_arm9_clock(b.handle,3)==-1
+            floor=[3 if y>=7 else 0 for y in range(9) for x in range(100)]
+            b.world(floor,384*65536,int(153.5*65536));b.step(0,60);transform(b,18)
+            start=ROOT/'oracle/arm9-clock-test.state';middle=ROOT/'oracle/arm9-clock-mid-test.state';b.save(start)
+            def play(clock,crowd,frames,state=start):
+                assert l.kssu_arm9_clock(b.handle,clock)==0 and l.kssu_load_state(b.handle,bytes(state))==0
+                passes=l.kssu_unfinished_passes(b.handle);trace=[]
+                for i in range(frames):
+                    at=b.state();b.world(floor,at['x_raw'],at['y_raw'])
+                    for slot in range(1,crowd+1):
+                        x=(at['x_raw']>>16)+(-120+slot*8 if slot%2 else 30+slot*6)
+                        assert l.kssu_proxy_set(b.handle,slot,x*65536,151*65536,32760,True)==0
+                        l.kssu_proxy_options(b.handle,slot,18,True);l.kssu_proxy_size(b.handle,slot,24,34)
+                    at=b.step((2 if i%24<10 else 0)|(16 if (i//90)%2==0 else 32)|(1 if i%60==5 else 0))
+                    trace.append((at['frame'],at['x_raw'],at['y_raw'],at['animation'],at['graphic'],at['flags']))
+                return trace,l.kssu_unfinished_passes(b.handle)-passes
+            alone=[play(clock,0,240) for clock in (1,2,1)]
+            assert alone[0]==alone[1]==alone[2] and alone[0][1]==0, 'Without a crowd both clocks must give the same frames'
+            slow,fast=play(1,31,300),play(2,31,300)
+            assert slow[1]>0 and fast[1]==0,(slow[1],fast[1])
+            # The crowd again at 2x, saved part of the way: the saved state continues as the run did.
+            def digest():
+                b.save(middle);data=middle.read_bytes()
+                return hashlib.sha256(b.read(0x02000000,0x400000)).hexdigest(),hashlib.sha256(data).hexdigest(),data[-8:]==b'KSSUCK01'
+            play(2,31,120);saved=digest();assert saved[2], 'A state saved at 2x names its clock'
+            kept=ROOT/'oracle/arm9-clock-kept-test.state';kept.write_bytes(middle.read_bytes())
+            b.step(2,60);straight=digest()
+            assert l.kssu_load_state(b.handle,bytes(kept))==0;b.step(2,60);resumed=digest()
+            assert straight==resumed, 'A state saved and loaded at 2x must continue as the run did'
+            # The same state at the DS clock runs on, and a state saved there keeps the old format.
+            assert l.kssu_arm9_clock(b.handle,1)==0 and l.kssu_load_state(b.handle,bytes(kept))==0
+            frame=b.state()['frame'];b.step(2,60);assert b.state()['frame']==frame+60 and not digest()[2]
+            for path in (start,middle,kept):path.unlink()
+            return {'frames_without_crowd':240,'same_frames_at_both_clocks':True,'crowd':31,'crowd_frames':300,'unfinished_passes_ds_clock':slow[1],'unfinished_passes_doubled':fast[1],'state_saved_doubled_continues_exactly':True,'doubled_state_runs_at_ds_clock':True}
         if name=='recompiler':
             # #153: the original on the emulator's recompiler. The frames are the same ones,
             # an armed call still runs (on the interpreter), a state from either continues on
@@ -991,14 +1108,35 @@ def run_case(name):
     finally:b.close()
 
 
+def survey(cases,clock):
+    """Every case at another ARM9 clock, against the evidence of the DS clock. The cases expect the DS clock: a failure here is a difference to explain, not a defect."""
+    path=ROOT/'oracle/bridge-test-results.json'
+    recorded={item['case']:item['result'] for item in json.loads(path.read_text())} if path.is_file() else {}
+    same=[];different=[];failed=[]
+    for name in cases:
+        process=subprocess.run([sys.executable,__file__,'--case',name,'--arm9-clock',str(clock)],capture_output=True,text=True,timeout=60)
+        lines=[line[7:] for line in process.stdout.splitlines() if line.startswith('RESULT ')]
+        if process.returncode or not lines:
+            reason=[line for line in process.stderr.splitlines() if line.strip()][-1:] or ['no result']
+            failed.append({'case':name,'reason':reason[0][:300]});print(f'FAIL {name}: {reason[0][:300]}',flush=True);continue
+        result=json.loads(lines[-1])['result']
+        if name in recorded and result==recorded[name]:same.append(name);print(f'SAME {name}',flush=True)
+        else:different.append({'case':name,'result':result,'ds_clock':recorded.get(name)});print(f'DIFF {name}: '+json.dumps(result),flush=True)
+    out=ROOT/f'oracle/bridge-test-survey-arm9x{clock}.json'
+    out.write_text(json.dumps({'clock':clock,'same':same,'different':different,'failed':failed},indent=2)+'\n')
+    print(f'{len(cases)} cases at {clock}x the DS clock: {len(same)} same, {len(different)} different, {len(failed)} failed. Survey: {out}')
+
 def main():
-    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--case');parser.add_argument('--skip-abilities',action='store_true');args=parser.parse_args()
+    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--case');parser.add_argument('--skip-abilities',action='store_true')
+    parser.add_argument('--arm9-clock',type=int,choices=[1,2],default=1,help='2 surveys every case at twice the DS clock (#150): it lists the cases that fail or answer differently and replaces no evidence.')
+    args=parser.parse_args()
     if args.case:
-        result=run_case(args.case)
+        result=run_case(args.case,args.arm9_clock)
         # The emulator's log shares stdout and may stop mid-line: start the result on its own line.
         print('\nRESULT '+json.dumps({'case':args.case,'result':result}),flush=True);return
-    cases=['scene_doors', 'far_shot_draw', 'room_food', 'proxy_birth_contact', 'proxy_birth_inhale', 'proxy_contact', 'proxy_contact_sword', 'proxy_touch_off', 'proxy_swallow_touch_off', 'proxy_suplex_touch_off', 'proxy_ice_detach', 'proxy_ice_release', 'proxy_lethal', 'motion', 'ladder', 'ladder_top', 'ladder_top_stomp', 'one_way', 'solid_ceiling', 'water', 'proxy_water', 'proxy_water_sword', 'proxy_water_below', 'hurt_water', 'proxy_swallow', 'hazard_spit', 'hazard_swallow', 'star_spit', 'star_spit_wall', 'star_big', 'star_ability', 'proxy_sword', 'proxy_reuse', 'proxy_save', 'proxy_mix', 'boss_inhale', 'boss_suplex', 'boss_cook', 'boss_sword', 'proxy_capacity', 'copy_drop_reabsorb', 'wheelie_ride', 'proxy_suplex', 'proxy_cook', 'audio', 'hurt', 'hurt_lethal', 'hurt_cold', 'guard', 'health_invulnerable', 'health_sync', 'proxy_size', 'f_slot', 'f_slot_save', 'f_slot_plasma', 'helper_reaction', 'helper_move', 'helper_owns', 'obj_vram_block', 'main_screen_only', 'recompiler', 'step_between_passes']
+    cases=['scene_doors', 'far_shot_draw', 'room_food', 'proxy_birth_contact', 'proxy_birth_inhale', 'proxy_contact', 'proxy_contact_sword', 'proxy_touch_off', 'proxy_swallow_touch_off', 'proxy_suplex_touch_off', 'proxy_ice_detach', 'proxy_ice_release', 'proxy_lethal', 'motion', 'ladder', 'ladder_top', 'ladder_top_stomp', 'one_way', 'solid_ceiling', 'water', 'proxy_water', 'proxy_water_sword', 'proxy_water_below', 'hurt_water', 'proxy_swallow', 'hazard_spit', 'hazard_swallow', 'star_spit', 'star_spit_wall', 'star_big', 'star_ability', 'proxy_sword', 'proxy_reuse', 'proxy_save', 'proxy_mix', 'mix_no_limited', 'boss_inhale', 'boss_suplex', 'boss_cook', 'boss_sword', 'proxy_capacity', 'copy_drop_reabsorb', 'wheelie_ride', 'proxy_suplex', 'proxy_cook', 'audio', 'hurt', 'hurt_lethal', 'hurt_cold', 'guard', 'health_invulnerable', 'health_sync', 'proxy_size', 'f_slot', 'f_slot_save', 'f_slot_plasma', 'helper_reaction', 'helper_move', 'helper_owns', 'obj_vram_block', 'main_screen_only', 'skip_idle_main', 'arm9_clock', 'recompiler', 'step_between_passes']
     if not args.skip_abilities:cases += [f'ability-{i}' for i in range(2,26)]
+    if args.arm9_clock!=1:return survey(cases,args.arm9_clock)
     results=[]
     for name in cases:
         process=subprocess.run([sys.executable,__file__,'--case',name],capture_output=True,text=True,timeout=30)

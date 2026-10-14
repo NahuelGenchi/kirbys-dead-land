@@ -33,7 +33,8 @@ preserved; generated assets and native dependencies remain in the private data r
   Host swords and bows never attack, including the starting sword.
 - Copied Kirby retains the exact shield it carried for parrying. Taking a
   dropped shield swaps it in as in Dead Cells, in either form, and the new
-  shield becomes the one that parries.
+  shield becomes the one that parries. Kirby holds one shield: taking or
+  buying another drops the one he had (#139).
 - Items Kirby cannot use (every weapon other than a shield, and skills) get
   Dead Cells' own "Can't use that right now" message and stay on the ground; a
   long press still recycles them.
@@ -63,10 +64,11 @@ preserved; generated assets and native dependencies remain in the private data r
   Flask I. See
   [health flask and fountains](docs/GAMEPLAY_FIDELITY.md#health-flask-and-fountains-intentional-deviation).
 - Crash, Paint, Mike and Cook are limited-use abilities (#102). They are never
-  swallowed: no enemy gives them, and their floor item is taken with Interact
-  (R by default) into the F slot, replacing (and dropping) any stored one. F
-  fires the original attack while Kirby keeps his copy ability; Mike has three
-  shouts, the others one use. See
+  swallowed: no enemy gives them, the Mix roulette of a mouthful of several
+  enemies no longer stops on them (#141), and their floor item is taken with
+  Interact (R by default) into the F slot, replacing (and dropping) any stored
+  one. F fires the original attack while Kirby keeps his copy ability; Mike has
+  three shouts, the others one use. See
   [F slot](docs/GAMEPLAY_FIDELITY.md#f-slot-limited-use-abilities-intentional-deviation).
 - Original inhale, mouthful, Down-to-swallow, spit, flight, guard, slide and copy
   discard are executed by the ROM. All 24 original copy forms load through the
@@ -154,7 +156,7 @@ As in Dead Cells, touching an enemy does not hurt Kirby: only enemy attacks do
 (and the few Dead Cells enemies whose bodies are spiked or electric). Bumping
 into enemies does not hurt them either; inhaling, sliding and copy attacks do.
 
-Eight options in the staged `config.json` tune the adaptation: `CameraZoom`
+Nine options in the staged `config.json` tune the adaptation: `CameraZoom`
 (1 keeps the Beheaded's camera; 2 shows about the DS screen's height),
 `AlwaysDash` (a held direction dashes; a light analog tilt still walks),
 `ControllerLayout` (true: the [controller layout](docs/GAMEPLAY_FIDELITY.md#controller-layout-130-intentional-deviation);
@@ -166,7 +168,10 @@ game's touch damage, which hurts Kirby and weak enemies on contact),
 `CopyDamageScale` (2.625: a Zombie takes three Sword hits), `HelperCopyDamageScale`
 (1.75, the CPU helper's own scale: four Sword hits; see
 [Damage balance](docs/GAMEPLAY_FIDELITY.md#damage-balance-128-intentional-deviation))
-and `FlashStrength` (0.35; 1 restores the original full flash).
+`FlashStrength` (0.35; 1 restores the original full flash) and
+`DoubleArm9Clock` (true: the original's processor runs at twice the DS clock so
+it lags less among many enemies; false keeps the DS clock, see
+[The original's processor at twice the DS clock](docs/GAMEPLAY_FIDELITY.md#the-originals-processor-at-twice-the-ds-clock-150-intentional-deviation)).
 
 `Recompiler` (true) in the same file runs the original on the emulator's
 recompiler, which takes about three fifths of the interpreter's time; a load
@@ -371,7 +376,7 @@ applied to the host camera. The enemy bridge has 31 simultaneous nearby slots.
 Every host enemy, hazard, item and boss phase has not been individually tested.
 See the detailed fidelity report for measured coverage and these boundaries.
 
-Details: [ROM format](docs/ROM_FORMAT.md), [renderer](docs/RENDERING.md),
+Details: [ROM format](docs/ROM_FORMAT.md), [ROM internals](docs/ROM_INTERNALS.md), [renderer](docs/RENDERING.md),
 [runtime launch](docs/RUNTIME_LAUNCH.md), [gameplay fidelity](docs/GAMEPLAY_FIDELITY.md), [performance](docs/PERFORMANCE.md),
 [tutorial integration](docs/TUTORIALS.md), [work tracking](docs/TRACKING.md), and [work journal](MODLOG.md). Older research notes describe the initial foundation;
 the dated journal records subsequent implementation.

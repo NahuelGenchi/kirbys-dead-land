@@ -21,6 +21,20 @@ public static class NdsBackgroundEffectDecoder
 {
     public const int PixelCount = 256 * 192;
 
+    /// <summary>
+    /// The effect of a frame the bridge did not draw in full (<see cref="NdsRuntime.MainFrame"/>),
+    /// or null for a drawn frame, whose capture is to be read and decoded. The
+    /// bridge leaves a scanline undrawn only where <see cref="Decode"/> finds the
+    /// seed palette and no colour effect: a frame of such lines is the identity,
+    /// and one with other lines among them has a nonuniform palette or effect.
+    /// </summary>
+    public static NdsBackgroundEffect? Undrawn(int mainFrame) => mainFrame switch
+    {
+        1 => NdsBackgroundEffect.Identity,
+        2 => NdsBackgroundEffect.Unsupported,
+        _ => null,
+    };
+
     public static NdsBackgroundEffect Decode(ReadOnlySpan<byte> seedPalette,
         ReadOnlySpan<uint> paletteLines, ReadOnlySpan<uint> top, ReadOnlySpan<uint> metadata)
     {

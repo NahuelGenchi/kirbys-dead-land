@@ -58,6 +58,9 @@ struct Bridge {
     unfinished_passes: u32,
     /// The host asked for the main screen only (see `kssu_main_screen_only`).
     main_screen_only: bool,
+    /// The palette of an idle scanline, while the host asked for those to be
+    /// left undrawn (see `kssu_skip_idle_main`).
+    idle_palette: Option<[u8; 512]>,
     /// `proxies` already describes main RAM as it is now. Every call that can
     /// change main RAM or a proxy record clears it, so reads between two such
     /// calls share one walk of the actor lists.
@@ -137,6 +140,7 @@ pub unsafe extern "C" fn kssu_open(
         native_trace("open: ROM validated");
         let state = CStr::from_ptr(state_path).to_str().ok()?.to_owned();
         let mut saved = fs::read(&state).ok()?;
+        let clock = take_clock_trailer(&mut saved);
         let hook = take_hook_trailer(&mut saved);
         let metadata = read_metadata(&saved);
         if metadata.is_some() {
@@ -167,6 +171,9 @@ pub unsafe extern "C" fn kssu_open(
         // A diagnostic can keep the frame-end step to compare the two (#134).
         kssu_vblank_step = std::env::var_os("KSSU_STEP_AT_FRAME_END").is_none() as u32;
         native_trace("open: NDS started; loading snapshot");
+        // A new machine runs at the DS clock until the host asks otherwise.
+        kssu_arm9_shift = 0;
+        kssu_arm9_state = clock;
         if !nds.read_savestate_bytes(&mut saved) {
             return None;
         }
@@ -182,6 +189,7 @@ pub unsafe extern "C" fn kssu_open(
             far_shown: Vec::new(),
             unfinished_passes: 0,
             main_screen_only: false,
+            idle_palette: None,
             proxies_fresh: false,
         })) as *mut std::ffi::c_void)
     });
@@ -204,6 +212,44 @@ pub unsafe extern "C" fn kssu_close(handle: *mut std::ffi::c_void) {
 // point loads and continues correctly (2: `align_to_vblank`).
 extern "C" {
     static mut kssu_vblank_step: u32;
+    // The same patch's clock stage (#150): the shift the next frame brings the
+    // ARM9 clock to (1 the DS's 67 MHz, 2 twice that, 0 as it is), and the
+    // shift a savestate's ARM9 timestamps count in, which the core writes when
+    // it saves and takes when it loads.
+    static mut kssu_arm9_shift: u32;
+    static mut kssu_arm9_state: u32;
+}
+/// Follows the hook trailer of a state saved while the ARM9 ran at twice the DS
+/// clock: the shift, then the magic. A state without it is at the DS clock.
+const CLOCK_MAGIC: &[u8; 8] = b"KSSUCK01";
+fn take_clock_trailer(data: &mut Vec<u8>) -> u32 {
+    if data.len() < 12 + 16 || &data[data.len() - 8..] != CLOCK_MAGIC {
+        return 1;
+    }
+    let shift = u32at(data, data.len() - 12);
+    data.truncate(data.len() - 12);
+    if shift == 2 {
+        2
+    } else {
+        1
+    }
+}
+/// Run the emulated ARM9 at `multiple` times the DS clock from the next source
+/// frame on: 1 is the DS (67 MHz), which every machine starts at, and 2 is
+/// 134 MHz, the clock the core has for a DSi. The original does the same work
+/// in a pass either way; at 2 a pass that fills the DS's frame (a crowd, not
+/// a cartridge load) ends sooner, so the original drops fewer frames. That is a
+/// departure from the original machine (docs/GAMEPLAY_FIDELITY.md), asked for
+/// by the host only. A state saved at either clock loads at either; one saved
+/// and loaded at the same clock continues as if never saved.
+#[no_mangle]
+pub unsafe extern "C" fn kssu_arm9_clock(handle: *mut std::ffi::c_void, multiple: u32) -> i32 {
+    if handle.is_null() || !(1..=2).contains(&multiple) {
+        return -1;
+    }
+    // The clock shift is the multiple for both: 1 halves a system cycle, 2 quarters it.
+    kssu_arm9_shift = multiple;
+    0
 }
 /// Bring a machine just loaded from a state to where a step ends. A state saved
 /// at the end of a frame (the seed, or one from before #134) has 192 scanlines
@@ -230,6 +276,7 @@ pub unsafe extern "C" fn kssu_step(handle: *mut std::ffi::c_void, mask: u16, fra
     if !mute_proxy_footsteps(b.nds.main_ram_mut())
         || !keep_proxies_alive_in_water(b.nds.main_ram_mut())
         || !quicken_helper_reaction(b.nds.main_ram_mut())
+        || !keep_limited_abilities_off_mix_wheel(b.nds.main_ram_mut())
     {
         return -6;
     }
@@ -415,8 +462,13 @@ pub unsafe extern "C" fn kssu_save_state(
     };
     let b = &mut *(handle as *mut Bridge);
     let mut data = b.nds.savestate();
+    let clock = kssu_arm9_state;
     append_metadata(&mut data, &b.proxies);
     append_hook_trailer(&mut data);
+    if clock == 2 {
+        data.extend(clock.to_le_bytes());
+        data.extend(CLOCK_MAGIC);
+    }
     if fs::write(path, data).is_ok() {
         0
     } else {
@@ -480,6 +532,51 @@ pub unsafe extern "C" fn kssu_main_screen_only(handle: *mut std::ffi::c_void, en
     }
     b.main_screen_only = enabled;
     0
+}
+/// Leave engine A's backgrounds and composition out of every scanline the host
+/// would learn nothing from. The host reads that drawing only through
+/// `kssu_read_layers`, to find a palette or colour effect over the whole frame;
+/// a scanline of an enabled, unblanked unit with no colour effect control whose
+/// standard BG palette equals `palette` (512 bytes, the palette the host
+/// compares against) reads as "no effect" there. Sprites, and a scanline a
+/// display capture reads, are always drawn, so the emulated machine and its
+/// save states are the same either way (bridge test `skip_idle_main`). Null
+/// turns it off, which is the default.
+/// The top framebuffer is black on such scanlines and the layer capture keeps
+/// what an earlier frame drew: ask `kssu_main_frame` before reading either.
+/// `KSSU_DRAW_EVERY_FRAME` in the environment keeps every scanline drawn.
+#[no_mangle]
+pub unsafe extern "C" fn kssu_skip_idle_main(
+    handle: *mut std::ffi::c_void,
+    palette: *const u8,
+    len: usize,
+) -> i32 {
+    if handle.is_null() || (!palette.is_null() && len != 512) {
+        return -1;
+    }
+    let b = &mut *(handle as *mut Bridge);
+    let mut reference = None;
+    if !palette.is_null() && std::env::var_os("KSSU_DRAW_EVERY_FRAME").is_none() {
+        let mut copy = [0u8; 512];
+        copy.copy_from_slice(std::slice::from_raw_parts(palette, 512));
+        reference = Some(copy);
+    }
+    if !b.nds.set_skip_idle_main(reference.as_ref()) {
+        return -2;
+    }
+    b.idle_palette = reference;
+    0
+}
+/// How engine A's last frame was drawn (the frame whose 192 scanlines ended
+/// at the latest VBlank): 0 every scanline, so `kssu_read_layers` holds that
+/// frame; 1 none, the frame has no effect; 2 some of each, which is a frame
+/// whose palette or colour effect changed part of the way down.
+#[no_mangle]
+pub unsafe extern "C" fn kssu_main_frame(handle: *mut std::ffi::c_void) -> i32 {
+    if handle.is_null() {
+        return -1;
+    }
+    (*(handle as *mut Bridge)).nds.main_frame() as i32
 }
 fn put32(r: &mut [u8], p: usize, v: u32) {
     r[p..p + 4].copy_from_slice(&v.to_le_bytes());
@@ -1187,6 +1284,7 @@ pub unsafe extern "C" fn kssu_load_state(
     if data.len() < 16 || data.get(..4) != Some(b"MELN") {
         return -4;
     }
+    let clock = take_clock_trailer(&mut data);
     let hook = take_hook_trailer(&mut data);
     let metadata = read_metadata(&data);
     if metadata.is_some() {
@@ -1195,6 +1293,7 @@ pub unsafe extern "C" fn kssu_load_state(
     let b = &mut *(handle as *mut Bridge);
     b.proxies_fresh = false;
     native_trace("load: restoring source snapshot");
+    kssu_arm9_state = clock;
     if b.nds.read_savestate_bytes(&mut data) {
         native_trace("load: source snapshot restored");
         b.proxies = metadata.unwrap_or([Proxy::default(); PROXY_COUNT]);
@@ -1205,6 +1304,9 @@ pub unsafe extern "C" fn kssu_load_state(
         restore_hook(hook);
         if b.main_screen_only {
             b.nds.set_main_screen_only(true);
+        }
+        if let Some(palette) = b.idle_palette {
+            b.nds.set_skip_idle_main(Some(&palette));
         }
         align_to_vblank(&mut b.nds);
         0
@@ -1944,6 +2046,36 @@ fn quicken_helper_reaction(r: &mut [u8]) -> bool {
     }
     code32(r, GETTER + 20, patched[0]);
     code32(r, GETTER + 24, patched[1]);
+    true
+}
+
+// A mouthful of two or more objects runs the original Mix roulette. Its wheel
+// is the 25-byte table at 0x020BAA8C: the setup 0x020AF140 derives the start
+// and auto-stop positions from the two swallowed copies, and 0x020AF1C8 reads
+// the face shown, the stop and the result from it. Three faces are limited-use
+// abilities (Mike, Crash and Cook; Paint is not on the wheel), which Kirby
+// never gets from a swallow (#102): a stop there made one his main copy
+// (#141). Each of those faces shows the next face instead, so the wheel keeps
+// its original order, speed and length and those three last twice as long.
+// The roulette code and its other faces are untouched. The user's ROM file is
+// never changed.
+fn keep_limited_abilities_off_mix_wheel(r: &mut [u8]) -> bool {
+    const WHEEL: usize = 0x020baa8c - BASE as usize;
+    const FACES: [u8; 25] = [
+        11, 2, 22, 7, 13, 18, 15, 8, 16, 36, 4, 6, 25, 23, 14, 12, 20, 10, 3, 19, 24, 5, 17, 32, 9,
+    ];
+    const LIMITED: std::ops::RangeInclusive<u8> = 21..=24;
+    for (i, &face) in FACES.iter().enumerate() {
+        let allowed = if LIMITED.contains(&face) { FACES[i + 1] } else { face };
+        if r[WHEEL + i] != face && r[WHEEL + i] != allowed {
+            return false;
+        }
+    }
+    for (i, &face) in FACES.iter().enumerate() {
+        if LIMITED.contains(&face) {
+            r[WHEEL + i] = FACES[i + 1];
+        }
+    }
     true
 }
 

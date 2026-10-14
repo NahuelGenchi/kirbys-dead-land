@@ -339,6 +339,12 @@ public sealed class RuntimeConfig
     /// </summary>
     public bool MatchHostSpeed { get; set; } = true;
     /// <summary>
+    /// The original's processor runs at twice the DS clock, so the original
+    /// slows down less when many enemies are near Kirby (#150, a deliberate
+    /// departure from the hardware). False keeps the DS clock and its slowdown.
+    /// </summary>
+    public bool DoubleArm9Clock { get; set; } = true;
+    /// <summary>
     /// The original game's touch damage: bumping into an enemy hurts Kirby
     /// and weak enemies. False (the default) follows Dead Cells, where only
     /// enemy attacks hurt the hero and touching hurts neither side; Kirby's

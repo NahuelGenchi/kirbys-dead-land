@@ -43,6 +43,7 @@
   "AlwaysDash": true,
   "ControllerLayout": true,
   "MatchHostSpeed": true,
+  "DoubleArm9Clock": true,
   "OriginalTouchDamage": false,
   "CopyDamageScale": 2.625,
   "Recompiler": true,

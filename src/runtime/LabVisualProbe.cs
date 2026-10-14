@@ -70,8 +70,13 @@ internal static unsafe class LabVisualProbe
         var machine = KirbyMod.Instance?.NativeProvider?.Machine;
         if (machine is null || machine.State.Frame == lastPoll) return;
         lastPoll = machine.State.Frame;
-        Read(machine, top, 0); Read(machine, metadata, 2); Read(machine, palette, 4);
-        var effect = NdsBackgroundEffectDecoder.Decode(machine.SourceBgPalette, palette, top, metadata);
+        NdsBackgroundEffect effect;
+        if (NdsBackgroundEffectDecoder.Undrawn(machine.MainFrame) is { } undrawn) effect = undrawn;
+        else
+        {
+            Read(machine, top, 0); Read(machine, metadata, 2); Read(machine, palette, 4);
+            effect = NdsBackgroundEffectDecoder.Decode(machine.SourceBgPalette, palette, top, metadata);
+        }
         ActiveEffect = effect.Active;
         var hero = KirbyMod.Instance?.ActiveSession?.Hero;
         File.AppendAllText(Path.Combine(run, "visual-effects.jsonl"), JsonSerializer.Serialize(new

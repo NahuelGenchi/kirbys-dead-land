@@ -1,8 +1,8 @@
 diff --git a/src/melon/nds.rs b/src/melon/nds.rs
-index 0b039c8..ab52859 100644
+index 0b039c8..686028c 100644
 --- a/src/melon/nds.rs
 +++ b/src/melon/nds.rs
-@@ -151,6 +151,25 @@ impl Nds {
+@@ -151,6 +151,31 @@ impl Nds {
          unsafe { sys::CurrentFrame(self.0.as_ref().expect("Couldn't get ref to pin")) }
      }
  
@@ -25,14 +25,20 @@ index 0b039c8..ab52859 100644
 +
 +    pub fn set_main_screen_only(&mut self, enabled: bool) -> bool { sys::Set_MainScreenOnly(self.0.pin_mut(), enabled) }
 +
++    pub fn set_skip_idle_main(&mut self, palette: Option<&[u8; 512]>) -> bool {
++        unsafe { sys::Set_SkipIdleMain(self.0.pin_mut(), palette.map_or(std::ptr::null(), |p| p.as_ptr())) }
++    }
++
++    pub fn main_frame(&mut self) -> u32 { sys::Get_MainFrame(self.0.pin_mut()) }
++
      pub fn main_ram(&self) -> &[u8] {
          unsafe {
              let max_size = sys::MainRAMMaxSize(&self.0) as usize;
 diff --git a/src/melon/sys.rs b/src/melon/sys.rs
-index d0d2077..45270f4 100644
+index d0d2077..e8b3183 100644
 --- a/src/melon/sys.rs
 +++ b/src/melon/sys.rs
-@@ -290,6 +290,10 @@ mod sys {
+@@ -290,6 +290,12 @@ mod sys {
  
          pub unsafe fn CurrentFrame(nds: &NDS) -> u32;
  
@@ -40,6 +46,8 @@ index d0d2077..45270f4 100644
 +        pub unsafe fn Copy_LayerCapture(nds: Pin<&mut NDS>, dest: *mut u32, plane: u32, count: u32) -> bool;
 +        pub unsafe fn Copy_ObjVram(nds: Pin<&mut NDS>, dest: *mut u8, offset: u32, count: u32) -> bool;
 +        pub fn Set_MainScreenOnly(nds: Pin<&mut NDS>, enabled: bool) -> bool;
++        pub unsafe fn Set_SkipIdleMain(nds: Pin<&mut NDS>, palette: *const u8) -> bool;
++        pub fn Get_MainFrame(nds: Pin<&mut NDS>) -> u32;
          pub unsafe fn MainRAM(nds: &NDS) -> *const u8;
          pub unsafe fn MainRAMMut(nds: Pin<&mut NDS>) -> *mut u8;
          pub unsafe fn MainRAMMaxSize(nds: &NDS) -> u32;

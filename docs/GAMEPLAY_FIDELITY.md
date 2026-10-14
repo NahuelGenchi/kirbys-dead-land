@@ -14,11 +14,11 @@ in [NDS_BRIDGE.md](NDS_BRIDGE.md). The original bootstrap experiment remains in
 
 | System | Original code and host adapter |
 |---|---|
-| Clock | 33,513,982 / 560,190 source ticks per second. A display within 3% of that rate presents one original frame per host frame, like an emulator synchronized to vblank; other rates accumulate real time |
+| Clock | 33,513,982 / 560,190 source ticks per second. A display within 3% of that rate presents one original frame per host frame, like an emulator synchronized to vblank; other rates accumulate real time. With `DoubleArm9Clock` (default) the original's main processor runs at twice the DS clock; the frame rate is unchanged. See [The original's processor at twice the DS clock](#the-originals-processor-at-twice-the-ds-clock-150-intentional-deviation) |
 | Movement | The ROM updates fixed-point position, velocity and action state; the host follows its physical foot. With `MatchHostSpeed` (default) Kirby moves at the Beheaded's measured speeds: each original frame's own motion is carried on through free space (run and air control 236.5 px/s, float across at the same speed, fall 403 px/s, floating up and down at the run's tempo), the original horizontal velocity is cleared when the direction is released or reversed, and the jump keeps its 50 px but peaks after 0.25 s, as the Beheaded's does. Added motion stops short of walls and ceilings, leaves the original a full fall step above floors, follows slopes at the original's whole-pixel surface, and never applies to hits or swimming. Ladders, chains and vines climb as much faster than the original as the run, 265 px/s up and 315 px/s down (original 139 and 165, the Beheaded's average 97.5): at the original's speed the owner still found climbing too slow (#48, #51). The added climb stops a full step short of a ladder's ends, the one-way top it leads onto, ceilings and floors, so the original makes its own last steps onto and off the ladder. Ability moves keep their original motion unless they carry Kirby: a dash attack, or any move faster than the original dash, moves at the run's scale (see [Carrying ability moves](#carrying-ability-moves-40)). The original walk and dash cycles play faster with the run (up to 1.67 times, one frame a pose), so his feet cover about the ground they did natively. `false` keeps the original DS speeds (the stomp keeps the dive's) |
-| Terrain | Nearby host solids, one-way floors, slopes, ladders and water become source collision cells; all linked source objects and cached terrain probes move together when the window rebases by whole cells, while effects attached to a parent (Fire's head flame, Plasma's spark, attack effects) keep their offsets from it. Host movement of Kirby (speed match, stomp) moves only him and his terrain probes, so thrown bombs, cutters, effects and the helper keep their original paths. Over a moving host elevator the window is lifted to its surface and original objects ride with him (see [Host elevators](#host-elevators-deviation)) |
+| Terrain | Nearby host solids, one-way floors, slopes, ladders and water become source collision cells (water only where it fills a cell, see [Shallow host water](#shallow-host-water-intentional-deviation)); all linked source objects and cached terrain probes move together when the window rebases by whole cells, while effects attached to a parent (Fire's head flame, Plasma's spark, attack effects) keep their offsets from it. Host movement of Kirby (speed match, stomp) moves only him and his terrain probes, so thrown bombs, cutters, effects and the helper keep their original paths. Over a moving host elevator the window is lifted to its surface and original objects ride with him (see [Host elevators](#host-elevators-deviation)) |
 | Input | Existing host bindings become original digital buttons; ordinary source directional combinations still apply. A held direction dashes through the original double tap (`AlwaysDash`), re-tapped after a landing only in an original ground action, so Ninja's wall cling keeps its held direction (#97); a light analog tilt walks. A key bound to both Up and jump (W and the Up arrow by default) climbs at a ladder or chain, as in the host, instead of jumping first |
-| Terrain | Nearby host solids, one-way floors, slopes, ladders and water become source collision cells. Vines grown with the Vine rune (`en.inter.VineLadder`) have no collision bits, only level spots (0, where the Beheaded climbs, and 18); their cells become source ladders, and the solid blocks a vine passes through or ends under become one-way ladder tops in that column. A ladder under a solid block stops the original below it, so this deviation lets Kirby climb onto the ledge, as the Beheaded's `exitLadderTop` does; all linked source objects and cached terrain probes move together when the window rebases by whole cells, while effects attached to a parent (Fire's head flame, Plasma's spark, attack effects) keep their offsets from it. Host movement of Kirby (speed match, stomp) moves only him and his terrain probes, so thrown bombs, cutters, effects and the helper keep their original paths |
+| Terrain | Nearby host solids, one-way floors, slopes, ladders and water become source collision cells (water only where it fills a cell, see [Shallow host water](#shallow-host-water-intentional-deviation)). Vines grown with the Vine rune (`en.inter.VineLadder`) have no collision bits, only level spots (0, where the Beheaded climbs, and 18); their cells become source ladders, and the solid blocks a vine passes through or ends under become one-way ladder tops in that column. A ladder under a solid block stops the original below it, so this deviation lets Kirby climb onto the ledge, as the Beheaded's `exitLadderTop` does; all linked source objects and cached terrain probes move together when the window rebases by whole cells, while effects attached to a parent (Fire's head flame, Plasma's spark, attack effects) keep their offsets from it. Host movement of Kirby (speed match, stomp) moves only him and his terrain probes, so thrown bombs, cutters, effects and the helper keep their original paths |
 | Input | Existing host bindings become original digital buttons; ordinary source directional combinations still apply. A held direction dashes through the original double tap (`AlwaysDash`), re-tapped after a landing only in an original ground action, so Ninja's wall cling keeps its held direction (#97); a light analog tilt walks. A key bound to both Up and jump (W and the Up arrow by default) climbs at a ladder, chain or vine, as in the host, instead of jumping first |
 | Roll | Kirby's original slide is his roll and covers the Beheaded's roll: 131 px at up to 339 px/s. A Shift key bound to Dodge starts it too (see [Shift slides](#shift-slides-75)); Ctrl and the other Dodge bindings guard. Host roll-zone tunnels (collision 65) open while he slides and stay open until he leaves one entered by sliding; walking cannot enter. A slide inside a tunnel keeps rolling at full speed to its far end (see [Roll-zone tunnels roll through](#roll-zone-tunnels-roll-through-115)). The slide's fast part counts as a roll for the host's door and breakable-tile checks, and Suplex's grab lunge for its door check (see [Suplex's lunge bursts doors](#suplexs-lunge-bursts-doors-50)) |
 | Dive attack | The player's host dive binding in the air or on a ladder or chain (original jump, fall, float or climb) starts the host `DiveAttack` under its own rules. The original controller keeps its falling or exhaling animation and physics (3.5 px/frame cap) and drops straight down; the host adds 11.5 px/frame of descent through free space, 15 px a frame in all like the Beheaded's dive (about 900 px/s), and leaves the original a full fall step to make the floor contact; the host skill resolves the landing (shockwave, stun, damage, breakable floors with the Ram rune). Only what stops the original fall counts as floor: solids, slopes and one-way platforms from above, never ladders or chains. From a climb the original A kicks him off; climbing down from a ladder or vine top the original ignores A for its first frames, so while it still climbs A is pressed every other frame and the host adds no descent, and the dive passes the ladder top in the row his feet climb in ([#74](#stomp-from-a-vine-top-74)) Enemy touch damage is off while stomping and for 30 frames after landing |
@@ -110,8 +110,13 @@ copied form keeps only the exact retained shield for host parries. A shield can 
 for the equipped one (the old one drops), and the newly equipped shield becomes
 the retained shield (#31). The retained shield follows the host inventory every
 frame: it stays while equipped, otherwise the first equipped shield, or none, is
-retained. If two shields are equipped, the most recently taken one parries while
-copied. Every weapon other than a shield, and every skill, is declined in either
+retained. Kirby holds one shield (#139, owner decision 2026-10-13): the host
+equips a taken or bought shield into an empty slot, which base form always has,
+so `KirbyAbilityItems.Sync` drops every shield but the retained (most recently
+taken) one to the floor on the next host frame. Before #139 both stayed equipped
+in base form. Live run `20261013-203959` took two shields in base form and ended
+with the second equipped and the first on the floor; a shop purchase was not run
+(`docs/RUNTIME_LAUNCH.md`, "One shield"). Every weapon other than a shield, and every skill, is declined in either
 form through `InventItem.isUsefulFor`, the check the host makes
 before every item drop, altar, shop purchase and timed-door reward. The host then
 shows its own "Can't use that right now" message, leaves the item in place and
@@ -170,8 +175,9 @@ when the entity is on the ground (the cell below solid, the foot at the ground
 height, `dy` 0). `KirbyHurtbox` projects Kirby's original body onto the host hero
 for the whole `Level.update`, so `onTouch` saw the foot at `yr` 0.625 instead of
 1, the same cause as the pressure plate fix. `onTouch` now runs with the physical
-body (`Hook_CarnivorousPlant.onTouch`); the hit-area test in `fixedUpdate` keeps
-the projected hurtbox, as do the plant's own attacks on Kirby.
+body (`Hook_CarnivorousPlant.onTouch`). #113 left the hit-area test in
+`fixedUpdate` and the plant's bite on the projected hurtbox; #138 below changed
+that.
 
 Live (`docs/RUNTIME_LAUNCH.md`, "Carnivorous plants (#113)"): with the change
 Kirby dropped onto a plant, the plant announced, closed and bit him twice, 76 →
@@ -180,33 +186,88 @@ and no close, bump or damage. Not run: a plant under a copied attack, Kirby
 walking onto one, plants spawned by the Gardener boss (`fromGardenerBoss`), and
 normal play.
 
-#### The plant's throw (#132)
+#### The plant's throw (#132, #138)
 
-Owner report 2026-10-13 (screencast): the plant closed on Kirby and bit him, but
-he was dropped in place instead of being thrown upward. After closing,
-`onTouch` calls `bumpEntity`, which clears the entity's velocities and calls
-`bump(0, -1.5)`: 1.5 cells a fixed step, decaying by `Entity.bumpFrict` (0.82)
-each step while gravity pulls the hero back. The provider holds the host hero's
-velocities at zero, because the original machine owns Kirby's motion, so the
-bump was discarded.
+Owner reports 2026-10-13 (two screencasts): the plant bit Kirby and dropped him
+in place (#132); after #132 it threw him, but not as it throws the Beheaded:
+sometimes high, sometimes a hop, sometimes he sat on the closed plant (#138).
 
-Intentional deviation: the original has no such impulse, so the host replays it
-(`KirbyBumps`, `BumpLaunch`). The bump the host left on the hero is read after
-`bumpEntity` (so its bump window, immunity and resistance still apply) and
-becomes ascent added before each original frame: 18.9 px on the first, decaying
-by √0.82 a frame, 200 px in all before gravity, the same distance as the host's
-bump. The original controller finds itself in the air and falls on its own;
-Kirby keeps control and can float. A ceiling ends the launch, as the host clears
-a bump there; so do a stomp, a ladder, death, a cinematic and a level change.
+What the host does to the Beheaded (bytecode of `en.ltrap.CarnivorousPlant` and
+`tool.mainSkills.AirJump*`, and lab recordings of him, `docs/RUNTIME_LAUNCH.md`):
 
-Live (`docs/RUNTIME_LAUNCH.md`, "Carnivorous plants"): Kirby rose 115.5 px (4.8
-cells) in 14 frames. With no input he fell back onto the still closed plant
-0.63 s after the first bump and was bumped again (58 px, from a full-speed
-fall), then bitten when it reopened. The Beheaded's own height and air time on
-this plant were not measured, so whether he also returns inside the bump
-window is unknown. Only this plant's bump is replayed; other host bumps of the
-hero are still discarded. Not run: a launch under a ceiling, with input, while
-floating or copied, and normal play.
+- An open plant holds him (cells 303). Standing on it starts a 0.5 s timer;
+  `close()` then bites what is in the hit area, clears his velocities and
+  `bump(0, -0.5)`s him (a 34 px hop), and the plant stays shut 1.25 s. If he
+  leaves the hit area during the 0.5 s it snaps shut at once, without a bite.
+- While shut it holds nobody (cells 300: bit 8 without the solid bits) and
+  `bumpEntity` throws the hero who touches it, at most once every 0.5 s (the
+  bite starts that delay too): velocities cleared, `bump(0, -1.5)`. The touch is
+  the level's circular collision of his body (radius 16.8, height 54) with the
+  plant's (radius 24, height 24).
+- An air jump started within two cells to the side and 48 px above the plant's
+  position calls `bumpEntity` as well.
+- Per 30 Hz step, in cells: `v = dy + 0.065; y += v − bump; dy = 0.9 v;
+  bump *= 0.94`. From 1.5 that is 242.2 px in 17 steps (recorded steps match to
+  five decimals); from 0.5, 34.4 px.
+
+#132 replayed the bump as ascent added to the original's own motion with a
+decay read from the wrong field (0.82): 115 px from a stand and 58 px from a
+fall. It also left the touch to Kirby's projected hurtbox (radius 6, height 12),
+which a plant reaches only near its centre, kept the closed plant solid
+(`TileAt` took bit 8 alone for a one-way platform) and dropped the bite's hop.
+
+Intentional deviations, all host-side because the original has no such trap
+(`KirbyBumps`, `BumpLaunch`, `KirbyHurtbox.AsBeheaded`, `KirbyNdsProvider`):
+
+- A bump is replayed with the host's own steps, half a step each original
+  frame, with the original's vertical speed held at zero and Kirby's height
+  taken from the host while it lasts: 242.2 px from a stand, a fall or a float.
+  At the top the original controller falls on its own. A ceiling ends it, as do
+  a stomp, a ladder, death, a cinematic, a level change, and a jump press (the
+  Beheaded's air jump clears his bump too).
+- The plant's `fixedUpdate` and `close` see the Beheaded's body (16.8, 54) at
+  Kirby's foot instead of the projected hurtbox, and a closed plant tests that
+  circle against its own each step and calls its `onTouch`. This reverses
+  #113's choice for the hit area and the bite: the plant is a platform sized for
+  the Beheaded, and with Kirby's hurtbox it ignored him over most of its width.
+  Other attacks on Kirby keep the projected hurtbox.
+- The bite's hop is replayed (0.5 cells a step), and for that bite's hurt recoil
+  (`0F1D`) Kirby's horizontal speed is held at zero: the original recoil carried
+  him about 1 px a frame sideways, off the plant before it could throw him,
+  where the Beheaded stays in place.
+- The original ends a long fall with a small hop off the floor (about 24 px, in
+  its fall action). That hop left the plant's hit area, so the plant snapped
+  shut without biting and threw him again, for as long as he stayed. While the
+  hop lasts the plant is shown Kirby on the floor he hopped from; the hop itself
+  is untouched.
+- A jump press in the air within the host's reach of a closed plant throws
+  Kirby and is withheld from the original until released, so no float starts.
+- `TileAt` reports a one-way platform only for bit 8 with a solid bit; a closed
+  hanging plant is empty, as for the Beheaded.
+
+Live (`docs/RUNTIME_LAUNCH.md`, "Carnivorous plants", #138 table), Kirby against
+the Beheaded on generated plants: hop 34.0 / 34.4 px; throw 242.2 / 242.2 px;
+bite to throw 28–35 frames (0.47–0.58 s, the longest at the plant's edge, where
+he must sink below its surface to touch) / 0.5 s; Kirby bitten then thrown at 0,
+13, 26, 30 and 34 px from the centre (the Beheaded thrown at 13, 26 and 34);
+jumping off snaps the plant shut with no bite and falling back on it throws
+him, for both.
+
+Known differences that remain:
+
+- Kirby falls back at the original's fall speed: peak to plant in about 0.8 s
+  against the Beheaded's 0.97 s, so a bite-and-throw cycle is about 2.4 s
+  against 2.5–2.9 s.
+- The Beheaded's air-jump bounce rose 262 px in the one recording (his own air
+  jump adds to the bump); Kirby's is the plain 242 px.
+- The host's stun and control lock on the bitten or thrown hero (affects 8 and
+  45) are not translated; Kirby can steer after the bite's recoil ends.
+- Only this plant's bumps are replayed; other host bumps of the hero are still
+  discarded.
+
+Not run: a ceiling above the plant, a plant on the ground (`placedOnGround`),
+Gardener-boss plants, Kirby floating or with a copy ability on a plant, walking
+onto one, and normal play.
 
 ### Star projectiles
 
@@ -889,6 +950,16 @@ the stored one.
   floor ability items still replace host weapons and skills like the others, but
   are never paired with a source proxy, so the original inhale does not pull them
   in; their item card names Interact and F instead of the copy controls.
+- **Not on the Mix roulette.** A mouthful of two or more objects runs the
+  original roulette, whose wheel has its own faces, among them Mike, Crash and
+  Cook (not Paint). A stop there made the limited ability Kirby's main copy
+  (#141, owner screenshot of 2026-10-13: Cook after swallowing enemies). The
+  bridge now shows the next face in their place (Yo-Yo, Stone, Fighter; see
+  [the bridge](NDS_BRIDGE.md#verification-and-remaining-limits)): the wheel keeps
+  its original order, speed and 25 positions, and those three faces last twice
+  as long. Left to stop by itself on one of them, the original's own turn count
+  ends the roulette after two turns instead of four. A copy held from before
+  the change stays until it is used.
 - **Taken with Interact.** Interact (R by default) on such an item takes it into
   the F slot (`Rules.Stored`, item kept by `KirbyFSlot`) with its full uses: three
   for Mike, one for the others. A stored one is replaced and its item is put back
@@ -941,7 +1012,10 @@ Live runs `20261009-010357` and `20261009-010718` (see
 [RUNTIME_LAUNCH.md](RUNTIME_LAUNCH.md#f-slot-2026-10-09)) took and fired all four
 abilities with real Interact and F presses from a swallowed Sword, killed real
 Zombies with Crash and Cook (one food item), counted Mike's three shouts, dropped
-a replaced Paint back on the floor, and restored the slot from a host save. Not
+a replaced Paint back on the floor, and restored the slot from a host save.
+The roulette (#141) is covered headless only: bridge case `mix_no_limited`
+(no limited face shown, the three former stops give Stone, Fighter and Yo-Yo);
+no live two-enemy mouthful was run. Not
 run: a press lost to a hit (the live hit during the switch did no damage), F
 during a stomp, on a ladder or under water, the helper, a room change during the
 attack, Elite or Boss targets, and normal play with `./play-kirby`.
@@ -999,6 +1073,47 @@ attack enemies and was much slower than Kirby.
   peak speed the run's, stops at a wall). **No live game check was run**, so the
   feel in the running host game, other abilities' helpers and a helper in water
   or on a ladder are unverified.
+
+### The original's processor at twice the DS clock (#150, intentional deviation)
+
+Owner decision of 2026-10-13. The DS runs the original's main processor (the
+ARM9) at 67 MHz. When a logic pass does not fit in a frame the original lags:
+that frame ends inside the pass, and the mod holds Kirby and the terrain window
+for it (#134). A Kirby room rarely reaches that load; a Dead Cells room with
+many enemies near Kirby does.
+
+- **Change.** With `DoubleArm9Clock` (default `true`) the bridge runs the ARM9
+  at 134 MHz, the step the emulator already has for a DSi. The second
+  processor, the video and sound hardware and the cartridge keep the DS's
+  timing. `false` keeps the DS clock and its lag. Tools and tests run at the
+  DS clock.
+- **Frames that fit are the same frames.** 240 frames of Sword Kirby running,
+  attacking and jumping without a crowd give the same trace at both clocks
+  (bridge case `arm9_clock`).
+- **What ends sooner.** Passes that waited for the processor. With 31 proxies
+  around Kirby, 4 of 300 frames ended inside a pass at the DS clock and none at
+  twice it. An ability set through `SetAbility` (the F slot) takes B one frame
+  sooner: Crash's revert is seen at frame 266 instead of 267, and with one idle
+  frame after the change both clocks give the same 533 frames.
+- **What does not.** Passes that wait for the cartridge: a swallowed Sword
+  costs three late frames at both clocks. And the freeze of #151, where one
+  attack that hits 24 or more enemies stops the original at either clock.
+- **Sound.** The mixed samples can differ while a sound plays: over 240 frames
+  the only memory that differed between the clocks was the original's two
+  sound capture buffers (4 KB at `0x02048BE0`, in 11 of 30 samples). Main RAM
+  otherwise, the I/O registers, palette, OAM, VRAM, the layer captures and both
+  screens were identical. Not listened to.
+- **Evidence.** Bridge: `arm9_clock` in `tools/nds_tests.py`, and the 85 older
+  cases run once at twice the clock (`--arm9-clock 2`): 83 give the same
+  result; `f_slot` and `main_screen_only` change for the two reasons above
+  (docs/NDS_BRIDGE.md, The ARM9's clock). Live, isolated profile, one run per
+  clock: 20 Zombies hit by one Sword swing, 7 frames ended inside a pass in a
+  minute at the DS clock and 5 at twice it (runs `20261014-002620`,
+  `20261014-002418`); the `movement` plan, none at either (`20261014-002835`,
+  `20261014-003037`). Costs are in docs/PERFORMANCE.md.
+- **Not verified.** Windowed play with a controller, the sound by ear, bosses
+  and abilities other than Sword and Crash at twice the clock, and more than
+  one live run per configuration.
 
 ### Damage balance (#128, intentional deviation)
 
@@ -1176,6 +1291,42 @@ therefore points that one table entry at the original return-zero stub
 `0x020CF36C` (`mov r0,#0; bx lr`) in emulated RAM, after validating both the stub
 and the entry. Kirby's swimming, the exit-water handler and other enemies' water
 reactions are unchanged. Water itself still works on Kirby as before.
+### Shallow host water (intentional deviation)
+
+Issue #144. For the host, water is decoration. `level.LevelMap.getWaterSurfaceY`
+returns a cell's surface in pixels, `(room.y + marker.cy + marker.yr) * 24`, for
+every cell of the water marker's rectangle; `Entity.fixedUpdate` calls
+`onEnterWater` and the splash once an entity's feet are below it and changes
+nothing in its movement. The Beheaded never swims. The runtime used to export
+every free cell with a surface as an original water tile, so the partly filled
+top row of a pool counted as a whole tile. In the Mama Tick arena (`SwampHeart`)
+the floor is covered by 12 px of water over 82 columns. On the old rule Kirby
+swam there (`0815`) for about 36 frames after a fall or a jump, a jump press
+gave a swimming stroke for 8 frames before the jump, and a held direction
+walked instead of dashing.
+
+The owner decided that Kirby swims only where the water would cover him. A cell
+is now original water only when the host surface is at or above its top
+(`SpeedMatch.Submerged`), which is a whole tile, the only kind the original has.
+Kirby (22 px) walks, dashes, jumps and lands as on dry floor in water less than
+24 px deep, with the host's own splashes; in the cells a deeper pool fills he
+swims as before. Enemies in shallow water are no longer in original water
+either. Depths measured in generated levels on 2026-10-13: 12 px in `SwampHeart`;
+18 px in `PrisonStart` (5 columns), `SewerShort` (92), `Swamp` (38), and most
+columns of `Greenhouse`, `Shipwreck` and `SewerDepths`; 42 px in `Greenhouse`
+and `SewerDepths`; 90, 114 and 330 px in `SewerDepths` and 282 px in `Shipwreck`.
+`StiltVillage` had none. Levels are generated, so other seeds can differ.
+
+Live, isolated profile (`repros/water-20261013`, see
+[RUNTIME_LAUNCH.md](RUNTIME_LAUNCH.md#shallow-water-144)): in the arena Kirby
+stood, dashed, jumped (`070D` on the press), landed (`0507`) and stood, with no
+`0815`; the same in 18 px of water in `Shipwreck` and `Greenhouse`, and no
+`0815` in `SewerShort`.
+In a 42 px pool (`Greenhouse`) and a 114 px one (`SewerDepths`) he still swam
+after the jump. Not run: the Mama Tick fight itself beyond the first seconds,
+copy abilities and the helper in shallow water, a pool between 18 and 42 px,
+normal play. Toxic water still hurts Kirby through the host (seen in both
+sewers).
 ### Ice freezes with the host status (intentional deviation)
 
 Issue #42. In the original game an enemy reduced to zero HP by Ice becomes a
@@ -1736,7 +1887,7 @@ addition built from host items and the original inhale and swallow.
   he discards his copy first.
 - **Weapon slot.** Once per host frame `KirbyAbilityItems.Sync` keeps the slots in
   step with the copy: the copy's item sits in one non-shield slot, and base form
-  has none. The swallowed floor item itself goes into the slot; a copy from an
+  has none. A second shield is dropped first (#139). The swallowed floor item itself goes into the slot; a copy from an
   enemy gets a new base item of its ability at the level's loot level. The slot
   is the one already holding that item, else a slot holding another non-shield
   weapon (removed: it is unusable to Kirby), else an empty slot, else a shield

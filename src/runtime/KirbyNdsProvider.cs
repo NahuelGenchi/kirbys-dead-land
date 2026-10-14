@@ -30,6 +30,21 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
     private bool slideHeld;
     private readonly StompController stomp = new();
     private readonly BumpLaunch launch = new();
+    // The held jump press that a plant threw; it does not reach the original.
+    private bool bouncePress;
+    // A plant's bite: source frames left for its hurt recoil to begin, then
+    // whether that recoil is running. Kirby keeps his column for both.
+    private const int BiteWait = 4;
+    private int biteWait;
+    private bool biteRecoil;
+    private double? bounceFloor;
+    /// <summary>
+    /// The original ends a long fall with a small hop off the floor, still in
+    /// its fall action. The Beheaded just lands: host code that waits for a
+    /// hero to stand (a carnivorous plant) is shown the floor Kirby hopped
+    /// from, in host pixels, while the hop lasts.
+    /// </summary>
+    internal double? BounceFloor => bounceFloor;
     private readonly SpeedMatch.ActionFilter motionActions = new();
     private readonly KirbyHelperMatch helperMatch = new();
     private readonly AnimationPacer walkCycle = new();
@@ -109,13 +124,20 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
     /// <summary>
     /// A host bump threw the hero upward at <paramref name="cellsPerStep"/> cells
     /// a fixed step. The original machine owns Kirby's motion, so the bump is
-    /// replayed around it as added ascent (see BumpLaunch).
+    /// replayed around it as added ascent (see BumpLaunch). The host has
+    /// cancelled the hero's dive by now; so is Kirby's stomp.
+    /// <paramref name="bite"/>: the bump comes with a hit (the plant's bite).
+    /// The host clears the hero's velocities and he stays where he is, to be
+    /// thrown when the plant's own delay ends; the original's hurt recoil would
+    /// carry Kirby off the plant sideways, so it is held to the vertical.
     /// </summary>
-    public void Launch(double cellsPerStep)
+    public void Launch(double cellsPerStep, bool bite = false)
     {
-        if (nds is null || stomp.Active) return;
+        if (nds is null) return;
+        if (stomp.Active) CancelStomp();
         launch.Start(cellsPerStep * 24);
-        Diagnostic?.Invoke("bump-launch", new { cellsPerStep, active = launch.Active, action = nds.Action });
+        if (bite) biteWait = BiteWait;
+        Diagnostic?.Invoke("bump-launch", new { cellsPerStep, bite, active = launch.Active, action = nds.Action });
     }
     /// <summary>True while the original death animation finishes after the host destroyed the hero.</summary>
     public bool PlayingDeath => deathLevel is not null;
@@ -141,8 +163,16 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         // Migrate private development checkpoints written before bodyHei was
         // identified as a cell count. These values are native Hero defaults.
         if (originalBody.BodyHeight > 4) originalBody = new(16.8, 54, 2.25, originalBody.MaxLife);
-        nds ??= new NdsRuntime(Path.Combine(modRoot, "libkssu_bridge.so"), config.RomPath, config.SeedStatePath);
+        if (nds is null)
+        {
+            nds = new NdsRuntime(Path.Combine(modRoot, "libkssu_bridge.so"), config.RomPath, config.SeedStatePath);
+            // The upper screen is read only for a screen-wide effect, and only
+            // by readers that ask whether the frame was drawn.
+            nds.SkipIdleScreen(true);
+        }
         LabActivationTrace.Mark("Native runtime ready");
+        // #150: the owner's choice of clock for the original's processor.
+        nds.DoubleClock(config.DoubleArm9Clock);
         session.Rules.Restore(lastSession?.Rules.AbilityId, lastSession?.Rules.RetainedShieldId ?? session.Rules.RetainedShieldId,
             lastSession?.Rules.AbilityEmpowered ?? false, lastSession?.Rules.PendingEmpowerment);
         // The F slot carries over like the copy. So does a press in progress while the
@@ -434,7 +464,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         // A new source session counts from zero again.
         if (unfinished < paceUnfinished) paceUnfinished = 0;
         Log?.Invoke(string.Create(System.Globalization.CultureInfo.InvariantCulture,
-            $"Kirby pacing: host {paceFrames / span:0.0} fps, original {paceSteps / span:0.0} fps, locked {100.0 * paceLocked / paceFrames:0}%, frames without a step {paceIdle}, with several {paceDoubled}, original step {paceStepTicks * ms / Math.Max(1, paceSteps):0.00} ms, render {paceRenderTicks * ms / paceFrames:0.00} ms, original frames ended inside a pass {unfinished - paceUnfinished}."));
+            $"Kirby pacing: host {paceFrames / span:0.0} fps, original {paceSteps / span:0.0} fps, locked {100.0 * paceLocked / paceFrames:0}%, frames without a step {paceIdle}, with several {paceDoubled}, original step {paceStepTicks * ms / Math.Max(1, paceSteps):0.00} ms, render {paceRenderTicks * ms / paceFrames:0.00} ms, original frames ended inside a pass {unfinished - paceUnfinished}, original clock x{nds?.ClockMultiple ?? 1}."));
         paceStarted = now;
         paceUnfinished = unfinished;
         paceFrames = paceSteps = paceLocked = paceIdle = paceDoubled = 0;
@@ -625,11 +655,23 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
             BeginStomp(hero, action, centerY + 14.5);
         previousInput = raw;
         previousDiveButton = diveButton;
+        // The Beheaded's air jump over a closed carnivorous plant is thrown by
+        // the plant; any other air jump of his ends a bump. Kirby's jump press
+        // in the air is his air jump: a thrown press does not also inflate him.
+        if ((raw & 1) == 0) bouncePress = false;
+        else if (jumpPressed && !stomp.Active)
+        {
+            if (!KirbyActions.OnGround(action) && action != KirbyActions.Climb && KirbyBumps.AirJump(hero)) bouncePress = true;
+            else launch.Reset();
+        }
+        if (bouncePress) mask &= unchecked((ushort)~1);
         if (stomp.Active) centerY += stomp.Descent(FreeBelow(map, hostX, centerY + 14.5), action);
         // A host bump carries Kirby up before the original frame; a stomp or a ladder ends it.
+        bool launching = false;
         if (stomp.Active || action == KirbyActions.Climb) launch.Reset();
         else if (launch.Active)
         {
+            launching = true;
             terrainMap = map; terrainRollThrough = rollZones.Open;
             centerY -= launch.Ascent(SpeedMatch.FreeAbove(terrain ??= MatchTerrain, hostX, centerY + 14.5));
         }
@@ -699,6 +741,13 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
             mask = dash.Filter(mask, config.AlwaysDash && !KirbyInput.AnalogWalk, lastVx, lastVy, action);
             // A recoil from a hit this frame keeps its original velocity.
             if (matched && !hurt) MatchVelocity(action, motionActions.Effective, direction);
+            // The host cleared the hero's velocities for the bump, which carries him alone.
+            if (launching && !hurt) nds.Write(nds.State.Player + 0x8A, stackalloc byte[2]);
+            if (biteWait > 0 || biteRecoil)
+            {
+                nds.Write(nds.State.Player + 0x88, stackalloc byte[2]);
+                nds.Write(nds.State.Player + 0x98, stackalloc byte[2]);
+            }
         }
         PaceWalkCycle(action, matched);
         if (fAttack) mask |= 2;
@@ -752,6 +801,9 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         foreach (var swallowed in enemies.Swallowed) mouthfulItems.Add(swallowed, KirbyAbilityItems.AbilityOf(swallowed.Item)!);
         enemies.Swallowed.Clear();
         NdsState state = nds.State;
+        // The original's landing hop: its falling speed turns upward on a floor, still in the fall action.
+        if (nds.Action != KirbyActions.Fall || launch.Active || stomp.Active) bounceFloor = null;
+        else if (action == KirbyActions.Fall && lastVy > 0 && state.VyRaw < 0) bounceFloor = state.Y + originY * 24 + 14.5 + lift;
         lastVx = state.VxRaw; lastVy = state.VyRaw;
         // A held slide runs at full speed whichever part it was entered in.
         int slideVx = slideHold.Holding && state.VxRaw != 0
@@ -762,6 +814,12 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         terrainMap = map; terrainRollThrough = rollThrough;
         if (matched)
             (x, feet) = SpeedMatch.Move(motion, motionActions.Direction(direction), slideVx, hostX, centerY + 14.5, x, feet, terrain ??= MatchTerrain);
+        // During a bump the height is the host's alone: the gravity the original
+        // adds to its zeroed speed each frame would shorten the Beheaded's rise.
+        if (launching && !hurt) feet = centerY + 14.5;
+        // A plant's bite does not move the Beheaded sideways.
+        if (after == KirbyActions.Hurt && (biteWait > 0 || biteRecoil)) { biteRecoil = true; biteWait = 0; x = hostX; }
+        else { biteRecoil = false; if (biteWait > 0) { biteWait--; x = hostX; } }
         // The helper keeps pace with him (#105); a stomp is Kirby's alone.
         if (config.MatchHostSpeed)
             helperMatch.Finish(nds, originX, originY, (state.Graphic & 0xFFFF) == 0xFFFF, terrain ??= MatchTerrain);
@@ -831,7 +889,10 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         bool passed = stomp.Active && cy <= stompIgnoreRow;
         ushort tile = (c & 512) != 0 ? ((c & 1024) != 0 ? (ushort)133 : (ushort)132)
             : (c & RollZoneBit) != 0 ? (rollThrough ? (ushort)0 : (ushort)3)
-            : (c & 8) != 0 ? (passed ? (ushort)0 : (ushort)131)
+            // A one-way platform is a solid cell with bit 8 (11 in level maps). Bit 8
+            // alone holds nobody: a closed hanging carnivorous plant keeps it and
+            // drops its solid bits, and the Beheaded falls through it.
+            : (c & 8) != 0 && (c & 3) != 0 ? (passed ? (ushort)0 : (ushort)131)
             : (c & 3) != 0 ? (ushort)3
             : (c & 16) != 0 ? (passed ? (ushort)0 : (ushort)134) : (ushort)0;
         // A grown vine is a ladder, and the solid blocks it passes through or
@@ -845,7 +906,8 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         {
             if (!water.TryGetValue((cx, cy), out bool submerged))
             {
-                submerged = map.getRoomAt(cx, cy) is not null && map.getWaterSurfaceY(cx, cy) > 0;
+                // Only a cell the water fills: Kirby walks through shallow host water (SpeedMatch.Submerged).
+                submerged = map.getRoomAt(cx, cy) is not null && SpeedMatch.Submerged(map.getWaterSurfaceY(cx, cy), cy);
                 water[(cx, cy)] = submerged;
             }
             if (submerged) tile = 130;
@@ -1156,6 +1218,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         forcedDiveStartFeetY = double.NaN;
         // Whatever ends a stomp (death, a cinematic, a new level or run) ends a bump launch too.
         launch.Reset();
+        biteWait = 0; biteRecoil = false; bounceFloor = null;
         var dive = activeDive;
         if (stomp.Active || dive is not null) dash.Reset();
         stomp.Reset();
