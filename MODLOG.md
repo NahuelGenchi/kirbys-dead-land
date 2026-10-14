@@ -1973,6 +1973,32 @@ the all-ability rendering tests as full gameplay acceptance.
   pass on the new bridge. The shared bridge needs `tools/nds_build.py` and a
   new staging after the merge.
 
+## 2026-10-13 — ROM internals (#146)
+
+- Read the whole program, not one feature: a private capstone index of the
+  5,996 functions loaded during play, and a private instrumented copy of the
+  bridge (`repros/re-debug`: instruction histogram, watchpoints, a register
+  breakpoint, stage timers, ARM9 clock, 2D renderer and recompiler switches).
+  Record: `docs/ROM_INTERNALS.md`.
+- Found: the overlays present in play and the five addresses enemy overlays
+  share (one species a slot); the frame's call chain and its 34.7% idle load;
+  Kirby's action table `0x02131688`, the move pointer `R+0x808` and the
+  per-ability move tables behind `SetAbility`; actions `0E1B` (ability change)
+  and `1021` (death); the vitals record every hit group is built from; the
+  object type table `0x0209E10C`, file codes and the spawner; health, copy
+  ability and touch damage of 38 enemy species; the 12-bit random routine
+  `0x0200B8A4`; 566 named sound sequences.
+- Measured, headless: with 24 to 31 proxies the original ends 2 to 5 frames in
+  360 inside its logic pass, none with the emulated ARM9 clock doubled;
+  `kssu_step` 2.41 ms idle and 3.71 ms in that crowd on the interpreter, 1.31
+  and 1.71 ms on the recompiler with fast memory off, with byte-identical
+  600-frame traces of Kirby.
+- Changed: documentation only. No bridge, runtime or test change; the fix
+  candidates are listed in the record for their own issues.
+- Not run: `tools/nds_tests.py` or any verifier on the recompiler or the
+  doubled clock, any live game check, the owner's play launcher. Enemy numbers
+  are stored values read statically; only Waddle Dee's were seen applied.
+
 ## 2026-10-13 — Kirby holds one shield (#139)
 
 - Owner report with a screenshot: base Kirby with a shield in each weapon slot
