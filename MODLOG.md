@@ -2018,3 +2018,25 @@ the all-ability rendering tests as full gameplay acceptance.
   floor.
 - Not run: a shop purchase, a resumed save with two shields, a parry with the
   kept shield, the HUD on screen, the owner's play launcher.
+
+## 2026-10-13 — the Mix roulette gave Cook as the main copy (#141)
+
+- Owner screenshot (play log `20261013-201446`): Kirby wears Cook's hat and
+  the main copy slot shows Cook after swallowing enemies. Limited abilities
+  (#102) must only come from a floor item and go to the F slot.
+- Cause, reproduced headless on the shared bridge: no enemy carries a limited
+  ability, but a mouthful of two or more runs the original Mix roulette, whose
+  wheel (25 bytes at `0x020BAA8C`, read by `0x020AF1C8`) has Mike, Crash and
+  Cook among its faces. With Sword and Beam proxies, B on frames 111, 139 and
+  167 gave Crash, Cook and Mike.
+- Fix in the bridge (`keep_limited_abilities_off_mix_wheel`, validated and
+  applied each step): each of the three faces shows the next one (Yo-Yo,
+  Stone, Fighter). Order, speed, the 25 positions and the roulette code are
+  the original's. Side effect: left alone on a doubled face the original's
+  turn count stops the roulette after two turns instead of four.
+- New case `mix_no_limited` in `tools/nds_tests.py`; it fails on the unchanged
+  bridge. Bridge built in an isolated crate, shared binary untouched: 86 cases
+  passed one at a time.
+- Not run: a live game check, `scripts/check.py` (it does not cover the bridge
+  or its tests). A Cook already held as the main copy stays until used. The
+  shared bridge needs `tools/nds_build.py` and a new staging after the merge.

@@ -894,6 +894,16 @@ the stored one.
   floor ability items still replace host weapons and skills like the others, but
   are never paired with a source proxy, so the original inhale does not pull them
   in; their item card names Interact and F instead of the copy controls.
+- **Not on the Mix roulette.** A mouthful of two or more objects runs the
+  original roulette, whose wheel has its own faces, among them Mike, Crash and
+  Cook (not Paint). A stop there made the limited ability Kirby's main copy
+  (#141, owner screenshot of 2026-10-13: Cook after swallowing enemies). The
+  bridge now shows the next face in their place (Yo-Yo, Stone, Fighter; see
+  [the bridge](NDS_BRIDGE.md#verification-and-remaining-limits)): the wheel keeps
+  its original order, speed and 25 positions, and those three faces last twice
+  as long. Left to stop by itself on one of them, the original's own turn count
+  ends the roulette after two turns instead of four. A copy held from before
+  the change stays until it is used.
 - **Taken with Interact.** Interact (R by default) on such an item takes it into
   the F slot (`Rules.Stored`, item kept by `KirbyFSlot`) with its full uses: three
   for Mike, one for the others. A stored one is replaced and its item is put back
@@ -946,7 +956,10 @@ Live runs `20261009-010357` and `20261009-010718` (see
 [RUNTIME_LAUNCH.md](RUNTIME_LAUNCH.md#f-slot-2026-10-09)) took and fired all four
 abilities with real Interact and F presses from a swallowed Sword, killed real
 Zombies with Crash and Cook (one food item), counted Mike's three shouts, dropped
-a replaced Paint back on the floor, and restored the slot from a host save. Not
+a replaced Paint back on the floor, and restored the slot from a host save.
+The roulette (#141) is covered headless only: bridge case `mix_no_limited`
+(no limited face shown, the three former stops give Stone, Fighter and Yo-Yo);
+no live two-enemy mouthful was run. Not
 run: a press lost to a hit (the live hit during the switch did no damage), F
 during a stomp, on a ladder or under water, the helper, a room change during the
 attack, Elite or Boss targets, and normal play with `./play-kirby`.
