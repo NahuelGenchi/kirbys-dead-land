@@ -2380,8 +2380,12 @@ const HOOK_WORDS: usize = 3 + 4 + 15;
 /// Arm one original ability change. Returns 0 when armed, -2 while the original
 /// would refuse it (the give-ability routine's own test: an active player standing,
 /// walking, airborne or swimming, field 2 == 1 and action group 4, 6, 7 or 8;
-/// an attack, a mouthful, a slide, a recoil or a ladder are other groups), -3
-/// while a change is still pending, and -4 when the player is not the expected object.
+/// an attack, a slide, a recoil or a ladder are other groups) or while Kirby holds
+/// a mouthful, -3 while a change is still pending, and -4 when the player is not
+/// the expected object. A mouthful keeps the groups of standing, walking and
+/// jumping; after `SetAbility` the give-ability routine drops it (`0x020AEF70`
+/// sets field 4 back to 1), which this call does not do, so it refuses instead
+/// and the mouthful is spat or swallowed first (#158).
 #[no_mangle]
 pub unsafe extern "C" fn kssu_set_ability(handle: *mut std::ffi::c_void, ability: u8) -> i32 {
     if handle.is_null() || !(1..=25).contains(&ability) {
@@ -2400,13 +2404,57 @@ pub unsafe extern "C" fn kssu_set_ability(handle: *mut std::ffi::c_void, ability
         return -4;
     }
     let record = (PLAYER_RECORD - BASE) as usize;
-    if inhaling || r[record + 0x12] != 1 || !matches!(r[record + 0x19], 4 | 6 | 7 | 8) {
+    if inhaling
+        || r[record + 0x12] != 1
+        || !matches!(r[record + 0x19], 4 | 6 | 7 | 8)
+        || r[record + 0x14] == CARRY_MOUTHFUL
+    {
         return -2;
     }
     kssu_hook_args = [actor, PLAYER_RECORD, ability as u32, 0];
     kssu_hook_fn = SET_ABILITY;
     kssu_hook_at = PLAYER_UPDATE;
     kssu_hook_state = 1;
+    0
+}
+/// Player field 4 (record +0x14) while Kirby holds a mouthful.
+const CARRY_MOUTHFUL: u8 = 2;
+/// Kirby's move as the original keeps it (#158). The original's move selectors
+/// (the stand's is `0x0210EA60`) and its give-ability routine read player field 4,
+/// `carry`: 2 while Kirby holds a mouthful, from the stand after the catch through
+/// a swallow until the copy loads, or a spit until the star leaves, and 1 when he
+/// holds nothing. The mouth count behind `kssu_action_flags` bit 1 stays set after
+/// a swallow until the next inhale; `carry` does not. `descriptor` is the running
+/// move (record +0x808), a 24-byte descriptor, and `table` the copy's move table
+/// (+0x800, 0 for Normal): `(descriptor - table) / 24` indexes a copy's own move,
+/// while standing, walking, jumping and their mouthful variants come from tables
+/// every copy shares (mouthful stand `0x02131508`, walk `0x02131148`, jump
+/// `0x021311C0`, fall `0x02131238`, landing `0x021310E8`).
+#[repr(C)]
+#[derive(Default, Copy, Clone)]
+pub struct KssuMove {
+    /// The action code, group then id (record +0x18, 0x020BAF80).
+    pub action: u16,
+    pub carry: u8,
+    /// The copy byte, 1 for Normal.
+    pub ability: u8,
+    pub descriptor: u32,
+    pub table: u32,
+}
+#[no_mangle]
+pub unsafe extern "C" fn kssu_move(handle: *mut std::ffi::c_void, dest: *mut KssuMove) -> i32 {
+    if handle.is_null() || dest.is_null() {
+        return -1;
+    }
+    let r = (&*(handle as *mut Bridge)).nds.main_ram();
+    let record = (PLAYER_RECORD - BASE) as usize;
+    *dest = KssuMove {
+        action: u16at(r, record + 0x18),
+        carry: r[record + 0x14],
+        ability: r[record + 0x13],
+        descriptor: u32at(r, record + 0x808),
+        table: u32at(r, record + 0x800),
+    };
     0
 }
 /// 1 while an armed ability change has not returned yet, otherwise 0.

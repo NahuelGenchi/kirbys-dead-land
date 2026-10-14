@@ -37,6 +37,7 @@ Relevant environment variables are used only by the lab helper:
 - `KIRBY_LAB_TEST_HUD=1`: with the ability probe, exposed as `--probe-hud`. After the new run settles, it adds a real `StartShield` beside the starting sword through the normal inventory. It later discards the copy with the original Select button, and writes `hud.jsonl` whenever a HUD weapon slot changes: real item, slot item, icon texture, frame group, icon size and scale, and ammo flag. Each distinct decoded icon is saved as private `hud-icon-<hash>.rgba`.
 - `KIRBY_LAB_TEST_PAUSE=1`: with `--probe-hud`, exposed as `--probe-pause`. At 700 probe frames it opens the normal pause screen (`new DefaultPause()`, whose constructor pauses the game), instead of the discard. It writes `pause-cards.jsonl` for every pause equipment card: whether it was drawn as the ability, the real item, and the card's object tree with texts. The run ends paused; set `KIRBY_LAB_CAPTURE_ALL=1` to capture the paused screen.
 - `KIRBY_LAB_TEST_LEGENDARY=1`: with `--probe-hud`, exposed as `--probe-legendary`. Once the copy's ability item is in a weapon slot, it gives that item the host `Legendary` affix, calls `Hero.hudInitItems`, and appends the slot and affix result to `hud.jsonl`.
+- `KIRBY_LAB_FSLOT_MOUTHFUL=1`: with the `fslot` plan, presses F while base Kirby holds a real Zombie in his mouth, then spits and presses F again (see [F slot with a mouthful](#f-slot-with-a-mouthful-2026-10-14)). Set it in the environment of `launch_runtime.py`.
 - `KIRBY_LAB_COMBAT_ELITE=1`: with the `combat` plan, makes the swallowed Zombie an Elite (Elite skills disabled) and records in `combat.json` whether the copy was empowered and the damage that the second Zombie takes from each hit. Set it in the environment of `launch_runtime.py`.
 - `KIRBY_LAB_ARRIVAL_LEVEL`: the level the `arrival` plan starts a new run in (default `Ossuary`; for example `PrisonStart`). Kirby stands still and `arrival-trace.jsonl` records, every host frame, the hero's host position, the viewport centre, size and zoom, the camera's `vertical` lead and dive state as the host reads them, and the source camera (#126).
 - `KIRBY_LAB_WATER_LEVEL`: the level the `water` plan starts a new run in (default: the normal start), for example `SewerDepths` or `SwampHeart`. `KIRBY_LAB_WATER_WADE=1` makes the plan wade instead of placing a Zombie (see [Shallow water](#shallow-water-144)). Set both in the environment of `launch_runtime.py`.
@@ -1160,6 +1161,42 @@ Mike's icon with 3 and 2. Earlier runs of the same probe (`004146` to `005835`)
 failed only in probe phases: duplicated spawns (the test input runs twice per host
 frame), a focus on other floor items, and a stale Interact press.
 `tools/nds_tests.py` passed all 78 cases, including `f_slot` and `f_slot_save`.
+
+## F slot with a mouthful (2026-10-14)
+
+Issue #158. With `KIRBY_LAB_FSLOT_MOUTHFUL=1` the `fslot` plan stores Crash with
+the real Interact binding in base form, places a Zombie two cells ahead (AI
+locked), holds the inhale until the original's mouth count is set, waits 20
+frames in the mouthful, presses the real F binding and watches 80 frames, then
+spits (B for 3 frames) and presses F again 60 frames later. It adds
+`fWithMouthful`, `afterSpit` and `fAfterSpit` to `fslot.json`. Private data root
+`repros/move-158` (made for this issue, with its own `research` folder of links),
+outfit pack `outfit-build-sync/res.pak`, bridge
+`e44ebb90ec30a424ec9471ab8f0b0900419a59733a07d4f630ffa48ad80190b9` built from this
+branch by `tools/nds_build.py` under a fake HOME (the shared bridge was not
+replaced), runtime DLL
+`369d2378c5dae9f26e0fd4ba91c19d65d330e206a60ab6cd9d5dba87302c5a66`:
+
+```sh
+python3 scripts/stage_runtime.py --data-root ~/.local/share/kirby-dead-cells/repros/move-158 \
+  --original-runtime --outfit-pack "$HOME/.local/share/kirby-dead-cells/outfit-build-sync/res.pak"
+KIRBY_LAB_FSLOT_MOUTHFUL=1 python3 scripts/launch_runtime.py --data-root ~/.local/share/kirby-dead-cells/repros/move-158 \
+  --seconds 120 --start-game --outfit KirbySuperStarUltra --input-plan fslot --capture-fps 10
+```
+
+`20261014-125544`: Crash stored (1 use, base form). The Zombie was caught and
+Kirby stood in the mouthful (action `0406`, player field 4 = 2, move `02131508`).
+F, pressed 11 frames later, started no press; for the next 80 frames the mouthful
+stayed, the copy byte stayed 1 and Crash kept its use. After the spit Kirby stood
+plain (field 4 = 1, move `021314D8`) and F fired Crash: the press finished 253
+frames later, used, back to base form, the slot empty. The captures show the
+inhale, the held Zombie, the spit star and Crash's blast. `20261014-125300` (the
+same without `--capture-fps`, with a runtime that wrote the seen copy bytes as
+base64) gave the same events a frame later. Both ended at the time limit with no
+fatal log and source saves unchanged; the `Kirby pacing` line reported 59.9 and
+59.8 original fps and no frame ended inside a pass. Not run: a press already
+waiting when a catch completes (the drop path), the swallow path live, and normal
+play with `./play-kirby`.
 
 ## F slot and fountain (2026-10-10)
 
