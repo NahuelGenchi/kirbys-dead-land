@@ -168,6 +168,11 @@ game's touch damage, which hurts Kirby and weak enemies on contact),
 [Damage balance](docs/GAMEPLAY_FIDELITY.md#damage-balance-128-intentional-deviation))
 and `FlashStrength` (0.35; 1 restores the original full flash).
 
+`Recompiler` (true) in the same file runs the original on the emulator's
+recompiler, which takes about three fifths of the interpreter's time; a load
+can end one original frame later. `false` puts the interpreter back. See
+[The original on the recompiler](docs/GAMEPLAY_FIDELITY.md#the-original-on-the-recompiler-153-intentional-deviation).
+
 Existing Dead Cells bindings are used:
 
 | Dead Cells action | Kirby action |

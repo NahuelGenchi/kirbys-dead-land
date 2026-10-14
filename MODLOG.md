@@ -1972,3 +1972,38 @@ the all-ability rendering tests as full gameplay acceptance.
   (their projects lack `NdsObjRenderer.cs`); private copies with that file
   pass on the new bridge. The shared bridge needs `tools/nds_build.py` and a
   new staging after the merge.
+
+## 2026-10-14 — the original on the emulator's recompiler (#153)
+
+- Owner decision of 2026-10-13: the recompiler last of the three speed fixes
+  of #146, on by default (`Recompiler`), the interpreter kept behind the
+  switch and in tools and tests.
+- `tools/nds_jit_patch.py` builds the pinned core with its recompiler, fast
+  memory off, and without the process-wide SIGSEGV handler (the library
+  imports neither `sigaction` nor `signal`). `tools/nds_call_patch.py` second
+  stage: each ARM9/ARM7 slice runs on the interpreter unless the bridge sets
+  `kssu_recompile`; the ARM9 also while a call is armed; prefetch refilled on
+  the way back; compiled blocks dropped after the bridge's RAM patches change
+  code. Exports `kssu_recompiler`, `kssu_code_changed`; `KSSU_RECOMPILER=1`
+  starts every machine on it. Runtime logs `Kirby original machine:`.
+- Private build `repros/jit-153`, shared bridge untouched: `nds_tests.py` 86
+  cases, the 85 older equal to the recorded results; new case `recompiler`;
+  each of the 85 on the recompiler: 83 equal, 2 different and passing (load
+  timing, sound capture buffers). Renderer and background verifiers 0
+  mismatches on both paths; `verify_native_init.py` 64 cycles;
+  `scripts/check.py` passes.
+- Bridge, median step: 2.85 → 1.80 ms alone, 3.71 → 2.06 ms with 31 proxies,
+  same traces. Some loads end a frame later (Sword swallow 3 → 4, Wheel
+  2 → 3). Live, one run each: `movement` 2.82 → 1.81 ms, 103.1 → 110.3 fps;
+  `crowd` 6.42 → 2.37 ms, 61.8 → 91.2 fps.
+- Found: the recompiler skips the protection unit's data aborts. #151's null
+  write then lands in six bytes of the original's ITCM (a routine that did
+  not run in 1,003 frames of play) and play continues; the interpreter
+  freezes. Recorded in docs/NDS_BRIDGE.md and docs/GAMEPLAY_FIDELITY.md; #151
+  still needs its fix.
+- Not run: the owner's play launcher, a controller, a window on the GPU,
+  bosses, a long session, listening, and the recompiler with #148 or #150.
+  The shared bridge needs `tools/nds_build.py` and a new stage after the
+  merge. The native-init verifier's shared record was rewritten through the
+  private root's `research` link and restored by rerunning it on the shared
+  bridge.

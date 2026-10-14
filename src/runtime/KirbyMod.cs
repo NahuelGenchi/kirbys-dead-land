@@ -360,6 +360,12 @@ public sealed class RuntimeConfig
     /// </summary>
     public double HelperCopyDamageScale { get; set; } = 1.75;
     /// <summary>
+    /// The original runs on the emulator's recompiler, which does the same
+    /// work in about three fifths of the time (#153). False runs it on the
+    /// interpreter, the fallback if the recompiler ever misbehaves.
+    /// </summary>
+    public bool Recompiler { get; set; } = true;
+    /// <summary>
     /// Critical hits of copy attacks (#88, a mod addition). Kirby has no base
     /// crit chance; mutations add timed chance. A crit multiplies the hit by
     /// <see cref="CopyCriticalDamage"/>.

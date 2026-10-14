@@ -71,6 +71,23 @@ The same runs show the behaviour held. `crowd`: the same 30 hits and 1,260 damag
 
 The `Kirby pacing:` log line, once a minute in any run including play, gives host and original fps, the mean time of the original step and of the drawing, and how many original frames ended inside a logic pass (#134): a few at each ability or helper load, otherwise none. More than that means Kirby can be drawn a terrain cell off for single frames again (docs/NDS_BRIDGE.md, Where a source frame ends). Check `powerprofilesctl get` first: the power-saver profile alone took the game well below 60 fps on 2026-10-10.
 
+## The original on the recompiler (#153)
+
+The original step is the largest part of the mod's frame, and it was melonDS's interpreter. `Recompiler` (default `true`) runs it on the core's recompiler instead; what that changes in the original, and the evidence that the rest is the same, is in docs/NDS_BRIDGE.md, The recompiler.
+
+The bridge alone, 600 original frames of Sword Kirby swinging, median `kssu_step`, interpreter → recompiler, on a private build: 2.85 → 1.80 ms alone, 3.11 → 1.88 ms with 8 proxies and 3.71 → 2.06 ms with 31, about three fifths.
+
+Lab runs of that build, isolated profile, software drawing, `performance` power profile, one 120 s run each with `Recompiler` false → true:
+
+| Plan | Original step | Host fps | Frames ended inside a pass |
+|---|---|---|---|
+| `movement` | 2.82 → 1.81 ms | 103.1 → 110.3 | 0 → 0 |
+| `crowd`, 31 Zombies | 6.42 → 2.37 ms | 61.8 → 91.2 | 3,264 → 10 |
+
+The `crowd` row compares two different games. On the interpreter the original freezes at the first swing that hits 24 or more Zombies (#151), so its 6.42 ms is a frozen original running out every frame's budget. On the recompiler that write is not stopped and the original plays on: 96 hits on the Zombies against 30, and Kirby killed by them before the run ends. It is the first `crowd` run with a live original after the swing.
+
+Not measured: play in a window on the GPU with vsync, the recompiler together with #148's idle-screen skip or #150's doubled clock, and more than one run of each.
+
 ## Checks run
 
 On the final tree, 2026-10-11:
@@ -86,7 +103,7 @@ The shared bridge binary, its provenance and `oracle/bridge-test-results.json` w
 
 Measured or seen in #123 and not changed.
 
-- **The original frame, about 2.6 ms.** The bridge runs melonDS's interpreter. A recompiler was left out of #123: it changes the emulated timing that the recorded bridge evidence rests on.
+- **The original frame, about 2.6 ms.** The bridge ran melonDS's interpreter. A recompiler was left out of #123: it changes the emulated timing that the recorded bridge evidence rests on. #153 added it behind a switch (The original on the recompiler, above).
 - **A pile of enemies in recoil.** With the 30 fixture targets of the `crowd` plan stacked on one spot, the original frame takes about 6 ms. Thirty proxies spread over the room cost about 0.9 ms together, so the time is the original game's own code for overlapping actors, not the bridge.
 - **`HSprite.draw`.** `KirbyHostVisuals` hooks it to keep the Beheaded's graphics away from Kirby, and the host calls it 77–140 times a frame. It is needed on every frame while the outfit is on. At the per-call figure above that is 70–130 KB of the 166 KB a frame still allocated; this share is an estimate, not a measurement.
 - **The texture upload.** A drawn frame still uploads the whole 1024×512 texture, about 0.6 ms in the lab.

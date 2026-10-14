@@ -861,6 +861,63 @@ def run_case(name):
             black=b'\x00\x00\x00\xff'*(256*192)
             assert only[2]=={black} and black not in full[2] and full[2]==again[2], 'Bottom screen: black only while engine B is left out'
             return {'frames':240,'machine_and_engine_a_digest':full[0][:16],'save_state_sha256':full[1][:16],'same_with_engine_b_left_out':True,'bottom_screen_black_only_when_left_out':True}
+        if name=='recompiler':
+            # #153: the original on the emulator's recompiler. The frames are the same ones,
+            # an armed call still runs (on the interpreter), a state from either continues on
+            # either, and code changed in RAM is compiled again.
+            l=b.lib;l.kssu_recompiler.argtypes=[C.c_void_p,C.c_bool];l.kssu_code_changed.argtypes=[C.c_void_p]
+            l.kssu_set_ability.argtypes=[C.c_void_p,C.c_uint8];l.kssu_ability_change_pending.argtypes=[C.c_void_p]
+            floor=[3 if y>=7 else 0 for y in range(9) for x in range(100)]
+            b.world(floor,384*65536,int(153.5*65536));b.step(0,60);transform(b,18)
+            start=ROOT/'oracle/recompiler-test.state';middle=ROOT/'oracle/recompiler-mid-test.state';b.save(start)
+            def frame(i,crowd=8):
+                at=b.state();b.world(floor,at['x_raw'],at['y_raw'])
+                for slot in range(1,crowd+1):
+                    x=(at['x_raw']>>16)+(-120+slot*8 if slot%2 else 30+slot*6)
+                    assert l.kssu_proxy_set(b.handle,slot,x*65536,151*65536,32760,True)==0
+                    l.kssu_proxy_options(b.handle,slot,18,True);l.kssu_proxy_size(b.handle,slot,24,34)
+                at=b.step((2 if i%24<10 else 0)|(16 if (i//90)%2==0 else 32)|(1 if i%60==5 else 0))
+                return (at['x_raw'],at['y_raw'],at['animation'],at['graphic'],at['flags'])
+            def play(compiled,first,last,state=start):
+                assert l.kssu_recompiler(b.handle,compiled)==0 and l.kssu_load_state(b.handle,bytes(state))==0
+                return [frame(i) for i in range(first,last)]
+            plain=play(False,0,300);fast=play(True,0,300)
+            assert plain==fast==play(False,0,300), 'The recompiler must give the interpreter\'s frames'
+            # A state saved on one continues on the other as the run did.
+            for saved_on in (True,False):
+                assert play(saved_on,0,120)==plain[:120];b.save(middle)
+                for continued_on in (True,False):
+                    assert play(continued_on,120,300,middle)==plain[120:], (saved_on,continued_on)
+            # An armed call runs although its hook is in the interpreter loop.
+            ability=lambda:b.read(0x020baf7b,1)[0]
+            def crash(compiled):
+                assert l.kssu_recompiler(b.handle,compiled)==0 and l.kssu_load_state(b.handle,bytes(start))==0
+                b.step(0,60);assert l.kssu_set_ability(b.handle,23)==0
+                for switch in range(1,21):
+                    b.step()
+                    if not l.kssu_ability_change_pending(b.handle):break
+                assert ability()==23,ability()
+                b.step(2,3)
+                for revert in range(4,400):
+                    b.step()
+                    if ability()==1:return switch,revert
+                raise AssertionError('Crash never reverted')
+            calls=crash(False),crash(True)
+            assert calls[0]==calls[1],calls
+            # Code the host changes in RAM: the player update made to return at once.
+            assert l.kssu_recompiler(b.handle,True)==0 and l.kssu_load_state(b.handle,bytes(start))==0
+            def walk():
+                x=b.state()['x_raw']
+                for _ in range(30):
+                    at=b.state();b.world(floor,at['x_raw'],at['y_raw']);b.step(16)
+                return (b.state()['x_raw']-x)>>16
+            entry=b.read(0x020b2714,4);moving=walk();assert moving>20,moving
+            b.write(0x020b2714,struct.pack('<I',0xe12fff1e));stale=walk()
+            assert l.kssu_code_changed(b.handle)==0;stopped=walk()
+            b.write(0x020b2714,entry);assert l.kssu_code_changed(b.handle)==0;restored=walk()
+            assert stopped==0 and restored>20,(stale,stopped,restored)
+            for path in (start,middle):path.unlink()
+            return {'frames':300,'same_frames_as_interpreter':True,'state_from_either_continues_on_either':True,'crash_switch_and_revert':list(calls[1]),'walk_px':moving,'walk_px_unflushed_change':stale,'walk_px_after_flush':stopped,'walk_px_restored':restored}
         if name=='step_between_passes':
             # #134: a source frame ends as VBlank begins, between two logic passes of the
             # original. Replayed as the runtime places Kirby (the terrain window rebased
@@ -940,7 +997,7 @@ def main():
         result=run_case(args.case)
         # The emulator's log shares stdout and may stop mid-line: start the result on its own line.
         print('\nRESULT '+json.dumps({'case':args.case,'result':result}),flush=True);return
-    cases=['scene_doors', 'far_shot_draw', 'room_food', 'proxy_birth_contact', 'proxy_birth_inhale', 'proxy_contact', 'proxy_contact_sword', 'proxy_touch_off', 'proxy_swallow_touch_off', 'proxy_suplex_touch_off', 'proxy_ice_detach', 'proxy_ice_release', 'proxy_lethal', 'motion', 'ladder', 'ladder_top', 'ladder_top_stomp', 'one_way', 'solid_ceiling', 'water', 'proxy_water', 'proxy_water_sword', 'proxy_water_below', 'hurt_water', 'proxy_swallow', 'hazard_spit', 'hazard_swallow', 'star_spit', 'star_spit_wall', 'star_big', 'star_ability', 'proxy_sword', 'proxy_reuse', 'proxy_save', 'proxy_mix', 'boss_inhale', 'boss_suplex', 'boss_cook', 'boss_sword', 'proxy_capacity', 'copy_drop_reabsorb', 'wheelie_ride', 'proxy_suplex', 'proxy_cook', 'audio', 'hurt', 'hurt_lethal', 'hurt_cold', 'guard', 'health_invulnerable', 'health_sync', 'proxy_size', 'f_slot', 'f_slot_save', 'f_slot_plasma', 'helper_reaction', 'helper_move', 'helper_owns', 'obj_vram_block', 'main_screen_only', 'step_between_passes']
+    cases=['scene_doors', 'far_shot_draw', 'room_food', 'proxy_birth_contact', 'proxy_birth_inhale', 'proxy_contact', 'proxy_contact_sword', 'proxy_touch_off', 'proxy_swallow_touch_off', 'proxy_suplex_touch_off', 'proxy_ice_detach', 'proxy_ice_release', 'proxy_lethal', 'motion', 'ladder', 'ladder_top', 'ladder_top_stomp', 'one_way', 'solid_ceiling', 'water', 'proxy_water', 'proxy_water_sword', 'proxy_water_below', 'hurt_water', 'proxy_swallow', 'hazard_spit', 'hazard_swallow', 'star_spit', 'star_spit_wall', 'star_big', 'star_ability', 'proxy_sword', 'proxy_reuse', 'proxy_save', 'proxy_mix', 'boss_inhale', 'boss_suplex', 'boss_cook', 'boss_sword', 'proxy_capacity', 'copy_drop_reabsorb', 'wheelie_ride', 'proxy_suplex', 'proxy_cook', 'audio', 'hurt', 'hurt_lethal', 'hurt_cold', 'guard', 'health_invulnerable', 'health_sync', 'proxy_size', 'f_slot', 'f_slot_save', 'f_slot_plasma', 'helper_reaction', 'helper_move', 'helper_owns', 'obj_vram_block', 'main_screen_only', 'recompiler', 'step_between_passes']
     if not args.skip_abilities:cases += [f'ability-{i}' for i in range(2,26)]
     results=[]
     for name in cases:

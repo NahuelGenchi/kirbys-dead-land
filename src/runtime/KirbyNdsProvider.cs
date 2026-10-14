@@ -149,6 +149,9 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         // machine stays alive: the original still holds the stored ability, and only the
         // press can give the main copy back. A new machine has no press (#102).
         KirbyFSlot.Reset(keepPress: !firstActivation);
+        // #153: the owner's choice of how the original's code is run.
+        nds.Recompile(config.Recompiler);
+        if (firstActivation) Log?.Invoke($"Kirby original machine: {(nds.Recompiled ? "recompiler" : "interpreter")}.");
         if (lastSession is not null && !ReferenceEquals(lastSession, session))
             session.Rules.Stored.Restore(lastSession.Rules.Stored.Ability, lastSession.Rules.Stored.Uses);
         lastSession = session;

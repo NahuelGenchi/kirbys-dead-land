@@ -1043,6 +1043,44 @@ Kirby's damage drops by 25% and the helper's by 50%, both against the earlier
   the helper, so would take the helper's scale), and an older bridge without
   the export (the helper then keeps Kirby's scale) are unverified.
 
+### The original on the recompiler (#153, intentional deviation)
+
+The mod ran the original on the emulator's interpreter, one instruction at a
+time. With `Recompiler` (default `true`) it runs on the emulator's recompiler,
+which translates the original's code to host code once and then runs that.
+The original's code, data and frame rate are the same. What differs is timing
+below the frame: an interrupt or a scheduled event is taken at the end of a
+translated block instead of after the very instruction, and the cost of a
+block is counted when it is translated.
+
+What that was seen to change, on a private build:
+
+- **Play traces.** 600 frames of Sword Kirby swinging, alone, among 8 and
+  among 31 proxies: the same position, speed, pose and ability on every frame
+  as on the interpreter.
+- **The recorded bridge cases.** 83 of 85 return exactly what the interpreter
+  recorded. The other two pass their own checks and differ in load timing and
+  in the original's sound capture buffers (docs/NDS_BRIDGE.md, The
+  recompiler).
+- **Loads.** A load from the cartridge can end one original frame later:
+  swallowing Sword held 4 frames instead of 3 and Wheel 3 instead of 2; Fire,
+  Ice, a helper and the `SetAbility` changes were the same. During those
+  frames Kirby stays where he is, as before (#134).
+- **Sound.** The capture buffers differ, so the samples the original mixes
+  are not bit-identical. Nobody listened to it.
+- **Memory protection.** The console stops a data access its protection unit
+  denies, and so does the interpreter. The recompiler lets it through. The
+  one known case is #151: an attack that hits 24 or more enemies freezes the
+  original for good on the interpreter. On the recompiler play goes on, with
+  one hit effect missing and six bytes of an original routine overwritten
+  that 1,003 frames of play never ran. That is not a fix for #151.
+
+`Recompiler: false` in the staged `config.json` puts the interpreter back; a
+bridge built before #153 keeps the interpreter whatever the option says, and
+the log line `Kirby original machine:` names which one runs. Tools, tests and
+verifiers use the interpreter. Not verified: play in a window, bosses, a long
+session, and how it sounds.
+
 ### Host elevators (deviation)
 
 Dead Cells elevators (`en.inter.Elevator` and its `SimpleElevator`,
