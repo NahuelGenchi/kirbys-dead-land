@@ -82,6 +82,8 @@ An original frozen-enemy Ice cube fixture was checked for 120 source frames: 153
 
 `tools/nds_graphics_patch.py` adds a checked, read-only capture to the pinned software renderer. It records engine A's actual top and underlying RGB6/layer pixels, window mask, blend registers, final composite, and standard palette at each source scanline. The resulting original pixel planes are exposed by `kssu_read_layers`; they do not change source rendering or memory. This avoids inferring effects from end-of-frame register snapshots. `BLDY`, for example, is write-only through the normal bus interface.
 
+Since #148 the live runtime reads the capture only for a frame the bridge drew. On a frame whose every scanline has the seed palette and no colour effect control the bridge does not draw engine A's backgrounds at all and says so (`kssu_main_frame`); the runtime takes that frame as having no effect, which is what the decoder returns for it. Tools and verifiers that read the capture or the framebuffer leave the switch off ([Performance](PERFORMANCE.md)).
+
 The captured Crash growing circle is an ordinary OBJ effect already handled above. The later flash changes the extended background palettes: the decoder accepts it only when every visible captured background pixel agrees with the changed backdrop color. Paint and Mike instead produce uniform integer RGB5 palette transforms. The decoder checks all 256 entries against the seed palette before accepting the scale and RGB offsets; it never schedules a flash from an ability ID or substitutes an invented shape.
 
 ```sh

@@ -2098,3 +2098,29 @@ the all-ability rendering tests as full gameplay acceptance.
 - Not run: the fight beyond its first seconds, copy abilities and the helper in
   shallow water, a pool between 18 and 42 px, an inhale of an enemy in deep
   water on the new rule, `nds_tests.py` (bridge untouched), normal play.
+
+## 2026-10-13 — upper screen left undrawn on frames with no effect (#148)
+
+- Engine A was still drawn on every scanline of every original frame, and the
+  host read it only to find a screen-wide palette or colour effect, which
+  almost no frame has (candidate from the ROM study, #146).
+- The bridge leaves a scanline's backgrounds and composition undrawn when its
+  layer capture would read as "no effect" (unit on, not blanked, no colour
+  effect control, the seed palette), keeps sprites and any scanline a display
+  capture reads, and reports each frame as drawn, undrawn or mixed
+  (`kssu_skip_idle_main`, `kssu_main_frame`; third stage of
+  `tools/nds_graphics_patch.py` and `tools/nds_vendor.py`). The provider turns
+  it on; `NdsBackgroundEffects` and `LabVisualProbe` decode only drawn frames.
+  `KSSU_DRAW_EVERY_FRAME=1` keeps every scanline drawn.
+- Private build under `repros/skip-148`, shared bridge untouched: `kssu_step`
+  2.77 → 2.44 ms from Python; in the lab the original frame 2.58 → 2.15 ms
+  and the background capture 0.07 → 0.003 ms a frame (two runs each way).
+- Same machine and same effect on every frame: new case `skip_idle_main`
+  (480 frames with Crash), `verify_background.py` replaying its four cases
+  with the switch on (1,200 frames, 0 different), and the lab's `visual` plan
+  both ways (2,093 common frames, 0 different). `nds_tests.py` 86 cases,
+  `verify_renderer.py` 29, `verify_native_init.py` and `scripts/check.py`
+  pass.
+- Not run: windowed play, a controller. No run produced a mixed frame or a
+  display capture. The shared bridge needs `tools/nds_build.py` and a new
+  staging after the merge.

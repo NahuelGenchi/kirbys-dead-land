@@ -11,6 +11,17 @@ reads only engine A: ``MainScreenOnly`` leaves engine B's 2D drawing out (its
 half of the framebuffer is filled black), and ``Copy_ObjVram`` copies engine A's
 OBJ VRAM eight bytes at a time through the same accessors as the ARM9 bus read.
 The switch is off unless the bridge is asked; neither changes emulated state.
+
+A third stage (#148) leaves engine A undrawn as well where the host would learn
+nothing from it. The host reads that drawing only through the layer capture, and
+there only to find a palette or colour effect over the whole frame. With
+``SkipIdleMain`` on, a scanline of an enabled, unblanked unit with no colour
+effect control whose standard BG palette equals ``IdlePalette`` is not drawn:
+the capture of such a line reads as "no effect". ``MainFrame`` says whether the
+frame that ended at the last VBlank was drawn (0), left out (1) or mixed (2).
+A scanline a display capture reads is always drawn, and sprites are drawn for
+every scanline at their usual time, so emulated state is the same either way.
+Off unless the bridge is asked.
 """
 import subprocess
 from pathlib import Path
@@ -109,6 +120,102 @@ CORE_EDITS_2 = {
     ],
 }
 
+# Third stage (#148), applied on top of the second.
+WRAPPER_EDITS_3 = {
+    "src/melon/cpp/Shims.h": [(
+        "    bool Set_MainScreenOnly(NDS &nds, bool enabled);\n",
+        "    bool Set_MainScreenOnly(NDS &nds, bool enabled);\n"
+        "    bool Set_SkipIdleMain(NDS &nds, const u8 *palette);\n"
+        "    u32 Get_MainFrame(NDS &nds);\n",
+    )],
+    "src/melon/cpp/Shims.cpp": [(
+        "    bool Copy_Framebuffers(NDS &nds, u8 *dest, bool index)\n",
+        "    bool Set_SkipIdleMain(NDS &nds, const u8 *palette)\n"
+        "    {\n"
+        "        // palette: the 512 bytes of standard BG palette an idle scanline has, or null for off.\n"
+        "        auto* renderer = dynamic_cast<SoftRenderer*>(&nds.GPU.GetRenderer());\n"
+        "        if (!renderer) return false;\n"
+        "        renderer->SkipIdleMain = palette != nullptr;\n"
+        "        if (palette) memcpy(renderer->IdlePalette, palette, sizeof(renderer->IdlePalette));\n"
+        "        return true;\n"
+        "    }\n\n"
+        "    u32 Get_MainFrame(NDS &nds)\n"
+        "    {\n"
+        "        auto* renderer = dynamic_cast<SoftRenderer*>(&nds.GPU.GetRenderer());\n"
+        "        return renderer ? renderer->MainFrame : 0;\n"
+        "    }\n\n"
+        "    bool Copy_Framebuffers(NDS &nds, u8 *dest, bool index)\n",
+    )],
+}
+
+CORE_EDITS_3 = {
+    "src/GPU_Soft.h": [
+        ("    void VBlank() override {};\n",
+         "    void VBlank() override\n"
+         "    {\n"
+         "        MainFrame = !MainSkipped ? 0 : (MainSkipped == 192 && !MainDrawn) ? 1 : 2;\n"
+         "        MainSkipped = MainDrawn = 0;\n"
+         "    };\n"),
+        ("    bool MainScreenOnly = false;\n",
+         "    bool MainScreenOnly = false;\n"
+         "    // Checked addition: the BG and composition of an engine A scanline that MainIdle\n"
+         "    // accepts are not drawn (its sprites still are, one scanline ahead as always).\n"
+         "    // MainFrame is the frame that ended at the last VBlank: 0 every scanline drawn,\n"
+         "    // 1 none (192 left out), 2 some of each.\n"
+         "    bool SkipIdleMain = false;\n"
+         "    u8 IdlePalette[0x200] {};\n"
+         "    u32 MainFrame = 0;\n"),
+        ("    void DoCapture(u32 line);\n",
+         "    void DoCapture(u32 line);\n\n"
+         "    bool MainIdle() const;\n"
+         "    void SyncMain();\n"
+         "    u32 MainSkipped = 0, MainDrawn = 0;\n"
+         "    bool MainStale = false; // engine A's flat BG VRAM copies missed scanlines\n"),
+    ],
+    "src/GPU_Soft.cpp": [
+        ("void SoftRenderer::DrawScanline(u32 line)\n",
+         "bool SoftRenderer::MainIdle() const\n"
+         "{\n"
+         "    // The layer capture of such a scanline reads as \"no effect\": every pixel valid,\n"
+         "    // no colour effect control, the palette the host compares against. A display\n"
+         "    // capture reads the drawn line, so its scanlines are never idle.\n"
+         "    return SkipIdleMain && !GPU.CaptureEnable && GPU.GPU2D_A.Enabled && !GPU.GPU2D_A.ForcedBlank\n"
+         "        && !GPU.GPU2D_A.BlendCnt && !memcmp(GPU.Palette, IdlePalette, sizeof(IdlePalette));\n"
+         "}\n\n"
+         "void SoftRenderer::SyncMain()\n"
+         "{\n"
+         "    // The BG dirty tracking was not followed while no scanline was drawn: copy all of\n"
+         "    // it again. Sprites are drawn for every scanline, so OBJ VRAM was followed.\n"
+         "    if (!MainStale) return;\n"
+         "    GPU.VRAMDirty_ABG.Reset();\n"
+         "    GPU.VRAMDirty_ABGExtPal.Reset();\n"
+         "    GPU.VRAMDirty_AOBJExtPal.Reset();\n"
+         "    MainStale = false;\n"
+         "}\n\n"
+         "void SoftRenderer::DrawScanline(u32 line)\n"),
+        ("    line = GPU.VCount;\n    if (line < 192)\n",
+         "    line = GPU.VCount;\n    bool idle = false;\n    if (line < 192)\n"),
+        ("        // draw BG/OBJ layers\n        Rend2D_A->DrawScanline(line);\n",
+         "        idle = MainIdle();\n"
+         "        if (idle)\n"
+         "        {\n"
+         "            MainSkipped++;\n"
+         "            MainStale = true;\n"
+         "        }\n"
+         "        else\n"
+         "        {\n"
+         "            MainDrawn++;\n"
+         "            SyncMain();\n"
+         "        }\n\n"
+         "        // draw BG/OBJ layers\n        if (!idle) Rend2D_A->DrawScanline(line);\n"),
+        ("        DrawScanlineA(line, dstA);\n", "        if (!idle) DrawScanlineA(line, dstA);\n"),
+        ("        ExpandColor(dstA);\n", "        if (!idle) ExpandColor(dstA);\n"),
+        ("    if (MainScreenOnly)\n        for (int i = 0; i < 256; i++)\n            dstB[i] = 0xFF000000;\n}\n",
+         "    if (MainScreenOnly)\n        for (int i = 0; i < 256; i++)\n            dstB[i] = 0xFF000000;\n\n"
+         "    if (idle)\n        for (int i = 0; i < 256; i++)\n            dstA[i] = 0xFF000000;\n}\n"),
+    ],
+}
+
 GRAPHICS_WRAPPER_FILES = tuple(WRAPPER_EDITS)
 GRAPHICS_CORE_FILES = tuple(CORE_EDITS)
 
@@ -116,8 +223,8 @@ GRAPHICS_CORE_FILES = tuple(CORE_EDITS)
 def check_graphics_patch(vendor: Path, wrapper_revision: str, core_revision: str, apply=False):
     """Accept exactly pristine or a known stage of this patch; apply only after all checks."""
     writes = []
-    for root, revision, edits, second in ((vendor, wrapper_revision, WRAPPER_EDITS, WRAPPER_EDITS_2),
-                                          (vendor / "melonDS", core_revision, CORE_EDITS, CORE_EDITS_2)):
+    for root, revision, edits, second, third in ((vendor, wrapper_revision, WRAPPER_EDITS, WRAPPER_EDITS_2, WRAPPER_EDITS_3),
+                                                 (vendor / "melonDS", core_revision, CORE_EDITS, CORE_EDITS_2, CORE_EDITS_3)):
         for relative, replacements in edits.items():
             original = subprocess.check_output(["git", "-C", str(root), "show", f"{revision}:{relative}"], text=True)
             first = original
@@ -125,15 +232,20 @@ def check_graphics_patch(vendor: Path, wrapper_revision: str, core_revision: str
                 if first.count(before) != 1:
                     raise SystemExit(f"Graphics capture patch precondition failed: {relative}")
                 first = first.replace(before, after)
-            patched = first
+            staged = first
             for before, after in second.get(relative, []):
-                if patched.count(before) != 1:
+                if staged.count(before) != 1:
                     raise SystemExit(f"Graphics patch second-stage precondition failed: {relative}")
+                staged = staged.replace(before, after)
+            patched = staged
+            for before, after in third.get(relative, []):
+                if patched.count(before) != 1:
+                    raise SystemExit(f"Graphics patch third-stage precondition failed: {relative}")
                 patched = patched.replace(before, after)
             target = root / relative
             actual = target.read_text()
             legacy = first.replace("LayerCapture[5]", "LayerCapture[4]").replace("plane >= 5", "plane >= 4").replace("plane < 5", "plane < 4").replace("            LayerCapture[4][at] = reinterpret_cast<u16*>(&GPU.Palette[GPU2D.Num ? 0x400 : 0])[i];\n", "")
-            if actual not in (original, legacy, first, patched):
+            if actual not in (original, legacy, first, staged, patched):
                 raise SystemExit(f"Unexpected graphics capture edits: {relative}; left untouched.")
             if actual != patched:
                 writes.append((target, patched))

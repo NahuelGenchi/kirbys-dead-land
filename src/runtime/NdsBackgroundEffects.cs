@@ -34,8 +34,12 @@ public sealed unsafe class NdsBackgroundEffects : IDisposable
         uint frame = nds.State.Frame;
         if (lastFrame != frame)
         {
-            Read(nds, top, 0); Read(nds, metadata, 2); Read(nds, paletteLines, 4);
-            Effect = NdsBackgroundEffectDecoder.Decode(nds.SourceBgPalette, paletteLines, top, metadata);
+            if (NdsBackgroundEffectDecoder.Undrawn(nds.MainFrame) is { } undrawn) Effect = undrawn;
+            else
+            {
+                Read(nds, top, 0); Read(nds, metadata, 2); Read(nds, paletteLines, 4);
+                Effect = NdsBackgroundEffectDecoder.Decode(nds.SourceBgPalette, paletteLines, top, metadata);
+            }
             if (!Effect.Supported) UnsupportedFrames++;
             lastFrame = frame;
         }
