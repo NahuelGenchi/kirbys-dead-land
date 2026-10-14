@@ -2222,3 +2222,32 @@ the all-ability rendering tests as full gameplay acceptance.
   peak 1,571, landing peak 5,597, as `docs/AUDIO.md` records).
   `python3 scripts/check.py` passes with the six new builds.
 - Not run: any live check; nothing in the game changed.
+
+## 2026-10-14 — one attack into 24 or more enemies no longer stops the original (#151)
+
+- Cause: the original takes every collision group from one pool of 48
+  (`0x02076F00`, set up at each stage load by `0x02071C00`). A proxy holds
+  one; each hit makes the recoil routine `0x02156ACC` create a companion
+  that holds one more for about 7 frames, and then writes the enemy's
+  health into it unchecked. Thirty-one proxies and 24 hits in one swing
+  emptied it: a null write, a data abort on the interpreter, six bytes of
+  ITCM on the recompiler.
+- `kssu_world` links 64 more groups, two per proxy slot, from the scene
+  heap after the original's free ones and sets the count to 112, its
+  marker; no original instruction changes. It returns -6 when the pool is
+  not the one expected. Only the pool's setup reads the count or the base.
+- Private build `repros/fix-151`: 90 cases pass with the new `hit_pool`; the
+  other 89 equal the shared record except the memory digests of
+  `main_screen_only` and `skip_idle_main`. A margin probe (every copy
+  ability, four attack patterns, 31 stacked proxies) kept at least 44 of
+  111 groups free; up to 189 of 300 frames ended inside a pass (Mirror,
+  mashed). Verifiers 0 mismatches, 64 init cycles; `scripts/check.py`
+  passes.
+- Live 31-Zombie `crowd`: interpreter 7 frames inside a pass after the
+  crowd appeared (3,264 on `main`) and 96 hits; the defaults 2 and 66. The
+  crowd probe now decides `passed` once, 300 frames after the crowd
+  appears, so a death's new run no longer overwrites it.
+- Not run: the helper's attacks, bosses, windowed play, the owner's
+  launcher. The shared bridge was not rebuilt. Two scratch probes that
+  leaked one emulator per run filled the machine's memory; probes now run
+  one machine per process.

@@ -27,6 +27,9 @@ internal static class LabBossCrowdProbe
     private static bool captureObserved, sourceControlledBoss, bossMoved;
     private static double bossStartX;
     private static int setupAttempts;
+    private static int? unfinishedAtSpawn;
+    private static int unfinishedSinceSpawn;
+    private static bool? crowdPassed;
 
     internal static void Install(string output, string plan)
     {
@@ -81,10 +84,10 @@ internal static class LabBossCrowdProbe
         }
         if (elapsed >= 200 && !spawned && machine.State.Ability == 18)
         {
-            spawned = true; ready = frame;
+            spawned = true; ready = frame; unfinishedAtSpawn = machine.UnfinishedPasses;
             double x = (hero.cx + hero.xr) * 24, y = (hero.cy + hero.yr) * 24;
-            // 31 fills every proxy slot. One Sword swing that hits 24 or more of them
-            // stops the original for good (#151); a smaller crowd keeps it running.
+            // 31 fills every proxy slot. One Sword swing that hit 24 or more of them
+            // stopped the original for good until its collision pool was enlarged (#151).
             int size = int.TryParse(Environment.GetEnvironmentVariable("KIRBY_LAB_CROWD_SIZE"), out int asked) ? Math.Clamp(asked, 1, 31) : 31;
             for (int i = 0; i < size; i++)
             {
@@ -197,6 +200,9 @@ internal static class LabBossCrowdProbe
             BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(provider)!).Capture();
         int boundFixtureTargets = bindings.Count(binding => targets.Any(target => target.__uid == binding.Uid));
         maximumBoundFixtureTargets = Math.Max(maximumBoundFixtureTargets, boundFixtureTargets);
+        // A death starts a new run and its frame count again; keep the crowd's numbers.
+        uint? sinceReady = ready is uint at && lastPoll >= at ? lastPoll - at : null;
+        if (sinceReady is not null && unfinishedAtSpawn is int counted) unfinishedSinceSpawn = machine.UnfinishedPasses - counted;
         if ((machine.ActionFlags & 1) != 0) inhaleFrames++;
         if (machine.State.Ability == 18) swordFormFrames++;
         if (boss is { destroyed: false })
@@ -212,9 +218,17 @@ internal static class LabBossCrowdProbe
             initialLife = initialHp[mob.__uid],
             sourceControlled = !mob.destroyed && provider!.ControlsEnemy(mob),
         }).ToArray();
+        uint elapsed = sinceReady ?? 0;
+        // Decided once, 300 frames after the crowd appeared: the swing hit 24 or more
+        // Zombies (#151's trigger; 30 of the 31 are bound at once, another host enemy
+        // holds a slot) and the original kept finishing its passes. A stopped original
+        // ends every later frame inside one, a running one a few, at the Sword's load
+        // and the swing.
+        if (mode == "crowd" && crowdPassed is null && elapsed >= 300)
+            crowdPassed = damagedTargets.Count >= 24 && unfinishedSinceSpawn <= 30;
         File.WriteAllText(Path.Combine(run, "boss-crowd.json"), JsonSerializer.Serialize(new
         {
-            mode, frame = lastPoll, elapsed = ready is uint at ? lastPoll - at : 0,
+            mode, frame = lastPoll, elapsed, passed = crowdPassed, unfinishedSinceSpawn,
             setupAttempts, spawned, fed, originalAbility = machine.State.Ability,
             maximumProxies, active, boundFixtureTargets, maximumBoundFixtureTargets, inhaleFrames, swordFormFrames,
             excludedIncomingHits, outgoingHitCount, outgoingDamage, damagedTargets = damagedTargets.Count,
