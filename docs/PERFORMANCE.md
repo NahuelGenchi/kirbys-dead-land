@@ -116,7 +116,7 @@ Live, isolated profile, offscreen, `performance` power profile, one 120 s run pe
 | `crowd --crowd-size 20` (`20261014-002620`, `20261014-002418`) | 7 → 5 | 3.60 → 3.69 ms | 79.7 → 79.5 |
 | `crowd`, 31 Zombies (`20261014-001218`, `20261014-000955`) | 3,252 → 3,257 | 6.32 → 8.41 ms | 56.0 → 40.0 |
 
-The last row is not the clock's doing: the swing that hits all 31 stops the original for good at either clock (#151), and what is timed is an ARM9 that never rests again. It is the most a frame can cost: about 2.2 ms more at twice the clock. Three of the late frames in the 20-Zombie row are the Sword's load from the cartridge, which the clock does not shorten; the bridge replay of that fixture's input gives the other 4 → 2.
+The last row is not the clock's doing: the swing that hits all 31 stopped the original for good at either clock until #151 ([the collision pool](#the-collision-pool-151)), and what is timed is an ARM9 that never rests again. It is the most a frame can cost: about 2.2 ms more at twice the clock. Three of the late frames in the 20-Zombie row are the Sword's load from the cartridge, which the clock does not shorten; the bridge replay of that fixture's input gives the other 4 → 2.
 
 Checks on the final tree, 2026-10-14, private build (bridge SHA-256 `41ca6f7eae0ddc1b7e12972b8cd32751439aac4f1bbc5cb41aa1c832d6ae2819`): `tools/nds_tests.py` passes all 86 cases at the DS clock, and the 85 older ones return what the shared bridge recorded; `tools/verify_renderer.py` 29 cases, 3,065,177 pixels, 0 mismatched; `tools/verify_background.py` 4 cases, 176,357,376 values, 0 mismatches; `tools/verify_native_init.py` 64 cycles; `python3 scripts/check.py` passes. The shared bridge binary and its recorded results were not replaced; play needs `python3 tools/nds_build.py` and a new stage, and with an older bridge the runtime keeps the DS clock.
 
@@ -141,7 +141,7 @@ Lab runs of that build, isolated profile, software drawing, `performance` power 
 | `movement` | 2.82 → 1.81 ms | 103.1 → 110.3 | 0 → 0 |
 | `crowd`, 31 Zombies | 6.42 → 2.37 ms | 61.8 → 91.2 | 3,264 → 10 |
 
-The `crowd` row compares two different games. On the interpreter the original freezes at the first swing that hits 24 or more Zombies (#151), so its 6.42 ms is a frozen original running out every frame's budget. On the recompiler that write is not stopped and the original plays on: 96 hits on the Zombies against 30, and Kirby killed by them before the run ends. It is the first `crowd` run with a live original after the swing.
+The `crowd` row compares two different games. On the interpreter the original freezes at the first swing that hits 24 or more Zombies (#151), so its 6.42 ms is a frozen original running out every frame's budget. On the recompiler that write is not stopped and the original plays on: 96 hits on the Zombies against 30, and Kirby killed by them before the run ends. It is the first `crowd` run with a live original after the swing. Since #151 the interpreter's original plays on too ([the collision pool](#the-collision-pool-151)).
 
 Not measured: play in a window on the GPU with vsync, and more than one run of each. The recompiler with #148 and #150 is below.
 
@@ -158,6 +158,19 @@ The runtime's defaults turn on the idle-screen skip, twice the ARM9 clock and th
 Against the runs above, on other builds and days: the `movement` step was 2.82 ms on the interpreter and 1.81 ms on the recompiler alone; the 20-Zombie step 3.60 ms at the DS clock and 3.69 ms at twice it, with 7 and 5 frames ended inside a pass. In the 31-Zombie run all 31 Zombies were destroyed after 66 hits; on the recompiler alone the Zombies killed Kirby. Each row is a different game, so the counts of late frames compare loosely. `perf.json` of the `movement` run: host frame median 8.4 ms, 99th percentile 15.0 ms, 50 of 10,415 frames over 20 ms.
 
 Not measured: play in a window on the GPU with vsync, and more than one run of each.
+
+## The collision pool (#151)
+
+One swing into 24 or more enemies used up the original's 48 collision groups and stopped it for good (docs/NDS_BRIDGE.md, The collision pool). The bridge now adds 64 groups from the scene heap, one 37,136-byte block per stage. Lab runs of the 31-Zombie `crowd` on a private build (`repros/fix-151`), isolated profile, software drawing, `performance` power profile, one 120 s run each:
+
+| Machine | Original step | Host fps | Frames ended inside a pass |
+|---|---|---|---|
+| Interpreter, DS clock (`20261014-122119`) | 3.67 ms | 78.4 | 10 in the logged minute; 7 after the crowd appeared |
+| Recompiler, twice the clock (`20261014-122321`) | 2.08 ms | 85.8 | 5; 2 after the crowd appeared |
+
+On the interpreter the same plan cost 6.42 ms with 3,264 late frames before (The original on the recompiler, above): that was a stopped original using up every frame. Now it plays on, and 3.67 ms is what that fight costs on the interpreter. The recompiler row matches the run of the three together (2.08 ms, 5 frames).
+
+A harder pile, from the bridge's margin probe (docs/NDS_BRIDGE.md, The collision pool): 31 enemies stacked on one spot and attacked for 240 frames end up to 189 of 300 frames inside a pass on the interpreter at the DS clock (Mirror, B mashed), and 0 to 189 across the 24 abilities. Not measured at the runtime's defaults.
 
 ## Per-step bookkeeping (#160)
 
@@ -196,7 +209,7 @@ The shared bridge binary, its provenance and `oracle/bridge-test-results.json` w
 Measured or seen in #123 and not changed.
 
 - **The original frame, about 2.6 ms.** The bridge ran melonDS's interpreter. A recompiler was left out of #123: it changes the emulated timing that the recorded bridge evidence rests on. #153 added it behind a switch (The original on the recompiler, above).
-- **A pile of enemies in recoil.** With the 30 fixture targets of the `crowd` plan stacked on one spot, the original frame takes about 6 ms. #150 found what that is: the first swing hits all of them and stops the original for good (#151), and the time is an ARM9 that never rests again, not the original's code for overlapping actors. Twenty stacked targets, which it survives, cost about 3.6 ms (the table above). Thirty proxies spread over the room cost about 0.9 ms together.
+- **A pile of enemies in recoil.** With the 30 fixture targets of the `crowd` plan stacked on one spot, the original frame takes about 6 ms. #150 found what that was: the first swing hit all of them and stopped the original for good, and the time was an ARM9 that never rests again, not the original's code for overlapping actors. #151 removed the stop ([the collision pool](#the-collision-pool-151)). Twenty stacked targets, which it survives, cost about 3.6 ms (the table above). Thirty proxies spread over the room cost about 0.9 ms together.
 - **`HSprite.draw`.** `KirbyHostVisuals` hooks it to keep the Beheaded's graphics away from Kirby, and the host calls it 77–140 times a frame. It is needed on every frame while the outfit is on. At the per-call figure above that is 70–130 KB of the 166 KB a frame still allocated; this share is an estimate, not a measurement.
 - **The texture upload.** A drawn frame still uploads the whole 1024×512 texture, about 0.6 ms in the lab.
 - **OAM and palette reads.** `kssu_read_gpu` copies OBJ VRAM as a block but still reads OAM and the palettes with one bus read a byte; the whole `Read` stage is 0.04 ms a step. A block copy for them needs a new accessor in the pinned melon-rs wrapper, for at most those 0.04 ms; #160 left it out.

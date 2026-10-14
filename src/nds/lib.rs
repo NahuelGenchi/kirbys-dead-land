@@ -735,6 +735,9 @@ pub unsafe extern "C" fn kssu_world(
     if !expand_scene(r) {
         return -5;
     }
+    if !extend_hit_pool(r) {
+        return -6;
+    }
     native_trace_once(10, "world: scene allocation validated");
     let player = u32at(r, 0x49df0);
     let Some(p) = off(player, 0x8c) else {
@@ -1888,6 +1891,93 @@ fn expand_scene(r: &mut [u8]) -> bool {
     r[0x9f3e8] = PROXY_COUNT as u8;
     true
 }
+
+// The original's collision groups (0x244 bytes: four hit-box sets, then the
+// class, copy and health at +0x238) come from one pool that overlay 23 sets up
+// at a stage load (0x02071C00): 48 groups at 0x02077428, linked into a free
+// list at 0x02076F84 and taken and given back only through it and the used list
+// at 0x02076F80 (0x020714DC for the creator 0x020742C8, 0x02071508). An enemy
+// holds one for its body and one more from the start of each hit recoil
+// (0x02156ACC) for about seven frames, and the creator returns null once the
+// free list is empty. The recoil routine writes through that result unchecked,
+// so one attack that hit 24 or more proxies emptied the pool and the ARM9 took a
+// data abort that stopped the original for good (#151). The original's rooms
+// hold a few enemies; the bridge's hold up to 31 proxies. Two more groups for
+// each proxy slot come from the scene heap and are linked after the original's
+// free groups, which are still taken first. The count at +0x8C, which only the
+// stage-load setup reads, right after writing 48, records that the pool holds
+// them; after another stage load they are linked again. No code changes.
+const HIT_POOL: usize = 0x76f00;
+const HIT_GROUP_SIZE: usize = 0x244;
+const HIT_GROUPS: u16 = 48;
+const HIT_GROUPS_ADDED: usize = 2 * PROXY_COUNT;
+const HIT_POOL_MAGIC: &[u8; 8] = b"KSSUHIT1";
+fn extend_hit_pool(r: &mut [u8]) -> bool {
+    let total = HIT_GROUPS + HIT_GROUPS_ADDED as u16;
+    let count = u16at(r, HIT_POOL + 0x8c);
+    if count == total {
+        return true;
+    }
+    if count != HIT_GROUPS || u32at(r, HIT_POOL + 0x90) != 0x02077428 {
+        return false;
+    }
+    let size = 16 + HIT_GROUPS_ADDED * HIT_GROUP_SIZE;
+    let block = match scene_block(r, HIT_POOL_MAGIC, size) {
+        Some(p) => p,
+        None => {
+            let Some(p) = scene_alloc(r, size) else {
+                return false;
+            };
+            r[p..p + 16].fill(0);
+            r[p..p + 8].copy_from_slice(HIT_POOL_MAGIC);
+            put32(r, p + 8, HIT_GROUPS_ADDED as u32);
+            p
+        }
+    };
+    // The free list's last link, bounded like the original's own 48.
+    let mut link = HIT_POOL + 0x84;
+    for _ in 0..=HIT_GROUPS {
+        let next = u32at(r, link);
+        if next == 0 {
+            break;
+        }
+        let Some(p) = off(next, HIT_GROUP_SIZE) else {
+            return false;
+        };
+        link = p;
+    }
+    if u32at(r, link) != 0 {
+        return false;
+    }
+    for i in 0..HIT_GROUPS_ADDED {
+        let group = block + 16 + i * HIT_GROUP_SIZE;
+        r[group..group + HIT_GROUP_SIZE].fill(0);
+        put32(r, link, BASE + group as u32);
+        link = group;
+    }
+    r[HIT_POOL + 0x8c..HIT_POOL + 0x8e].copy_from_slice(&total.to_le_bytes());
+    true
+}
+// A block this bridge allocated earlier in the scene heap, found by the magic at
+// the start of its data, or None.
+fn scene_block(r: &[u8], magic: &[u8; 8], size: usize) -> Option<usize> {
+    let heap = 0x1e5360;
+    if u32at(r, heap) != 0x45585048 {
+        return None;
+    }
+    let mut address = u32at(r, heap + 0x2c);
+    for _ in 0..4096 {
+        let p = off(address, 16)?;
+        if u16at(r, p) != 0x5544 {
+            return None;
+        }
+        if u32at(r, p + 4) as usize >= size && off(address, 16 + size).is_some() && &r[p + 16..p + 24] == magic {
+            return Some(p + 16);
+        }
+        address = u32at(r, p + 12);
+    }
+    None
+}
 #[no_mangle]
 pub extern "C" fn kssu_proxy_capacity() -> u32 {
     (PROXY_COUNT - 1) as u32
@@ -2317,8 +2407,12 @@ const HOOK_WORDS: usize = 3 + 4 + 15;
 /// Arm one original ability change. Returns 0 when armed, -2 while the original
 /// would refuse it (the give-ability routine's own test: an active player standing,
 /// walking, airborne or swimming, field 2 == 1 and action group 4, 6, 7 or 8;
-/// an attack, a mouthful, a slide, a recoil or a ladder are other groups), -3
-/// while a change is still pending, and -4 when the player is not the expected object.
+/// an attack, a slide, a recoil or a ladder are other groups) or while Kirby holds
+/// a mouthful, -3 while a change is still pending, and -4 when the player is not
+/// the expected object. A mouthful keeps the groups of standing, walking and
+/// jumping; after `SetAbility` the give-ability routine drops it (`0x020AEF70`
+/// sets field 4 back to 1), which this call does not do, so it refuses instead
+/// and the mouthful is spat or swallowed first (#158).
 #[no_mangle]
 pub unsafe extern "C" fn kssu_set_ability(handle: *mut std::ffi::c_void, ability: u8) -> i32 {
     if handle.is_null() || !(1..=25).contains(&ability) {
@@ -2337,13 +2431,57 @@ pub unsafe extern "C" fn kssu_set_ability(handle: *mut std::ffi::c_void, ability
         return -4;
     }
     let record = (PLAYER_RECORD - BASE) as usize;
-    if inhaling || r[record + 0x12] != 1 || !matches!(r[record + 0x19], 4 | 6 | 7 | 8) {
+    if inhaling
+        || r[record + 0x12] != 1
+        || !matches!(r[record + 0x19], 4 | 6 | 7 | 8)
+        || r[record + 0x14] == CARRY_MOUTHFUL
+    {
         return -2;
     }
     kssu_hook_args = [actor, PLAYER_RECORD, ability as u32, 0];
     kssu_hook_fn = SET_ABILITY;
     kssu_hook_at = PLAYER_UPDATE;
     kssu_hook_state = 1;
+    0
+}
+/// Player field 4 (record +0x14) while Kirby holds a mouthful.
+const CARRY_MOUTHFUL: u8 = 2;
+/// Kirby's move as the original keeps it (#158). The original's move selectors
+/// (the stand's is `0x0210EA60`) and its give-ability routine read player field 4,
+/// `carry`: 2 while Kirby holds a mouthful, from the stand after the catch through
+/// a swallow until the copy loads, or a spit until the star leaves, and 1 when he
+/// holds nothing. The mouth count behind `kssu_action_flags` bit 1 stays set after
+/// a swallow until the next inhale; `carry` does not. `descriptor` is the running
+/// move (record +0x808), a 24-byte descriptor, and `table` the copy's move table
+/// (+0x800, 0 for Normal): `(descriptor - table) / 24` indexes a copy's own move,
+/// while standing, walking, jumping and their mouthful variants come from tables
+/// every copy shares (mouthful stand `0x02131508`, walk `0x02131148`, jump
+/// `0x021311C0`, fall `0x02131238`, landing `0x021310E8`).
+#[repr(C)]
+#[derive(Default, Copy, Clone)]
+pub struct KssuMove {
+    /// The action code, group then id (record +0x18, 0x020BAF80).
+    pub action: u16,
+    pub carry: u8,
+    /// The copy byte, 1 for Normal.
+    pub ability: u8,
+    pub descriptor: u32,
+    pub table: u32,
+}
+#[no_mangle]
+pub unsafe extern "C" fn kssu_move(handle: *mut std::ffi::c_void, dest: *mut KssuMove) -> i32 {
+    if handle.is_null() || dest.is_null() {
+        return -1;
+    }
+    let r = (&*(handle as *mut Bridge)).nds.main_ram();
+    let record = (PLAYER_RECORD - BASE) as usize;
+    *dest = KssuMove {
+        action: u16at(r, record + 0x18),
+        carry: r[record + 0x14],
+        ability: r[record + 0x13],
+        descriptor: u32at(r, record + 0x808),
+        table: u32at(r, record + 0x800),
+    };
     0
 }
 /// 1 while an armed ability change has not returned yet, otherwise 0.

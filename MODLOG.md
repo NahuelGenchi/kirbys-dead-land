@@ -2210,6 +2210,70 @@ the all-ability rendering tests as full gameplay acceptance.
 - Not run: the owner's play launcher, a controller, a window on the GPU,
   bosses, a long session, listening.
 
+## 2026-10-14 — the native and audio test projects build again (#155)
+
+- `tests/nds` and `tests/audio` linked `NdsRuntime.cs` but not
+  `NdsObjRenderer.cs`, where `FarObject` has lived since #67, so neither
+  built. Both now link it, and `scripts/check.py` builds every C# project
+  under `tests/`, so a missing link fails the offline check.
+- `tests/nds` against the shared bridge, the ROM and `oracle/ready2/000.state`:
+  passes (ABI sizes, seed, walking, facing, RAM bounds, 3 live hits).
+  `tests/audio` with `SDL_AUDIODRIVER=dummy`: passes (288,836 samples, jump
+  peak 1,571, landing peak 5,597, as `docs/AUDIO.md` records).
+  `python3 scripts/check.py` passes with the six new builds.
+- Not run: any live check; nothing in the game changed.
+
+## 2026-10-14 — one attack into 24 or more enemies no longer stops the original (#151)
+
+- Cause: the original takes every collision group from one pool of 48
+  (`0x02076F00`, set up at each stage load by `0x02071C00`). A proxy holds
+  one; each hit makes the recoil routine `0x02156ACC` create a companion
+  that holds one more for about 7 frames, and then writes the enemy's
+  health into it unchecked. Thirty-one proxies and 24 hits in one swing
+  emptied it: a null write, a data abort on the interpreter, six bytes of
+  ITCM on the recompiler.
+- `kssu_world` links 64 more groups, two per proxy slot, from the scene
+  heap after the original's free ones and sets the count to 112, its
+  marker; no original instruction changes. It returns -6 when the pool is
+  not the one expected. Only the pool's setup reads the count or the base.
+- Private build `repros/fix-151`: 90 cases pass with the new `hit_pool`; the
+  other 89 equal the shared record except the memory digests of
+  `main_screen_only` and `skip_idle_main`. A margin probe (every copy
+  ability, four attack patterns, 31 stacked proxies) kept at least 44 of
+  111 groups free; up to 189 of 300 frames ended inside a pass (Mirror,
+  mashed). Verifiers 0 mismatches, 64 init cycles; `scripts/check.py`
+  passes.
+- Live 31-Zombie `crowd`: interpreter 7 frames inside a pass after the
+  crowd appeared (3,264 on `main`) and 96 hits; the defaults 2 and 66. The
+  crowd probe now decides `passed` once, 300 frames after the crowd
+  appears, so a death's new run no longer overwrites it.
+- Not run: the helper's attacks, bosses, windowed play, the owner's
+  launcher. The shared bridge was not rebuilt. Two scratch probes that
+  leaked one emulator per run filled the machine's memory; probes now run
+  one machine per process.
+
+## 2026-10-14 — read Kirby's move; no F switch under a mouthful (#158)
+
+- A mouthful keeps the action groups of standing, walking and jumping, so
+  `kssu_set_ability`'s group test and the F slot's "free" check could not see
+  it: a change went through under the mouthful, and a swallow during the
+  press replaced the stored ability (headless: Crash set, Down, Sword).
+- The original tells a mouthful by player field 4 (`R+0x14`): the stand
+  selector `0x0210EA60` picks the mouthful stand from it, and the
+  give-ability routine's `0x020AEF70` resets it after `SetAbility`. New
+  export `kssu_move` (action, field 4, copy byte, move descriptor `R+0x808`,
+  move table `R+0x800`); `kssu_set_ability` refuses while field 4 is 2;
+  `KirbyFSlot` neither starts nor keeps waiting a press in a mouthful.
+- Case `move_mouthful`: field 4 through a catch, the five mouthful moves, a
+  spit and a swallow, the refusal, and a change after the swallow. Private
+  root `repros/move-158`, shared bridge untouched: 90 cases pass, the other
+  89 equal to the recorded results.
+- Live `fslot` with `KIRBY_LAB_FSLOT_MOUTHFUL=1` (`20261014-125300`,
+  `125544`): F with a real Zombie held started nothing and kept the mouthful
+  and Crash's use; after the spit F fired Crash as usual.
+- Not run: the drop of a press already waiting when a catch completes, the
+  swallow path live, verifiers (no rendering change), the owner's launcher.
+
 ## 2026-10-14 — cheaper per-step bookkeeping (#160)
 
 - `KirbyEnemies.Prepare` tested every entity of the level with host calls

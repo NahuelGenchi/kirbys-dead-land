@@ -14,7 +14,9 @@ namespace Kirby.Runtime;
 /// floor Crash item (it must stay on the floor), gets Sword through the original
 /// swallow, takes Crash with the real Interact binding, fires it with the real
 /// Heal binding (F) beside a real Zombie, then takes Mike and fires its three
-/// shouts, and finally takes Paint and Cook to check the replacement.
+/// shouts, and finally takes Paint and Cook to check the replacement. With
+/// KIRBY_LAB_FSLOT_MOUTHFUL=1 it instead stores Crash in base form, inhales a
+/// Zombie, presses F while holding it, spits, and presses F again (#158).
 /// </summary>
 internal static class LabFSlotProbe
 {
@@ -116,6 +118,12 @@ internal static class LabFSlotProbe
                         item = KirbyAbilityItems.AbilityOf(KirbyFSlot.Item), main = session.Rules.AbilityId, source = machine.State.Ability };
                     phase = 20; phaseAt = tick + 1;
                     Stage("Resumed", result["resumed"]);
+                    return 0;
+                }
+                if (Environment.GetEnvironmentVariable("KIRBY_LAB_FSLOT_MOUTHFUL") == "1")
+                {
+                    phase = 40; phaseAt = tick + 1;
+                    Stage("Settled, mouthful path", new { canChange = NdsRuntime.CanChangeAbility, canReadMove = machine.TryMove(out _) });
                     return 0;
                 }
                 Next(tick, "Settled", new { canChange = NdsRuntime.CanChangeAbility });
@@ -290,10 +298,73 @@ internal static class LabFSlotProbe
                     Next(tick, "Hit check done", result["hitDuringSwitch"]);
                 }
                 return 0;
+            case 40: // #158: store Crash with Interact, still in base form
+                if (inPhase == 0) { drop = Spawn(hero, "Crash"); return 0; }
+                if (interactAt is null && inPhase > 30 && hero.focused?.HashlinkPointer == drop!.HashlinkPointer) { interactAt = tick; return 0; }
+                if (interactAt is uint taken && tick - taken > 20 && session.Rules.Stored.Ability == "Crash")
+                    Next(tick, "Crash stored", new { uses = session.Rules.Stored.Uses, main = session.Rules.AbilityId, source = machine.State.Ability });
+                else if (inPhase > 400) Next(tick, "Crash not stored");
+                return 0;
+            case 41: // inhale a Zombie and hold it
+                if (inPhase == 0)
+                {
+                    zombie = Zombie.Class.create(hero._level, hero.cx + 2 * hero.dir, hero.cy, 1, 1);
+                    zombie.lockAiS(60);
+                    return 0;
+                }
+                if (machine.HoldsMouthful)
+                {
+                    mouthfulAt ??= tick;
+                    if (tick - mouthfulAt.Value >= 20) { usesBefore = session.Rules.Stored.Uses; Next(tick, "Holding a mouthful", Move(machine)); }
+                    return 0;
+                }
+                if (inPhase > 300) { Next(tick, "No mouthful", Move(machine)); phase = 99; return 0; }
+                // Let go of B once the catch is in (the mouth count), before the mouthful's stand.
+                return inPhase > 20 && (machine.ActionFlags & 2) == 0 ? (ushort)2 : (ushort)0;
+            case 42: // F while the mouthful is held: nothing starts and the mouthful stays
+                if (inPhase == 10) { healAt = tick; Stage("Pressing F with a mouthful", Move(machine)); }
+                if (inPhase > 10)
+                {
+                    pressStarted |= KirbyFSlot.Sequence.Active;
+                    sourcesSeen.Add(machine.State.Ability);
+                    mouthfulKept &= machine.HoldsMouthful;
+                }
+                if (inPhase == 90)
+                {
+                    result["fWithMouthful"] = new { pressStarted, mouthfulKept, sourcesSeen = sourcesSeen.Order().Select(source => (int)source).ToArray(),
+                        stored = session.Rules.Stored.Ability, usesBefore, usesAfter = session.Rules.Stored.Uses,
+                        main = session.Rules.AbilityId, move = Move(machine) };
+                    Next(tick, "F with a mouthful done", result["fWithMouthful"]);
+                }
+                return 0;
+            case 43: // spit, then F fires Crash as usual
+                if (inPhase < 3) return 2;
+                if (inPhase == 60)
+                {
+                    result["afterSpit"] = Move(machine);
+                    healAt = tick; finishesBeforeSpitPress = finishes.Count; Stage("Pressing F after the spit");
+                }
+                if (inPhase > 60 && !KirbyFSlot.Sequence.Active && finishes.Count > finishesBeforeSpitPress)
+                {
+                    result["fAfterSpit"] = new { finish = finishes[^1], stored = session.Rules.Stored.Ability, uses = session.Rules.Stored.Uses,
+                        main = session.Rules.AbilityId, source = machine.State.Ability };
+                    Next(tick, "F after the spit done", result["fAfterSpit"]);
+                }
+                else if (inPhase > 900) Next(tick, "F after the spit did not finish");
+                return 0;
             default:
                 return 0;
         }
     }
+
+    private static uint? mouthfulAt;
+    private static int usesBefore, finishesBeforeSpitPress;
+    private static bool pressStarted, mouthfulKept = true;
+    private static readonly HashSet<byte> sourcesSeen = [];
+
+    private static object Move(NdsRuntime machine) => machine.TryMove(out NdsMove move)
+        ? new { action = move.Action.ToString("X4"), move.Carry, move.Ability, descriptor = move.Descriptor.ToString("X8"), mouthful = move.Mouthful }
+        : new { action = machine.Action.ToString("X4"), Carry = (byte)0, Ability = machine.State.Ability, descriptor = "", mouthful = false };
 
     private static int foodBefore, finishesBeforeHit, lifeBeforeHit;
     private static readonly List<string> steps = [];

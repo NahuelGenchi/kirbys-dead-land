@@ -83,6 +83,7 @@ Static and run. Offsets are from the player record `R = 0x020BAF68`.
 
 | Field | Meaning |
 | :--- | :--- |
+| `R+0x14` | player field 4: 2 while Kirby holds a mouthful, 1 when he holds nothing (#158) |
 | `R+0x18` | action id, 0x01 to 0x2C |
 | `R+0x19` | action group, from the table `0x020BAAC4[id]` |
 | `R+0x1C` | pending action, 0 for none |
@@ -93,6 +94,8 @@ Static and run. Offsets are from the player record `R = 0x020BAF68`.
 | `R+0x818` | first word of the ability descriptor |
 
 The 16-bit action code the docs already use (`0x020BAF80`, for example `0x142C`) is group then id. `0x020B1D78` changes action: it calls the old action's exit, points `R+0x804` at `table + id × 24`, and calls the new action's enter. Every action shares the same five handlers; only its first word differs. That word is a selector, which returns a **move**: another 24-byte descriptor, stored at `R+0x808`. So an action is a state, and a move is what Kirby does inside it. `(R+0x808 − R+0x800) / 24` is the index of the running copy move.
+
+A mouthful is not an action of its own: it keeps the groups of standing, walking and jumping. The stand's selector `0x0210EA60` returns `0x021314C0 + n × 24` with `n` picked from player field 4 (`R+0x14`, read through `0x020A8214`): 3 when field 4 is 2, the mouthful stand `0x02131508`, and 1 when it is 1, the plain stand `0x021314D8` (6 with Plasma, 5 when field 5 is 4). Run (bridge case `move_mouthful`): field 4 is 2 from the stand after a catch, through the mouthful walk `0x02131148`, jump `0x021311C0`, fall `0x02131238` and landing `0x021310E8`, until a spit's star leaves or a swallowed copy has loaded, and 1 again after; the mouth count at `0x020BB211` is cleared by the spit but stays set after a swallow until the next inhale. The give-ability routine `0x020AF020` calls `0x020AEF70` after `SetAbility`, which sets field 4 back to 1 and asks for a stand or a fall. With Sword, `R+0x800` was `0x0212F7EC` and a swing index 3; in base form it was 0.
 
 Actions named by driving the input and reading the fields (run):
 
@@ -172,6 +175,8 @@ Static and run. A hit group is 0x240 bytes with four 0x8C nodes. `0x02071B38` bu
 | 32 | 4 × s16 | body hit box: x, y, width, height |
 
 `0x02071DF8(group, field, value)` sets one attribute later: field 0 the class, 1 the copy ability, 6 and 7 the health words. A breakpoint on `0x02071ADC` while a proxy spawned gave Waddle Dee's vitals at `0x0219C8C0` (class 0, no copy, health 16) and Parasol Waddle Dee's at `0x0219C8F0` (copy 20, health 16).
+
+Groups come from one pool of 48, which `0x02071C00` sets up at each stage load: header `0x02076F00` (used list `+0x80`, free list `+0x84`, count `+0x8C`), groups from `0x02077428` every `0x244` bytes, each with a first word that links it into one of the two lists. `0x020714DC` takes one and `0x02071508` gives it back; `0x020742C8(descriptor, callback, parent)` creates a collision actor with one. Only the setup reads the count or where the groups are. An enemy holds one for its body. Each hit makes the recoil routine `0x02156ACC` (overlay 27) create a companion that holds one more for about 7 frames, and then write the enemy's three health words into the companion's group without checking that it got one. A second pool of 96 (count `+0x8E`, records from `0x0207E0E8`, free list `+0x88`, taken by `0x02071384`) is checked by its callers. Thirty-one proxies and one swing that hit 24 of them ran the first pool out (#151; docs/NDS_BRIDGE.md, The collision pool).
 
 ## Objects, spawning and the enemy catalogue
 
@@ -264,20 +269,20 @@ A 600-frame trace of Kirby's position and pose is byte-identical between the int
 
 ## Fix candidates
 
-None is implemented. Each needs its own issue, the bridge suite, and a live check before any claim.
+Unless a row says otherwise, none is implemented. Each needs its own issue, the bridge suite, and a live check before any claim.
 
 | Candidate | Evidence here | What it needs |
 | :--- | :--- | :--- |
 | Run the original on the recompiler | 46% less step time idle, 54% less in the crowd, identical traces | The call hook lives in the interpreter loop, so fall back to the interpreter while `kssu_hook_state` is armed; discard compiled blocks after the bridge patches code in RAM; pass explicit settings (a recompiler build defaults to fast memory, which installs a fault handler inside the host process); define `JIT_ENABLED` for the C++ shim as well, or the object layouts disagree and `kssu_open` crashes; the 84 bridge cases |
 | Double the emulated ARM9 clock | Unfinished passes go from 2–5 in 360 frames to 0 with a crowd; identical traces where the original does not lag; 4 to 6% more step time | Timings that count frames across a slow pass (the limited-ability revert, loads) measured again; a decision recorded in `GAMEPLAY_FIDELITY.md`, since the original does lag here |
 | Draw engine A only when it is read | 0.4 ms a step | The layer capture is used only by screen-wide attacks; skip scanline drawing and `kssu_read_layers` outside them |
-| Read the move, not only the action | `R+0x808` names the move | Mouthful, wading and each copy attack can be told apart without inferring them from poses; `0E1B` and `1021` are ability change and death |
+| Read the move, not only the action | `R+0x808` names the move | Mouthful, wading and each copy attack can be told apart without inferring them from poses; `0E1B` and `1021` are ability change and death. The mouthful is done (#158: `kssu_move`, player field 4); wading and copy attacks are not |
 | Cheaper per-step bookkeeping | See `PERFORMANCE.md` | Block reads for OAM and palette; no per-step allocations in `kssu_world`; fewer `kssu_state` calls |
 | Real species in free slots | Enemy slots above | A host enemy mapped to a copy ability could be a real species from slots 0, 2, 3 or 4 instead of a patched Waddle Dee. Not tried |
 
 ## Not established
 
-- Nothing in this document was checked in play.
+- Apart from player field 4 during a mouthful (#158), nothing in this document was checked in play.
 - The enemy health and copy numbers are stored values read statically; only Waddle Dee's and Parasol Waddle Dee's were seen being applied.
 - The second number in each enemy descriptor (20 for Waddle Dee, 120 for Sword Knight) is probably a score value; not confirmed.
 - Mid-boss and boss health, the `shooting`, `poppyjr` and `lovely` records, the action ids listed above, the undecoded animation commands, and tile essence codes beyond the six already known.

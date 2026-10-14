@@ -740,6 +740,55 @@ def run_case(name,clock=1):
             assert ability()==1 and frame<200,frame
             assert l.kssu_set_mike_shouts(b.handle,1)==-2
             return {'refused_during_attack':refused,'switch_frames':switch,'crash_revert_frame':revert,'restore_frames':restore,'mike_one_shout_revert':frame}
+        if name=='move_mouthful':
+            # #158: player field 4 (record +0x14), which the original's move selectors and its
+            # give-ability routine read, is 2 exactly while Kirby holds a mouthful: from the
+            # stand after the catch, through the mouthful moves, until a spit's star leaves or a
+            # swallowed copy has loaded. The mouth count behind kssu_action_flags bit 1 is set
+            # from the catch and stays set after a swallow. A change is refused in a mouthful.
+            class Move(C.Structure):_fields_=[('action',C.c_uint16),('carry',C.c_uint8),('ability',C.c_uint8),('descriptor',C.c_uint32),('table',C.c_uint32)]
+            l=b.lib;l.kssu_move.argtypes=[C.c_void_p,C.POINTER(Move)]
+            l.kssu_set_ability.argtypes=[C.c_void_p,C.c_uint8];l.kssu_ability_change_pending.argtypes=[C.c_void_p]
+            l.kssu_proxy_options.argtypes=[C.c_void_p,C.c_uint32,C.c_uint8,C.c_bool]
+            floor=[3 if y>=7 else 0 for y in range(9) for x in range(100)];m=Move()
+            def run(mask,frames):
+                seen=[]
+                for _ in range(frames):
+                    at=b.state();b.world(floor,at['x_raw'],at['y_raw']);b.step(mask)
+                    assert l.kssu_move(b.handle,C.byref(m))==0
+                    v=(m.action,m.carry,m.ability,m.descriptor,b.action_flags()&2)
+                    if not seen or seen[-1]!=v:seen.append(v)
+                return seen
+            def catch(slot):
+                at=b.state();l.kssu_proxy_set(b.handle,slot,((at['x_raw']>>16)+40)*65536,151*65536,100,True);l.kssu_proxy_options(b.handle,slot,18,False)
+                for _ in range(90):
+                    run(2,1)
+                    if b.action_flags()&2:break
+                assert b.action_flags()&2
+                return run(0,20)+run(16,30)+run(0,10)+run(1,10)+run(0,60)
+            b.world(floor,384*65536,int(153.5*65536));plain=run(0,60)[-1]
+            assert plain==(0x0406,1,1,0x021314d8,0),plain
+            held=catch(1)
+            mouthful={v[3] for v in held if v[1]==2}
+            assert {0x02131508,0x02131148,0x021311c0,0x02131238,0x021310e8}<=mouthful,sorted(map(hex,mouthful))
+            assert all(v[4] for v in held) and held[-1][:2]==(0x0406,2),held[-1]
+            refused=l.kssu_set_ability(b.handle,23);assert refused==-2,refused
+            spit=run(2,3)+run(0,80)
+            assert spit[-1]==(0x0406,1,1,0x021314d8,0),spit[-1]
+            catch(2)
+            swallow=run(128,2)+run(0,200)
+            loaded=next(i for i,v in enumerate(swallow) if v[2]==18)
+            assert all(v[1]==2 for v in swallow[:loaded]),swallow[:loaded]
+            assert swallow[-1][1:3]==(1,18) and swallow[-1][4]==2,swallow[-1]
+            assert l.kssu_set_ability(b.handle,23)==0
+            for _ in range(20):
+                run(0,1)
+                if not l.kssu_ability_change_pending(b.handle):break
+            assert b.read(0x020baf7b,1)[0]==23
+            return {'plain_stand':'%08x'%plain[3],'mouthful_moves':sorted('%08x'%d for d in mouthful),'change_in_mouthful':refused,
+                    'after_spit':{'carry':spit[-1][1],'mouth_count':spit[-1][4]},
+                    'after_swallow':{'carry':swallow[-1][1],'ability':swallow[-1][2],'mouth_count_left_set':bool(swallow[-1][4])},
+                    'change_after_swallow':23}
         if name=='f_slot_plasma':
             # #135: Plasma's charge aura (effect type 20, update 0x020C838C) after an F press and back.
             l=b.lib;l.kssu_set_ability.argtypes=[C.c_void_p,C.c_uint8];l.kssu_ability_change_pending.argtypes=[C.c_void_p]
@@ -1075,6 +1124,54 @@ def run_case(name,clock=1):
             assert switched==loaded and loaded[1]>0,(switched[1:],loaded[1:],switched[0]==loaded[0])
             for path in (start,middle,after):path.unlink()
             return {'frames':300,'same_frames_as_interpreter':True,'state_from_either_continues_on_either':True,'crash_switch_and_revert':list(calls[1]),'walk_px':moving,'walk_px_unflushed_change':stale,'walk_px_after_flush':stopped,'walk_px_restored':restored,'clock_change_continues_as_saved_state':True,'crowd_unfinished_passes_after_clock_change':loaded[1]}
+        if name=='hit_pool':
+            # #151: an enemy holds one collision group for its body and one more while it
+            # recoils from a hit. The original's pool held 48, so one attack into 24 or more
+            # proxies emptied it and the original stopped for good. The bridge links two more
+            # groups per proxy slot after the original's free ones. A Sword swing and a Crash,
+            # each into 31 stacked proxies, now leave it running, and every proxy is hit. The
+            # proxies are bosses so that the host position holds them stacked through recoil.
+            l=b.lib;l.kssu_unfinished_passes.argtypes=[C.c_void_p]
+            l.kssu_set_ability.argtypes=[C.c_void_p,C.c_uint8];l.kssu_ability_change_pending.argtypes=[C.c_void_p]
+            floor=[3 if y>=7 else 0 for y in range(9) for x in range(100)]
+            groups=lambda:struct.unpack('<H',b.read(0x02076f8c,2))[0]
+            def free():
+                n=0;p=struct.unpack('<I',b.read(0x02076f84,4))[0]
+                while p and n<500:n+=1;p=struct.unpack('<I',b.read(p,4))[0]
+                return n
+            assert groups()==48 and free()==47,(groups(),free())
+            b.world(floor,384*65536,int(153.5*65536));assert groups()==112 and free()==111,(groups(),free())
+            b.step(0,60);transform(b,18);q=Proxy()
+            def place():
+                at=b.state();b.world(floor,at['x_raw'],at['y_raw'])
+                for slot in range(1,32):
+                    assert l.kssu_proxy_set(b.handle,slot,((at['x_raw']>>16)+55+(slot-1)%8)*65536,151*65536,32760,True)==0
+                    l.kssu_proxy_options(b.handle,slot,18,True);l.kssu_proxy_size(b.handle,slot,24,34)
+            def attack(held):
+                passes=l.kssu_unfinished_passes(b.handle);hit=set();low=free()
+                for i in range(300):
+                    place();b.step(2 if i<held else 0)
+                    if i<60:
+                        low=min(low,free())
+                        for slot in range(1,32):
+                            assert l.kssu_proxy_state(b.handle,slot,C.byref(q))==0
+                            if q.hp<32760 or q.flags&2:hit.add(slot)
+                x=b.state()['x_raw']
+                for _ in range(60):place();b.step(16)
+                return {'proxies_hit':len(hit),'fewest_free_groups':low,'frames_ended_inside_a_pass':l.kssu_unfinished_passes(b.handle)-passes,'walk_px_after':(b.state()['x_raw']-x)>>16}
+            for _ in range(60):place();b.step(0)
+            sword=attack(10)
+            # Crash through the F slot's call, as in case `recompiler`.
+            assert l.kssu_set_ability(b.handle,23)==0
+            for _ in range(20):
+                place();b.step()
+                if not l.kssu_ability_change_pending(b.handle):break
+            assert b.state()['ability']==23,b.state()['ability']
+            crash=attack(3)
+            for result in (sword,crash):
+                assert result['proxies_hit']==31 and result['fewest_free_groups']>0,result
+                assert result['frames_ended_inside_a_pass']<20 and result['walk_px_after']>40,result
+            return {'groups':groups(),'proxies':31,'sword':sword,'crash':crash}
         if name=='step_between_passes':
             # #134: a source frame ends as VBlank begins, between two logic passes of the
             # original. Replayed as the runtime places Kirby (the terrain window rebased
@@ -1174,7 +1271,7 @@ def main():
         result=run_case(args.case,args.arm9_clock)
         # The emulator's log shares stdout and may stop mid-line: start the result on its own line.
         print('\nRESULT '+json.dumps({'case':args.case,'result':result}),flush=True);return
-    cases=['scene_doors', 'far_shot_draw', 'room_food', 'proxy_birth_contact', 'proxy_birth_inhale', 'proxy_contact', 'proxy_contact_sword', 'proxy_touch_off', 'proxy_swallow_touch_off', 'proxy_suplex_touch_off', 'proxy_ice_detach', 'proxy_ice_release', 'proxy_lethal', 'motion', 'ladder', 'ladder_top', 'ladder_top_stomp', 'one_way', 'solid_ceiling', 'water', 'proxy_water', 'proxy_water_sword', 'proxy_water_below', 'hurt_water', 'proxy_swallow', 'hazard_spit', 'hazard_swallow', 'star_spit', 'star_spit_wall', 'star_big', 'star_ability', 'proxy_sword', 'proxy_reuse', 'proxy_cache', 'proxy_save', 'proxy_mix', 'mix_no_limited', 'boss_inhale', 'boss_suplex', 'boss_cook', 'boss_sword', 'proxy_capacity', 'copy_drop_reabsorb', 'wheelie_ride', 'proxy_suplex', 'proxy_cook', 'audio', 'hurt', 'hurt_lethal', 'hurt_cold', 'guard', 'health_invulnerable', 'health_sync', 'proxy_size', 'f_slot', 'f_slot_save', 'f_slot_plasma', 'helper_reaction', 'helper_move', 'helper_owns', 'obj_vram_block', 'main_screen_only', 'skip_idle_main', 'arm9_clock', 'recompiler', 'step_between_passes']
+    cases=['scene_doors', 'far_shot_draw', 'room_food', 'proxy_birth_contact', 'proxy_birth_inhale', 'proxy_contact', 'proxy_contact_sword', 'proxy_touch_off', 'proxy_swallow_touch_off', 'proxy_suplex_touch_off', 'proxy_ice_detach', 'proxy_ice_release', 'proxy_lethal', 'motion', 'ladder', 'ladder_top', 'ladder_top_stomp', 'one_way', 'solid_ceiling', 'water', 'proxy_water', 'proxy_water_sword', 'proxy_water_below', 'hurt_water', 'proxy_swallow', 'hazard_spit', 'hazard_swallow', 'star_spit', 'star_spit_wall', 'star_big', 'star_ability', 'proxy_sword', 'proxy_reuse', 'proxy_cache', 'proxy_save', 'proxy_mix', 'mix_no_limited', 'boss_inhale', 'boss_suplex', 'boss_cook', 'boss_sword', 'proxy_capacity', 'copy_drop_reabsorb', 'wheelie_ride', 'proxy_suplex', 'proxy_cook', 'audio', 'hurt', 'hurt_lethal', 'hurt_cold', 'guard', 'health_invulnerable', 'health_sync', 'proxy_size', 'f_slot', 'f_slot_save', 'f_slot_plasma', 'move_mouthful', 'helper_reaction', 'helper_move', 'helper_owns', 'obj_vram_block', 'main_screen_only', 'skip_idle_main', 'arm9_clock', 'recompiler', 'hit_pool', 'step_between_passes']
     if not args.skip_abilities:cases += [f'ability-{i}' for i in range(2,26)]
     if args.arm9_clock!=1:return survey(cases,args.arm9_clock)
     results=[]
