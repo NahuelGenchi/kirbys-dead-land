@@ -2209,3 +2209,16 @@ the all-ability rendering tests as full gameplay acceptance.
   followed by a throw; the three not cut short rose 242.2 px.
 - Not run: the owner's play launcher, a controller, a window on the GPU,
   bosses, a long session, listening.
+
+## 2026-10-14 — the native and audio test projects build again (#155)
+
+- `tests/nds` and `tests/audio` linked `NdsRuntime.cs` but not
+  `NdsObjRenderer.cs`, where `FarObject` has lived since #67, so neither
+  built. Both now link it, and `scripts/check.py` builds every C# project
+  under `tests/`, so a missing link fails the offline check.
+- `tests/nds` against the shared bridge, the ROM and `oracle/ready2/000.state`:
+  passes (ABI sizes, seed, walking, facing, RAM bounds, 3 live hits).
+  `tests/audio` with `SDL_AUDIODRIVER=dummy`: passes (288,836 samples, jump
+  peak 1,571, landing peak 5,597, as `docs/AUDIO.md` records).
+  `python3 scripts/check.py` passes with the six new builds.
+- Not run: any live check; nothing in the game changed.
