@@ -2209,3 +2209,25 @@ the all-ability rendering tests as full gameplay acceptance.
   followed by a throw; the three not cut short rose 242.2 px.
 - Not run: the owner's play launcher, a controller, a window on the GPU,
   bosses, a long session, listening.
+
+## 2026-10-14 — read Kirby's move; no F switch under a mouthful (#158)
+
+- A mouthful keeps the action groups of standing, walking and jumping, so
+  `kssu_set_ability`'s group test and the F slot's "free" check could not see
+  it: a change went through under the mouthful, and a swallow during the
+  press replaced the stored ability (headless: Crash set, Down, Sword).
+- The original tells a mouthful by player field 4 (`R+0x14`): the stand
+  selector `0x0210EA60` picks the mouthful stand from it, and the
+  give-ability routine's `0x020AEF70` resets it after `SetAbility`. New
+  export `kssu_move` (action, field 4, copy byte, move descriptor `R+0x808`,
+  move table `R+0x800`); `kssu_set_ability` refuses while field 4 is 2;
+  `KirbyFSlot` neither starts nor keeps waiting a press in a mouthful.
+- Case `move_mouthful`: field 4 through a catch, the five mouthful moves, a
+  spit and a swallow, the refusal, and a change after the swallow. Private
+  root `repros/move-158`, shared bridge untouched: 90 cases pass, the other
+  89 equal to the recorded results.
+- Live `fslot` with `KIRBY_LAB_FSLOT_MOUTHFUL=1` (`20261014-125300`,
+  `125544`): F with a real Zombie held started nothing and kept the mouthful
+  and Crash's use; after the spit F fired Crash as usual.
+- Not run: the drop of a press already waiting when a catch completes, the
+  swallow path live, verifiers (no rendering change), the owner's launcher.

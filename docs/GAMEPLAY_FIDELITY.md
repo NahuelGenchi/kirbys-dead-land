@@ -980,7 +980,14 @@ the stored one.
   give-ability routine would allow it: standing, walking, airborne or swimming.
   Called during an attack or with a mouthful, it left Kirby stuck in the attack
   action, so a press waits up to half a second for Kirby to be free and is
-  otherwise dropped. A hit's recoil before the attack starts can swallow the
+  otherwise dropped. A held mouthful keeps the action groups of standing,
+  walking and jumping; the original tells it by player field 4, which the
+  runtime now reads through the bridge (`kssu_move`, #158). F does nothing while
+  Kirby holds a mouthful (B spits it or Down swallows it first), a press still
+  waiting when he catches one is dropped, and the bridge refuses the switch
+  while he holds one. Before, the switch went through under the mouthful, and a
+  swallow during the press replaced the stored ability with the swallowed one
+  (seen headless). A hit's recoil before the attack starts can swallow the
   press; Kirby still holding the stored ability and free again is pressed again
   (up to three times), then switched straight back to his main copy with the use
   kept. In the attack itself the original makes Kirby immune to the hit.
@@ -1013,6 +1020,13 @@ Live runs `20261009-010357` and `20261009-010718` (see
 abilities with real Interact and F presses from a swallowed Sword, killed real
 Zombies with Crash and Cook (one food item), counted Mike's three shouts, dropped
 a replaced Paint back on the floor, and restored the slot from a host save.
+Bridge case `move_mouthful` (#158) reads player field 4 through a catch, the
+mouthful's moves, a spit and a swallow, and checks the refusal while Kirby holds
+a mouthful. Live runs `20261014-125300` and `20261014-125544` (see
+[RUNTIME_LAUNCH.md](RUNTIME_LAUNCH.md#f-slot-with-a-mouthful-2026-10-14)) pressed the real F
+binding while Kirby held a real Zombie in base form: no press started, the
+mouthful and Crash's use stayed, and after the spit F fired Crash as usual (used,
+back to base form).
 The roulette (#141) is covered headless only: bridge case `mix_no_limited`
 (no limited face shown, the three former stops give Stone, Fighter and Yo-Yo);
 no live two-enemy mouthful was run. Not

@@ -13,6 +13,7 @@ public sealed unsafe class NdsRuntime : IDisposable
     private static delegate* unmanaged[Cdecl]<nint, byte, int> recompiler;
     private static delegate* unmanaged[Cdecl]<nint, int, int, int> movePlayer, moveHelper;
     private static delegate* unmanaged[Cdecl]<nint, NdsHelper*, int> helperState;
+    private static delegate* unmanaged[Cdecl]<nint, NdsMove*, int> playerMove;
     private static delegate* unmanaged[Cdecl]<nint, uint, int> helperOwns;
     private static delegate* unmanaged[Cdecl]<nint, byte, int> setAbility, setMikeShouts, mainScreenOnly;
     private static delegate* unmanaged[Cdecl]<nint, int> abilityChangePending, unfinishedPasses, mainFrame;
@@ -85,6 +86,8 @@ public sealed unsafe class NdsRuntime : IDisposable
             skipIdleMain = (delegate* unmanaged[Cdecl]<nint, byte*, nuint, int>)skipIdle;
             mainFrame = (delegate* unmanaged[Cdecl]<nint, int>)frameDrawn;
         }
+        if (playerMove == null && NativeLibrary.TryGetExport(library, "kssu_move", out nint moveRead))
+            playerMove = (delegate* unmanaged[Cdecl]<nint, NdsMove*, int>)moveRead;
         if (arm9Clock == null && NativeLibrary.TryGetExport(library, "kssu_arm9_clock", out nint clock))
             arm9Clock = (delegate* unmanaged[Cdecl]<nint, uint, int>)clock;
         LabActivationTrace.Mark("Native Open begin");
@@ -285,6 +288,20 @@ public sealed unsafe class NdsRuntime : IDisposable
         if (movePlayer == null) throw new NotSupportedException("The native bridge cannot move Kirby alone. Rebuild and stage it with this runtime.");
         Result(movePlayer(handle, dxRaw, dyRaw));
     }
+    /// <summary>Kirby's move and mouthful state as the original keeps them (#158); false with an older bridge.</summary>
+    public bool TryMove(out NdsMove move)
+    {
+        Check();
+        move = default;
+        if (playerMove == null) return false;
+        fixed (NdsMove* ptr = &move) Result(playerMove(handle, ptr));
+        return true;
+    }
+    /// <summary>
+    /// Kirby holds a mouthful, as the original's own move selectors test it. Always
+    /// false with a bridge older than #158, which cannot tell.
+    /// </summary>
+    public bool HoldsMouthful => TryMove(out NdsMove move) && move.Mouthful;
     /// <summary>The bridge can read and move the original helper (#105).</summary>
     public static bool CanMoveHelper => moveHelper != null && helperState != null;
     /// <summary>The original CPU helper's position, velocity and action; false while Kirby has none (or an older bridge).</summary>
@@ -423,6 +440,21 @@ public unsafe struct NdsState
     /// (+0x15) does not change with facing; its 0x10 bit hides the actor.
     /// </summary>
     public readonly bool FacesLeft => (StateWords[11] & 0x8000_0000u) != 0;
+}
+
+/// <summary>
+/// Kirby's move (#158): the action, player field 4 (2 while he holds a mouthful,
+/// 1 otherwise), the copy byte, the running move descriptor and the copy's move
+/// table (0 for Normal).
+/// </summary>
+[StructLayout(LayoutKind.Sequential)]
+public struct NdsMove
+{
+    public ushort Action;
+    public byte Carry;
+    public byte Ability;
+    public uint Descriptor, Table;
+    public readonly bool Mouthful => Carry == 2;
 }
 
 /// <summary>The original CPU helper (the DS X button's partner), in source coordinates (16.16).</summary>

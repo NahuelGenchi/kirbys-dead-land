@@ -73,13 +73,25 @@ internal static class KirbyFSlot
         bool pressed = Held && !previousF;
         previousF = Held;
         if (!NdsRuntime.CanChangeAbility) return (mask, false, false);
-        if (!Sequence.Active && pressed && session.Rules.Stored.Ability is { } stored)
+        // A mouthful is spat with the attack button that a press holds back, and the
+        // original's give-ability routine would drop it. So a press neither starts nor
+        // keeps waiting while Kirby holds one: he spits or swallows first, and a copy
+        // swallowed meanwhile is not taken back by the press's restore (#158). A waiting
+        // press is dropped as one that waited too long: nothing used, nothing to restore.
+        bool mouthful = nds.HoldsMouthful;
+        if (mouthful && Sequence.Step == FStep.Waiting)
+        {
+            Sequence.Reset();
+            Finish(session, new FOutcome(false, true));
+        }
+        if (!Sequence.Active && pressed && !mouthful && session.Rules.Stored.Ability is { } stored)
             Sequence.Begin(Byte(stored), session.Rules.AbilityId is { } main ? Byte(main) : FSequence.BaseForm);
         if (!Sequence.Active) return (mask, false, false);
         // Kirby's own attack, discard and helper buttons wait for the press to end.
         mask &= unchecked((ushort)~(2 | 4 | 1024));
-        // Free as the original give-ability routine counts it: standing, walking, airborne or swimming.
-        bool free = (nds.Action >> 8) is 4 or 6 or 7 or 8;
+        // Free as the original give-ability routine counts it: standing, walking, airborne or
+        // swimming (action group 4, 6, 7 or 8), and not holding a mouthful, which keeps those groups.
+        bool free = (nds.Action >> 8) is 4 or 6 or 7 or 8 && !mouthful;
         var command = Sequence.Advance(nds.State.Ability, nds.AbilityChangePending, free, nds.RequestAbility);
         if (command.LimitShouts) nds.SetMikeShouts(1);
         if (command.Finished is { } outcome) Finish(session, outcome);
