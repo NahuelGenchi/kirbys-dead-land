@@ -347,6 +347,33 @@ def run_case(name):
                 b.step(0,wait);assert b.lib.kssu_hurt(b.handle,7,1)==0;b.step(0,3);health.append(b.lib.kssu_health(b.handle))
             assert health==[76,69,62],health
             return {'swimming_health':health}
+        if name=='mix_no_limited':
+            # The Mix wheel never shows or gives a limited-use ability (#141): the stops that
+            # gave Crash, Mike and Cook give the next face (Stone, Yo-Yo, Fighter).
+            wheel=[11,2,7,7,13,18,15,8,16,36,4,6,25,14,14,12,20,10,3,19,5,5,17,32,9]
+            floor=[3 if y>=7 else 0 for y in range(9) for x in range(100)];seed=str(ROOT/'oracle/ready2/000.state').encode();given={};lap=None
+            for press in (111,167,239):
+                assert b.lib.kssu_load_state(b.handle,seed)==0
+                qs=[Proxy(),Proxy()];previous=[0,0];faces=[]
+                b.world(floor,43*65536,int(153.5*65536));b.step(0,60)
+                for i in range(press+40):
+                    state=b.state();b.world(floor,state['x_raw'],state['y_raw'])
+                    for index in range(2):
+                        if previous[index]&12:continue
+                        assert b.lib.kssu_proxy_set(b.handle,index+1,(85+index*8)*65536,151*65536,32760,True)==0
+                        assert b.lib.kssu_proxy_options(b.handle,index+1,18 if index==0 else 4,False)==0
+                    b.step(2 if 5<=i<75 else (128 if i==90 else (2 if i==press else 0)))
+                    for index in range(2):
+                        b.lib.kssu_proxy_state(b.handle,index+1,C.byref(qs[index]));previous[index]=qs[index].flags
+                    if 100<=i<=press:faces.append(b.read(0x020bb213,1)[0])
+                assert list(b.read(0x020baa8c,25))==wheel
+                assert not any(21<=face<=24 for face in faces),faces
+                given[press]=b.state()['ability'];lap=[face for n,face in enumerate(faces) if n==0 or faces[n-1]!=face]
+            assert given=={111:14,167:7,239:5},given
+            # One full turn in the original order: the doubled faces appear once, for twice as long.
+            turn=[face for n,face in enumerate(wheel) if wheel[n-1]!=face]
+            start=turn.index(lap[1]);assert lap[1:1+len(turn)]==turn[start:]+turn[:start],lap
+            return {'wheel':wheel,'ability_by_stop_frame':given,'faces_in_one_turn':len(turn)}
         if name in ('proxy_mix','boss_inhale','boss_suplex','boss_cook','boss_sword'):
             ability={'boss_suplex':6,'boss_cook':24,'boss_sword':18}.get(name,1)
             if ability!=1:transform(b,ability)
@@ -940,7 +967,7 @@ def main():
         result=run_case(args.case)
         # The emulator's log shares stdout and may stop mid-line: start the result on its own line.
         print('\nRESULT '+json.dumps({'case':args.case,'result':result}),flush=True);return
-    cases=['scene_doors', 'far_shot_draw', 'room_food', 'proxy_birth_contact', 'proxy_birth_inhale', 'proxy_contact', 'proxy_contact_sword', 'proxy_touch_off', 'proxy_swallow_touch_off', 'proxy_suplex_touch_off', 'proxy_ice_detach', 'proxy_ice_release', 'proxy_lethal', 'motion', 'ladder', 'ladder_top', 'ladder_top_stomp', 'one_way', 'solid_ceiling', 'water', 'proxy_water', 'proxy_water_sword', 'proxy_water_below', 'hurt_water', 'proxy_swallow', 'hazard_spit', 'hazard_swallow', 'star_spit', 'star_spit_wall', 'star_big', 'star_ability', 'proxy_sword', 'proxy_reuse', 'proxy_save', 'proxy_mix', 'boss_inhale', 'boss_suplex', 'boss_cook', 'boss_sword', 'proxy_capacity', 'copy_drop_reabsorb', 'wheelie_ride', 'proxy_suplex', 'proxy_cook', 'audio', 'hurt', 'hurt_lethal', 'hurt_cold', 'guard', 'health_invulnerable', 'health_sync', 'proxy_size', 'f_slot', 'f_slot_save', 'f_slot_plasma', 'helper_reaction', 'helper_move', 'helper_owns', 'obj_vram_block', 'main_screen_only', 'step_between_passes']
+    cases=['scene_doors', 'far_shot_draw', 'room_food', 'proxy_birth_contact', 'proxy_birth_inhale', 'proxy_contact', 'proxy_contact_sword', 'proxy_touch_off', 'proxy_swallow_touch_off', 'proxy_suplex_touch_off', 'proxy_ice_detach', 'proxy_ice_release', 'proxy_lethal', 'motion', 'ladder', 'ladder_top', 'ladder_top_stomp', 'one_way', 'solid_ceiling', 'water', 'proxy_water', 'proxy_water_sword', 'proxy_water_below', 'hurt_water', 'proxy_swallow', 'hazard_spit', 'hazard_swallow', 'star_spit', 'star_spit_wall', 'star_big', 'star_ability', 'proxy_sword', 'proxy_reuse', 'proxy_save', 'proxy_mix', 'mix_no_limited', 'boss_inhale', 'boss_suplex', 'boss_cook', 'boss_sword', 'proxy_capacity', 'copy_drop_reabsorb', 'wheelie_ride', 'proxy_suplex', 'proxy_cook', 'audio', 'hurt', 'hurt_lethal', 'hurt_cold', 'guard', 'health_invulnerable', 'health_sync', 'proxy_size', 'f_slot', 'f_slot_save', 'f_slot_plasma', 'helper_reaction', 'helper_move', 'helper_owns', 'obj_vram_block', 'main_screen_only', 'step_between_passes']
     if not args.skip_abilities:cases += [f'ability-{i}' for i in range(2,26)]
     results=[]
     for name in cases:

@@ -508,6 +508,34 @@ All three runs reached their time limit without fatal log lines, and real saves
 were unchanged. A first take in base form before copying, then a swap while
 copied (the owner's exact order), and a parry-timed counter with the new shield
 were not run; the shield's existing parry path was not changed.
+
+### One shield (#139)
+
+`KIRBY_LAB_ITEM` also takes `state@seconds`: it drops nothing and records the
+inventory, the retained shield and the item drops on the level. Separate data
+root `repros/one-shield-139`, staged from the #139 branch; the private plan
+presses the copy discard (action 5) at 1.0 s and interact (action 6) at 4.6 and
+7.6 s.
+
+```sh
+KIRBY_LAB_REPRO_ABILITY=18 KIRBY_LAB_REPRO_PLAN=<plan> \
+KIRBY_LAB_ITEM=state@0.5,state@3,shield@4,shield@7,state@7.5,state@9,state@12 \
+python3 scripts/launch_runtime.py --data-root <root> --seconds 70 --start-game \
+  --outfit KirbySuperStarUltra --input-plan repro
+```
+
+Run `20261013-203959`: Sword's item sat in slot 0; the discard left both slots
+empty in base form. The first interact took a Warrior's Shield (permanent ID 277)
+into slot 0, retained 277. The second interact took another shield (item ID `Shield`,
+280): the host equipped it into the empty slot 1 with no replace dialog, so both
+shields were equipped at that instant (the owner's report). At 9.0 s and 12.0 s
+the inventory held only shield 280 in slot 1, retained 280, and the Warrior's
+Shield 277 lay among the level's item drops. The run reached its time limit
+without fatal log lines.
+
+Not run: a shop purchase (it reaches the same `Inventory.equip`, but no shop was
+used), a resumed save that already holds two shields, a parry with the kept
+shield, and the HUD slots on screen (the run is offscreen).
 ## Enemies in water
 
 `--input-plan water` (`LabWaterProbe`) looks for a host pool cell with a floor beside a dry bank (the bank may be up to three cells higher), places Kirby on the bank and creates a real Zombie in the pool, holding its AI so it stays in the water. For 120 source frames it records whether the source claims the Zombie, then it taps toward the pool, holds the original inhale until the Zombie is consumed (600-frame limit) and presses DOWN. `water.json` records the site, the frames the Zombie was source-controlled before any input, consumption and mouthful, the first copy after DOWN, and Kirby's life. A generated level may have no usable pool (`site: null`); launch again. All runs used the separate data root `repros/water-20261005`, whose bridge is built from this branch into its own `target/` so other sessions' builds of the shared oracle bridge cannot replace it.

@@ -110,8 +110,13 @@ copied form keeps only the exact retained shield for host parries. A shield can 
 for the equipped one (the old one drops), and the newly equipped shield becomes
 the retained shield (#31). The retained shield follows the host inventory every
 frame: it stays while equipped, otherwise the first equipped shield, or none, is
-retained. If two shields are equipped, the most recently taken one parries while
-copied. Every weapon other than a shield, and every skill, is declined in either
+retained. Kirby holds one shield (#139, owner decision 2026-10-13): the host
+equips a taken or bought shield into an empty slot, which base form always has,
+so `KirbyAbilityItems.Sync` drops every shield but the retained (most recently
+taken) one to the floor on the next host frame. Before #139 both stayed equipped
+in base form. Live run `20261013-203959` took two shields in base form and ended
+with the second equipped and the first on the floor; a shop purchase was not run
+(`docs/RUNTIME_LAUNCH.md`, "One shield"). Every weapon other than a shield, and every skill, is declined in either
 form through `InventItem.isUsefulFor`, the check the host makes
 before every item drop, altar, shop purchase and timed-door reward. The host then
 shows its own "Can't use that right now" message, leaves the item in place and
@@ -945,6 +950,16 @@ the stored one.
   floor ability items still replace host weapons and skills like the others, but
   are never paired with a source proxy, so the original inhale does not pull them
   in; their item card names Interact and F instead of the copy controls.
+- **Not on the Mix roulette.** A mouthful of two or more objects runs the
+  original roulette, whose wheel has its own faces, among them Mike, Crash and
+  Cook (not Paint). A stop there made the limited ability Kirby's main copy
+  (#141, owner screenshot of 2026-10-13: Cook after swallowing enemies). The
+  bridge now shows the next face in their place (Yo-Yo, Stone, Fighter; see
+  [the bridge](NDS_BRIDGE.md#verification-and-remaining-limits)): the wheel keeps
+  its original order, speed and 25 positions, and those three faces last twice
+  as long. Left to stop by itself on one of them, the original's own turn count
+  ends the roulette after two turns instead of four. A copy held from before
+  the change stays until it is used.
 - **Taken with Interact.** Interact (R by default) on such an item takes it into
   the F slot (`Rules.Stored`, item kept by `KirbyFSlot`) with its full uses: three
   for Mike, one for the others. A stored one is replaced and its item is put back
@@ -997,7 +1012,10 @@ Live runs `20261009-010357` and `20261009-010718` (see
 [RUNTIME_LAUNCH.md](RUNTIME_LAUNCH.md#f-slot-2026-10-09)) took and fired all four
 abilities with real Interact and F presses from a swallowed Sword, killed real
 Zombies with Crash and Cook (one food item), counted Mike's three shouts, dropped
-a replaced Paint back on the floor, and restored the slot from a host save. Not
+a replaced Paint back on the floor, and restored the slot from a host save.
+The roulette (#141) is covered headless only: bridge case `mix_no_limited`
+(no limited face shown, the three former stops give Stone, Fighter and Yo-Yo);
+no live two-enemy mouthful was run. Not
 run: a press lost to a hit (the live hit during the switch did no damage), F
 during a stomp, on a ladder or under water, the helper, a room change during the
 attack, Elite or Boss targets, and normal play with `./play-kirby`.
@@ -1754,7 +1772,7 @@ addition built from host items and the original inhale and swallow.
   he discards his copy first.
 - **Weapon slot.** Once per host frame `KirbyAbilityItems.Sync` keeps the slots in
   step with the copy: the copy's item sits in one non-shield slot, and base form
-  has none. The swallowed floor item itself goes into the slot; a copy from an
+  has none. A second shield is dropped first (#139). The swallowed floor item itself goes into the slot; a copy from an
   enemy gets a new base item of its ability at the level's loot level. The slot
   is the one already holding that item, else a slot holding another non-shield
   weapon (removed: it is unusable to Kirby), else an empty slot, else a shield

@@ -932,6 +932,12 @@ Check(SpeedMatch.RiseVelocity(KirbyActions.Jump, -2682) == -2682 && SpeedMatch.R
     Check(AbilityItems.Slot([SlotContent.Empty, SlotContent.Ability]) == 1, "The slot already holding the copy's item is kept");
     Check(AbilityItems.Slot([SlotContent.Shield, SlotContent.Shield], retainedShieldSlot: 1) == 0, "A second shield yields its slot");
     Check(AbilityItems.Slot([SlotContent.Shield], retainedShieldSlot: 0) == -1, "The retained shield is never replaced");
+    Check(AbilityItems.SpareShields([SlotContent.Shield, SlotContent.Shield], retainedShieldSlot: 1).SequenceEqual([0]), "A newly taken second shield replaces the one Kirby had");
+    Check(AbilityItems.SpareShields([SlotContent.Shield, SlotContent.Shield], retainedShieldSlot: 0).SequenceEqual([1]), "The retained shield stays whichever slot it is in");
+    Check(AbilityItems.SpareShields([SlotContent.Shield, SlotContent.Shield]).SequenceEqual([1]), "With no retained shield the first one stays");
+    Check(AbilityItems.SpareShields([SlotContent.Shield, SlotContent.Empty], retainedShieldSlot: 0).Count == 0 &&
+          AbilityItems.SpareShields([SlotContent.Ability, SlotContent.Shield], retainedShieldSlot: 1).Count == 0 &&
+          AbilityItems.SpareShields([SlotContent.Other, SlotContent.Empty]).Count == 0, "One shield, or none, is left alone");
 
     object first = new(), second = new(), third = new();
     var mouth = new MouthfulItems<object>();

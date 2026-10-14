@@ -226,6 +226,7 @@ pub unsafe extern "C" fn kssu_step(handle: *mut std::ffi::c_void, mask: u16, fra
     if !mute_proxy_footsteps(b.nds.main_ram_mut())
         || !keep_proxies_alive_in_water(b.nds.main_ram_mut())
         || !quicken_helper_reaction(b.nds.main_ram_mut())
+        || !keep_limited_abilities_off_mix_wheel(b.nds.main_ram_mut())
     {
         return -6;
     }
@@ -1901,6 +1902,36 @@ fn quicken_helper_reaction(r: &mut [u8]) -> bool {
     }
     put32(r, GETTER + 20, patched[0]);
     put32(r, GETTER + 24, patched[1]);
+    true
+}
+
+// A mouthful of two or more objects runs the original Mix roulette. Its wheel
+// is the 25-byte table at 0x020BAA8C: the setup 0x020AF140 derives the start
+// and auto-stop positions from the two swallowed copies, and 0x020AF1C8 reads
+// the face shown, the stop and the result from it. Three faces are limited-use
+// abilities (Mike, Crash and Cook; Paint is not on the wheel), which Kirby
+// never gets from a swallow (#102): a stop there made one his main copy
+// (#141). Each of those faces shows the next face instead, so the wheel keeps
+// its original order, speed and length and those three last twice as long.
+// The roulette code and its other faces are untouched. The user's ROM file is
+// never changed.
+fn keep_limited_abilities_off_mix_wheel(r: &mut [u8]) -> bool {
+    const WHEEL: usize = 0x020baa8c - BASE as usize;
+    const FACES: [u8; 25] = [
+        11, 2, 22, 7, 13, 18, 15, 8, 16, 36, 4, 6, 25, 23, 14, 12, 20, 10, 3, 19, 24, 5, 17, 32, 9,
+    ];
+    const LIMITED: std::ops::RangeInclusive<u8> = 21..=24;
+    for (i, &face) in FACES.iter().enumerate() {
+        let allowed = if LIMITED.contains(&face) { FACES[i + 1] } else { face };
+        if r[WHEEL + i] != face && r[WHEEL + i] != allowed {
+            return false;
+        }
+    }
+    for (i, &face) in FACES.iter().enumerate() {
+        if LIMITED.contains(&face) {
+            r[WHEEL + i] = FACES[i + 1];
+        }
+    }
     true
 }
 
