@@ -1033,8 +1033,22 @@ def run_case(name,clock=1):
             assert l.kssu_code_changed(b.handle)==0;stopped=walk()
             b.write(0x020b2714,entry);assert l.kssu_code_changed(b.handle)==0;restored=walk()
             assert stopped==0 and restored>20,(stale,stopped,restored)
-            for path in (start,middle):path.unlink()
-            return {'frames':300,'same_frames_as_interpreter':True,'state_from_either_continues_on_either':True,'crash_switch_and_revert':list(calls[1]),'walk_px':moving,'walk_px_unflushed_change':stale,'walk_px_after_flush':stopped,'walk_px_restored':restored}
+            # With #150: a block counts its cycles at the clock it was compiled at, so a clock
+            # change drops the compiled blocks. A crowd at 2x, then at the DS clock from the
+            # same frame on, plays as it does from a state saved there.
+            import hashlib
+            l.kssu_arm9_clock.argtypes=[C.c_void_p,C.c_uint32];l.kssu_unfinished_passes.argtypes=[C.c_void_p]
+            after=ROOT/'oracle/recompiler-after-test.state'
+            def crowd(frames):
+                passes=l.kssu_unfinished_passes(b.handle);trace=[frame(i,31) for i in range(frames)];b.save(after)
+                return trace,l.kssu_unfinished_passes(b.handle)-passes,hashlib.sha256(after.read_bytes()).hexdigest()
+            assert l.kssu_arm9_clock(b.handle,2)==0 and l.kssu_load_state(b.handle,bytes(start))==0
+            crowd(120);b.save(middle)
+            assert l.kssu_arm9_clock(b.handle,1)==0;switched=crowd(180)
+            assert l.kssu_load_state(b.handle,bytes(middle))==0;loaded=crowd(180)
+            assert switched==loaded and loaded[1]>0,(switched[1:],loaded[1:],switched[0]==loaded[0])
+            for path in (start,middle,after):path.unlink()
+            return {'frames':300,'same_frames_as_interpreter':True,'state_from_either_continues_on_either':True,'crash_switch_and_revert':list(calls[1]),'walk_px':moving,'walk_px_unflushed_change':stale,'walk_px_after_flush':stopped,'walk_px_restored':restored,'clock_change_continues_as_saved_state':True,'crowd_unfinished_passes_after_clock_change':loaded[1]}
         if name=='step_between_passes':
             # #134: a source frame ends as VBlank begins, between two logic passes of the
             # original. Replayed as the runtime places Kirby (the terrain window rebased

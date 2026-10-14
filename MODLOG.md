@@ -2184,3 +2184,28 @@ the all-ability rendering tests as full gameplay acceptance.
   merge. The native-init verifier's shared record was rewritten through the
   private root's `research` link and restored by rerunning it on the shared
   bridge.
+
+## 2026-10-14 — the recompiler with the doubled clock and the idle-screen skip (#153)
+
+- The open work merged together for the owner (#141, #144, #138, #139,
+  #146, #148, #150, #153). One interaction found: a compiled block counts
+  its cycles at the ARM9 clock it was compiled at, so a clock change left
+  stale costs. `kssu_arm9_clock` now sets `kssu_recompile_flush` when the
+  asked clock changes. Case `recompiler`: 31 proxies at twice the clock,
+  then the DS clock from the same frame, end in the state a state saved at
+  the switch reaches; without the flush the same trace but other states.
+- Private build of the merged tree `repros/merge-20261014` (bridge
+  `82e81174…`), shared bridge untouched: 89 cases pass; 85 equal to recorded
+  results; `main_screen_only` and `skip_idle_main` digests change only
+  through #141's wheel patch (equal with it skipped). On the recompiler at
+  twice the clock: 85 equal, 2 digests, `f_slot` as at twice the clock
+  alone, `arm9_clock`'s byte-exact save/load fails (loading drops the
+  compiled blocks; equal when the straight run drops them too). Verifiers 0
+  mismatches, `verify_native_init.py` 64 cycles (private report),
+  `scripts/check.py` passes.
+- Live, all three on, one run each: `movement` 1.45 ms, 117.8 fps, 0 late
+  frames; 20 Zombies 1.84 ms, 99.2 fps, 5; 31 Zombies 2.08 ms, 92.7 fps, 5.
+  #144's wade (`SwampHeart`): no swimming. #138's plant: four bites, each
+  followed by a throw; the three not cut short rose 242.2 px.
+- Not run: the owner's play launcher, a controller, a window on the GPU,
+  bosses, a long session, listening.

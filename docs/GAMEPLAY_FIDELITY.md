@@ -1189,6 +1189,16 @@ What that was seen to change, on a private build:
   original for good on the interpreter. On the recompiler play goes on, with
   one hit effect missing and six bytes of an original routine overwritten
   that 1,003 frames of play never ran. That is not a fix for #151.
+- **Saved states.** Loading a state discards the translated blocks, so the
+  machine does not continue byte for byte as the run that went on; on the
+  interpreter it does. A state saved after 120 frames among 8 proxies
+  continued with the same trace on either.
+- **With the doubled clock (#150).** A block's cost depends on the clock, so
+  a clock change discards the translated blocks too. All 89 bridge cases on
+  the recompiler at twice the clock: 85 return what the interpreter recorded
+  at the DS clock, two differ in digests, and two fail their own checks:
+  `f_slot` as at twice the clock alone, and the byte-for-byte check of a
+  saved state above (docs/NDS_BRIDGE.md, The recompiler).
 
 `Recompiler: false` in the staged `config.json` puts the interpreter back; a
 bridge built before #153 keeps the interpreter whatever the option says, and

@@ -143,7 +143,21 @@ Lab runs of that build, isolated profile, software drawing, `performance` power 
 
 The `crowd` row compares two different games. On the interpreter the original freezes at the first swing that hits 24 or more Zombies (#151), so its 6.42 ms is a frozen original running out every frame's budget. On the recompiler that write is not stopped and the original plays on: 96 hits on the Zombies against 30, and Kirby killed by them before the run ends. It is the first `crowd` run with a live original after the swing.
 
-Not measured: play in a window on the GPU with vsync, the recompiler together with #148's idle-screen skip or #150's doubled clock, and more than one run of each.
+Not measured: play in a window on the GPU with vsync, and more than one run of each. The recompiler with #148 and #150 is below.
+
+## The three together (#148, #150, #153)
+
+The runtime's defaults turn on the idle-screen skip, twice the ARM9 clock and the recompiler. A clock change discards the recompiler's compiled blocks, which count cycles at the clock they were compiled at (docs/NDS_BRIDGE.md, The recompiler). Lab runs of the merged tree, private build `repros/merge-20261014`, isolated profile, software drawing, `performance` power profile, one 120 s run each, all three on:
+
+| Plan | Original step | Host fps | Frames ended inside a pass |
+|---|---|---|---|
+| `movement` (`20261014-025856`) | 1.45 ms | 117.8 | 0 |
+| `crowd --crowd-size 20` (`20261014-030339`) | 1.84 ms | 99.2 | 5 |
+| `crowd`, 31 Zombies (`20261014-030116`) | 2.08 ms | 92.7 | 5 |
+
+Against the runs above, on other builds and days: the `movement` step was 2.82 ms on the interpreter and 1.81 ms on the recompiler alone; the 20-Zombie step 3.60 ms at the DS clock and 3.69 ms at twice it, with 7 and 5 frames ended inside a pass. In the 31-Zombie run all 31 Zombies were destroyed after 66 hits; on the recompiler alone the Zombies killed Kirby. Each row is a different game, so the counts of late frames compare loosely. `perf.json` of the `movement` run: host frame median 8.4 ms, 99th percentile 15.0 ms, 50 of 10,415 frames over 20 ms.
+
+Not measured: play in a window on the GPU with vsync, and more than one run of each.
 
 ## Checks run
 

@@ -247,6 +247,11 @@ pub unsafe extern "C" fn kssu_arm9_clock(handle: *mut std::ffi::c_void, multiple
     if handle.is_null() || !(1..=2).contains(&multiple) {
         return -1;
     }
+    // A compiled block counts its cycles at the clock it was compiled at (#153), so
+    // a change discards the blocks; that happens after the clock changes.
+    if kssu_arm9_shift != multiple {
+        kssu_recompile_flush = 1;
+    }
     // The clock shift is the multiple for both: 1 halves a system cycle, 2 quarters it.
     kssu_arm9_shift = multiple;
     0
