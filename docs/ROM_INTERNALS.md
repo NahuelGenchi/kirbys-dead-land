@@ -257,7 +257,7 @@ Run, i7-14700KF, power profile `performance`, driven from Python, mean of `kssu_
 
 | Build | Idle | Crowd |
 | :--- | ---: | ---: |
-| Interpreter (what the bridge uses) | 2.41 ms | 3.71 ms |
+| Interpreter (the bridge's only machine until #153) | 2.41 ms | 3.71 ms |
 | Recompiler, fast memory off | 1.31 ms | 1.71 ms |
 | Recompiler, engine A scanlines not drawn | 0.93 ms | 1.24 ms |
 | Recompiler, not drawn, ARM9 clock doubled | | 1.31 ms |
@@ -265,25 +265,24 @@ Run, i7-14700KF, power profile `performance`, driven from Python, mean of `kssu_
 
 Inside one interpreted frame the host time is 56–69% ARM9, 11–16% ARM7, 10–14.5% drawing the 2D screen and 2.6–3.5% sound mixing.
 
-A 600-frame trace of Kirby's position and pose is byte-identical between the interpreter and the recompiler, idle, with 8 proxies and with the crowd. `PERFORMANCE.md` records why the recompiler was left out of #123: "it changes the emulated timing that the recorded bridge evidence rests on". These traces show no difference; they cover three scenes, not the bridge suite.
+A 600-frame trace of Kirby's position and pose is byte-identical between the interpreter and the recompiler, idle, with 8 proxies and with the crowd. `PERFORMANCE.md` records why the recompiler was left out of #123: "it changes the emulated timing that the recorded bridge evidence rests on". These traces show no difference; they cover three scenes, not the bridge suite. The suite, the three verifiers and live runs came with #150 and #153 (docs/NDS_BRIDGE.md, The ARM9's clock and The recompiler), which record the cases that differ.
 
 ## Fix candidates
 
-Unless a row says otherwise, none is implemented. Each needs its own issue, the bridge suite, and a live check before any claim.
+Each candidate went through its own issue, the bridge suite and a live check before any claim. The last column says where it went and where its record is. The collision pool fix (#151, PR #157) came from a crowd that froze the original, not from this list; see Hits and health above.
 
-| Candidate | Evidence here | What it needs |
-| :--- | :--- | :--- |
-| Run the original on the recompiler | 46% less step time idle, 54% less in the crowd, identical traces | The call hook lives in the interpreter loop, so fall back to the interpreter while `kssu_hook_state` is armed; discard compiled blocks after the bridge patches code in RAM; pass explicit settings (a recompiler build defaults to fast memory, which installs a fault handler inside the host process); define `JIT_ENABLED` for the C++ shim as well, or the object layouts disagree and `kssu_open` crashes; the 84 bridge cases |
-| Double the emulated ARM9 clock | Unfinished passes go from 2–5 in 360 frames to 0 with a crowd; identical traces where the original does not lag; 4 to 6% more step time | Timings that count frames across a slow pass (the limited-ability revert, loads) measured again; a decision recorded in `GAMEPLAY_FIDELITY.md`, since the original does lag here |
-| Draw engine A only when it is read | 0.4 ms a step | The layer capture is used only by screen-wide attacks; skip scanline drawing and `kssu_read_layers` outside them |
-| Read the move, not only the action | `R+0x808` names the move | Mouthful, wading and each copy attack can be told apart without inferring them from poses; `0E1B` and `1021` are ability change and death. The mouthful is done (#158: `kssu_move`, player field 4); wading and copy attacks are not |
-| Cheaper per-step bookkeeping | See `PERFORMANCE.md` | Block reads for OAM and palette; no per-step allocations in `kssu_world`; fewer `kssu_state` calls |
-| Real species in free slots | Enemy slots above | A host enemy mapped to a copy ability could be a real species from slots 0, 2, 3 or 4 instead of a patched Waddle Dee. Not tried |
+| Candidate | Evidence here | What it needed | Where it went |
+| :--- | :--- | :--- | :--- |
+| Run the original on the recompiler | 46% less step time idle, 54% less in the crowd, identical traces | The call hook lives in the interpreter loop, so fall back to the interpreter while `kssu_hook_state` is armed; discard compiled blocks after the bridge patches code in RAM; pass explicit settings (a recompiler build defaults to fast memory, which installs a fault handler inside the host process); define `JIT_ENABLED` for the C++ shim as well, or the object layouts disagree and `kssu_open` crashes; the 84 bridge cases | Done in #153 (PR #154), on by default: docs/NDS_BRIDGE.md, The recompiler; docs/GAMEPLAY_FIDELITY.md, intentional deviation |
+| Double the emulated ARM9 clock | Unfinished passes go from 2–5 in 360 frames to 0 with a crowd; identical traces where the original does not lag; 4 to 6% more step time | Timings that count frames across a slow pass (the limited-ability revert, loads) measured again; a decision recorded in `GAMEPLAY_FIDELITY.md`, since the original does lag here | Done in #150 (PR #152), on by default: docs/NDS_BRIDGE.md, The ARM9's clock; docs/GAMEPLAY_FIDELITY.md, intentional deviation |
+| Draw engine A only when it is read | 0.4 ms a step | The layer capture is used only by screen-wide attacks; skip scanline drawing and `kssu_read_layers` outside them | Done in #148 (PR #149): docs/PERFORMANCE.md, The upper screen on frames with no effect |
+| Read the move, not only the action | `R+0x808` names the move | Mouthful, wading and each copy attack can be told apart without inferring them from poses; `0E1B` and `1021` are ability change and death | The mouthful only, in #158 (PR #159): `kssu_move` and player field 4 (docs/NDS_BRIDGE.md, Original ability change). Wading and copy attacks are not done |
+| Cheaper per-step bookkeeping | See `PERFORMANCE.md` | Block reads for OAM and palette; no per-step allocations in `kssu_world`; fewer `kssu_state` calls | The pairing and the actor-list walk in #160 (PR #162): docs/PERFORMANCE.md, Per-step bookkeeping. `kssu_world` and `kssu_state` were timed at under 2 µs a step together and left, and so were the OAM and palette reads |
+| Real species in free slots | Enemy slots above | A host enemy mapped to a copy ability could be a real species from slots 0, 2, 3 or 4 instead of a patched Waddle Dee | Not pursued (#161): the stand-ins are never drawn, so a real species would not be seen; the issue asks the owner what one should bring |
 
 ## Not established
 
-- Apart from player field 4 during a mouthful (#158), nothing in this document was checked in play.
+- Apart from player field 4 during a mouthful (#158) and the collision pool in a crowd (#151), nothing in this document was checked in play.
 - The enemy health and copy numbers are stored values read statically; only Waddle Dee's and Parasol Waddle Dee's were seen being applied.
 - The second number in each enemy descriptor (20 for Waddle Dee, 120 for Sword Knight) is probably a score value; not confirmed.
 - Mid-boss and boss health, the `shooting`, `poppyjr` and `lovely` records, the action ids listed above, the undecoded animation commands, and tile essence codes beyond the six already known.
-- The recompiler and clock results were not run against `tools/nds_tests.py`, the renderer or background verifiers, or the game.

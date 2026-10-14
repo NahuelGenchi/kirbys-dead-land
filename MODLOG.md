@@ -2299,3 +2299,17 @@ the all-ability rendering tests as full gameplay acceptance.
   Timed and left: `kssu_world` 1.7 µs a call, `kssu_state` 0.3 µs (a bare
   Python call is 0.4 µs), under 2 µs a step together.
   Not run: the owner's play launcher, a window on the GPU, a long session.
+
+## 2026-10-14 — the ROM notes say where each fix candidate went (#163)
+
+- `docs/ROM_INTERNALS.md`, Fix candidates, has a column that points each
+  row to its issue, pull request and record: the recompiler (#153), the
+  doubled ARM9 clock (#150) and the undrawn upper screen (#148) are in and
+  on by default; reading the move is in for the mouthful only (#158); the
+  bookkeeping is in for the pairing and the actor-list walk (#160), with
+  `kssu_world`, `kssu_state` and the OAM and palette reads timed or left;
+  real species were not pursued (#161).
+- Not established: the line saying the recompiler and the clock never met
+  the bridge suite, the verifiers or the game is gone (#150 and #153 ran
+  all three), and the collision pool joins what was checked in play.
+- Not run: anything live; documentation only.
