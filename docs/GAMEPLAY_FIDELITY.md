@@ -170,8 +170,9 @@ when the entity is on the ground (the cell below solid, the foot at the ground
 height, `dy` 0). `KirbyHurtbox` projects Kirby's original body onto the host hero
 for the whole `Level.update`, so `onTouch` saw the foot at `yr` 0.625 instead of
 1, the same cause as the pressure plate fix. `onTouch` now runs with the physical
-body (`Hook_CarnivorousPlant.onTouch`); the hit-area test in `fixedUpdate` keeps
-the projected hurtbox, as do the plant's own attacks on Kirby.
+body (`Hook_CarnivorousPlant.onTouch`). #113 left the hit-area test in
+`fixedUpdate` and the plant's bite on the projected hurtbox; #138 below changed
+that.
 
 Live (`docs/RUNTIME_LAUNCH.md`, "Carnivorous plants (#113)"): with the change
 Kirby dropped onto a plant, the plant announced, closed and bit him twice, 76 →
@@ -180,33 +181,88 @@ and no close, bump or damage. Not run: a plant under a copied attack, Kirby
 walking onto one, plants spawned by the Gardener boss (`fromGardenerBoss`), and
 normal play.
 
-#### The plant's throw (#132)
+#### The plant's throw (#132, #138)
 
-Owner report 2026-10-13 (screencast): the plant closed on Kirby and bit him, but
-he was dropped in place instead of being thrown upward. After closing,
-`onTouch` calls `bumpEntity`, which clears the entity's velocities and calls
-`bump(0, -1.5)`: 1.5 cells a fixed step, decaying by `Entity.bumpFrict` (0.82)
-each step while gravity pulls the hero back. The provider holds the host hero's
-velocities at zero, because the original machine owns Kirby's motion, so the
-bump was discarded.
+Owner reports 2026-10-13 (two screencasts): the plant bit Kirby and dropped him
+in place (#132); after #132 it threw him, but not as it throws the Beheaded:
+sometimes high, sometimes a hop, sometimes he sat on the closed plant (#138).
 
-Intentional deviation: the original has no such impulse, so the host replays it
-(`KirbyBumps`, `BumpLaunch`). The bump the host left on the hero is read after
-`bumpEntity` (so its bump window, immunity and resistance still apply) and
-becomes ascent added before each original frame: 18.9 px on the first, decaying
-by √0.82 a frame, 200 px in all before gravity, the same distance as the host's
-bump. The original controller finds itself in the air and falls on its own;
-Kirby keeps control and can float. A ceiling ends the launch, as the host clears
-a bump there; so do a stomp, a ladder, death, a cinematic and a level change.
+What the host does to the Beheaded (bytecode of `en.ltrap.CarnivorousPlant` and
+`tool.mainSkills.AirJump*`, and lab recordings of him, `docs/RUNTIME_LAUNCH.md`):
 
-Live (`docs/RUNTIME_LAUNCH.md`, "Carnivorous plants"): Kirby rose 115.5 px (4.8
-cells) in 14 frames. With no input he fell back onto the still closed plant
-0.63 s after the first bump and was bumped again (58 px, from a full-speed
-fall), then bitten when it reopened. The Beheaded's own height and air time on
-this plant were not measured, so whether he also returns inside the bump
-window is unknown. Only this plant's bump is replayed; other host bumps of the
-hero are still discarded. Not run: a launch under a ceiling, with input, while
-floating or copied, and normal play.
+- An open plant holds him (cells 303). Standing on it starts a 0.5 s timer;
+  `close()` then bites what is in the hit area, clears his velocities and
+  `bump(0, -0.5)`s him (a 34 px hop), and the plant stays shut 1.25 s. If he
+  leaves the hit area during the 0.5 s it snaps shut at once, without a bite.
+- While shut it holds nobody (cells 300: bit 8 without the solid bits) and
+  `bumpEntity` throws the hero who touches it, at most once every 0.5 s (the
+  bite starts that delay too): velocities cleared, `bump(0, -1.5)`. The touch is
+  the level's circular collision of his body (radius 16.8, height 54) with the
+  plant's (radius 24, height 24).
+- An air jump started within two cells to the side and 48 px above the plant's
+  position calls `bumpEntity` as well.
+- Per 30 Hz step, in cells: `v = dy + 0.065; y += v − bump; dy = 0.9 v;
+  bump *= 0.94`. From 1.5 that is 242.2 px in 17 steps (recorded steps match to
+  five decimals); from 0.5, 34.4 px.
+
+#132 replayed the bump as ascent added to the original's own motion with a
+decay read from the wrong field (0.82): 115 px from a stand and 58 px from a
+fall. It also left the touch to Kirby's projected hurtbox (radius 6, height 12),
+which a plant reaches only near its centre, kept the closed plant solid
+(`TileAt` took bit 8 alone for a one-way platform) and dropped the bite's hop.
+
+Intentional deviations, all host-side because the original has no such trap
+(`KirbyBumps`, `BumpLaunch`, `KirbyHurtbox.AsBeheaded`, `KirbyNdsProvider`):
+
+- A bump is replayed with the host's own steps, half a step each original
+  frame, with the original's vertical speed held at zero and Kirby's height
+  taken from the host while it lasts: 242.2 px from a stand, a fall or a float.
+  At the top the original controller falls on its own. A ceiling ends it, as do
+  a stomp, a ladder, death, a cinematic, a level change, and a jump press (the
+  Beheaded's air jump clears his bump too).
+- The plant's `fixedUpdate` and `close` see the Beheaded's body (16.8, 54) at
+  Kirby's foot instead of the projected hurtbox, and a closed plant tests that
+  circle against its own each step and calls its `onTouch`. This reverses
+  #113's choice for the hit area and the bite: the plant is a platform sized for
+  the Beheaded, and with Kirby's hurtbox it ignored him over most of its width.
+  Other attacks on Kirby keep the projected hurtbox.
+- The bite's hop is replayed (0.5 cells a step), and for that bite's hurt recoil
+  (`0F1D`) Kirby's horizontal speed is held at zero: the original recoil carried
+  him about 1 px a frame sideways, off the plant before it could throw him,
+  where the Beheaded stays in place.
+- The original ends a long fall with a small hop off the floor (about 24 px, in
+  its fall action). That hop left the plant's hit area, so the plant snapped
+  shut without biting and threw him again, for as long as he stayed. While the
+  hop lasts the plant is shown Kirby on the floor he hopped from; the hop itself
+  is untouched.
+- A jump press in the air within the host's reach of a closed plant throws
+  Kirby and is withheld from the original until released, so no float starts.
+- `TileAt` reports a one-way platform only for bit 8 with a solid bit; a closed
+  hanging plant is empty, as for the Beheaded.
+
+Live (`docs/RUNTIME_LAUNCH.md`, "Carnivorous plants", #138 table), Kirby against
+the Beheaded on generated plants: hop 34.0 / 34.4 px; throw 242.2 / 242.2 px;
+bite to throw 28–35 frames (0.47–0.58 s, the longest at the plant's edge, where
+he must sink below its surface to touch) / 0.5 s; Kirby bitten then thrown at 0,
+13, 26, 30 and 34 px from the centre (the Beheaded thrown at 13, 26 and 34);
+jumping off snaps the plant shut with no bite and falling back on it throws
+him, for both.
+
+Known differences that remain:
+
+- Kirby falls back at the original's fall speed: peak to plant in about 0.8 s
+  against the Beheaded's 0.97 s, so a bite-and-throw cycle is about 2.4 s
+  against 2.5–2.9 s.
+- The Beheaded's air-jump bounce rose 262 px in the one recording (his own air
+  jump adds to the bump); Kirby's is the plain 242 px.
+- The host's stun and control lock on the bitten or thrown hero (affects 8 and
+  45) are not translated; Kirby can steer after the bite's recoil ends.
+- Only this plant's bumps are replayed; other host bumps of the hero are still
+  discarded.
+
+Not run: a ceiling above the plant, a plant on the ground (`placedOnGround`),
+Gardener-boss plants, Kirby floating or with a copy ability on a plant, walking
+onto one, and normal play.
 
 ### Star projectiles
 
