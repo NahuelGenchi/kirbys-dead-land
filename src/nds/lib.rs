@@ -726,6 +726,9 @@ pub unsafe extern "C" fn kssu_world(
     if !expand_scene(r) {
         return -5;
     }
+    if !extend_hit_pool(r) {
+        return -6;
+    }
     native_trace_once(10, "world: scene allocation validated");
     let player = u32at(r, 0x49df0);
     let Some(p) = off(player, 0x8c) else {
@@ -1859,6 +1862,93 @@ fn expand_scene(r: &mut [u8]) -> bool {
     put32(r, 0x9f394, BASE + records as u32);
     r[0x9f3e8] = PROXY_COUNT as u8;
     true
+}
+
+// The original's collision groups (0x244 bytes: four hit-box sets, then the
+// class, copy and health at +0x238) come from one pool that overlay 23 sets up
+// at a stage load (0x02071C00): 48 groups at 0x02077428, linked into a free
+// list at 0x02076F84 and taken and given back only through it and the used list
+// at 0x02076F80 (0x020714DC for the creator 0x020742C8, 0x02071508). An enemy
+// holds one for its body and one more from the start of each hit recoil
+// (0x02156ACC) for about seven frames, and the creator returns null once the
+// free list is empty. The recoil routine writes through that result unchecked,
+// so one attack that hit 24 or more proxies emptied the pool and the ARM9 took a
+// data abort that stopped the original for good (#151). The original's rooms
+// hold a few enemies; the bridge's hold up to 31 proxies. Two more groups for
+// each proxy slot come from the scene heap and are linked after the original's
+// free groups, which are still taken first. The count at +0x8C, which only the
+// stage-load setup reads, right after writing 48, records that the pool holds
+// them; after another stage load they are linked again. No code changes.
+const HIT_POOL: usize = 0x76f00;
+const HIT_GROUP_SIZE: usize = 0x244;
+const HIT_GROUPS: u16 = 48;
+const HIT_GROUPS_ADDED: usize = 2 * PROXY_COUNT;
+const HIT_POOL_MAGIC: &[u8; 8] = b"KSSUHIT1";
+fn extend_hit_pool(r: &mut [u8]) -> bool {
+    let total = HIT_GROUPS + HIT_GROUPS_ADDED as u16;
+    let count = u16at(r, HIT_POOL + 0x8c);
+    if count == total {
+        return true;
+    }
+    if count != HIT_GROUPS || u32at(r, HIT_POOL + 0x90) != 0x02077428 {
+        return false;
+    }
+    let size = 16 + HIT_GROUPS_ADDED * HIT_GROUP_SIZE;
+    let block = match scene_block(r, HIT_POOL_MAGIC, size) {
+        Some(p) => p,
+        None => {
+            let Some(p) = scene_alloc(r, size) else {
+                return false;
+            };
+            r[p..p + 16].fill(0);
+            r[p..p + 8].copy_from_slice(HIT_POOL_MAGIC);
+            put32(r, p + 8, HIT_GROUPS_ADDED as u32);
+            p
+        }
+    };
+    // The free list's last link, bounded like the original's own 48.
+    let mut link = HIT_POOL + 0x84;
+    for _ in 0..=HIT_GROUPS {
+        let next = u32at(r, link);
+        if next == 0 {
+            break;
+        }
+        let Some(p) = off(next, HIT_GROUP_SIZE) else {
+            return false;
+        };
+        link = p;
+    }
+    if u32at(r, link) != 0 {
+        return false;
+    }
+    for i in 0..HIT_GROUPS_ADDED {
+        let group = block + 16 + i * HIT_GROUP_SIZE;
+        r[group..group + HIT_GROUP_SIZE].fill(0);
+        put32(r, link, BASE + group as u32);
+        link = group;
+    }
+    r[HIT_POOL + 0x8c..HIT_POOL + 0x8e].copy_from_slice(&total.to_le_bytes());
+    true
+}
+// A block this bridge allocated earlier in the scene heap, found by the magic at
+// the start of its data, or None.
+fn scene_block(r: &[u8], magic: &[u8; 8], size: usize) -> Option<usize> {
+    let heap = 0x1e5360;
+    if u32at(r, heap) != 0x45585048 {
+        return None;
+    }
+    let mut address = u32at(r, heap + 0x2c);
+    for _ in 0..4096 {
+        let p = off(address, 16)?;
+        if u16at(r, p) != 0x5544 {
+            return None;
+        }
+        if u32at(r, p + 4) as usize >= size && off(address, 16 + size).is_some() && &r[p + 16..p + 24] == magic {
+            return Some(p + 16);
+        }
+        address = u32at(r, p + 12);
+    }
+    None
 }
 #[no_mangle]
 pub extern "C" fn kssu_proxy_capacity() -> u32 {
