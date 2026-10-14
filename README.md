@@ -33,7 +33,8 @@ preserved; generated assets and native dependencies remain in the private data r
   Host swords and bows never attack, including the starting sword.
 - Copied Kirby retains the exact shield it carried for parrying. Taking a
   dropped shield swaps it in as in Dead Cells, in either form, and the new
-  shield becomes the one that parries.
+  shield becomes the one that parries. Kirby holds one shield: taking or
+  buying another drops the one he had (#139).
 - Items Kirby cannot use (every weapon other than a shield, and skills) get
   Dead Cells' own "Can't use that right now" message and stay on the ground; a
   long press still recycles them.

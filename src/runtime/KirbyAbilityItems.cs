@@ -315,7 +315,8 @@ internal static class KirbyAbilityItems
     /// <summary>
     /// Settle the mouthful once the original swallow or spit has happened, and
     /// keep the weapon slots in step with Kirby's copy: the copy's item in one
-    /// non-shield slot, no ability item in base form. Call once per host frame.
+    /// non-shield slot, no ability item in base form, and at most one shield.
+    /// Call once per host frame.
     /// </summary>
     public static void Sync(KirbySession session, MouthfulItems<Held> mouthful, bool mouthfulPending)
     {
@@ -356,6 +357,18 @@ internal static class KirbyAbilityItems
             }
             else contents[slot] = SlotContent.Other;
         }
+        // Kirby holds one shield (#139): the host equips a taken or bought
+        // shield into an empty slot, so the one he already had goes to the floor.
+        if (hero._level is not null)
+            foreach (int slot in AbilityItems.SpareShields(contents, retained))
+            {
+                var spare = items[slot]!;
+                inventory.remove(spare);
+                Drop(hero, spare, hero.cx, hero.cy, pop: true);
+                items[slot] = null;
+                contents[slot] = SlotContent.Empty;
+                changed = true;
+            }
         if (wanted is not null && !contents.Contains(SlotContent.Ability))
         {
             int target = AbilityItems.Slot(contents, retained);
