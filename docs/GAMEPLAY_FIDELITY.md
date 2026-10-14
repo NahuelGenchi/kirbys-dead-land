@@ -110,8 +110,13 @@ copied form keeps only the exact retained shield for host parries. A shield can 
 for the equipped one (the old one drops), and the newly equipped shield becomes
 the retained shield (#31). The retained shield follows the host inventory every
 frame: it stays while equipped, otherwise the first equipped shield, or none, is
-retained. If two shields are equipped, the most recently taken one parries while
-copied. Every weapon other than a shield, and every skill, is declined in either
+retained. Kirby holds one shield (#139, owner decision 2026-10-13): the host
+equips a taken or bought shield into an empty slot, which base form always has,
+so `KirbyAbilityItems.Sync` drops every shield but the retained (most recently
+taken) one to the floor on the next host frame. Before #139 both stayed equipped
+in base form. Live run `20261013-203959` took two shields in base form and ended
+with the second equipped and the first on the floor; a shop purchase was not run
+(`docs/RUNTIME_LAUNCH.md`, "One shield"). Every weapon other than a shield, and every skill, is declined in either
 form through `InventItem.isUsefulFor`, the check the host makes
 before every item drop, altar, shop purchase and timed-door reward. The host then
 shows its own "Can't use that right now" message, leaves the item in place and
@@ -170,8 +175,9 @@ when the entity is on the ground (the cell below solid, the foot at the ground
 height, `dy` 0). `KirbyHurtbox` projects Kirby's original body onto the host hero
 for the whole `Level.update`, so `onTouch` saw the foot at `yr` 0.625 instead of
 1, the same cause as the pressure plate fix. `onTouch` now runs with the physical
-body (`Hook_CarnivorousPlant.onTouch`); the hit-area test in `fixedUpdate` keeps
-the projected hurtbox, as do the plant's own attacks on Kirby.
+body (`Hook_CarnivorousPlant.onTouch`). #113 left the hit-area test in
+`fixedUpdate` and the plant's bite on the projected hurtbox; #138 below changed
+that.
 
 Live (`docs/RUNTIME_LAUNCH.md`, "Carnivorous plants (#113)"): with the change
 Kirby dropped onto a plant, the plant announced, closed and bit him twice, 76 →
@@ -180,33 +186,88 @@ and no close, bump or damage. Not run: a plant under a copied attack, Kirby
 walking onto one, plants spawned by the Gardener boss (`fromGardenerBoss`), and
 normal play.
 
-#### The plant's throw (#132)
+#### The plant's throw (#132, #138)
 
-Owner report 2026-10-13 (screencast): the plant closed on Kirby and bit him, but
-he was dropped in place instead of being thrown upward. After closing,
-`onTouch` calls `bumpEntity`, which clears the entity's velocities and calls
-`bump(0, -1.5)`: 1.5 cells a fixed step, decaying by `Entity.bumpFrict` (0.82)
-each step while gravity pulls the hero back. The provider holds the host hero's
-velocities at zero, because the original machine owns Kirby's motion, so the
-bump was discarded.
+Owner reports 2026-10-13 (two screencasts): the plant bit Kirby and dropped him
+in place (#132); after #132 it threw him, but not as it throws the Beheaded:
+sometimes high, sometimes a hop, sometimes he sat on the closed plant (#138).
 
-Intentional deviation: the original has no such impulse, so the host replays it
-(`KirbyBumps`, `BumpLaunch`). The bump the host left on the hero is read after
-`bumpEntity` (so its bump window, immunity and resistance still apply) and
-becomes ascent added before each original frame: 18.9 px on the first, decaying
-by √0.82 a frame, 200 px in all before gravity, the same distance as the host's
-bump. The original controller finds itself in the air and falls on its own;
-Kirby keeps control and can float. A ceiling ends the launch, as the host clears
-a bump there; so do a stomp, a ladder, death, a cinematic and a level change.
+What the host does to the Beheaded (bytecode of `en.ltrap.CarnivorousPlant` and
+`tool.mainSkills.AirJump*`, and lab recordings of him, `docs/RUNTIME_LAUNCH.md`):
 
-Live (`docs/RUNTIME_LAUNCH.md`, "Carnivorous plants"): Kirby rose 115.5 px (4.8
-cells) in 14 frames. With no input he fell back onto the still closed plant
-0.63 s after the first bump and was bumped again (58 px, from a full-speed
-fall), then bitten when it reopened. The Beheaded's own height and air time on
-this plant were not measured, so whether he also returns inside the bump
-window is unknown. Only this plant's bump is replayed; other host bumps of the
-hero are still discarded. Not run: a launch under a ceiling, with input, while
-floating or copied, and normal play.
+- An open plant holds him (cells 303). Standing on it starts a 0.5 s timer;
+  `close()` then bites what is in the hit area, clears his velocities and
+  `bump(0, -0.5)`s him (a 34 px hop), and the plant stays shut 1.25 s. If he
+  leaves the hit area during the 0.5 s it snaps shut at once, without a bite.
+- While shut it holds nobody (cells 300: bit 8 without the solid bits) and
+  `bumpEntity` throws the hero who touches it, at most once every 0.5 s (the
+  bite starts that delay too): velocities cleared, `bump(0, -1.5)`. The touch is
+  the level's circular collision of his body (radius 16.8, height 54) with the
+  plant's (radius 24, height 24).
+- An air jump started within two cells to the side and 48 px above the plant's
+  position calls `bumpEntity` as well.
+- Per 30 Hz step, in cells: `v = dy + 0.065; y += v − bump; dy = 0.9 v;
+  bump *= 0.94`. From 1.5 that is 242.2 px in 17 steps (recorded steps match to
+  five decimals); from 0.5, 34.4 px.
+
+#132 replayed the bump as ascent added to the original's own motion with a
+decay read from the wrong field (0.82): 115 px from a stand and 58 px from a
+fall. It also left the touch to Kirby's projected hurtbox (radius 6, height 12),
+which a plant reaches only near its centre, kept the closed plant solid
+(`TileAt` took bit 8 alone for a one-way platform) and dropped the bite's hop.
+
+Intentional deviations, all host-side because the original has no such trap
+(`KirbyBumps`, `BumpLaunch`, `KirbyHurtbox.AsBeheaded`, `KirbyNdsProvider`):
+
+- A bump is replayed with the host's own steps, half a step each original
+  frame, with the original's vertical speed held at zero and Kirby's height
+  taken from the host while it lasts: 242.2 px from a stand, a fall or a float.
+  At the top the original controller falls on its own. A ceiling ends it, as do
+  a stomp, a ladder, death, a cinematic, a level change, and a jump press (the
+  Beheaded's air jump clears his bump too).
+- The plant's `fixedUpdate` and `close` see the Beheaded's body (16.8, 54) at
+  Kirby's foot instead of the projected hurtbox, and a closed plant tests that
+  circle against its own each step and calls its `onTouch`. This reverses
+  #113's choice for the hit area and the bite: the plant is a platform sized for
+  the Beheaded, and with Kirby's hurtbox it ignored him over most of its width.
+  Other attacks on Kirby keep the projected hurtbox.
+- The bite's hop is replayed (0.5 cells a step), and for that bite's hurt recoil
+  (`0F1D`) Kirby's horizontal speed is held at zero: the original recoil carried
+  him about 1 px a frame sideways, off the plant before it could throw him,
+  where the Beheaded stays in place.
+- The original ends a long fall with a small hop off the floor (about 24 px, in
+  its fall action). That hop left the plant's hit area, so the plant snapped
+  shut without biting and threw him again, for as long as he stayed. While the
+  hop lasts the plant is shown Kirby on the floor he hopped from; the hop itself
+  is untouched.
+- A jump press in the air within the host's reach of a closed plant throws
+  Kirby and is withheld from the original until released, so no float starts.
+- `TileAt` reports a one-way platform only for bit 8 with a solid bit; a closed
+  hanging plant is empty, as for the Beheaded.
+
+Live (`docs/RUNTIME_LAUNCH.md`, "Carnivorous plants", #138 table), Kirby against
+the Beheaded on generated plants: hop 34.0 / 34.4 px; throw 242.2 / 242.2 px;
+bite to throw 28–35 frames (0.47–0.58 s, the longest at the plant's edge, where
+he must sink below its surface to touch) / 0.5 s; Kirby bitten then thrown at 0,
+13, 26, 30 and 34 px from the centre (the Beheaded thrown at 13, 26 and 34);
+jumping off snaps the plant shut with no bite and falling back on it throws
+him, for both.
+
+Known differences that remain:
+
+- Kirby falls back at the original's fall speed: peak to plant in about 0.8 s
+  against the Beheaded's 0.97 s, so a bite-and-throw cycle is about 2.4 s
+  against 2.5–2.9 s.
+- The Beheaded's air-jump bounce rose 262 px in the one recording (his own air
+  jump adds to the bump); Kirby's is the plain 242 px.
+- The host's stun and control lock on the bitten or thrown hero (affects 8 and
+  45) are not translated; Kirby can steer after the bite's recoil ends.
+- Only this plant's bumps are replayed; other host bumps of the hero are still
+  discarded.
+
+Not run: a ceiling above the plant, a plant on the ground (`placedOnGround`),
+Gardener-boss plants, Kirby floating or with a copy ability on a plant, walking
+onto one, and normal play.
 
 ### Star projectiles
 
@@ -889,6 +950,16 @@ the stored one.
   floor ability items still replace host weapons and skills like the others, but
   are never paired with a source proxy, so the original inhale does not pull them
   in; their item card names Interact and F instead of the copy controls.
+- **Not on the Mix roulette.** A mouthful of two or more objects runs the
+  original roulette, whose wheel has its own faces, among them Mike, Crash and
+  Cook (not Paint). A stop there made the limited ability Kirby's main copy
+  (#141, owner screenshot of 2026-10-13: Cook after swallowing enemies). The
+  bridge now shows the next face in their place (Yo-Yo, Stone, Fighter; see
+  [the bridge](NDS_BRIDGE.md#verification-and-remaining-limits)): the wheel keeps
+  its original order, speed and 25 positions, and those three faces last twice
+  as long. Left to stop by itself on one of them, the original's own turn count
+  ends the roulette after two turns instead of four. A copy held from before
+  the change stays until it is used.
 - **Taken with Interact.** Interact (R by default) on such an item takes it into
   the F slot (`Rules.Stored`, item kept by `KirbyFSlot`) with its full uses: three
   for Mike, one for the others. A stored one is replaced and its item is put back
@@ -941,7 +1012,10 @@ Live runs `20261009-010357` and `20261009-010718` (see
 [RUNTIME_LAUNCH.md](RUNTIME_LAUNCH.md#f-slot-2026-10-09)) took and fired all four
 abilities with real Interact and F presses from a swallowed Sword, killed real
 Zombies with Crash and Cook (one food item), counted Mike's three shouts, dropped
-a replaced Paint back on the floor, and restored the slot from a host save. Not
+a replaced Paint back on the floor, and restored the slot from a host save.
+The roulette (#141) is covered headless only: bridge case `mix_no_limited`
+(no limited face shown, the three former stops give Stone, Fighter and Yo-Yo);
+no live two-enemy mouthful was run. Not
 run: a press lost to a hit (the live hit during the switch did no damage), F
 during a stomp, on a ladder or under water, the helper, a room change during the
 attack, Elite or Boss targets, and normal play with `./play-kirby`.
@@ -1734,7 +1808,7 @@ addition built from host items and the original inhale and swallow.
   he discards his copy first.
 - **Weapon slot.** Once per host frame `KirbyAbilityItems.Sync` keeps the slots in
   step with the copy: the copy's item sits in one non-shield slot, and base form
-  has none. The swallowed floor item itself goes into the slot; a copy from an
+  has none. A second shield is dropped first (#139). The swallowed floor item itself goes into the slot; a copy from an
   enemy gets a new base item of its ability at the level's loot level. The slot
   is the one already holding that item, else a slot holding another non-shield
   weapon (removed: it is unusable to Kirby), else an empty slot, else a shield

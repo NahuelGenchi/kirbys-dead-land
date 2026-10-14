@@ -72,6 +72,20 @@ public static class AbilityItems
             if (slots[i] == SlotContent.Shield && i != retainedShieldSlot) return i;
         return -1;
     }
+
+    /// <summary>
+    /// Kirby holds one shield (#139). The slots whose shield leaves: every
+    /// shield slot except the retained one, or except the first when the
+    /// retained shield is in none of them.
+    /// </summary>
+    public static IReadOnlyList<int> SpareShields(IReadOnlyList<SlotContent> slots, int retainedShieldSlot = -1)
+    {
+        ArgumentNullException.ThrowIfNull(slots);
+        var shields = Enumerable.Range(0, slots.Count).Where(i => slots[i] == SlotContent.Shield).ToList();
+        if (shields.Count < 2) return [];
+        shields.Remove(shields.Contains(retainedShieldSlot) ? retainedShieldSlot : shields[0]);
+        return shields;
+    }
 }
 
 /// <summary>

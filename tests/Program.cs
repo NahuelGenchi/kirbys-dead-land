@@ -559,19 +559,40 @@ Check(HostStrikes.Grab(HostStrikes.Suplex, SpeedMatch.Carry, -1766) && !HostStri
     "Only Suplex's fast grab lunge bursts doors");
 var plantLaunch = new BumpLaunch();
 Check(!plantLaunch.Active && plantLaunch.Ascent(100) == 0, "No ascent without a bump");
+var plantSteps = BumpLaunch.Steps(1.5 * 24).ToArray();
+// Lab run 20261013-202552: the Beheaded's steps off a closed plant, in cells.
+double[] beheadedSteps = [1.43500, 1.28650, 1.14925, 1.02234, 0.90494, 0.79629, 0.69570, 0.60252, 0.51618,
+    0.43613, 0.36190, 0.29303, 0.22910, 0.16975, 0.11461, 0.06338, 0.01576];
+Check(plantSteps.Length == beheadedSteps.Length && plantSteps.Zip(beheadedSteps).All(p => Math.Abs(p.First / 24 - p.Second) < 1e-5),
+    "The launch rises by the Beheaded's recorded steps off a plant");
+Check(Math.Abs(plantSteps.Sum() - 242.217) < 0.01, "The plant throws Kirby the Beheaded's 242 px");
 plantLaunch.Start(1.5 * 24);
-double launched = 0; int launchFrames = 0;
-while (plantLaunch.Active && launchFrames++ < 600) launched += plantLaunch.Ascent(double.PositiveInfinity);
-Check(Math.Abs(BumpLaunch.Reach(1.5 * 24) - 200) < 1e-9 && launched > 197 && launched <= 200,
-    "The plant's bump carries Kirby the Beheaded's 200 px before gravity");
-Check(launchFrames < 60, "The launch is over within a second");
+double launched = 0; int launchFrames = 0; double firstAscent = plantLaunch.Ascent(double.PositiveInfinity);
+launched += firstAscent; launchFrames++;
+while (plantLaunch.Active && launchFrames < 600) { launched += plantLaunch.Ascent(double.PositiveInfinity); launchFrames++; }
+Check(Math.Abs(firstAscent - 1.435 * 12) < 1e-9, "Each fixed step's rise is spread over two source frames");
+Check(launchFrames == 34 && Math.Abs(launched - plantSteps.Sum()) < 1e-9, "The launch lasts the Beheaded's 17 steps and ends at the top");
 plantLaunch.Start(1.5 * 24);
 Check(Math.Abs(plantLaunch.Ascent(5) - (5 - BumpLaunch.CeilingMargin)) < 1e-9 && !plantLaunch.Active && plantLaunch.Ascent(100) == 0,
     "A ceiling stops the launch a margin short and ends it");
+plantLaunch.Start(1.5 * 24); plantLaunch.Ascent(100); plantLaunch.Start(1.5 * 24);
+Check(Math.Abs(plantLaunch.Ascent(100) - firstAscent) < 1e-9, "A second bump starts again from rest");
 plantLaunch.Start(1.5 * 24); plantLaunch.Reset();
 Check(!plantLaunch.Active, "A reset ends the launch");
-plantLaunch.Start(0.01);
-Check(!plantLaunch.Active, "A negligible bump does not launch");
+plantLaunch.Start(0.05 * 24);
+Check(!plantLaunch.Active, "A bump weaker than gravity does not launch");
+Check(BumpLaunch.AirJumpReach(213, 36, 1, 213, 35, 0.5) && BumpLaunch.AirJumpReach(213, 36, 1, 215, 35, 0.01) &&
+      BumpLaunch.AirJumpReach(213, 36, 1, 211, 36, 0.2), "An air jump up to two cells aside and 48 px above a plant is in its reach");
+Check(!BumpLaunch.AirJumpReach(213, 36, 1, 216, 35, 0.5) && !BumpLaunch.AirJumpReach(213, 36, 1, 213, 34, 0.9) &&
+      !BumpLaunch.AirJumpReach(213, 36, 1, 213, 37, 0.5), "Farther aside, higher, or below the plant is out of reach");
+// Lab run 20261013-203833: a closed plant (radius 24, height 24, feet 3324) first touched the falling
+// Beheaded (radius 16.8, height 54) 34 px aside between feet 3315.3 and 3326.5; run 202552, centred, between 846.4 and 856.6 (plant feet 876).
+Check(!BumpLaunch.Touches(0, 3324, 24, 24, 34, 3315.3, BumpLaunch.BeheadedRadius, BumpLaunch.BeheadedHeight) && BumpLaunch.Touches(0, 3324, 24, 24, 34, 3326.5, 16.8, 54) &&
+      !BumpLaunch.Touches(0, 876, 24, 24, 0, 846.4, 16.8, 54) && BumpLaunch.Touches(0, 876, 24, 24, 0, 856.6, 16.8, 54),
+    "A closed plant touches the Beheaded's body where the lab recorded it");
+Check(BumpLaunch.Touches(0, 876, 24, 24, 30, 864, 16.8, 54) && !BumpLaunch.Touches(0, 876, 24, 24, 31, 864, 16.8, 54),
+    "Standing on a closed plant, its touch reaches 30 px to each side");
+Check(Math.Abs(BumpLaunch.Steps(0.5 * 24).Sum() - 34.4) < 0.05, "The bite's bump is the Beheaded's 34 px hop");
 var stompRun = new StompController();
 Check(!stompRun.TryStart(KirbyActions.Standing, 480), "A grounded Kirby cannot stomp");
 Check(stompRun.TryStart(KirbyActions.Fall, 400) && stompRun.Active, "A falling Kirby stomps");
@@ -916,6 +937,12 @@ Check(SpeedMatch.RiseVelocity(KirbyActions.Jump, -2682) == -2682 && SpeedMatch.R
     Check(AbilityItems.Slot([SlotContent.Empty, SlotContent.Ability]) == 1, "The slot already holding the copy's item is kept");
     Check(AbilityItems.Slot([SlotContent.Shield, SlotContent.Shield], retainedShieldSlot: 1) == 0, "A second shield yields its slot");
     Check(AbilityItems.Slot([SlotContent.Shield], retainedShieldSlot: 0) == -1, "The retained shield is never replaced");
+    Check(AbilityItems.SpareShields([SlotContent.Shield, SlotContent.Shield], retainedShieldSlot: 1).SequenceEqual([0]), "A newly taken second shield replaces the one Kirby had");
+    Check(AbilityItems.SpareShields([SlotContent.Shield, SlotContent.Shield], retainedShieldSlot: 0).SequenceEqual([1]), "The retained shield stays whichever slot it is in");
+    Check(AbilityItems.SpareShields([SlotContent.Shield, SlotContent.Shield]).SequenceEqual([1]), "With no retained shield the first one stays");
+    Check(AbilityItems.SpareShields([SlotContent.Shield, SlotContent.Empty], retainedShieldSlot: 0).Count == 0 &&
+          AbilityItems.SpareShields([SlotContent.Ability, SlotContent.Shield], retainedShieldSlot: 1).Count == 0 &&
+          AbilityItems.SpareShields([SlotContent.Other, SlotContent.Empty]).Count == 0, "One shield, or none, is left alone");
 
     object first = new(), second = new(), third = new();
     var mouth = new MouthfulItems<object>();

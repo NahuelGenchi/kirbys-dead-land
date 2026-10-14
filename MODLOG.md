@@ -1973,6 +1973,101 @@ the all-ability rendering tests as full gameplay acceptance.
   pass on the new bridge. The shared bridge needs `tools/nds_build.py` and a
   new staging after the merge.
 
+## 2026-10-13 — ROM internals (#146)
+
+- Read the whole program, not one feature: a private capstone index of the
+  5,996 functions loaded during play, and a private instrumented copy of the
+  bridge (`repros/re-debug`: instruction histogram, watchpoints, a register
+  breakpoint, stage timers, ARM9 clock, 2D renderer and recompiler switches).
+  Record: `docs/ROM_INTERNALS.md`.
+- Found: the overlays present in play and the five addresses enemy overlays
+  share (one species a slot); the frame's call chain and its 34.7% idle load;
+  Kirby's action table `0x02131688`, the move pointer `R+0x808` and the
+  per-ability move tables behind `SetAbility`; actions `0E1B` (ability change)
+  and `1021` (death); the vitals record every hit group is built from; the
+  object type table `0x0209E10C`, file codes and the spawner; health, copy
+  ability and touch damage of 38 enemy species; the 12-bit random routine
+  `0x0200B8A4`; 566 named sound sequences.
+- Measured, headless: with 24 to 31 proxies the original ends 2 to 5 frames in
+  360 inside its logic pass, none with the emulated ARM9 clock doubled;
+  `kssu_step` 2.41 ms idle and 3.71 ms in that crowd on the interpreter, 1.31
+  and 1.71 ms on the recompiler with fast memory off, with byte-identical
+  600-frame traces of Kirby.
+- Changed: documentation only. No bridge, runtime or test change; the fix
+  candidates are listed in the record for their own issues.
+- Not run: `tools/nds_tests.py` or any verifier on the recompiler or the
+  doubled clock, any live game check, the owner's play launcher. Enemy numbers
+  are stored values read statically; only Waddle Dee's were seen applied.
+
+## 2026-10-13 — Kirby holds one shield (#139)
+
+- Owner report with a screenshot: base Kirby with a shield in each weapon slot
+  after buying a second one. Owner decision: one shield only.
+- Cause: base form has an empty weapon slot once the copy's item leaves, and the
+  host equips a taken or bought shield into an empty slot instead of swapping.
+  Nothing limited shields to one; the fidelity record listed two as allowed.
+- Fix: `AbilityItems.SpareShields` (core) names every shield slot but the
+  retained one, and `KirbyAbilityItems.Sync` drops those shields to the floor
+  each host frame, before it places the copy's item. The newly taken shield is
+  the retained one, so it stays and the old one drops, as in the host's swap.
+- `LabItemProbe` gained `state@seconds` (records inventory, retained shield and
+  level drops without dropping anything).
+- `scripts/check.py` passes (459 core assertions, runtime build). Live, isolated
+  root `repros/one-shield-139`, run `20261013-203959`: discard Sword, take two
+  shields in base form; the second stayed equipped and the first lay on the
+  floor.
+- Not run: a shop purchase, a resumed save with two shields, a parry with the
+  kept shield, the HUD on screen, the owner's play launcher.
+
+## 2026-10-13 — the Mix roulette gave Cook as the main copy (#141)
+
+- Owner screenshot (play log `20261013-201446`): Kirby wears Cook's hat and
+  the main copy slot shows Cook after swallowing enemies. Limited abilities
+  (#102) must only come from a floor item and go to the F slot.
+- Cause, reproduced headless on the shared bridge: no enemy carries a limited
+  ability, but a mouthful of two or more runs the original Mix roulette, whose
+  wheel (25 bytes at `0x020BAA8C`, read by `0x020AF1C8`) has Mike, Crash and
+  Cook among its faces. With Sword and Beam proxies, B on frames 111, 139 and
+  167 gave Crash, Cook and Mike.
+- Fix in the bridge (`keep_limited_abilities_off_mix_wheel`, validated and
+  applied each step): each of the three faces shows the next one (Yo-Yo,
+  Stone, Fighter). Order, speed, the 25 positions and the roulette code are
+  the original's. Side effect: left alone on a doubled face the original's
+  turn count stops the roulette after two turns instead of four.
+- New case `mix_no_limited` in `tools/nds_tests.py`; it fails on the unchanged
+  bridge. Bridge built in an isolated crate, shared binary untouched: 86 cases
+  passed one at a time.
+- Not run: a live game check, `scripts/check.py` (it does not cover the bridge
+  or its tests). A Cook already held as the main copy stays until used. The
+  shared bridge needs `tools/nds_build.py` and a new staging after the merge.
+
+## 2026-10-13 — the plant throws Kirby as it throws the Beheaded (#138)
+
+- Owner report (screencast) after #132: the throw is not the Beheaded's. Kirby
+  was thrown high, hopped, or sat on the closed plant.
+- Measured the Beheaded on generated plants with the mod inactive
+  (`KIRBY_LAB_MOVES_ANY=1`): 242.2 px in 17 fixed steps from `bump(0, -1.5)`,
+  reproduced to five decimals by gravity 0.065, gravity friction 0.9 and bump
+  friction 0.94 a step; a 34 px hop from the bite; thrown 0.5 s after the bite
+  anywhere on the plant; a shut plant does not hold him; an air jump just above
+  a shut plant throws him.
+- #132 used the wrong decay (0.82) on top of the original's own speed (115 px,
+  58 px from a fall), tested the touch with Kirby's small hurtbox, kept the
+  shut plant solid and dropped the bite's hop.
+- Fix: `BumpLaunch` replays the host's steps with the original's vertical speed
+  held; `KirbyHurtbox.AsBeheaded` gives the plant's `fixedUpdate` and `close`
+  the Beheaded's body at Kirby's foot, on the floor during the original's
+  landing hop; `KirbyBumps` adds the closed plant's touch, the bite's hop and
+  the air-press throw; the bite's hurt recoil is held to the vertical; `TileAt`
+  needs a solid bit for a one-way platform. Deviations and remaining
+  differences: docs/GAMEPLAY_FIDELITY.md ("The plant's throw").
+- Source: `python3 scripts/check.py` passes (463 rule assertions, the runtime
+  builds). Live (`repros/plant-138`, runs in docs/RUNTIME_LAUNCH.md): hop 34 px,
+  throw 242.2 px, bite then throw every cycle at 0, 13, 26, 30 and 34 px from
+  the centre, jump-off and air-press throws. Not run: a ceiling above the plant,
+  ground plants, Gardener-boss plants, a float or copy ability on a plant,
+  normal play.
+
 ## 2026-10-13 — Kirby swam in shallow water (#144)
 
 - Owner report (screenshot, Mama Tick): Kirby swims for the whole fight because
