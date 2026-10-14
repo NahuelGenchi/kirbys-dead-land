@@ -141,7 +141,13 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         // Migrate private development checkpoints written before bodyHei was
         // identified as a cell count. These values are native Hero defaults.
         if (originalBody.BodyHeight > 4) originalBody = new(16.8, 54, 2.25, originalBody.MaxLife);
-        nds ??= new NdsRuntime(Path.Combine(modRoot, "libkssu_bridge.so"), config.RomPath, config.SeedStatePath);
+        if (nds is null)
+        {
+            nds = new NdsRuntime(Path.Combine(modRoot, "libkssu_bridge.so"), config.RomPath, config.SeedStatePath);
+            // The upper screen is read only for a screen-wide effect, and only
+            // by readers that ask whether the frame was drawn.
+            nds.SkipIdleScreen(true);
+        }
         LabActivationTrace.Mark("Native runtime ready");
         session.Rules.Restore(lastSession?.Rules.AbilityId, lastSession?.Rules.RetainedShieldId ?? session.Rules.RetainedShieldId,
             lastSession?.Rules.AbilityEmpowered ?? false, lastSession?.Rules.PendingEmpowerment);

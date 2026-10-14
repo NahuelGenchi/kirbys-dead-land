@@ -59,7 +59,7 @@ def main():
         summaries.append(summary)
         print(json.dumps(summary), flush=True)
         if result.returncode:
-            raise RuntimeError(f'{name}: source output differs or an effect is unsupported; see {report}')
+            raise RuntimeError(f'{name}: source output differs, an effect is unsupported or the idle skip changes one; see {report}')
     (output / 'summary.json').write_text(json.dumps(summaries, indent=2) + '\n')
 
 

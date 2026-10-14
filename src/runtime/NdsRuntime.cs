@@ -14,7 +14,8 @@ public sealed unsafe class NdsRuntime : IDisposable
     private static delegate* unmanaged[Cdecl]<nint, NdsHelper*, int> helperState;
     private static delegate* unmanaged[Cdecl]<nint, uint, int> helperOwns;
     private static delegate* unmanaged[Cdecl]<nint, byte, int> setAbility, setMikeShouts, mainScreenOnly;
-    private static delegate* unmanaged[Cdecl]<nint, int> abilityChangePending, unfinishedPasses;
+    private static delegate* unmanaged[Cdecl]<nint, int> abilityChangePending, unfinishedPasses, mainFrame;
+    private static delegate* unmanaged[Cdecl]<nint, byte*, nuint, int> skipIdleMain;
     private bool firstStep = true, firstWorld = true;
     // Kirby's original screen position after the latest source frame, taken
     // before the next World call rebases his coordinates.
@@ -74,6 +75,12 @@ public sealed unsafe class NdsRuntime : IDisposable
             mainScreenOnly = (delegate* unmanaged[Cdecl]<nint, byte, int>)mainOnly;
         if (unfinishedPasses == null && NativeLibrary.TryGetExport(library, "kssu_unfinished_passes", out nint unfinished))
             unfinishedPasses = (delegate* unmanaged[Cdecl]<nint, int>)unfinished;
+        if (skipIdleMain == null && NativeLibrary.TryGetExport(library, "kssu_skip_idle_main", out nint skipIdle) &&
+            NativeLibrary.TryGetExport(library, "kssu_main_frame", out nint frameDrawn))
+        {
+            skipIdleMain = (delegate* unmanaged[Cdecl]<nint, byte*, nuint, int>)skipIdle;
+            mainFrame = (delegate* unmanaged[Cdecl]<nint, int>)frameDrawn;
+        }
         LabActivationTrace.Mark("Native Open begin");
         handle = Native.Open(Path.GetFullPath(rom), Path.GetFullPath(state));
         LabActivationTrace.Mark("Native Open returned");
@@ -130,6 +137,31 @@ public sealed unsafe class NdsRuntime : IDisposable
         get { Check(); if (unfinishedPasses == null) return 0; int value = unfinishedPasses(handle); Result(value); return value; }
     }
     private int countedPasses;
+    /// <summary>
+    /// Ask the bridge to leave the upper screen undrawn on every scanline whose
+    /// layer capture would read as no effect against <see cref="SourceBgPalette"/>
+    /// (#148). The machine is the same either way; this only saves time. Only a
+    /// reader that asks <see cref="MainFrame"/> first may turn it on: the capture
+    /// and the framebuffer are not those of an undrawn frame. An older bridge
+    /// without the switch, or a refusal, keeps drawing every frame.
+    /// </summary>
+    public void SkipIdleScreen(bool enabled)
+    {
+        Check();
+        if (skipIdleMain == null) return;
+        fixed (byte* pointer = SourceBgPalette)
+            skipIdleMain(handle, enabled ? pointer : null, enabled ? (nuint)SourceBgPalette.Length : 0);
+    }
+    /// <summary>
+    /// How the upper screen of the last source frame was drawn: 0 all of it, so
+    /// the layer capture holds that frame; 1 none of it, a frame with no effect;
+    /// 2 part of it, a frame whose palette or colour effect changed on the way
+    /// down. Always 0 unless <see cref="SkipIdleScreen"/> is on.
+    /// </summary>
+    public int MainFrame
+    {
+        get { Check(); return mainFrame == null ? 0 : Math.Max(0, mainFrame(handle)); }
+    }
     /// <summary>
     /// The last frame ended inside a logic pass: the original takes longer than
     /// a frame over it, as it does when it loads an ability or a helper. Kirby
