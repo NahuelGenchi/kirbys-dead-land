@@ -14,7 +14,7 @@ in [NDS_BRIDGE.md](NDS_BRIDGE.md). The original bootstrap experiment remains in
 
 | System | Original code and host adapter |
 |---|---|
-| Clock | 33,513,982 / 560,190 source ticks per second. A display within 3% of that rate presents one original frame per host frame, like an emulator synchronized to vblank; other rates accumulate real time |
+| Clock | 33,513,982 / 560,190 source ticks per second. A display within 3% of that rate presents one original frame per host frame, like an emulator synchronized to vblank; other rates accumulate real time. With `DoubleArm9Clock` (default) the original's main processor runs at twice the DS clock; the frame rate is unchanged. See [The original's processor at twice the DS clock](#the-originals-processor-at-twice-the-ds-clock-150-intentional-deviation) |
 | Movement | The ROM updates fixed-point position, velocity and action state; the host follows its physical foot. With `MatchHostSpeed` (default) Kirby moves at the Beheaded's measured speeds: each original frame's own motion is carried on through free space (run and air control 236.5 px/s, float across at the same speed, fall 403 px/s, floating up and down at the run's tempo), the original horizontal velocity is cleared when the direction is released or reversed, and the jump keeps its 50 px but peaks after 0.25 s, as the Beheaded's does. Added motion stops short of walls and ceilings, leaves the original a full fall step above floors, follows slopes at the original's whole-pixel surface, and never applies to hits or swimming. Ladders, chains and vines climb as much faster than the original as the run, 265 px/s up and 315 px/s down (original 139 and 165, the Beheaded's average 97.5): at the original's speed the owner still found climbing too slow (#48, #51). The added climb stops a full step short of a ladder's ends, the one-way top it leads onto, ceilings and floors, so the original makes its own last steps onto and off the ladder. Ability moves keep their original motion unless they carry Kirby: a dash attack, or any move faster than the original dash, moves at the run's scale (see [Carrying ability moves](#carrying-ability-moves-40)). The original walk and dash cycles play faster with the run (up to 1.67 times, one frame a pose), so his feet cover about the ground they did natively. `false` keeps the original DS speeds (the stomp keeps the dive's) |
 | Terrain | Nearby host solids, one-way floors, slopes, ladders and water become source collision cells; all linked source objects and cached terrain probes move together when the window rebases by whole cells, while effects attached to a parent (Fire's head flame, Plasma's spark, attack effects) keep their offsets from it. Host movement of Kirby (speed match, stomp) moves only him and his terrain probes, so thrown bombs, cutters, effects and the helper keep their original paths. Over a moving host elevator the window is lifted to its surface and original objects ride with him (see [Host elevators](#host-elevators-deviation)) |
 | Input | Existing host bindings become original digital buttons; ordinary source directional combinations still apply. A held direction dashes through the original double tap (`AlwaysDash`), re-tapped after a landing only in an original ground action, so Ninja's wall cling keeps its held direction (#97); a light analog tilt walks. A key bound to both Up and jump (W and the Up arrow by default) climbs at a ladder or chain, as in the host, instead of jumping first |
@@ -999,6 +999,47 @@ attack enemies and was much slower than Kirby.
   peak speed the run's, stops at a wall). **No live game check was run**, so the
   feel in the running host game, other abilities' helpers and a helper in water
   or on a ladder are unverified.
+
+### The original's processor at twice the DS clock (#150, intentional deviation)
+
+Owner decision of 2026-10-13. The DS runs the original's main processor (the
+ARM9) at 67 MHz. When a logic pass does not fit in a frame the original lags:
+that frame ends inside the pass, and the mod holds Kirby and the terrain window
+for it (#134). A Kirby room rarely reaches that load; a Dead Cells room with
+many enemies near Kirby does.
+
+- **Change.** With `DoubleArm9Clock` (default `true`) the bridge runs the ARM9
+  at 134 MHz, the step the emulator already has for a DSi. The second
+  processor, the video and sound hardware and the cartridge keep the DS's
+  timing. `false` keeps the DS clock and its lag. Tools and tests run at the
+  DS clock.
+- **Frames that fit are the same frames.** 240 frames of Sword Kirby running,
+  attacking and jumping without a crowd give the same trace at both clocks
+  (bridge case `arm9_clock`).
+- **What ends sooner.** Passes that waited for the processor. With 31 proxies
+  around Kirby, 4 of 300 frames ended inside a pass at the DS clock and none at
+  twice it. An ability set through `SetAbility` (the F slot) takes B one frame
+  sooner: Crash's revert is seen at frame 266 instead of 267, and with one idle
+  frame after the change both clocks give the same 533 frames.
+- **What does not.** Passes that wait for the cartridge: a swallowed Sword
+  costs three late frames at both clocks. And the freeze of #151, where one
+  attack that hits 24 or more enemies stops the original at either clock.
+- **Sound.** The mixed samples can differ while a sound plays: over 240 frames
+  the only memory that differed between the clocks was the original's two
+  sound capture buffers (4 KB at `0x02048BE0`, in 11 of 30 samples). Main RAM
+  otherwise, the I/O registers, palette, OAM, VRAM, the layer captures and both
+  screens were identical. Not listened to.
+- **Evidence.** Bridge: `arm9_clock` in `tools/nds_tests.py`, and the 85 older
+  cases run once at twice the clock (`--arm9-clock 2`): 83 give the same
+  result; `f_slot` and `main_screen_only` change for the two reasons above
+  (docs/NDS_BRIDGE.md, The ARM9's clock). Live, isolated profile, one run per
+  clock: 20 Zombies hit by one Sword swing, 7 frames ended inside a pass in a
+  minute at the DS clock and 5 at twice it (runs `20261014-002620`,
+  `20261014-002418`); the `movement` plan, none at either (`20261014-002835`,
+  `20261014-003037`). Costs are in docs/PERFORMANCE.md.
+- **Not verified.** Windowed play with a controller, the sound by ear, bosses
+  and abilities other than Sword and Crash at twice the clock, and more than
+  one live run per configuration.
 
 ### Damage balance (#128, intentional deviation)
 

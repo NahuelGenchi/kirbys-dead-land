@@ -63,6 +63,7 @@ def main() -> None:
     parser.add_argument('--gdb', action='store_true', help=argparse.SUPPRESS)
     parser.add_argument('--start-game', action='store_true', help='Start a fresh run in the isolated lab save.')
     parser.add_argument('--resume-game', action='store_true', help='Resume the existing isolated save for a persistence check.')
+    parser.add_argument('--crowd-size', type=int, choices=range(1, 32), metavar='1..31', help='Zombies the crowd plan spawns (default 31).')
     parser.add_argument('--save-after', type=int, help='Request a normal host save after this many source frames.')
     parser.add_argument('--outfit', help='Set this outfit ID before starting the isolated new run.')
     parser.add_argument('--seconds', type=int, help='Offscreen test duration, default 45 seconds.')
@@ -76,6 +77,8 @@ def main() -> None:
         parser.error('--start-game and --resume-game are mutually exclusive')
     if args.probe_ability is not None and args.input_plan not in ('ability', 'screen'):
         parser.error('--probe-ability requires --input-plan ability or screen')
+    if args.crowd_size is not None and args.input_plan != 'crowd':
+        parser.error('--crowd-size requires --input-plan crowd')
     if args.probe_hud and args.input_plan != 'ability':
         parser.error('--probe-hud requires --input-plan ability')
     if args.probe_pause and not args.probe_hud:
@@ -169,7 +172,7 @@ def main() -> None:
                 env.pop(key)
     for key in ['KIRBY_LAB_PLAY', 'KIRBY_LAB_INPUT_PLAN', 'KIRBY_LAB_START_GAME', 'KIRBY_LAB_OUTFIT',
                 'KIRBY_LAB_RESUME_GAME', 'KIRBY_LAB_SAVE_AFTER', 'KIRBY_LAB_TEST_ABILITY', 'KIRBY_LAB_TEST_SCROLLS', 'KIRBY_LAB_TEST_MENU', 'KIRBY_LAB_TEST_COLLECTOR', 'KIRBY_LAB_TEST_MUTATIONS', 'KIRBY_LAB_TEST_AFFECTS', 'KIRBY_LAB_TEST_HUD', 'KIRBY_LAB_TEST_PAUSE', 'KIRBY_LAB_TEST_LEGENDARY',
-                'KIRBY_LAB_CAPTURE_FPS']:
+                'KIRBY_LAB_CAPTURE_FPS', 'KIRBY_LAB_CROWD_SIZE']:
         env.pop(key, None)
     env.update({
         'DCCM_OverridePath_CORE_ROOT': str(lab / 'coremod'),
@@ -208,6 +211,8 @@ def main() -> None:
         env['KIRBY_LAB_INPUT_PLAN'] = args.input_plan
     if args.probe_ability is not None:
         env['KIRBY_LAB_TEST_ABILITY'] = str(args.probe_ability)
+    if args.crowd_size is not None:
+        env['KIRBY_LAB_CROWD_SIZE'] = str(args.crowd_size)
     if args.probe_scrolls is not None:
         env['KIRBY_LAB_TEST_SCROLLS'] = args.probe_scrolls
     if args.probe_mutations is not None:

@@ -83,7 +83,10 @@ internal static class LabBossCrowdProbe
         {
             spawned = true; ready = frame;
             double x = (hero.cx + hero.xr) * 24, y = (hero.cy + hero.yr) * 24;
-            for (int i = 0; i < 31; i++)
+            // 31 fills every proxy slot. One Sword swing that hits 24 or more of them
+            // stops the original for good (#151); a smaller crowd keeps it running.
+            int size = int.TryParse(Environment.GetEnvironmentVariable("KIRBY_LAB_CROWD_SIZE"), out int asked) ? Math.Clamp(asked, 1, 31) : 31;
+            for (int i = 0; i < size; i++)
             {
                 var mob = Zombie.Class.create(hero._level, hero.cx + 3, hero.cy, 1, 1);
                 // Keep every durability target on the verified start platform;

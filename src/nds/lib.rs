@@ -137,6 +137,7 @@ pub unsafe extern "C" fn kssu_open(
         native_trace("open: ROM validated");
         let state = CStr::from_ptr(state_path).to_str().ok()?.to_owned();
         let mut saved = fs::read(&state).ok()?;
+        let clock = take_clock_trailer(&mut saved);
         let hook = take_hook_trailer(&mut saved);
         let metadata = read_metadata(&saved);
         if metadata.is_some() {
@@ -163,6 +164,9 @@ pub unsafe extern "C" fn kssu_open(
         // A diagnostic can keep the frame-end step to compare the two (#134).
         kssu_vblank_step = std::env::var_os("KSSU_STEP_AT_FRAME_END").is_none() as u32;
         native_trace("open: NDS started; loading snapshot");
+        // A new machine runs at the DS clock until the host asks otherwise.
+        kssu_arm9_shift = 0;
+        kssu_arm9_state = clock;
         if !nds.read_savestate_bytes(&mut saved) {
             return None;
         }
@@ -200,6 +204,44 @@ pub unsafe extern "C" fn kssu_close(handle: *mut std::ffi::c_void) {
 // point loads and continues correctly (2: `align_to_vblank`).
 extern "C" {
     static mut kssu_vblank_step: u32;
+    // The same patch's clock stage (#150): the shift the next frame brings the
+    // ARM9 clock to (1 the DS's 67 MHz, 2 twice that, 0 as it is), and the
+    // shift a savestate's ARM9 timestamps count in, which the core writes when
+    // it saves and takes when it loads.
+    static mut kssu_arm9_shift: u32;
+    static mut kssu_arm9_state: u32;
+}
+/// Follows the hook trailer of a state saved while the ARM9 ran at twice the DS
+/// clock: the shift, then the magic. A state without it is at the DS clock.
+const CLOCK_MAGIC: &[u8; 8] = b"KSSUCK01";
+fn take_clock_trailer(data: &mut Vec<u8>) -> u32 {
+    if data.len() < 12 + 16 || &data[data.len() - 8..] != CLOCK_MAGIC {
+        return 1;
+    }
+    let shift = u32at(data, data.len() - 12);
+    data.truncate(data.len() - 12);
+    if shift == 2 {
+        2
+    } else {
+        1
+    }
+}
+/// Run the emulated ARM9 at `multiple` times the DS clock from the next source
+/// frame on: 1 is the DS (67 MHz), which every machine starts at, and 2 is
+/// 134 MHz, the clock the core has for a DSi. The original does the same work
+/// in a pass either way; at 2 a pass that fills the DS's frame (a crowd, not
+/// a cartridge load) ends sooner, so the original drops fewer frames. That is a
+/// departure from the original machine (docs/GAMEPLAY_FIDELITY.md), asked for
+/// by the host only. A state saved at either clock loads at either; one saved
+/// and loaded at the same clock continues as if never saved.
+#[no_mangle]
+pub unsafe extern "C" fn kssu_arm9_clock(handle: *mut std::ffi::c_void, multiple: u32) -> i32 {
+    if handle.is_null() || !(1..=2).contains(&multiple) {
+        return -1;
+    }
+    // The clock shift is the multiple for both: 1 halves a system cycle, 2 quarters it.
+    kssu_arm9_shift = multiple;
+    0
 }
 /// Bring a machine just loaded from a state to where a step ends. A state saved
 /// at the end of a frame (the seed, or one from before #134) has 192 scanlines
@@ -407,8 +449,13 @@ pub unsafe extern "C" fn kssu_save_state(
     };
     let b = &mut *(handle as *mut Bridge);
     let mut data = b.nds.savestate();
+    let clock = kssu_arm9_state;
     append_metadata(&mut data, &b.proxies);
     append_hook_trailer(&mut data);
+    if clock == 2 {
+        data.extend(clock.to_le_bytes());
+        data.extend(CLOCK_MAGIC);
+    }
     if fs::write(path, data).is_ok() {
         0
     } else {
@@ -1144,6 +1191,7 @@ pub unsafe extern "C" fn kssu_load_state(
     if data.len() < 16 || data.get(..4) != Some(b"MELN") {
         return -4;
     }
+    let clock = take_clock_trailer(&mut data);
     let hook = take_hook_trailer(&mut data);
     let metadata = read_metadata(&data);
     if metadata.is_some() {
@@ -1152,6 +1200,7 @@ pub unsafe extern "C" fn kssu_load_state(
     let b = &mut *(handle as *mut Bridge);
     b.proxies_fresh = false;
     native_trace("load: restoring source snapshot");
+    kssu_arm9_state = clock;
     if b.nds.read_savestate_bytes(&mut data) {
         native_trace("load: source snapshot restored");
         b.proxies = metadata.unwrap_or([Proxy::default(); PROXY_COUNT]);

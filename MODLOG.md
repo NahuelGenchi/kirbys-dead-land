@@ -1972,3 +1972,28 @@ the all-ability rendering tests as full gameplay acceptance.
   (their projects lack `NdsObjRenderer.cs`); private copies with that file
   pass on the new bridge. The shared bridge needs `tools/nds_build.py` and a
   new staging after the merge.
+
+## 2026-10-14 — the original's processor at twice the DS clock (#150)
+
+- Owner decision of 2026-10-13: a deliberate departure from the DS, on by
+  default (`DoubleArm9Clock`), off in tools and tests.
+- `tools/nds_step_patch.py` second stage: `RunFrame` moves the ARM9 to the
+  clock the bridge asks for (timestamps rescaled, bus timings recomputed).
+  `kssu_arm9_clock`; a state saved at twice the clock ends with
+  `[2]["KSSUCK01"]`, a DS-clock state is unchanged.
+- Bridge, private build `repros/clock-150`: same 240-frame trace at both
+  clocks without a crowd; 31 proxies, 4 → 0 of 300 frames ended inside a pass;
+  a state saved at twice the clock continues as the run did (`arm9_clock`).
+  The 85 older cases at twice the clock: 83 the same, `f_slot` a frame sooner
+  (B is taken the frame after `SetAbility`), `main_screen_only` differs only
+  in the sound capture buffers at `0x02048BE0`.
+- Live, isolated profile, one run per clock: `movement` 0 and 0 late frames,
+  step 2.81 → 2.82 ms; 20 Zombies in one swing 7 → 5, 3.60 → 3.69 ms.
+- The 31-Zombie crowd fixture showed no change (3,252 and 3,257) because the
+  original is dead in it: one attack that hits 24 or more proxies makes the
+  ARM9 abort at `0x02156BA4` (a creator's null result, used unchecked) and
+  spin in the BIOS at either clock. Filed as #151. `--crowd-size` added to the
+  launcher so the fixture can stay under it.
+- Not run: windowed play, a controller, the sound by ear, the shared bridge
+  build. On the private build `nds_tests.py` (86 cases), the three verifiers
+  and `scripts/check.py` pass.
