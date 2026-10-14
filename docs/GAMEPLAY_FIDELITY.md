@@ -110,8 +110,13 @@ copied form keeps only the exact retained shield for host parries. A shield can 
 for the equipped one (the old one drops), and the newly equipped shield becomes
 the retained shield (#31). The retained shield follows the host inventory every
 frame: it stays while equipped, otherwise the first equipped shield, or none, is
-retained. If two shields are equipped, the most recently taken one parries while
-copied. Every weapon other than a shield, and every skill, is declined in either
+retained. Kirby holds one shield (#139, owner decision 2026-10-13): the host
+equips a taken or bought shield into an empty slot, which base form always has,
+so `KirbyAbilityItems.Sync` drops every shield but the retained (most recently
+taken) one to the floor on the next host frame. Before #139 both stayed equipped
+in base form. Live run `20261013-203959` took two shields in base form and ended
+with the second equipped and the first on the floor; a shop purchase was not run
+(`docs/RUNTIME_LAUNCH.md`, "One shield"). Every weapon other than a shield, and every skill, is declined in either
 form through `InventItem.isUsefulFor`, the check the host makes
 before every item drop, altar, shop purchase and timed-door reward. The host then
 shows its own "Can't use that right now" message, leaves the item in place and
@@ -1711,7 +1716,7 @@ addition built from host items and the original inhale and swallow.
   he discards his copy first.
 - **Weapon slot.** Once per host frame `KirbyAbilityItems.Sync` keeps the slots in
   step with the copy: the copy's item sits in one non-shield slot, and base form
-  has none. The swallowed floor item itself goes into the slot; a copy from an
+  has none. A second shield is dropped first (#139). The swallowed floor item itself goes into the slot; a copy from an
   enemy gets a new base item of its ability at the level's loot level. The slot
   is the one already holding that item, else a slot holding another non-shield
   weapon (removed: it is unusable to Kirby), else an empty slot, else a shield
