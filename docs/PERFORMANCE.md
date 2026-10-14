@@ -159,6 +159,25 @@ Against the runs above, on other builds and days: the `movement` step was 2.82 m
 
 Not measured: play in a window on the GPU with vsync, and more than one run of each.
 
+## Per-step bookkeeping (#160)
+
+With the original step cut down, the largest part of the mod's own work left was `Prepare`, the pairing of host enemies with original proxies: 0.21 ms a step moving and 0.51 ms beside 31 Zombies. Most of it was managed. Every step it ran host type and damage tests (`canBeHitBy`, the ability item lookup) on every entity of the level before asking whether the entity was within reach, built a new candidate list and allocated a delegate for each target's critical roll. It now tests the reach first, keeps the list between steps and reuses one delegate; the mutation checks no longer allocate an array or a closure. The filters are the same, so the same entities are paired. The bridge half keeps its walk of the actor lists between proxy calls (docs/NDS_BRIDGE.md, after the freshness flag).
+
+Lab runs, isolated profile, software drawing, `performance` power profile, one 120 s run each, 2026-10-14: `main` (`f498c5f`, runtime and bridge), the managed change alone on `main`'s bridge (`repros/perf-160-base`), and both (`repros/perf-160`, bridge `5f88a1ae…`, runtime `5399c1ee…`). The mod's work per original step is the `Step` section's total over the original steps.
+
+| | `main` | Managed alone | Both |
+| :--- | ---: | ---: | ---: |
+| `movement`: `Prepare` | 0.206 ms, 3,838 B | 0.139 ms, 3,126 B | 0.122 ms, 2,917 B |
+| `movement`: mod work per original step | 1.50 ms | 1.35 ms | 1.35 ms |
+| `movement`: host fps | 107.2 | 110.2 | 111.6 |
+| `crowd`, 31 Zombies: `Prepare` | 0.506 ms, 36,702 B | 0.447 ms, 34,839 B | 0.346 ms, 35,321 B |
+| `crowd`: mod work per original step | 2.03 ms | 1.99 ms | 1.89 ms |
+| `crowd`: host fps | 86.5 | 90.2 | 94.3 |
+
+Runs `20261014-130811`, `131343`, `132819` (`movement`) and `131022`, `131546`, `133029` (`crowd`). All six ended by their time limit with no fatal log and the real saves unchanged. The three `crowd` runs played the same fight: 31 proxies at most, 30 fixture targets hit 66 times for 2,046 damage, all 31 destroyed. Host frames over 20 ms stayed at 0.5% moving and went 1.2% → 0.9% in the crowd, which one run each does not separate from noise.
+
+What is left of `Prepare` in the crowd is the host's own per-target work, which must run on every step: its damage bonuses, status checks and `canBeHitBy` for each paired enemy. Its garbage, about 35 KB a step, is that work's, so the crowd's garbage per second did not fall.
+
 ## Checks run
 
 On the final tree, 2026-10-11:
@@ -178,6 +197,7 @@ Measured or seen in #123 and not changed.
 - **A pile of enemies in recoil.** With the 30 fixture targets of the `crowd` plan stacked on one spot, the original frame takes about 6 ms. #150 found what that is: the first swing hits all of them and stops the original for good (#151), and the time is an ARM9 that never rests again, not the original's code for overlapping actors. Twenty stacked targets, which it survives, cost about 3.6 ms (the table above). Thirty proxies spread over the room cost about 0.9 ms together.
 - **`HSprite.draw`.** `KirbyHostVisuals` hooks it to keep the Beheaded's graphics away from Kirby, and the host calls it 77–140 times a frame. It is needed on every frame while the outfit is on. At the per-call figure above that is 70–130 KB of the 166 KB a frame still allocated; this share is an estimate, not a measurement.
 - **The texture upload.** A drawn frame still uploads the whole 1024×512 texture, about 0.6 ms in the lab.
+- **OAM and palette reads.** `kssu_read_gpu` copies OBJ VRAM as a block but still reads OAM and the palettes with one bus read a byte; the whole `Read` stage is 0.04 ms a step. A block copy for them needs a new accessor in the pinned melon-rs wrapper, for at most those 0.04 ms; #160 left it out.
 - **The garbage collector mode** comes from DCCM's `runtimeconfig.json`. Overriding it from the environment (`DOTNET_gcServer=0`, `DOTNET_gcConcurrent=1`) changed nothing measurable.
 - **A host shader made on first use.** The host logs `Shader missing from cache: shaderLinker_ad70e08c` the first time one sprite combination is drawn, here when a Zombie first hit Kirby. In the lab that one frame took 1.3 s. The same line is in 123 earlier lab and play logs back to 2026-10-04, so it is not new; what it costs on the GPU was not measured.
 

@@ -597,6 +597,32 @@ def run_case(name,clock=1):
                 b.lib.kssu_proxy_set(b.handle,1,0,0,0,False);b.step(0,2)
                 b.lib.kssu_proxy_state(b.handle,1,C.byref(q));assert q.flags==0 and q.entity==0
             return {'native_destroy_and_respawn_cycles':len(entities)}
+        if name=='proxy_cache':
+            # #160: the proxy setters keep the bridge's walk of the actor lists. Every read
+            # must equal the one after a forced fresh walk (writing back an unchanged byte
+            # clears the cache), through births, captures, spits, kills and releases.
+            l=b.lib;l.kssu_proxy_contact.argtypes=[C.c_void_p,C.c_uint32,C.c_bool]
+            floor=[3 if y>=7 else 0 for y in range(9) for x in range(100)];q=Proxy();compared=0;seen=set()
+            def states():
+                out=[]
+                for slot in range(1,32):
+                    assert l.kssu_proxy_state(b.handle,slot,C.byref(q))==0;out.append((q.entity,q.flags,q.x_raw,q.y_raw,q.hp,q.update))
+                return out
+            def same():
+                cached=states();b.write(0x020baf68,b.read(0x020baf68,1));assert cached==states(),'cached proxy state differs from a fresh walk'
+                seen.update(state[1] for state in cached);return 1
+            b.world(floor,384*65536,int(153.5*65536));b.step(0,30)
+            for frame in range(240):
+                s=b.state();b.world(floor,s['x_raw'],s['y_raw'])
+                for slot in range(1,32):
+                    l.kssu_proxy_state(b.handle,slot,C.byref(q))
+                    if q.flags&12:assert l.kssu_proxy_set(b.handle,slot,0,0,0,False)==0;continue
+                    assert l.kssu_proxy_set(b.handle,slot,((s['x_raw']>>16)+40+slot*12)*65536,151*65536,100,True)==0
+                    l.kssu_proxy_options(b.handle,slot,18,slot%2==0);l.kssu_proxy_contact(b.handle,slot,False);l.kssu_proxy_size(b.handle,slot,24,30)
+                    if slot%8==0:compared+=same()
+                b.step(2 if frame%60<20 else 0);compared+=same()
+            assert {1,4,16}<=seen and any(flags&32 for flags in seen),sorted(seen)  # born, inhaled, swallowed
+            return {'frames':240,'reads_equal_to_a_fresh_walk':compared,'proxy_flags_seen':sorted(seen)}
         if name=='proxy_save':
             floor=[3 if y>=7 else 0 for y in range(9) for x in range(100)];q=Proxy()
             b.world(floor,43*65536,int(153.5*65536));b.step(0,60)
@@ -1148,7 +1174,7 @@ def main():
         result=run_case(args.case,args.arm9_clock)
         # The emulator's log shares stdout and may stop mid-line: start the result on its own line.
         print('\nRESULT '+json.dumps({'case':args.case,'result':result}),flush=True);return
-    cases=['scene_doors', 'far_shot_draw', 'room_food', 'proxy_birth_contact', 'proxy_birth_inhale', 'proxy_contact', 'proxy_contact_sword', 'proxy_touch_off', 'proxy_swallow_touch_off', 'proxy_suplex_touch_off', 'proxy_ice_detach', 'proxy_ice_release', 'proxy_lethal', 'motion', 'ladder', 'ladder_top', 'ladder_top_stomp', 'one_way', 'solid_ceiling', 'water', 'proxy_water', 'proxy_water_sword', 'proxy_water_below', 'hurt_water', 'proxy_swallow', 'hazard_spit', 'hazard_swallow', 'star_spit', 'star_spit_wall', 'star_big', 'star_ability', 'proxy_sword', 'proxy_reuse', 'proxy_save', 'proxy_mix', 'mix_no_limited', 'boss_inhale', 'boss_suplex', 'boss_cook', 'boss_sword', 'proxy_capacity', 'copy_drop_reabsorb', 'wheelie_ride', 'proxy_suplex', 'proxy_cook', 'audio', 'hurt', 'hurt_lethal', 'hurt_cold', 'guard', 'health_invulnerable', 'health_sync', 'proxy_size', 'f_slot', 'f_slot_save', 'f_slot_plasma', 'helper_reaction', 'helper_move', 'helper_owns', 'obj_vram_block', 'main_screen_only', 'skip_idle_main', 'arm9_clock', 'recompiler', 'step_between_passes']
+    cases=['scene_doors', 'far_shot_draw', 'room_food', 'proxy_birth_contact', 'proxy_birth_inhale', 'proxy_contact', 'proxy_contact_sword', 'proxy_touch_off', 'proxy_swallow_touch_off', 'proxy_suplex_touch_off', 'proxy_ice_detach', 'proxy_ice_release', 'proxy_lethal', 'motion', 'ladder', 'ladder_top', 'ladder_top_stomp', 'one_way', 'solid_ceiling', 'water', 'proxy_water', 'proxy_water_sword', 'proxy_water_below', 'hurt_water', 'proxy_swallow', 'hazard_spit', 'hazard_swallow', 'star_spit', 'star_spit_wall', 'star_big', 'star_ability', 'proxy_sword', 'proxy_reuse', 'proxy_cache', 'proxy_save', 'proxy_mix', 'mix_no_limited', 'boss_inhale', 'boss_suplex', 'boss_cook', 'boss_sword', 'proxy_capacity', 'copy_drop_reabsorb', 'wheelie_ride', 'proxy_suplex', 'proxy_cook', 'audio', 'hurt', 'hurt_lethal', 'hurt_cold', 'guard', 'health_invulnerable', 'health_sync', 'proxy_size', 'f_slot', 'f_slot_save', 'f_slot_plasma', 'helper_reaction', 'helper_move', 'helper_owns', 'obj_vram_block', 'main_screen_only', 'skip_idle_main', 'arm9_clock', 'recompiler', 'step_between_passes']
     if not args.skip_abilities:cases += [f'ability-{i}' for i in range(2,26)]
     if args.arm9_clock!=1:return survey(cases,args.arm9_clock)
     results=[]

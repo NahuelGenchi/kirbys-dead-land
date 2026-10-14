@@ -15,6 +15,8 @@ internal static class KirbyMutations
 {
     /// <summary>Host affect IDs Heart of Ice checks on its target: slowed, stunned, frozen and rooted.</summary>
     private static readonly int[] ControlAffects = [15, 8, 23, 133];
+    private static readonly string[] CooldownMutations = [MutationDescriptions.KillerInstinct, MutationDescriptions.BlindFaith,
+        MutationDescriptions.HeartOfIce, MutationDescriptions.HuntersInstinct, MutationDescriptions.MasterOfArms];
 
     public static void Install()
     {
@@ -45,8 +47,7 @@ internal static class KirbyMutations
     public static KirbyMutation Owned(Hero hero)
     {
         var owned = KirbyMutation.None;
-        foreach (var id in new[] { MutationDescriptions.KillerInstinct, MutationDescriptions.BlindFaith, MutationDescriptions.HeartOfIce,
-                     MutationDescriptions.HuntersInstinct, MutationDescriptions.MasterOfArms })
+        foreach (var id in CooldownMutations)
             if (hero.inventory.hasItem(id.AsHaxeString())) owned |= MutationDescriptions.Mutation(id);
         return owned;
     }
@@ -57,7 +58,10 @@ internal static class KirbyMutations
     /// </summary>
     public static bool HeartOfIceTarget(Hero hero, dc.Entity mob)
     {
-        if (!ControlAffects.Any(mob.hasAffect)) return false;
+        bool controlled = false;
+        foreach (int affect in ControlAffects)
+            if (mob.hasAffect(affect)) { controlled = true; break; }
+        if (!controlled) return false;
         double dx = hero.cx + hero.xr - (mob.cx + mob.xr);
         double dy = hero.cy + hero.yr - 0.020833333333333332 * hero.hei - (mob.cy + mob.yr - 0.020833333333333332 * mob.hei);
         return dx * dx + dy * dy <= 16;

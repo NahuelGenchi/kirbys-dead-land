@@ -2209,3 +2209,27 @@ the all-ability rendering tests as full gameplay acceptance.
   followed by a throw; the three not cut short rose 242.2 px.
 - Not run: the owner's play launcher, a controller, a window on the GPU,
   bosses, a long session, listening.
+
+## 2026-10-14 — cheaper per-step bookkeeping (#160)
+
+- `KirbyEnemies.Prepare` tested every entity of the level with host calls
+  before its reach; it now tests the reach first, keeps its candidate list
+  and one roll delegate between steps. `KirbyMutations` no longer allocates
+  an array or a closure per check. Same filters, same pairs.
+- The bridge keeps its walk of the actor lists (which object is in which
+  proxy slot) until a call steps, writes, loads or moves something; the
+  proxy setters keep it, and `kssu_proxy_set` walks again only after its
+  first call enlarges the scene's record table. New case `proxy_cache`:
+  960 reads through births, inhales, swallows, kills and releases, all
+  equal to a forced fresh walk; a build that never drops the walk fails it.
+- Private build `repros/perf-160` (bridge `5f88a1ae…`), shared bridge
+  untouched: 90 cases pass, the 89 older ones equal to the shared record.
+  Python-driven, 31 proxies: proxy calls 0.109 → 0.072 ms a frame, same
+  900-frame trace. `scripts/check.py` passes.
+- Live, one 120 s run each, `main` → managed alone → both: `Prepare`
+  0.206 → 0.139 → 0.122 ms moving and 0.506 → 0.447 → 0.346 ms beside 31
+  Zombies; host fps 107.2 → 111.6 and 86.5 → 94.3. The three crowd runs
+  played the same fight (66 hits, 2,046 damage, 31 destroyed).
+- Left: the host's own per-target damage queries (most of the crowd's
+  `Prepare` and its 35 KB a step) and the per-byte OAM and palette reads.
+  Not run: the owner's play launcher, a window on the GPU, a long session.
