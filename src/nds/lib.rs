@@ -62,9 +62,17 @@ struct Bridge {
     /// left undrawn (see `kssu_skip_idle_main`).
     idle_palette: Option<[u8; 512]>,
     /// `proxies` already describes main RAM as it is now. Every call that can
-    /// change main RAM or a proxy record clears it, so reads between two such
-    /// calls share one walk of the actor lists.
+    /// change main RAM clears it, so reads between two such calls share one
+    /// refresh. The size, options and contact setters change nothing the
+    /// refresh reads and leave it (#160).
     proxies_fresh: bool,
+    /// Each proxy slot's original object, from the last walk of the actor
+    /// lists (#160). Only a call that runs or writes the machine can change
+    /// it, and each clears it (`stale`), except `kssu_proxy_set`: its writes
+    /// (positions, health, a spawn record's bytes, a retiring object's update)
+    /// leave the lists and each object's kind, parent and record pointer as
+    /// they are. A step's pairing then walks the lists once, not twice a proxy.
+    proxy_tree: Option<[Option<usize>; PROXY_COUNT]>,
 }
 /// One OBJ piece the original OAM builder culled: full screen position, its
 /// original attributes (x and y bits as the builder would write them) and the
@@ -191,6 +199,7 @@ pub unsafe extern "C" fn kssu_open(
             main_screen_only: false,
             idle_palette: None,
             proxies_fresh: false,
+            proxy_tree: None,
         })) as *mut std::ffi::c_void)
     });
     run.ok().flatten().unwrap_or(ptr::null_mut())
@@ -277,7 +286,7 @@ pub unsafe extern "C" fn kssu_step(handle: *mut std::ffi::c_void, mask: u16, fra
     }
     native_trace_once(0, "step: entered");
     let b = &mut *(handle as *mut Bridge);
-    b.proxies_fresh = false;
+    stale(b);
     if !mute_proxy_footsteps(b.nds.main_ram_mut())
         || !keep_proxies_alive_in_water(b.nds.main_ram_mut())
         || !quicken_helper_reaction(b.nds.main_ram_mut())
@@ -313,7 +322,7 @@ pub unsafe extern "C" fn kssu_step(handle: *mut std::ffi::c_void, mask: u16, fra
             b.audio.pop_front();
         }
         native_trace_once(5, "step: PCM read; refreshing proxies");
-        b.proxies_fresh = false;
+        stale(b);
         refresh_proxies(b);
         native_trace_once(6, "step: completed");
     }
@@ -350,7 +359,7 @@ pub unsafe extern "C" fn kssu_write(
         return -2;
     };
     let b = &mut *(handle as *mut Bridge);
-    b.proxies_fresh = false;
+    stale(b);
     ptr::copy_nonoverlapping(src, b.nds.main_ram_mut().as_mut_ptr().add(p), len);
     0
 }
@@ -721,7 +730,7 @@ pub unsafe extern "C" fn kssu_world(
         return -1;
     }
     let b = &mut *(handle as *mut Bridge);
-    b.proxies_fresh = false;
+    stale(b);
     let r = b.nds.main_ram_mut();
     if !expand_scene(r) {
         return -5;
@@ -847,7 +856,7 @@ pub unsafe extern "C" fn kssu_move_player(handle: *mut std::ffi::c_void, dx: i32
         return -1;
     }
     let b = &mut *(handle as *mut Bridge);
-    b.proxies_fresh = false;
+    stale(b);
     let r = b.nds.main_ram_mut();
     let player = u32at(r, 0x49df0);
     let Some(p) = off(player, 0x8c) else {
@@ -935,7 +944,7 @@ pub unsafe extern "C" fn kssu_move_helper(handle: *mut std::ffi::c_void, dx: i32
         return -1;
     }
     let b = &mut *(handle as *mut Bridge);
-    b.proxies_fresh = false;
+    stale(b);
     let r = b.nds.main_ram_mut();
     let Some(p) = helper_node(r) else {
         return -2;
@@ -1001,7 +1010,7 @@ pub unsafe extern "C" fn kssu_feed(handle: *mut std::ffi::c_void, ability: u8) -
         return -2;
     }
     let b = &mut *(handle as *mut Bridge);
-    b.proxies_fresh = false;
+    stale(b);
     let r = b.nds.main_ram_mut();
     put32(r, 0xbb210, ((ability as u32) << 24) | 0x100);
     0
@@ -1072,14 +1081,28 @@ fn proxy_nodes(r: &[u8]) -> [Option<usize>; PROXY_COUNT] {
     }
     out
 }
+/// The proxy slots' objects, walked once until the machine changes (#160).
+fn proxy_tree(b: &mut Bridge) -> [Option<usize>; PROXY_COUNT] {
+    if let Some(tree) = b.proxy_tree {
+        return tree;
+    }
+    let tree = proxy_nodes(b.nds.main_ram());
+    b.proxy_tree = Some(tree);
+    tree
+}
+/// The machine may have changed: refresh the proxies and walk the actor lists again.
+fn stale(b: &mut Bridge) {
+    b.proxies_fresh = false;
+    b.proxy_tree = None;
+}
 fn refresh_proxies(b: &mut Bridge) {
     if b.proxies_fresh {
         return;
     }
     b.proxies_fresh = true;
+    let nodes = proxy_tree(b);
     let frame = b.nds.current_frame();
     let r = b.nds.main_ram();
-    let nodes = proxy_nodes(r);
     for slot in 0..PROXY_COUNT {
         let q = &mut b.proxies[slot];
         if q.flags == 0 {
@@ -1172,12 +1195,19 @@ pub unsafe extern "C" fn kssu_proxy_set(
     let slot = slot as usize;
     let b = &mut *(handle as *mut Bridge);
     refresh_proxies(b);
+    // The writes below change positions, health and records, which the refresh
+    // reads, but not which object is in which slot. The first call enlarges the
+    // scene's record table, which does (#160).
     b.proxies_fresh = false;
-    let r = b.nds.main_ram_mut();
-    if !expand_scene(r) {
+    let expanded = b.nds.main_ram()[0x9f3e8] as usize == PROXY_COUNT;
+    if !expand_scene(b.nds.main_ram_mut()) {
         return -4;
     }
-    let node = proxy_nodes(r)[slot];
+    if !expanded {
+        b.proxy_tree = None;
+    }
+    let node = proxy_tree(b)[slot];
+    let r = b.nds.main_ram_mut();
     if !active {
         b.proxies[slot] = Proxy::default();
         let records = record_base(r);
@@ -1271,7 +1301,7 @@ pub unsafe extern "C" fn kssu_set_swallowed_ability(
         return -2;
     }
     let b = &mut *(handle as *mut Bridge);
-    b.proxies_fresh = false;
+    stale(b);
     b.nds.main_ram_mut()[0xbb213] = ability;
     0
 }
@@ -1299,7 +1329,7 @@ pub unsafe extern "C" fn kssu_load_state(
         data.truncate(data.len() - metadata_len(&data));
     }
     let b = &mut *(handle as *mut Bridge);
-    b.proxies_fresh = false;
+    stale(b);
     native_trace("load: restoring source snapshot");
     kssu_arm9_state = clock;
     if b.nds.read_savestate_bytes(&mut data) {
@@ -1443,7 +1473,6 @@ pub unsafe extern "C" fn kssu_proxy_size(
         return -1;
     }
     let b = &mut *(handle as *mut Bridge);
-    b.proxies_fresh = false;
     b.proxies[slot as usize].width = width;
     b.proxies[slot as usize].height = height;
     0
@@ -1535,7 +1564,7 @@ pub unsafe extern "C" fn kssu_hurt(
         return -1;
     }
     let b = &mut *(handle as *mut Bridge);
-    b.proxies_fresh = false;
+    stale(b);
     b.proxies[0].width = damage;
     b.proxies[0].height = if direction < 0 { 0 } else { 1 };
     0
@@ -1673,7 +1702,7 @@ pub unsafe extern "C" fn kssu_set_health(
         return -1;
     }
     let b = &mut *(handle as *mut Bridge);
-    b.proxies_fresh = false;
+    stale(b);
     let r = b.nds.main_ram_mut();
     let Some(g) = player_health_group(r) else {
         return -2;
@@ -1733,7 +1762,6 @@ pub unsafe extern "C" fn kssu_proxy_options(
         return -1;
     }
     let b = &mut *(handle as *mut Bridge);
-    b.proxies_fresh = false;
     b.proxies[slot as usize].options =
         (b.proxies[slot as usize].options & !0x1ff) | ability as u32 | if boss { 0x100 } else { 0 };
     0
@@ -1966,7 +1994,6 @@ pub unsafe extern "C" fn kssu_proxy_contact(
         return -1;
     }
     let b = &mut *(handle as *mut Bridge);
-    b.proxies_fresh = false;
     let was_disabled = b.proxies[slot as usize].options & 0x200 != 0;
     if enabled {
         b.proxies[slot as usize].options &= !0x200;
@@ -1998,7 +2025,7 @@ pub unsafe extern "C" fn kssu_proxy_detach(handle: *mut std::ffi::c_void, slot: 
         return -1;
     }
     let b = &mut *(handle as *mut Bridge);
-    b.proxies_fresh = false;
+    stale(b);
     let q = &mut b.proxies[slot as usize];
     let r = b.nds.main_ram_mut();
     if off(q.original_definition, 28).is_some() {
@@ -2030,7 +2057,7 @@ pub unsafe extern "C" fn kssu_room_cleanup(handle: *mut std::ffi::c_void) -> i32
         return -1;
     }
     let b = &mut *(handle as *mut Bridge);
-    b.proxies_fresh = false;
+    stale(b);
     let r = b.nds.main_ram_mut();
     let nodes = descendants(r, u32at(r, 0x49df0));
     let mut retiring = std::collections::HashSet::new();
@@ -2475,7 +2502,7 @@ pub unsafe extern "C" fn kssu_set_mike_shouts(handle: *mut std::ffi::c_void, sho
         return -1;
     }
     let b = &mut *(handle as *mut Bridge);
-    b.proxies_fresh = false;
+    stale(b);
     let r = b.nds.main_ram_mut();
     if r[(PLAYER_RECORD - BASE) as usize + 0x13] != ABILITY_MIKE {
         return -2;

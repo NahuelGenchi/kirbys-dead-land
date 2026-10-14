@@ -152,6 +152,9 @@ public sealed class KirbyEnemies
     /// <param name="bodyContact">The original touch damage between Kirby and enemies: off by default
     /// (Dead Cells has none) and while Kirby stomps, as the host dive lands on enemies; his own
     /// attacks, inhale and slide still hit them.</param>
+    // Kept between steps, so pairing allocates neither a list nor a delegate each step (#160).
+    private readonly List<(Entity Mob, double Distance)> candidates = [];
+    private static readonly Func<double> NextRoll = Random.Shared.NextDouble;
     public void Prepare(KirbySession session, NdsRuntime nds, int ox, double oy, Func<Entity, double> scale, bool bodyContact = true)
     {
         var hero = session.Hero;
@@ -203,6 +206,7 @@ public sealed class KirbyEnemies
         criticalFactor = crit.DamageMultiplier;
         criticalGuaranteed = crit.Guaranteed;
         double hx = (hero.cx + hero.xr) * 24, hy = (hero.cy + hero.yr) * 24;
+        nint level = hero._level.HashlinkPointer;
         for (uint i = 1; i <= Capacity; i++)
         {
             if (detached[i])
@@ -213,7 +217,7 @@ public sealed class KirbyEnemies
             }
             var mob = mobs[i];
             if (mob is null) continue;
-            if (!Live(mob) || mob._level.HashlinkPointer != hero._level.HashlinkPointer || Refuses(mob))
+            if (!Live(mob) || mob._level.HashlinkPointer != level || Refuses(mob))
             { Release(nds, i); continue; }
             // The host can stop letting the hero hit an enemy after it was paired:
             // a Conjunctivius tentacle burrows (BeholderTtcl._isInGround, invulnerable,
@@ -229,18 +233,20 @@ public sealed class KirbyEnemies
             var distance = Distance(mob, hx, hy);
             if (!controlled[i] && (distance.X > 320 || distance.Y > 120)) Release(nds, i);
         }
-        List<(Entity Mob, double Distance)> candidates = [];
+        candidates.Clear();
         var entities = hero._level.entities;
         for (int j = 0; j < entities.length; j++)
         {
             if (entities.getDyn(j) is not Entity mob || !Live(mob)) continue;
+            // Reach first: most of the level is out of it, and the tests below call into the host (#160).
+            var (x, y) = Distance(mob, hx, hy);
+            if (x > 300 || y > 96) continue;
             // A floor ability item is never hit; it is only there for base Kirby to inhale.
             if (KirbyAbilityItems.IsAbilityDrop(mob) ? !session.Rules.IsBaseForm :
                 IsHazard(mob) ? !MouthfulHazards.CanPair(mob.isOpponent(hero), live: true, mob is Bullet { disabled: true })
                 : !Eligible(mob) || !mob.canBeHitBy(hero)) continue;
             if (Pairs(mob) || TestUnpaired?.Invoke(mob) == true) continue;
-            var (x, y) = Distance(mob, hx, hy);
-            if (x <= 300 && y <= 96) candidates.Add((mob, x * x + y * y));
+            candidates.Add((mob, x * x + y * y));
         }
         candidates.Sort((a, b) => a.Distance.CompareTo(b.Distance));
         int slot = 0;
@@ -273,7 +279,7 @@ public sealed class KirbyEnemies
             bool item = KirbyAbilityItems.IsAbilityDrop(mob);
             bonus[i] = mob is Mob && !item && !IsHazard(mob) ? (hostBonuses ??= KirbyHostBonuses.Begin(hero)).Factor(mob) : 1;
             critical[i] = mob is Mob && !item && !IsHazard(mob) &&
-                crit.Roll(Random.Shared.NextDouble, mutations.TargetChance(KirbyMutations.HeartOfIceTarget(hero, mob)));
+                crit.Roll(NextRoll, mutations.TargetChance(KirbyMutations.HeartOfIceTarget(hero, mob)));
             assignedHp[i] = IsHazard(mob) ? 1 : item ? MaxSourceHp :
                 ColorlessDamage.SourceHp(mob.life, CopyMultiplier(i, scale, mob, true), MaxSourceHp);
             nds.SetProxy(i, x, y, assignedHp[i]);
