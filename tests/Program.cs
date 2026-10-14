@@ -664,6 +664,11 @@ Check(SpeedMatch.Move(KirbyActions.Float, 0, 0, 300, 690, 300, 688, MPlatform).F
 Check(SpeedMatch.Move(KirbyActions.Fall, 0, 0, 300, 600, 300, 603.5, MLadder).Feet > 603.5, "Ladders never stop a fall");
 ushort MPool(int cx, int cy) => cy >= 30 ? SpeedMatch.Solid : cy >= 27 ? SpeedMatch.Water : SpeedMatch.Free;
 Check(MNear(SpeedMatch.Move(KirbyActions.Fall, 0, 0, 300, 640, 300, 643.5, MPool).Feet, 648 - SpeedMatch.LandingMargin), "Kirby enters water at the original speed");
+// Host water (#144): the surface is in pixels; row 39 spans 936 to 960.
+Check(!SpeedMatch.Submerged(0, 39), "A cell without host water is not original water");
+Check(!SpeedMatch.Submerged(948, 39) && !SpeedMatch.Submerged(942, 39), "Kirby walks through water 12 or 18 px deep (a partly filled cell)");
+Check(SpeedMatch.Submerged(936, 39) && SpeedMatch.Submerged(918, 39) && !SpeedMatch.Submerged(918, 38),
+    "Kirby swims in the cells a pool fills, not in its partly filled top row");
 // Slopes: the original follows them from Kirby's centre at whole pixel columns.
 ushort MRamp(int cx, int cy) => cy >= 30 || (cx >= 17 && cy >= 29) ? SpeedMatch.Solid : (cx, cy) == (16, 29) ? SpeedMatch.SlopeUpRight : (cx, cy) == (17, 28) ? SpeedMatch.SlopeUpRight : SpeedMatch.Free;
 Check(SpeedMatch.Surface(MRamp, 389.625, 714, 3) == 714 && SpeedMatch.Surface(MRamp, 402, 701, 3) == 701 &&

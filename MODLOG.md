@@ -1972,3 +1972,34 @@ the all-ability rendering tests as full gameplay acceptance.
   (their projects lack `NdsObjRenderer.cs`); private copies with that file
   pass on the new bridge. The shared bridge needs `tools/nds_build.py` and a
   new staging after the merge.
+
+## 2026-10-13 — Kirby swam in shallow water (#144)
+
+- Owner report (screenshot, Mama Tick): Kirby swims for the whole fight because
+  the arena floor is under water.
+- Cause: `KirbyNdsProvider.TileAt` exported every free cell with a host water
+  surface as an original water tile. The host surface is in pixels
+  (`getWaterSurfaceY`, marker `cy + yr`), so a partly filled top row counted as
+  a whole tile. The arena has 12 px of water over 82 columns; for the host it
+  is decoration and the Beheaded never swims.
+- Owner decision: Kirby swims only where the water would cover him.
+- Fix: a cell is original water only when the surface is at or above its top
+  (`SpeedMatch.Submerged`). Intentional deviation, recorded in
+  docs/GAMEPLAY_FIDELITY.md ("Shallow host water").
+- Lab: the `water` plan takes `KIRBY_LAB_WATER_LEVEL` and, with
+  `KIRBY_LAB_WATER_WADE=1`, wades and counts the original's actions; it also
+  records every water column's depth. Its Zombie check now needs a level with
+  deep pools (docs/RUNTIME_LAUNCH.md).
+- Source: `python3 scripts/check.py` passes (458 rule assertions, 3 new; the
+  runtime builds).
+- Live (`repros/water-20261013`): old rule in the arena, `0815` after the jump
+  press and the landing (run `20261013-212620`); new rule, none, and the jump
+  starts on the press (`212720`, `213551`). No `0815` in 18 px of water in
+  `Shipwreck`, `Greenhouse` and `SewerShort`; still `0815` in a 42 px pool
+  (`Greenhouse`, `213406`) and a 114 px one (`SewerDepths`, `213103`).
+- The Zombie check in `SewerDepths` (`213902`, `214040`): the Zombie in a
+  42 px pool was never source-controlled; the inhale timed out because the
+  only bank found was three cells above it.
+- Not run: the fight beyond its first seconds, copy abilities and the helper in
+  shallow water, a pool between 18 and 42 px, an inhale of an enemy in deep
+  water on the new rule, `nds_tests.py` (bridge untouched), normal play.
