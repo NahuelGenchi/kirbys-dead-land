@@ -895,7 +895,8 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         {
             if (!water.TryGetValue((cx, cy), out bool submerged))
             {
-                submerged = map.getRoomAt(cx, cy) is not null && map.getWaterSurfaceY(cx, cy) > 0;
+                // Only a cell the water fills: Kirby walks through shallow host water (SpeedMatch.Submerged).
+                submerged = map.getRoomAt(cx, cy) is not null && SpeedMatch.Submerged(map.getWaterSurfaceY(cx, cy), cy);
                 water[(cx, cy)] = submerged;
             }
             if (submerged) tile = 130;

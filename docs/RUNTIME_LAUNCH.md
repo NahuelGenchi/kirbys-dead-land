@@ -38,6 +38,7 @@ Relevant environment variables are used only by the lab helper:
 - `KIRBY_LAB_TEST_LEGENDARY=1`: with `--probe-hud`, exposed as `--probe-legendary`. Once the copy's ability item is in a weapon slot, it gives that item the host `Legendary` affix, calls `Hero.hudInitItems`, and appends the slot and affix result to `hud.jsonl`.
 - `KIRBY_LAB_COMBAT_ELITE=1`: with the `combat` plan, makes the swallowed Zombie an Elite (Elite skills disabled) and records in `combat.json` whether the copy was empowered and the damage that the second Zombie takes from each hit. Set it in the environment of `launch_runtime.py`.
 - `KIRBY_LAB_ARRIVAL_LEVEL`: the level the `arrival` plan starts a new run in (default `Ossuary`; for example `PrisonStart`). Kirby stands still and `arrival-trace.jsonl` records, every host frame, the hero's host position, the viewport centre, size and zoom, the camera's `vertical` lead and dive state as the host reads them, and the source camera (#126).
+- `KIRBY_LAB_WATER_LEVEL`: the level the `water` plan starts a new run in (default: the normal start), for example `SewerDepths` or `SwampHeart`. `KIRBY_LAB_WATER_WADE=1` makes the plan wade instead of placing a Zombie (see [Shallow water](#shallow-water-144)). Set both in the environment of `launch_runtime.py`.
 - `KIRBY_LAB_PLAY=1`: keep outfit selection but disable all smoke capture and automatic input.
 - `KIRBY_LAB_PERF=1` (set in the shell that runs `launch_runtime.py`; ignored in play): write `perf.json` in the run folder with the time and managed bytes of each stage of the mod's frame, host frame intervals and collections. See [Performance](PERFORMANCE.md).
 
@@ -557,7 +558,37 @@ python3 scripts/launch_runtime.py --data-root ~/.local/share/kirby-dead-cells/re
 | `20261006-002101` | `4967f6f4ac84` | 1-cell pool | 0 | Consumed 38 frames in, mouthful | Copy at frame 4557; a natural enemy's hit at 4738 knocked it loose |
 | `20261006-002601` | `4967f6f4ac84` | 12-cell pool | 0 | Consumed 37 frames in, mouthful | No copy observed; Kirby kept the inhale pose after consumption (not investigated) |
 
+Since #144 a pool cell is one the runtime exports as original water (a cell the water fills). The start level's pools are 18 px deep and no longer qualify, so this plan needs `KIRBY_LAB_WATER_LEVEL=SewerDepths` (pools 42 px and deeper in the runs so far); `water.json` also lists every water column's depth (`depths`). Two such runs on 2026-10-13 (`20261013-213902`, `214040`, `repros/water-20261013`) found the same site, a 42 px pool whose bank is three cells above its floor: the Zombie stayed in the exported water and was never source-controlled in the 120 frames before input, and its life did not change, but the inhale timed out with the Zombie out of reach below the bank. Consumption of an enemy in exported water was not repeated live on the new rule.
+
 Every run kept the real saves unchanged and logged no fatal errors. Natural enemies near the pool hurt Kirby in some runs; the probe does not control them. Sword or other attacks on an enemy in water, and a walkway-over-pool site with the fixed bridge, were checked only in the native suite (`proxy_water_sword`, `proxy_water_below`), not live.
+
+## Shallow water (#144)
+
+With `KIRBY_LAB_WATER_WADE=1` the `water` plan puts Kirby on the floor in the middle of the widest stretch of water (exported water if the level has any, otherwise host water of any depth) and holds nothing for 60 source frames, right for 60, left for 60, A for 12, nothing until 300 and right until 360. `water.json` records `depths` (host water cells, how many are exported as original water, and the columns by depth in pixels from the surface to the first solid cell below), `wadeSite`, `wadeActions` (the original's action codes counted in each step, two readings a source frame) and `wadeOrder` (each change of action with its frame; `0815` is swimming). The plan is short because a boss wakes when Kirby appears and attacks about eight seconds later; a death sets `wadeInterrupted` and ends it. A new run in a late level starts with 76 health and no scrolls, and one hit killed Kirby in the cut runs listed below.
+
+```sh
+python3 scripts/check.py   # builds; staging copies the existing build
+python3 scripts/stage_runtime.py --data-root ~/.local/share/kirby-dead-cells/repros/water-20261013 \
+  --original-runtime --outfit-pack "$HOME/.local/share/kirby-dead-cells/outfit-build-sync/res.pak"
+KIRBY_LAB_WATER_WADE=1 KIRBY_LAB_WATER_LEVEL=SwampHeart python3 scripts/launch_runtime.py \
+  --data-root ~/.local/share/kirby-dead-cells/repros/water-20261013 \
+  --seconds 45 --start-game --outfit KirbySuperStarUltra --input-plan water --capture-fps 5
+```
+
+All runs on 2026-10-13, DCCM 35.13.6, the shared oracle bridge (not changed by this issue).
+
+| Run | Rule | Level, depth at Kirby | Actions in order (frame and code) |
+| :--- | :--- | :--- | :--- |
+| `20261013-212620` | old (any surface) | `SwampHeart`, 12 px | 0 `0406`, 1 `0815`, 3 `0406`, 61 `060B`, 181 `0815`, 189 `070D`, 221 `070E`, 226 `0815`, 262 `0406`, 301 `060B` |
+| `20261013-212720` | new | `SwampHeart`, 12 px | 0 `0406`, 61 `060B`, 63 `060C`, 98 `0509` (the arena's thorn wall), 104 `0406`, 121 `060B`, 123 `060C`, 181 `070D`, 213 `070E`, 216 `0507`, 221 `0406`, 301 `060B`, 303 `060C` |
+| `20261013-213551` | new, final probe | `SwampHeart`, 12 px | the same; jump at 183, landing at 216 |
+| `20261013-213320` | new | `Shipwreck`, 18 px | 0 `0406`, 62 `060B`, 63 `060C`, 122 `0406`, 123 `060C`, 181 `070D`, 213 `070E`, 215 `0507`, 222 `0406`, 301 `060B`, 303 `060C` |
+| `20261013-213650` | new, final probe | `Greenhouse`, 18 px | 0 `0406`, 62 `060B`, 65 `060C`, 99 `0509`, 105 `0406`, 121 `060B`, 123 `060C`, 182 `070D`, 214 `070E`, 217 `0507`, 223 `0406`, 301 `060B`, 303 `060C` |
+| `20261013-213017` | new | `SewerShort`, 18 px, toxic | no `0815`; hurt recoil `0F1D` at 18, 112, 211 and 330 between standing, dashing and the jump at 181 |
+| `20261013-213406` | new | `Greenhouse`, 42 px (exported) | 0 `0406`, 1 `0815`, 6 `0406`, 65 `060B`, 181 `0815`, 190 `070D`, 222 `070E`, 226 `0815`, 262 `0406`, 301 `060B` |
+| `20261013-213103` | new | `SewerDepths`, 114 px (exported), toxic | 0 `0406`, 61 `060B`, 181 `0815`, then `0815` between hurt recoils to the end |
+
+In all of them `source_saves_unchanged` is true and no fatal log was written. On the new rule the arena's 82 water cells and the start level's 5 (run `20261013-212840`) export none. On the old rule Kirby walked on the arena floor at the original's walk (`060B`); on the new one the held direction dashes (`060C`) as on dry floor. The runs before `213551` used the final rule with an earlier probe (the level variable alone chose wading, and a death did not stop it); a `Swamp` run of that probe (`20261013-213149`, 18 px) was cut by a death at frame 158, before the jump, and is not counted. Two earlier baseline runs with a longer plan (`20261013-212122`, `212246`) ended in the boss's first hit. Not run: the fight beyond those seconds, copy abilities or the helper in shallow water, a pool between 18 and 42 px deep, the owner's play launcher.
 
 ## Ice host freeze (2026-10-06)
 

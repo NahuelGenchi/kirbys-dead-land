@@ -16,9 +16,9 @@ in [NDS_BRIDGE.md](NDS_BRIDGE.md). The original bootstrap experiment remains in
 |---|---|
 | Clock | 33,513,982 / 560,190 source ticks per second. A display within 3% of that rate presents one original frame per host frame, like an emulator synchronized to vblank; other rates accumulate real time |
 | Movement | The ROM updates fixed-point position, velocity and action state; the host follows its physical foot. With `MatchHostSpeed` (default) Kirby moves at the Beheaded's measured speeds: each original frame's own motion is carried on through free space (run and air control 236.5 px/s, float across at the same speed, fall 403 px/s, floating up and down at the run's tempo), the original horizontal velocity is cleared when the direction is released or reversed, and the jump keeps its 50 px but peaks after 0.25 s, as the Beheaded's does. Added motion stops short of walls and ceilings, leaves the original a full fall step above floors, follows slopes at the original's whole-pixel surface, and never applies to hits or swimming. Ladders, chains and vines climb as much faster than the original as the run, 265 px/s up and 315 px/s down (original 139 and 165, the Beheaded's average 97.5): at the original's speed the owner still found climbing too slow (#48, #51). The added climb stops a full step short of a ladder's ends, the one-way top it leads onto, ceilings and floors, so the original makes its own last steps onto and off the ladder. Ability moves keep their original motion unless they carry Kirby: a dash attack, or any move faster than the original dash, moves at the run's scale (see [Carrying ability moves](#carrying-ability-moves-40)). The original walk and dash cycles play faster with the run (up to 1.67 times, one frame a pose), so his feet cover about the ground they did natively. `false` keeps the original DS speeds (the stomp keeps the dive's) |
-| Terrain | Nearby host solids, one-way floors, slopes, ladders and water become source collision cells; all linked source objects and cached terrain probes move together when the window rebases by whole cells, while effects attached to a parent (Fire's head flame, Plasma's spark, attack effects) keep their offsets from it. Host movement of Kirby (speed match, stomp) moves only him and his terrain probes, so thrown bombs, cutters, effects and the helper keep their original paths. Over a moving host elevator the window is lifted to its surface and original objects ride with him (see [Host elevators](#host-elevators-deviation)) |
+| Terrain | Nearby host solids, one-way floors, slopes, ladders and water become source collision cells (water only where it fills a cell, see [Shallow host water](#shallow-host-water-intentional-deviation)); all linked source objects and cached terrain probes move together when the window rebases by whole cells, while effects attached to a parent (Fire's head flame, Plasma's spark, attack effects) keep their offsets from it. Host movement of Kirby (speed match, stomp) moves only him and his terrain probes, so thrown bombs, cutters, effects and the helper keep their original paths. Over a moving host elevator the window is lifted to its surface and original objects ride with him (see [Host elevators](#host-elevators-deviation)) |
 | Input | Existing host bindings become original digital buttons; ordinary source directional combinations still apply. A held direction dashes through the original double tap (`AlwaysDash`), re-tapped after a landing only in an original ground action, so Ninja's wall cling keeps its held direction (#97); a light analog tilt walks. A key bound to both Up and jump (W and the Up arrow by default) climbs at a ladder or chain, as in the host, instead of jumping first |
-| Terrain | Nearby host solids, one-way floors, slopes, ladders and water become source collision cells. Vines grown with the Vine rune (`en.inter.VineLadder`) have no collision bits, only level spots (0, where the Beheaded climbs, and 18); their cells become source ladders, and the solid blocks a vine passes through or ends under become one-way ladder tops in that column. A ladder under a solid block stops the original below it, so this deviation lets Kirby climb onto the ledge, as the Beheaded's `exitLadderTop` does; all linked source objects and cached terrain probes move together when the window rebases by whole cells, while effects attached to a parent (Fire's head flame, Plasma's spark, attack effects) keep their offsets from it. Host movement of Kirby (speed match, stomp) moves only him and his terrain probes, so thrown bombs, cutters, effects and the helper keep their original paths |
+| Terrain | Nearby host solids, one-way floors, slopes, ladders and water become source collision cells (water only where it fills a cell, see [Shallow host water](#shallow-host-water-intentional-deviation)). Vines grown with the Vine rune (`en.inter.VineLadder`) have no collision bits, only level spots (0, where the Beheaded climbs, and 18); their cells become source ladders, and the solid blocks a vine passes through or ends under become one-way ladder tops in that column. A ladder under a solid block stops the original below it, so this deviation lets Kirby climb onto the ledge, as the Beheaded's `exitLadderTop` does; all linked source objects and cached terrain probes move together when the window rebases by whole cells, while effects attached to a parent (Fire's head flame, Plasma's spark, attack effects) keep their offsets from it. Host movement of Kirby (speed match, stomp) moves only him and his terrain probes, so thrown bombs, cutters, effects and the helper keep their original paths |
 | Input | Existing host bindings become original digital buttons; ordinary source directional combinations still apply. A held direction dashes through the original double tap (`AlwaysDash`), re-tapped after a landing only in an original ground action, so Ninja's wall cling keeps its held direction (#97); a light analog tilt walks. A key bound to both Up and jump (W and the Up arrow by default) climbs at a ladder, chain or vine, as in the host, instead of jumping first |
 | Roll | Kirby's original slide is his roll and covers the Beheaded's roll: 131 px at up to 339 px/s. A Shift key bound to Dodge starts it too (see [Shift slides](#shift-slides-75)); Ctrl and the other Dodge bindings guard. Host roll-zone tunnels (collision 65) open while he slides and stay open until he leaves one entered by sliding; walking cannot enter. A slide inside a tunnel keeps rolling at full speed to its far end (see [Roll-zone tunnels roll through](#roll-zone-tunnels-roll-through-115)). The slide's fast part counts as a roll for the host's door and breakable-tile checks, and Suplex's grab lunge for its door check (see [Suplex's lunge bursts doors](#suplexs-lunge-bursts-doors-50)) |
 | Dive attack | The player's host dive binding in the air or on a ladder or chain (original jump, fall, float or climb) starts the host `DiveAttack` under its own rules. The original controller keeps its falling or exhaling animation and physics (3.5 px/frame cap) and drops straight down; the host adds 11.5 px/frame of descent through free space, 15 px a frame in all like the Beheaded's dive (about 900 px/s), and leaves the original a full fall step to make the floor contact; the host skill resolves the landing (shockwave, stun, damage, breakable floors with the Ram rune). Only what stops the original fall counts as floor: solids, slopes and one-way platforms from above, never ladders or chains. From a climb the original A kicks him off; climbing down from a ladder or vine top the original ignores A for its first frames, so while it still climbs A is pressed every other frame and the host adds no descent, and the dive passes the ladder top in the row his feet climb in ([#74](#stomp-from-a-vine-top-74)) Enemy touch damage is off while stomping and for 30 frames after landing |
@@ -1212,6 +1212,42 @@ therefore points that one table entry at the original return-zero stub
 `0x020CF36C` (`mov r0,#0; bx lr`) in emulated RAM, after validating both the stub
 and the entry. Kirby's swimming, the exit-water handler and other enemies' water
 reactions are unchanged. Water itself still works on Kirby as before.
+### Shallow host water (intentional deviation)
+
+Issue #144. For the host, water is decoration. `level.LevelMap.getWaterSurfaceY`
+returns a cell's surface in pixels, `(room.y + marker.cy + marker.yr) * 24`, for
+every cell of the water marker's rectangle; `Entity.fixedUpdate` calls
+`onEnterWater` and the splash once an entity's feet are below it and changes
+nothing in its movement. The Beheaded never swims. The runtime used to export
+every free cell with a surface as an original water tile, so the partly filled
+top row of a pool counted as a whole tile. In the Mama Tick arena (`SwampHeart`)
+the floor is covered by 12 px of water over 82 columns. On the old rule Kirby
+swam there (`0815`) for about 36 frames after a fall or a jump, a jump press
+gave a swimming stroke for 8 frames before the jump, and a held direction
+walked instead of dashing.
+
+The owner decided that Kirby swims only where the water would cover him. A cell
+is now original water only when the host surface is at or above its top
+(`SpeedMatch.Submerged`), which is a whole tile, the only kind the original has.
+Kirby (22 px) walks, dashes, jumps and lands as on dry floor in water less than
+24 px deep, with the host's own splashes; in the cells a deeper pool fills he
+swims as before. Enemies in shallow water are no longer in original water
+either. Depths measured in generated levels on 2026-10-13: 12 px in `SwampHeart`;
+18 px in `PrisonStart` (5 columns), `SewerShort` (92), `Swamp` (38), and most
+columns of `Greenhouse`, `Shipwreck` and `SewerDepths`; 42 px in `Greenhouse`
+and `SewerDepths`; 90, 114 and 330 px in `SewerDepths` and 282 px in `Shipwreck`.
+`StiltVillage` had none. Levels are generated, so other seeds can differ.
+
+Live, isolated profile (`repros/water-20261013`, see
+[RUNTIME_LAUNCH.md](RUNTIME_LAUNCH.md#shallow-water-144)): in the arena Kirby
+stood, dashed, jumped (`070D` on the press), landed (`0507`) and stood, with no
+`0815`; the same in 18 px of water in `Shipwreck` and `Greenhouse`, and no
+`0815` in `SewerShort`.
+In a 42 px pool (`Greenhouse`) and a 114 px one (`SewerDepths`) he still swam
+after the jump. Not run: the Mama Tick fight itself beyond the first seconds,
+copy abilities and the helper in shallow water, a pool between 18 and 42 px,
+normal play. Toxic water still hurts Kirby through the host (seen in both
+sewers).
 ### Ice freezes with the host status (intentional deviation)
 
 Issue #42. In the original game an enemy reduced to zero HP by Ice becomes a
