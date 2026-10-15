@@ -2299,3 +2299,17 @@ the all-ability rendering tests as full gameplay acceptance.
   Timed and left: `kssu_world` 1.7 µs a call, `kssu_state` 0.3 µs (a bare
   Python call is 0.4 µs), under 2 µs a step together.
   Not run: the owner's play launcher, a window on the GPU, a long session.
+
+## 2026-10-14 — a real species in the free enemy slot, tried (#161)
+
+- `0x020936A4(type, unused, parameter)` loads a species' overlay and graphics
+  during play, as the room loader does. A headless probe ran it through the
+  call hook for the five species of the empty slot 2 (Knuckle Joe, Gim, Jungle
+  Bomb, Birdon, Tac) and spawned each as a proxy. Each one loaded in 1 or 2
+  frames, matched the ROM's file, and was taken by the bridge as a proxy.
+- Its own program runs: Knuckle Joe took Kirby from 76 to 44 health in 300
+  frames and could not be inhaled; Gim's yo-yo hit for 10. The other three
+  were inhaled and gave their copy. With Waddle Dee's update routine, Knuckle
+  Joe stopped attacking and gave Fighter, which is what the current proxy does.
+- Not adopted: one free slot, never drawn, and nothing gained once its program
+  is off. Recorded in `docs/ROM_INTERNALS.md` (Enemy slots). No code changed.
