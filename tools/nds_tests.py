@@ -989,6 +989,23 @@ def run_case(name,clock=1):
             assert gpu(0x06404040,4096)==block[0x4040:0x5040], 'Partial block read differs'
             used=sum(1 for v in block if v);assert used>10000,used
             return {'bytes':len(block),'nonzero_bytes':used,'equals_bus_read':True}
+        if name=='gpu_block':
+            # The host reads the OAM and the OBJ palette whole on every frame, and the
+            # bridge reads the OAM after every frame for the off-screen pieces, as one
+            # block (#165). A request that is not whole 8-byte words still takes one
+            # bus read a byte, so the two can be compared.
+            b.lib.kssu_read_gpu.argtypes=[C.c_void_p,C.c_uint32,C.c_void_p,C.c_size_t]
+            def gpu(address,length):
+                out=C.create_string_buffer(length);assert b.lib.kssu_read_gpu(b.handle,address,out,length)==0;return out.raw
+            transform(b,18);b.step(2,30)
+            result={}
+            for memory,base in (('palettes',0x05000000),('oam',0x07000000)):
+                block=gpu(base,0x800);slow=gpu(base+1,0x800-2)
+                assert block[1:-1]==slow,f'Block {memory} read differs from the bus read'
+                assert gpu(base+0x200,0x200)==block[0x200:0x400],f'Partial {memory} block read differs'
+                result[f'{memory}_nonzero_bytes']=sum(1 for v in block if v)
+            assert result['palettes_nonzero_bytes']>500 and result['oam_nonzero_bytes']>8,result
+            return {**result,'equals_bus_read':True}
         if name=='main_screen_only':
             # The host shows neither DS screen and reads only engine A. With engine B's
             # drawing left out, main RAM, the GPU memory, the layer capture, the top
@@ -1326,7 +1343,7 @@ def main():
         result=run_case(args.case,args.arm9_clock)
         # The emulator's log shares stdout and may stop mid-line: start the result on its own line.
         print('\nRESULT '+json.dumps({'case':args.case,'result':result}),flush=True);return
-    cases=['scene_doors', 'far_shot_draw', 'room_food', 'proxy_birth_contact', 'proxy_birth_inhale', 'proxy_contact', 'proxy_contact_sword', 'proxy_touch_off', 'proxy_swallow_touch_off', 'proxy_suplex_touch_off', 'proxy_ice_detach', 'proxy_ice_release', 'proxy_lethal', 'motion', 'ladder', 'ladder_top', 'ladder_top_stomp', 'one_way', 'solid_ceiling', 'water', 'proxy_water', 'proxy_water_sword', 'proxy_water_below', 'hurt_water', 'proxy_swallow', 'hazard_spit', 'hazard_swallow', 'star_spit', 'star_spit_wall', 'star_big', 'star_ability', 'proxy_sword', 'proxy_reuse', 'proxy_cache', 'proxy_save', 'proxy_mix', 'mix_no_limited', 'boss_inhale', 'boss_suplex', 'boss_cook', 'boss_sword', 'proxy_capacity', 'copy_drop_reabsorb', 'wheelie_ride', 'proxy_suplex', 'proxy_cook', 'audio', 'hurt', 'hurt_lethal', 'hurt_cold', 'guard', 'health_invulnerable', 'health_sync', 'proxy_size', 'f_slot', 'f_slot_save', 'f_slot_plasma', 'move_mouthful', 'move_wade', 'helper_reaction', 'helper_move', 'helper_owns', 'obj_vram_block', 'main_screen_only', 'skip_idle_main', 'arm9_clock', 'recompiler', 'hit_pool', 'step_between_passes']
+    cases=['scene_doors', 'far_shot_draw', 'room_food', 'proxy_birth_contact', 'proxy_birth_inhale', 'proxy_contact', 'proxy_contact_sword', 'proxy_touch_off', 'proxy_swallow_touch_off', 'proxy_suplex_touch_off', 'proxy_ice_detach', 'proxy_ice_release', 'proxy_lethal', 'motion', 'ladder', 'ladder_top', 'ladder_top_stomp', 'one_way', 'solid_ceiling', 'water', 'proxy_water', 'proxy_water_sword', 'proxy_water_below', 'hurt_water', 'proxy_swallow', 'hazard_spit', 'hazard_swallow', 'star_spit', 'star_spit_wall', 'star_big', 'star_ability', 'proxy_sword', 'proxy_reuse', 'proxy_cache', 'proxy_save', 'proxy_mix', 'mix_no_limited', 'boss_inhale', 'boss_suplex', 'boss_cook', 'boss_sword', 'proxy_capacity', 'copy_drop_reabsorb', 'wheelie_ride', 'proxy_suplex', 'proxy_cook', 'audio', 'hurt', 'hurt_lethal', 'hurt_cold', 'guard', 'health_invulnerable', 'health_sync', 'proxy_size', 'f_slot', 'f_slot_save', 'f_slot_plasma', 'move_mouthful', 'move_wade', 'helper_reaction', 'helper_move', 'helper_owns', 'obj_vram_block', 'gpu_block', 'main_screen_only', 'skip_idle_main', 'arm9_clock', 'recompiler', 'hit_pool', 'step_between_passes']
     if not args.skip_abilities:cases += [f'ability-{i}' for i in range(2,26)]
     if args.arm9_clock!=1:return survey(cases,args.arm9_clock)
     results=[]
