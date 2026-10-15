@@ -2344,3 +2344,18 @@ the all-ability rendering tests as full gameplay acceptance.
   same with frames captured.
 - Not run: copy abilities or the helper wading, F with a water mouthful live,
   other copies' affix uses live, the owner's launcher.
+
+## 2026-10-14 — a real species in the free enemy slot, tried (#161)
+
+- `0x020936A4(type, unused, parameter)` loads a species' overlay and graphics
+  during play, as the room loader does. A headless probe ran it through the
+  call hook for the five species of the empty slot 2 (Knuckle Joe, Gim, Jungle
+  Bomb, Birdon, Tac) and spawned each as a proxy. Each one loaded in 1 or 2
+  frames, matched the ROM's file, and was taken by the bridge as a proxy.
+- Its own program runs: Knuckle Joe took Kirby from 76 to 50 health in 300
+  frames and could not be inhaled; Gim's yo-yo hit for 10. The other three
+  were inhaled and gave their copy. With Waddle Dee's update routine, Knuckle
+  Joe made no attack and gave Fighter, but his touch still hurt Kirby twice
+  for 8, which the Waddle Dee proxy did not from the same place.
+- Not adopted: one free slot, never drawn, and nothing gained once its program
+  is off. Recorded in `docs/ROM_INTERNALS.md` (Enemy slots). No code changed.
