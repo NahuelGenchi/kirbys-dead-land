@@ -288,6 +288,8 @@ public sealed unsafe class NdsRuntime : IDisposable
         if (movePlayer == null) throw new NotSupportedException("The native bridge cannot move Kirby alone. Rebuild and stage it with this runtime.");
         Result(movePlayer(handle, dxRaw, dyRaw));
     }
+    /// <summary>The bridge reads Kirby's move (#158).</summary>
+    public static bool CanReadMove => playerMove != null;
     /// <summary>Kirby's move and mouthful state as the original keeps them (#158); false with an older bridge.</summary>
     public bool TryMove(out NdsMove move)
     {
@@ -443,9 +445,10 @@ public unsafe struct NdsState
 }
 
 /// <summary>
-/// Kirby's move (#158): the action, player field 4 (2 while he holds a mouthful,
-/// 1 otherwise), the copy byte, the running move descriptor and the copy's move
-/// table (0 for Normal).
+/// Kirby's move (#158): the action, player field 4 (1 on dry land, 2 with a
+/// mouthful there, 4 in water and 5 with a mouthful in water, #166), the copy
+/// byte, the running move descriptor (<see cref="Kirby.Core.KirbyMoves"/>) and the
+/// copy's move table (0 for Normal).
 /// </summary>
 [StructLayout(LayoutKind.Sequential)]
 public struct NdsMove
@@ -454,7 +457,7 @@ public struct NdsMove
     public byte Carry;
     public byte Ability;
     public uint Descriptor, Table;
-    public readonly bool Mouthful => Carry == 2;
+    public readonly bool Mouthful => Carry is 2 or 5;
 }
 
 /// <summary>The original CPU helper (the DS X button's partner), in source coordinates (16.16).</summary>
