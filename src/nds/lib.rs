@@ -512,14 +512,19 @@ pub unsafe extern "C" fn kssu_read_gpu(
         return -2;
     }
     let b = &mut *(handle as *mut Bridge);
-    // The host reads all of engine A's OBJ VRAM on every source frame. Whole
-    // 8-byte words inside it are copied as a block (the same accessors as the
-    // bus read, see tools/nds_graphics_patch.py) instead of one bus read a byte.
+    // The host reads all of engine A's OBJ VRAM, the OAM and the OBJ palette on
+    // every source frame. Whole 8-byte words of them are copied as a block (the
+    // same accessors and power test as the bus read, see
+    // tools/nds_graphics_patch.py) instead of one bus read a byte (#123, #165).
     let end = address + len as u32;
-    let block = address >= OBJ_VRAM
-        && end <= OBJ_VRAM + OBJ_VRAM_SIZE
-        && (address | end) & 7 == 0
-        && b.nds.obj_vram(address - OBJ_VRAM, std::slice::from_raw_parts_mut(dest, len));
+    let whole = (address | end) & 7 == 0;
+    let out = std::slice::from_raw_parts_mut(dest, len);
+    let block = whole
+        && if address >= OBJ_VRAM && end <= OBJ_VRAM + OBJ_VRAM_SIZE {
+            b.nds.obj_vram(address - OBJ_VRAM, out)
+        } else {
+            gpu_block(address, end) && b.nds.gpu_memory(address, out)
+        };
     if !block {
         for i in 0..len {
             *dest.add(i) = b.nds.bus_read8(address + i as u32);
@@ -530,6 +535,12 @@ pub unsafe extern "C" fn kssu_read_gpu(
 }
 const OBJ_VRAM: u32 = 0x06400000;
 const OBJ_VRAM_SIZE: u32 = 0x40000;
+const PALETTES: u32 = 0x05000000;
+const OAM: u32 = 0x07000000;
+/// Inside the 2 KB of palettes or of OAM, which `Copy_GpuMemory` copies as a block.
+fn gpu_block(address: u32, end: u32) -> bool {
+    [PALETTES, OAM].iter().any(|&base| address >= base && end <= base + 0x800)
+}
 /// Leave engine B's 2D drawing out of every frame; its half of the framebuffer
 /// is black. The host shows neither DS screen and reads only engine A (OBJ
 /// tiles, OAM, palettes and the layer capture), so it turns this on. Tools and
@@ -2354,9 +2365,11 @@ pub unsafe extern "C" fn kssu_unfinished_passes(handle: *mut std::ffi::c_void) -
     (&*(handle as *mut Bridge)).unfinished_passes.min(i32::MAX as u32) as i32
 }
 fn update_far_objects(b: &mut Bridge) {
-    let oam: Vec<u8> = (0..1024).map(|i| b.nds.bus_read8(0x07000000 + i)).collect();
+    // Engine A's OAM as one block (#165); the copy refuses only a range outside it.
+    let mut oam = [0u8; 1024];
+    let read = b.nds.gpu_memory(OAM, &mut oam);
     b.far_shown = match b.far_pending.take() {
-        Some((far, shadow)) if shadow == oam => far,
+        Some((far, shadow)) if read && shadow == oam => far,
         _ => Vec::new(),
     };
     b.far_pending = build_far_objects(b.nds.main_ram_mut());
@@ -2412,7 +2425,8 @@ const HOOK_WORDS: usize = 3 + 4 + 15;
 /// the expected object. A mouthful keeps the groups of standing, walking and
 /// jumping; after `SetAbility` the give-ability routine drops it (`0x020AEF70`
 /// sets field 4 back to 1), which this call does not do, so it refuses instead
-/// and the mouthful is spat or swallowed first (#158).
+/// and the mouthful is spat or swallowed first (#158), on dry land and in water
+/// (#166).
 #[no_mangle]
 pub unsafe extern "C" fn kssu_set_ability(handle: *mut std::ffi::c_void, ability: u8) -> i32 {
     if handle.is_null() || !(1..=25).contains(&ability) {
@@ -2434,7 +2448,7 @@ pub unsafe extern "C" fn kssu_set_ability(handle: *mut std::ffi::c_void, ability
     if inhaling
         || r[record + 0x12] != 1
         || !matches!(r[record + 0x19], 4 | 6 | 7 | 8)
-        || r[record + 0x14] == CARRY_MOUTHFUL
+        || holds_mouthful(r[record + 0x14])
     {
         return -2;
     }
@@ -2444,19 +2458,27 @@ pub unsafe extern "C" fn kssu_set_ability(handle: *mut std::ffi::c_void, ability
     kssu_hook_state = 1;
     0
 }
-/// Player field 4 (record +0x14) while Kirby holds a mouthful.
+/// Player field 4 (record +0x14) while Kirby holds a mouthful, on dry land and in
+/// water (#166).
 const CARRY_MOUTHFUL: u8 = 2;
+const CARRY_WATER_MOUTHFUL: u8 = 5;
+fn holds_mouthful(carry: u8) -> bool {
+    matches!(carry, CARRY_MOUTHFUL | CARRY_WATER_MOUTHFUL)
+}
 /// Kirby's move as the original keeps it (#158). The original's move selectors
 /// (the stand's is `0x0210EA60`) and its give-ability routine read player field 4,
-/// `carry`: 2 while Kirby holds a mouthful, from the stand after the catch through
-/// a swallow until the copy loads, or a spit until the star leaves, and 1 when he
-/// holds nothing. The mouth count behind `kssu_action_flags` bit 1 stays set after
-/// a swallow until the next inhale; `carry` does not. `descriptor` is the running
-/// move (record +0x808), a 24-byte descriptor, and `table` the copy's move table
-/// (+0x800, 0 for Normal): `(descriptor - table) / 24` indexes a copy's own move,
-/// while standing, walking, jumping and their mouthful variants come from tables
-/// every copy shares (mouthful stand `0x02131508`, walk `0x02131148`, jump
-/// `0x021311C0`, fall `0x02131238`, landing `0x021310E8`).
+/// `carry`: 1 on dry land, 2 while Kirby holds a mouthful there, 4 in water and 5
+/// with a mouthful in water (#166). A mouthful lasts from the stand after the catch
+/// through a swallow until the copy loads, or a spit until the star leaves. The
+/// mouth count behind `kssu_action_flags` bit 1 stays set after a swallow until the
+/// next inhale; `carry` does not. `descriptor` is the running move (record +0x808),
+/// a 24-byte descriptor, and `table` the copy's move table (+0x800, 0 for Normal):
+/// `(descriptor - table) / 24` indexes a copy's own move, while standing, walking,
+/// jumping and their mouthful and water variants come from tables every copy shares
+/// (mouthful stand `0x02131508`, walk `0x02131148`, jump `0x021311C0`, fall
+/// `0x02131238`, landing `0x021310E8`; in water the stand is `0x021314F0`, with a
+/// mouthful `0x02131520`, and walking on the bottom is the wade, `0x02131160`, the
+/// walk action under its own move).
 #[repr(C)]
 #[derive(Default, Copy, Clone)]
 pub struct KssuMove {

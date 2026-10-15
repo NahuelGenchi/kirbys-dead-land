@@ -566,7 +566,7 @@ Every run kept the real saves unchanged and logged no fatal errors. Natural enem
 
 ## Shallow water (#144)
 
-With `KIRBY_LAB_WATER_WADE=1` the `water` plan puts Kirby on the floor in the middle of the widest stretch of water (exported water if the level has any, otherwise host water of any depth) and holds nothing for 60 source frames, right for 60, left for 60, A for 12, nothing until 300 and right until 360. `water.json` records `depths` (host water cells, how many are exported as original water, and the columns by depth in pixels from the surface to the first solid cell below), `wadeSite`, `wadeActions` (the original's action codes counted in each step, two readings a source frame) and `wadeOrder` (each change of action with its frame; `0815` is swimming). The plan is short because a boss wakes when Kirby appears and attacks about eight seconds later; a death sets `wadeInterrupted` and ends it. A new run in a late level starts with 76 health and no scrolls, and one hit killed Kirby in the cut runs listed below.
+With `KIRBY_LAB_WATER_WADE=1` the `water` plan puts Kirby on the floor in the middle of the widest stretch of water (exported water if the level has any, otherwise host water of any depth) and holds nothing for 60 source frames, right for 60, left for 60, A for 12, nothing until 300 and right until 360. `water.json` records `depths` (host water cells, how many are exported as original water, and the columns by depth in pixels from the surface to the first solid cell below), `wadeSite`, `wadeActions` (the original's action codes counted in each step, two readings a source frame) and `wadeOrder` (each change of action with its frame; `0815` is swimming). Since #166 it also records `wadeMoves` (each change of action, running move and player field 4, with its frame) and `wadeSpeed` (the host distance of each source frame spent in the wade, `060B` under move `0x02131160`, after another: frames, median and largest). The plan is short because a boss wakes when Kirby appears and attacks about eight seconds later; a death sets `wadeInterrupted` and ends it. A new run in a late level starts with 76 health and no scrolls, and one hit killed Kirby in the cut runs listed below.
 
 ```sh
 python3 scripts/check.py   # builds; staging copies the existing build
@@ -591,6 +591,10 @@ All runs on 2026-10-13, DCCM 35.13.6, the shared oracle bridge (not changed by t
 | `20261013-213103` | new | `SewerDepths`, 114 px (exported), toxic | 0 `0406`, 61 `060B`, 181 `0815`, then `0815` between hurt recoils to the end |
 
 In all of them `source_saves_unchanged` is true and no fatal log was written. On the new rule the arena's 82 water cells and the start level's 5 (run `20261013-212840`) export none. On the old rule Kirby walked on the arena floor at the original's walk (`060B`); on the new one the held direction dashes (`060C`) as on dry floor. The runs before `213551` used the final rule with an earlier probe (the level variable alone chose wading, and a death did not stop it); a `Swamp` run of that probe (`20261013-213149`, 18 px) was cut by a death at frame 158, before the jump, and is not counted. Two earlier baseline runs with a longer plan (`20261013-212122`, `212246`) ended in the boss's first hit. Not run: the fight beyond those seconds, copy abilities or the helper in shallow water, a pool between 18 and 42 px deep, the owner's play launcher.
+
+### Wading at the original's speed (#166)
+
+Run `20261014-221157`, 2026-10-14, isolated profile `repros/move-166` with the #166 bridge (SHA-256 `0378487363af718439283a76a37d5cf685704facbf4861ac2052cd37283b5866`), `KIRBY_LAB_WATER_WADE=1 KIRBY_LAB_WATER_LEVEL=Greenhouse`, the 42 px pool (exported): `wadeMoves` 0 `0406/021314D8/1`, 1 `0815/02131430/4` (swim entry), 5 `0406/021314F0/4` (the water stand), 62 `060B/02131160/4` (the wade), 182 `0815/02131448/4`, 188 `0815/02131460/1`, 191 `070D/021311F0/1` (the jump out of water), 222 `070E/02131220/1`, 226 `0815/02131430/4`, 243 `0815/02131448/4`, 263 `0406/021314F0/4`, 295 `0F1D/02130D0C/4` (a hurt in water), 315 `0406/021314F0/4`, 316 `060B/02131160/4`. `wadeSpeed`: 117 frames, median 0.9375 px a frame (the original's), largest 2.8125 (three source frames in one host step). The saves were unchanged and no fatal log was written. Before #166 the same walk moved 1.79 px a frame headless (`tests/speed`); no live run of the old rule was recorded in this pool.
 
 ## Ice host freeze (2026-10-06)
 
@@ -910,9 +914,20 @@ B every 16 frames for 240 frames, then stops while its life is sampled.
   the ability item. All `passed: true`, saves unchanged, no fatal log.
 - `20261007-004127` (before the fix) showed no affix use: the press check also
   required an empty original mouth, whose count bit stays stale after a swallow.
+- `20261014-221330` and `20261014-222720` (#166, `repros/move-166`, the bridge
+  above): a press now uses the item when the original starts a Sword move for it.
+  The same 15 presses start 9 slashes headless (three combos of three; a slash
+  started up to 10 frames after its press). The first version of the rule, where
+  a press expired 10 frames after it was made, gave 6 uses; the final one, where
+  a press waits while a slash runs, gave 9. Both spawned the arrow and bled the
+  Zombie (29691 → 29667 after the attacks), `passed: true`, saves unchanged, no
+  fatal log.
+- `20261014-225817` (the same root and build, `--capture-fps 10`) repeated the
+  final rule: 9 uses, the arrow and the bleed (29681 → 29657), `passed: true`,
+  saves unchanged, no fatal log. Its frames show the burning arrows in flight
+  toward the Zombie and the bleed mark over it.
 
-Not run: the Grenade affix, on-kill affixes, a forge reroll in play, and the
-arrow captured on screen.
+Not run: the Grenade affix, on-kill affixes and a forge reroll in play.
 
 ## Scroll claim (#80)
 

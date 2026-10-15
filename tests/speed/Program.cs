@@ -23,6 +23,18 @@ double Speed(List<Row> r, int a, int b) => (r[b].X - r[a].X) / (b - a) * 60;
     Check(full >= 0 && full - 170 <= 16, "Turning reaches full speed the other way within a quarter second");
 }
 {
+    // #166: on the bottom of water the original walks at its own wade speed, and the
+    // matched run must not speed it up (it used to, 1.91 times, as a dry walk).
+    var sim = new Sim(nds, seed);
+    for (int x = 15; x < 60; x++) sim.Tiles[(x, 29)] = SpeedMatch.Water;
+    var r = sim.Run(R(16, 200));
+    var wading = Range(1, r.Count - 1).Where(i => r[i].Motion == SpeedMatch.Wade && r[i - 1].Motion == SpeedMatch.Wade).ToList();
+    Console.WriteLine("  wade px a frame: " + string.Join(" ", wading.Take(14).Select(i => $"{r[i].X - r[i - 1].X:0.####}")));
+    Check(wading.Count(i => r[i].Vx == 240) > 100 && wading.All(i => Math.Abs(r[i].X - r[i - 1].X - r[i].Vx / 256.0) < 1e-6)
+        && r.All(x => Math.Abs(x.Feet - 720) < 1e-6),
+        $"Kirby wades on the floor of a pool at the original's speed, up to 56 px/s ({wading.Count} frames)");
+}
+{
     var sim = new Sim(nds, seed);
     for (int y = 20; y < 30; y++) sim.Tiles[(30, y)] = 3;
     var r = sim.Run(R(16, 200));
@@ -504,8 +516,8 @@ sealed class Sim
             nds.Write(current.Player + 0x8A, value);
         }
         double x0 = hostX, f0 = feet;
-        // KirbyNdsProvider.PaceWalkCycle: the pose count at player+0x40 -> +0x6C8.
-        if (match && action is KirbyActions.Walk or KirbyActions.Dash)
+        // KirbyNdsProvider.PaceWalkCycle: the pose count at player+0x40 -> +0x6C8; not for the wade (#166).
+        if (match && action is KirbyActions.Walk or KirbyActions.Dash && motionActions.Effective != SpeedMatch.Wade)
         {
             Span<byte> word = stackalloc byte[4];
             nds.Read(current.Player + 0x40, word);
@@ -526,7 +538,8 @@ sealed class Sim
         int vx = slideHold.Holding && s.VxRaw != 0 ? Math.Sign(s.VxRaw) * Math.Max(Math.Abs((int)s.VxRaw), SlideHold.Velocity) : s.VxRaw;
         if (MatchHelper) helper.Finish(nds, ox, oy, false, TileAt);
         ushort after = nds.Action;
-        ushort motion = motionActions.Next(after, s.VxRaw);
+        nds.TryMove(out NdsMove move);
+        ushort motion = motionActions.Next(after, s.VxRaw, move.Descriptor);
         (hostX, feet) = match ? SpeedMatch.Move(motion, motionActions.Direction(direction), vx, x0, f0, s.X + ox * 24, s.Y + oy * 24 + 14.5, TileAt)
             : (s.X + ox * 24, s.Y + oy * 24 + 14.5);
         return new Row(after, hostX, feet, s.VxRaw, s.VyRaw, motion);

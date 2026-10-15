@@ -15,7 +15,7 @@ in [NDS_BRIDGE.md](NDS_BRIDGE.md). The original bootstrap experiment remains in
 | System | Original code and host adapter |
 |---|---|
 | Clock | 33,513,982 / 560,190 source ticks per second. A display within 3% of that rate presents one original frame per host frame, like an emulator synchronized to vblank; other rates accumulate real time. With `DoubleArm9Clock` (default) the original's main processor runs at twice the DS clock; the frame rate is unchanged. See [The original's processor at twice the DS clock](#the-originals-processor-at-twice-the-ds-clock-150-intentional-deviation) |
-| Movement | The ROM updates fixed-point position, velocity and action state; the host follows its physical foot. With `MatchHostSpeed` (default) Kirby moves at the Beheaded's measured speeds: each original frame's own motion is carried on through free space (run and air control 236.5 px/s, float across at the same speed, fall 403 px/s, floating up and down at the run's tempo), the original horizontal velocity is cleared when the direction is released or reversed, and the jump keeps its 50 px but peaks after 0.25 s, as the Beheaded's does. Added motion stops short of walls and ceilings, leaves the original a full fall step above floors, follows slopes at the original's whole-pixel surface, and never applies to hits or swimming. Ladders, chains and vines climb as much faster than the original as the run, 265 px/s up and 315 px/s down (original 139 and 165, the Beheaded's average 97.5): at the original's speed the owner still found climbing too slow (#48, #51). The added climb stops a full step short of a ladder's ends, the one-way top it leads onto, ceilings and floors, so the original makes its own last steps onto and off the ladder. Ability moves keep their original motion unless they carry Kirby: a dash attack, or any move faster than the original dash, moves at the run's scale (see [Carrying ability moves](#carrying-ability-moves-40)). The original walk and dash cycles play faster with the run (up to 1.67 times, one frame a pose), so his feet cover about the ground they did natively. `false` keeps the original DS speeds (the stomp keeps the dive's) |
+| Movement | The ROM updates fixed-point position, velocity and action state; the host follows its physical foot. With `MatchHostSpeed` (default) Kirby moves at the Beheaded's measured speeds: each original frame's own motion is carried on through free space (run and air control 236.5 px/s, float across at the same speed, fall 403 px/s, floating up and down at the run's tempo), the original horizontal velocity is cleared when the direction is released or reversed, and the jump keeps its 50 px but peaks after 0.25 s, as the Beheaded's does. Added motion stops short of walls and ceilings, leaves the original a full fall step above floors, follows slopes at the original's whole-pixel surface, and never applies to hits, swimming or wading on the bottom of water (see [Moves under one action](#moves-under-one-action-166)). Ladders, chains and vines climb as much faster than the original as the run, 265 px/s up and 315 px/s down (original 139 and 165, the Beheaded's average 97.5): at the original's speed the owner still found climbing too slow (#48, #51). The added climb stops a full step short of a ladder's ends, the one-way top it leads onto, ceilings and floors, so the original makes its own last steps onto and off the ladder. Ability moves keep their original motion unless they carry Kirby: a dash attack, or any move faster than the original dash, moves at the run's scale (see [Carrying ability moves](#carrying-ability-moves-40)). The original walk and dash cycles on dry floor play faster with the run (up to 1.67 times, one frame a pose), so his feet cover about the ground they did natively. `false` keeps the original DS speeds (the stomp keeps the dive's) |
 | Terrain | Nearby host solids, one-way floors, slopes, ladders and water become source collision cells (water only where it fills a cell, see [Shallow host water](#shallow-host-water-intentional-deviation)); all linked source objects and cached terrain probes move together when the window rebases by whole cells, while effects attached to a parent (Fire's head flame, Plasma's spark, attack effects) keep their offsets from it. Host movement of Kirby (speed match, stomp) moves only him and his terrain probes, so thrown bombs, cutters, effects and the helper keep their original paths. Over a moving host elevator the window is lifted to its surface and original objects ride with him (see [Host elevators](#host-elevators-deviation)) |
 | Input | Existing host bindings become original digital buttons; ordinary source directional combinations still apply. A held direction dashes through the original double tap (`AlwaysDash`), re-tapped after a landing only in an original ground action, so Ninja's wall cling keeps its held direction (#97); a light analog tilt walks. A key bound to both Up and jump (W and the Up arrow by default) climbs at a ladder or chain, as in the host, instead of jumping first |
 | Terrain | Nearby host solids, one-way floors, slopes, ladders and water become source collision cells (water only where it fills a cell, see [Shallow host water](#shallow-host-water-intentional-deviation)). Vines grown with the Vine rune (`en.inter.VineLadder`) have no collision bits, only level spots (0, where the Beheaded climbs, and 18); their cells become source ladders, and the solid blocks a vine passes through or ends under become one-way ladder tops in that column. A ladder under a solid block stops the original below it, so this deviation lets Kirby climb onto the ledge, as the Beheaded's `exitLadderTop` does; all linked source objects and cached terrain probes move together when the window rebases by whole cells, while effects attached to a parent (Fire's head flame, Plasma's spark, attack effects) keep their offsets from it. Host movement of Kirby (speed match, stomp) moves only him and his terrain probes, so thrown bombs, cutters, effects and the helper keep their original paths |
@@ -981,8 +981,9 @@ the stored one.
   Called during an attack or with a mouthful, it left Kirby stuck in the attack
   action, so a press waits up to half a second for Kirby to be free and is
   otherwise dropped. A held mouthful keeps the action groups of standing,
-  walking and jumping; the original tells it by player field 4, which the
-  runtime now reads through the bridge (`kssu_move`, #158). F does nothing while
+  walking and jumping; the original tells it by player field 4 (2 on land, 5 in
+  water), which the runtime now reads through the bridge (`kssu_move`, #158; the
+  water value since #166). F does nothing while
   Kirby holds a mouthful (B spits it or Down swallows it first), a press still
   waiting when he catches one is dropped, and the bridge refuses the switch
   while he holds one. Before, the switch went through under the mouthful, and a
@@ -1027,6 +1028,10 @@ a mouthful. Live runs `20261014-125300` and `20261014-125544` (see
 binding while Kirby held a real Zombie in base form: no press started, the
 mouthful and Crash's use stayed, and after the spit F fired Crash as usual (used,
 back to base form).
+Bridge case `move_wade` (#166) walks a mouthful into water (field 4 is 5) and
+checks the refusal there, then spits it and switches in water. On the bridge
+from before #166 the switch went through under the water mouthful (the case
+fails at that refusal). F with a mouthful in water was not run live.
 The roulette (#141) is covered headless only: bridge case `mix_no_limited`
 (no limited face shown, the three former stops give Stone, Fighter and Yo-Yo);
 no live two-enemy mouthful was run. Not
@@ -1570,6 +1575,68 @@ ability probe replaying original buttons (`KIRBY_LAB_ABILITY_PLAN`):
 
 Both runs ended at their time limit without fatal log lines. Not run live:
 other abilities, slopes and ledges during a carrying move, Wheel turning.
+
+### Moves under one action (#166)
+
+The original runs several moves under one action code. Since #158 the bridge
+reads the running move (the 24-byte descriptor the player record points to at
++`0x808`) and the copy's move table (+`0x800`, 0 for Normal) through
+`kssu_move`. The runtime now uses them where the action alone was ambiguous
+(`KirbyMoves`, `SpeedMatch.ActionFilter` and `CopyAttackPresses` in `src/core/`).
+
+- **Wading.** Walking on the bottom of water keeps the walk action `060B` under
+  its own move, `0x02131160`, with and without a mouthful. Entering from a run,
+  it started at 0.375 px a frame and gained 3/64 px a frame up to 0.9375
+  (56 px/s); the dry walk is 1.375. The speed match took it for a dry walk: Kirby moved 1.79 px a frame
+  (1.91 times the original) with a faster walk cycle. It now keeps the
+  original's motion, with no brakes and no cycle pacing, as swimming does.
+- **A mouthful in water.** Player field 4 is 1 on dry land, 2 with a mouthful
+  there, 4 in water and 5 with a mouthful in water. The F slot's check and the
+  bridge's refusal read only 2, so F could switch abilities under a mouthful
+  held in water. Both now read 2 and 5.
+- **The exhale.** The float's exhale is its own move, `0x021313D0`, with B or
+  on landing. The speed match now knows it by that move instead of by the float
+  before it. Both measured exhales (B in a float, and landing from one) follow
+  a float, so they move as before.
+- **Copy attacks.** Each copy's moves are entries of its own table. The 24
+  tables run from Cutter's `0x02129DE8` to Sleep's `0x02130B44`, all below the
+  moves every form shares (the lowest is the climb, `0x02130C04`). A headless
+  survey pressed B for all 24 copies from a stand, held, in the air and from a
+  dash, and recorded every move. A press starts a copy move on its own frame
+  (Fighter's a frame later, or 7 frames later when B is held). A press made
+  during an attack waits until the attack can take its next move: Sword's next
+  slash started 5, 7 or 10 frames after such a press. Some moves follow another
+  with no press (Beam's whip after its wind-up, Jet's and Wheel's second move,
+  Cutter's catch), and many presses during an attack do nothing. The copy item's affixes (#57) are now used when
+  a copy move starts while a press waits. A press waits as long as copy moves
+  run, then 10 more frames. Before, every press used them, even one that
+  started nothing. Replayed over the survey, every single press, hold, air
+  press and dash press uses the item once. Sleep's air and dash presses start
+  nothing, so they use nothing.
+
+Without the move (the helper, which shares the filter, or a bridge older than
+#158), the exhale is the ability action that follows a float, the wade moves as
+a dry walk, and each copy attack press uses the item, as before.
+
+Evidence: bridge case `move_wade` (`tools/nds_tests.py`) builds a pool, walks
+into it with and without a mouthful (field 4 is 4 and 5, both at 0.9375 px a
+frame), checks the refusal of an F switch under the water mouthful, then spits
+and switches. It fails at the refusal on the bridge from before #166. All 93
+bridge cases pass, and the 92 older ones give the same results. `tests/speed`
+walks into a pool: in all 177 wade frames Kirby moves exactly the original's
+velocity, up to 0.9375 px a frame (1.7917 px with the old rule). Core tests
+replay the survey's Sword, Fighter, Cutter, Beam and Jet frames. Live, in the
+isolated profile `repros/move-166` (see
+[RUNTIME_LAUNCH.md](RUNTIME_LAUNCH.md#wading-at-the-originals-speed-166)), run `20261014-221157`
+waded 117 frames along the floor of a 42 px pool in `Greenhouse` at a median
+0.9375 px a frame. In run `20261014-222720` (see
+[RUNTIME_LAUNCH.md](RUNTIME_LAUNCH.md#ability-item-affixes-57)), 15 Sword
+presses, one every 16 frames, used the item 9 times, once for each slash the
+same presses start headless (6 times under the first version of this rule,
+`20261014-221330`), with the arrow and the bleed.
+Not run: a copy ability or the helper wading, F with a mouthful in water, other
+copies' affix uses live, and normal play with `./play-kirby`.
+
 ### Suplex's lunge bursts doors (#50)
 
 Owner recording 2026-10-06 21:05: Suplex Kirby's dash attack ran into a closed
@@ -1916,11 +1983,16 @@ addition built from host items and the original inhale and swallow.
   Cells weapon's: every copy hit is an attack whose source item is the copy's
   ability item (`useItemAffixes`, as `AttackUtils.createFromHeroItem` does), so
   on-hit and on-kill affixes (bleed, poison, burning, oil, freeze…) apply; and
-  every copy attack press (DS B while copied) uses the item as a weapon strike
-  does: `Weapon.prepare`'s Grenade affix grenade, then `Weapon.executeAffixes`
-  (the arrow affixes and the on-use shield), with the host's own cooldowns. The
-  press, not each original hit, is the "use": an ability that hits many times per
-  press (Fire's breath) triggers on-use affixes once.
+  every copy attack press (DS B while copied) that starts an attack uses the item
+  as a weapon strike does: `Weapon.prepare`'s Grenade affix grenade, then
+  `Weapon.executeAffixes` (the arrow affixes and the on-use shield), with the
+  host's own cooldowns. The use comes when the original starts one of the copy's
+  own moves for a waiting press (#166, see
+  [Moves under one action](#moves-under-one-action-166)): a press that starts
+  nothing (in a recoil, in water, or again during the same attack) uses nothing,
+  and a move that follows another by itself (Beam's whip, Cutter's catch) is not
+  a second use. The press, not each original hit, is the "use": an ability that
+  hits many times per press (Fire's breath) triggers on-use affixes once.
 - **Taking one.** `InventItem.isUsefulFor` is false for an ability item for every
   hero but Kirby (#61: true for him, so a shop short of gold says so; his presses
   never pick one up). A short press shows "Inhale and swallow it to copy"; a long press still

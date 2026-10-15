@@ -78,14 +78,21 @@ public static class SpeedMatch
     public const ushort Carry = 0xFFFF;
     /// <summary>The original dash velocity (2.0625 px/frame); ability moves beyond it carry Kirby.</summary>
     public const int DashVelocity = 528;
+    /// <summary>
+    /// Walking on the bottom of water: the walk action (060B) under the wade move
+    /// (#166), 0.94 px a frame against the dry walk's 1.375. Not an original action
+    /// code; <see cref="ActionFilter"/> gives it in place of 060B. It keeps its
+    /// original motion, as swimming does.
+    /// </summary>
+    public const ushort Wade = 0xFFFE;
 
     /// <summary>
     /// The ability action (142C) is also the exhale that ends a float, with B or
-    /// on landing. It moves like floating while it follows a float. A move under
-    /// it that starts from a dash, or that becomes faster than the original
-    /// dash, carries Kirby: it moves as much faster than the matched run as the
-    /// original's is than its dash. Every other copy-ability attack keeps its
-    /// original motion.
+    /// on landing. It moves like floating. A move under it that starts from a
+    /// dash, or that becomes faster than the original dash, carries Kirby: it
+    /// moves as much faster than the matched run as the original's is than its
+    /// dash. Every other copy-ability attack keeps its original motion, and so
+    /// does the walk action on the bottom of water (the wade).
     /// </summary>
     public sealed class ActionFilter
     {
@@ -94,10 +101,16 @@ public static class SpeedMatch
         private int dashDirection, heading;
         /// <summary>The latest action as SpeedMatch should treat it.</summary>
         public ushort Effective { get; private set; }
-        /// <summary>Record the original action and horizontal velocity after a frame and return the action as SpeedMatch should treat it.</summary>
-        public ushort Next(ushort action, int vx = 0)
+        /// <summary>
+        /// Record the original action, horizontal velocity and running move after a
+        /// frame and return the action as SpeedMatch should treat it. With the move
+        /// (#166) the exhale and the wade are their own moves; without it (0: the
+        /// helper, or a bridge older than #158) the exhale is the ability action
+        /// that follows a float, and the wade walks as on dry floor.
+        /// </summary>
+        public ushort Next(ushort action, int vx = 0, uint move = 0)
         {
-            exhale = action == KirbyActions.Ability && (exhale || last == KirbyActions.Float);
+            exhale = action == KirbyActions.Ability && (move != 0 ? move == KirbyMoves.Exhale : exhale || last == KirbyActions.Float);
             // The move keeps carrying Kirby until the ability action ends, and
             // turns with him (Wheel) once he is fast the other way.
             if (action != KirbyActions.Ability || exhale) heading = 0;
@@ -105,7 +118,8 @@ public static class SpeedMatch
             else if (last == KirbyActions.Dash) heading = dashDirection;
             if (action == KirbyActions.Dash) dashDirection = Math.Sign(vx);
             last = action;
-            return Effective = exhale ? KirbyActions.Float : heading != 0 ? Carry : action;
+            return Effective = exhale ? KirbyActions.Float : heading != 0 ? Carry
+                : action == KirbyActions.Walk && move == KirbyMoves.Wade ? Wade : action;
         }
         /// <summary>
         /// The direction whose motion SpeedMatch speeds up: the carrying move's

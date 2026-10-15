@@ -789,6 +789,61 @@ def run_case(name,clock=1):
                     'after_spit':{'carry':spit[-1][1],'mouth_count':spit[-1][4]},
                     'after_swallow':{'carry':swallow[-1][1],'ability':swallow[-1][2],'mouth_count_left_set':bool(swallow[-1][4])},
                     'change_after_swallow':23}
+        if name=='move_wade':
+            # #166: walking on the bottom of shallow water keeps the walk action (060B) under
+            # its own move, the wade (0x02131160), with or without a mouthful. Player field 4
+            # is 4 in water and 5 with a mouthful there; a change is refused at 5 as at 2.
+            class Move(C.Structure):_fields_=[('action',C.c_uint16),('carry',C.c_uint8),('ability',C.c_uint8),('descriptor',C.c_uint32),('table',C.c_uint32)]
+            l=b.lib;l.kssu_move.argtypes=[C.c_void_p,C.POINTER(Move)]
+            l.kssu_set_ability.argtypes=[C.c_void_p,C.c_uint8];l.kssu_ability_change_pending.argtypes=[C.c_void_p]
+            l.kssu_proxy_options.argtypes=[C.c_void_p,C.c_uint32,C.c_uint8,C.c_bool]
+            pool=[3 if y>=7 else (130 if y==6 and 30<=x<80 else 0) for y in range(9) for x in range(100)];m=Move()
+            def run(mask,frames):
+                seen=[]
+                for _ in range(frames):
+                    at=b.state();b.world(pool,at['x_raw'],at['y_raw']);b.step(mask)
+                    assert l.kssu_move(b.handle,C.byref(m))==0
+                    seen.append((m.action,m.carry,m.descriptor,(b.state()['x_raw']-at['x_raw'])/65536,mask))
+                return seen
+            def until(mask,move,limit=400):
+                seen=[]
+                while len(seen)<limit and (not seen or seen[-1][:3]!=move):seen+=run(mask,1)
+                assert seen[-1][:3]==move,(hex(move[2]),[(hex(a),c,hex(d)) for a,c,d,*_ in seen[-3:]])
+                return seen
+            def speed(frames,move):
+                # The last ten frames of the move with the direction held: its steady speed.
+                dx=[v[3] for v in frames if v[:3]==move and v[4]==16][-10:]
+                assert len(dx)==10,(hex(move[2]),len(dx));return round(sum(dx)/len(dx),4)
+            walk,wade=(0x060b,1,0x02131130),(0x060b,4,0x02131160)
+            mouthful_walk,mouthful_wade=(0x060b,2,0x02131148),(0x060b,5,0x02131160)
+            b.world(pool,384*65536,int(153.5*65536));stand=run(0,60)[-1][:3]
+            assert stand==(0x0406,1,0x021314d8),stand
+            dry=run(16,40)+run(0,30)
+            at=b.state();l.kssu_proxy_set(b.handle,1,((at['x_raw']>>16)+40)*65536,151*65536,100,True);l.kssu_proxy_options(b.handle,1,18,False)
+            for _ in range(90):
+                run(2,1)
+                if b.action_flags()&2:break
+            assert b.action_flags()&2
+            held=run(0,20)+until(16,mouthful_wade)+run(16,60)
+            assert mouthful_walk in {v[:3] for v in held},sorted({(hex(a),c,hex(d)) for a,c,d,*_ in held})
+            entry=[v[:3] for v in held[held.index(next(v for v in held if v[1]==5)):] if v[:3]!=mouthful_wade]
+            water_mouthful=until(0,(0x0406,5,0x02131520),200)[-1][:3]
+            refused=l.kssu_set_ability(b.handle,23);assert refused==-2,refused
+            spit=run(2,3)+until(0,(0x0406,4,0x021314f0),200)
+            plain=until(16,wade)+run(16,60)
+            stopped=len(until(0,(0x0406,4,0x021314f0),200))
+            assert l.kssu_set_ability(b.handle,23)==0
+            for _ in range(20):
+                run(0,1)
+                if not l.kssu_ability_change_pending(b.handle):break
+            assert b.read(0x020baf7b,1)[0]==23
+            after=run(0,30)[-1][:3]
+            return {'dry_walk':{'move':'%08x'%walk[2],'px_per_frame':speed(dry,walk)},'mouthful_walk_px_per_frame':speed(held,mouthful_walk),
+                    'water_entry_with_mouthful':sorted({'%04x/%d/%08x'%v for v in entry}),
+                    'wade':{'move':'%08x'%wade[2],'field4':4,'px_per_frame':speed(plain,wade),'frames_to_stand_after_release':stopped},
+                    'mouthful_wade':{'field4':5,'px_per_frame':speed(held,mouthful_wade)},
+                    'water_stand':'%08x'%0x021314f0,'water_mouthful_stand':'%08x'%water_mouthful[2],'change_with_water_mouthful':refused,
+                    'change_in_water':23,'after_change':{'action':'%04x'%after[0],'field4':after[1],'move':'%08x'%after[2]}}
         if name=='f_slot_plasma':
             # #135: Plasma's charge aura (effect type 20, update 0x020C838C) after an F press and back.
             l=b.lib;l.kssu_set_ability.argtypes=[C.c_void_p,C.c_uint8];l.kssu_ability_change_pending.argtypes=[C.c_void_p]
@@ -934,6 +989,23 @@ def run_case(name,clock=1):
             assert gpu(0x06404040,4096)==block[0x4040:0x5040], 'Partial block read differs'
             used=sum(1 for v in block if v);assert used>10000,used
             return {'bytes':len(block),'nonzero_bytes':used,'equals_bus_read':True}
+        if name=='gpu_block':
+            # The host reads the OAM and the OBJ palette whole on every frame, and the
+            # bridge reads the OAM after every frame for the off-screen pieces, as one
+            # block (#165). A request that is not whole 8-byte words still takes one
+            # bus read a byte, so the two can be compared.
+            b.lib.kssu_read_gpu.argtypes=[C.c_void_p,C.c_uint32,C.c_void_p,C.c_size_t]
+            def gpu(address,length):
+                out=C.create_string_buffer(length);assert b.lib.kssu_read_gpu(b.handle,address,out,length)==0;return out.raw
+            transform(b,18);b.step(2,30)
+            result={}
+            for memory,base in (('palettes',0x05000000),('oam',0x07000000)):
+                block=gpu(base,0x800);slow=gpu(base+1,0x800-2)
+                assert block[1:-1]==slow,f'Block {memory} read differs from the bus read'
+                assert gpu(base+0x200,0x200)==block[0x200:0x400],f'Partial {memory} block read differs'
+                result[f'{memory}_nonzero_bytes']=sum(1 for v in block if v)
+            assert result['palettes_nonzero_bytes']>500 and result['oam_nonzero_bytes']>8,result
+            return {**result,'equals_bus_read':True}
         if name=='main_screen_only':
             # The host shows neither DS screen and reads only engine A. With engine B's
             # drawing left out, main RAM, the GPU memory, the layer capture, the top
@@ -1271,7 +1343,7 @@ def main():
         result=run_case(args.case,args.arm9_clock)
         # The emulator's log shares stdout and may stop mid-line: start the result on its own line.
         print('\nRESULT '+json.dumps({'case':args.case,'result':result}),flush=True);return
-    cases=['scene_doors', 'far_shot_draw', 'room_food', 'proxy_birth_contact', 'proxy_birth_inhale', 'proxy_contact', 'proxy_contact_sword', 'proxy_touch_off', 'proxy_swallow_touch_off', 'proxy_suplex_touch_off', 'proxy_ice_detach', 'proxy_ice_release', 'proxy_lethal', 'motion', 'ladder', 'ladder_top', 'ladder_top_stomp', 'one_way', 'solid_ceiling', 'water', 'proxy_water', 'proxy_water_sword', 'proxy_water_below', 'hurt_water', 'proxy_swallow', 'hazard_spit', 'hazard_swallow', 'star_spit', 'star_spit_wall', 'star_big', 'star_ability', 'proxy_sword', 'proxy_reuse', 'proxy_cache', 'proxy_save', 'proxy_mix', 'mix_no_limited', 'boss_inhale', 'boss_suplex', 'boss_cook', 'boss_sword', 'proxy_capacity', 'copy_drop_reabsorb', 'wheelie_ride', 'proxy_suplex', 'proxy_cook', 'audio', 'hurt', 'hurt_lethal', 'hurt_cold', 'guard', 'health_invulnerable', 'health_sync', 'proxy_size', 'f_slot', 'f_slot_save', 'f_slot_plasma', 'move_mouthful', 'helper_reaction', 'helper_move', 'helper_owns', 'obj_vram_block', 'main_screen_only', 'skip_idle_main', 'arm9_clock', 'recompiler', 'hit_pool', 'step_between_passes']
+    cases=['scene_doors', 'far_shot_draw', 'room_food', 'proxy_birth_contact', 'proxy_birth_inhale', 'proxy_contact', 'proxy_contact_sword', 'proxy_touch_off', 'proxy_swallow_touch_off', 'proxy_suplex_touch_off', 'proxy_ice_detach', 'proxy_ice_release', 'proxy_lethal', 'motion', 'ladder', 'ladder_top', 'ladder_top_stomp', 'one_way', 'solid_ceiling', 'water', 'proxy_water', 'proxy_water_sword', 'proxy_water_below', 'hurt_water', 'proxy_swallow', 'hazard_spit', 'hazard_swallow', 'star_spit', 'star_spit_wall', 'star_big', 'star_ability', 'proxy_sword', 'proxy_reuse', 'proxy_cache', 'proxy_save', 'proxy_mix', 'mix_no_limited', 'boss_inhale', 'boss_suplex', 'boss_cook', 'boss_sword', 'proxy_capacity', 'copy_drop_reabsorb', 'wheelie_ride', 'proxy_suplex', 'proxy_cook', 'audio', 'hurt', 'hurt_lethal', 'hurt_cold', 'guard', 'health_invulnerable', 'health_sync', 'proxy_size', 'f_slot', 'f_slot_save', 'f_slot_plasma', 'move_mouthful', 'move_wade', 'helper_reaction', 'helper_move', 'helper_owns', 'obj_vram_block', 'gpu_block', 'main_screen_only', 'skip_idle_main', 'arm9_clock', 'recompiler', 'hit_pool', 'step_between_passes']
     if not args.skip_abilities:cases += [f'ability-{i}' for i in range(2,26)]
     if args.arm9_clock!=1:return survey(cases,args.arm9_clock)
     results=[]
