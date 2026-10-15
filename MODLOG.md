@@ -2307,9 +2307,10 @@ the all-ability rendering tests as full gameplay acceptance.
   call hook for the five species of the empty slot 2 (Knuckle Joe, Gim, Jungle
   Bomb, Birdon, Tac) and spawned each as a proxy. Each one loaded in 1 or 2
   frames, matched the ROM's file, and was taken by the bridge as a proxy.
-- Its own program runs: Knuckle Joe took Kirby from 76 to 44 health in 300
+- Its own program runs: Knuckle Joe took Kirby from 76 to 50 health in 300
   frames and could not be inhaled; Gim's yo-yo hit for 10. The other three
   were inhaled and gave their copy. With Waddle Dee's update routine, Knuckle
-  Joe stopped attacking and gave Fighter, which is what the current proxy does.
+  Joe made no attack and gave Fighter, but his touch still hurt Kirby twice
+  for 8, which the Waddle Dee proxy did not from the same place.
 - Not adopted: one free slot, never drawn, and nothing gained once its program
   is off. Recorded in `docs/ROM_INTERNALS.md` (Enemy slots). No code changed.

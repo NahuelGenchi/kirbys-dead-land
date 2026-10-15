@@ -49,16 +49,16 @@ Two overlays of one slot occupy the same memory, so a room of the original can h
 
 | Species (type) | Copy | Loaded in | Kirby's health over 300 frames | Inhaled | Copy after the swallow |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| Knuckle Joe (`12`) | Fighter | 1 frame | 76 → 44: hits of 2 every 4 frames from frame 94, from his own attack | no | none |
+| Knuckle Joe (`12`) | Fighter | 1 frame | 76 → 50: ten hits of 2 from frame 94 to 137 and one of 6 at frame 279, from his own attacks (another 6 at frame 475, after the inhale) | no | none |
 | Gim (`0E`) | Yo-Yo | 1 frame | 76 → 66: one hit of 10 at frame 154, from his yo-yo | yes | Yo-Yo |
 | Jungle Bomb (`10`) | Bomb | 2 frames | 76 | yes | Bomb |
 | Birdon (`26`) | Wing | 1 frame | 76 | yes | Wing |
 | Tac (`2C`) | Copy | 2 frames | 76 | yes | Copy |
 | Waddle Dee (`01`), the proxy with Fighter's copy byte | Fighter | already loaded | 76 | yes | Fighter |
 
-Each overlay matched the ROM's file word for word after the call, and each species spawned with the object kind the bridge looks for, so the bridge took it as a proxy and held it in place. At frames 40 and 120 the hardware sprite list held no entry for Knuckle Joe or for the Waddle Dee proxy. With Knuckle Joe's update routine replaced by Waddle Dee's (`0x0219806C`), he stopped attacking, and the inhale and the swallow gave Fighter. A real species is safe only when it runs the stand-in's program, and then it is what the Waddle Dee proxy with a copy byte already is.
+Each overlay matched the ROM's file word for word after the call, and each species spawned with the object kind the bridge looks for, so the bridge took it as a proxy and held it in place. At frames 40 and 120 the hardware sprite list held no entry for Knuckle Joe or for the Waddle Dee proxy. With Knuckle Joe's update routine replaced by Waddle Dee's (`0x0219806C`) from his second frame, he made no attack of his own, and the inhale and the swallow gave Fighter. His body still hurt Kirby twice for 8, his touch damage, at frames 31 and 208 (76 → 60; the probe leaves body contact on, as `kssu_proxy_contact` does by default, and the Waddle Dee proxy did not hurt Kirby from the same place). Even on the stand-in's program a real species keeps parts of its own, and the Waddle Dee proxy with a copy byte already gives the copy.
 
-Not adopted. Only slot 2 is free, so one of the twenty copies at a time could have its real species. It would not be seen. Its own program attacks Kirby, while the Dead Cells enemy already does. Without that program, nothing differs from the current proxy. The routine stays recorded for a later feature that needs an original species, such as one of its sounds. Not tried: slots 0, 3 and 4 (their species belong to the room), a longer or closer encounter with the three species that did not attack, and live play.
+Not adopted. Only slot 2 is free, so one of the twenty copies at a time could have its real species. It would not be seen. Its own program attacks Kirby, while the Dead Cells enemy already does. Without that program it still hurt Kirby by touch, and gave only what the current proxy gives. The routine stays recorded for a later feature that needs an original species, such as one of its sounds. Not tried: slots 0, 3 and 4 (their species belong to the room), a longer or closer encounter with the three species that did not attack, and live play.
 
 ## One original frame
 
