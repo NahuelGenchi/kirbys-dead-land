@@ -922,9 +922,12 @@ B every 16 frames for 240 frames, then stops while its life is sampled.
   a press waits while a slash runs, gave 9. Both spawned the arrow and bled the
   Zombie (29691 → 29667 after the attacks), `passed: true`, saves unchanged, no
   fatal log.
+- `20261014-225817` (the same root and build, `--capture-fps 10`) repeated the
+  final rule: 9 uses, the arrow and the bleed (29681 → 29657), `passed: true`,
+  saves unchanged, no fatal log. Its frames show the burning arrows in flight
+  toward the Zombie and the bleed mark over it.
 
-Not run: the Grenade affix, on-kill affixes, a forge reroll in play, and the
-arrow captured on screen.
+Not run: the Grenade affix, on-kill affixes and a forge reroll in play.
 
 ## Scroll claim (#80)
 

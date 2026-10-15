@@ -2321,6 +2321,7 @@ the all-ability rendering tests as full gameplay acceptance.
   tests 484 assertions, `tests/speed` 46 checks, `scripts/check.py` pass.
 - Live: `20261014-221157` waded 117 frames at a median 0.9375 px a frame in a
   42 px `Greenhouse` pool; `20261014-222720` used Sword's item 9 times for 15
-  presses (9 slashes), with the arrow and bleed.
+  presses (9 slashes), with the arrow and bleed, and `20261014-225817` did the
+  same with frames captured.
 - Not run: copy abilities or the helper wading, F with a water mouthful live,
   other copies' affix uses live, the owner's launcher.
