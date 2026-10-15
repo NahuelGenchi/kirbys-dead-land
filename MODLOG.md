@@ -2305,10 +2305,11 @@ the all-ability rendering tests as full gameplay acceptance.
 - `docs/ROM_INTERNALS.md`, Fix candidates, has a column that points each
   row to its issue, pull request and record: the recompiler (#153), the
   doubled ARM9 clock (#150) and the undrawn upper screen (#148) are in and
-  on by default; reading the move is in for the mouthful only (#158); the
-  bookkeeping is in for the pairing and the actor-list walk (#160), with
-  `kssu_world`, `kssu_state` and the OAM and palette reads timed or left;
-  real species were not pursued (#161).
+  on by default; reading the move is in for the mouthful (#158) and for
+  wading, the mouthful in water, the exhale and copy attacks (#166); the
+  bookkeeping is in for the pairing and the actor-list walk (#160) and the
+  OAM and palette reads (#165), with `kssu_world` and `kssu_state` timed and
+  left; real species were tried headless and not adopted (#161).
 - Not established: the line saying the recompiler and the clock never met
   the bridge suite, the verifiers or the game is gone (#150 and #153 ran
   all three), and the collision pool joins what was checked in play.
