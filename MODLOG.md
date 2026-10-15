@@ -2299,3 +2299,28 @@ the all-ability rendering tests as full gameplay acceptance.
   Timed and left: `kssu_world` 1.7 µs a call, `kssu_state` 0.3 µs (a bare
   Python call is 0.4 µs), under 2 µs a step together.
   Not run: the owner's play launcher, a window on the GPU, a long session.
+
+## 2026-10-14 — read the move, not only the action (#166)
+
+- The wade: on the bottom of water the walk action `060B` runs move
+  `0x02131160`, 0.9375 px a frame at most against the dry walk's 1.375. The
+  speed match scaled it as a dry walk (1.79 px a frame); it now keeps the
+  original's motion and walk cycle. `tests/speed` pool check: 177 wade frames
+  at exactly the original's velocity, failing with the old rule.
+- Player field 4 is 4 in water and 5 with a mouthful in water. The F check and
+  `kssu_set_ability`'s refusal now read 2 and 5. New bridge case `move_wade`;
+  it fails at the refusal on the bridge from before #166.
+- The exhale is known by its move (`0x021313D0`), not by the float before it.
+- Copy attacks: a headless survey of all 24 copies' moves (tables from
+  `0x02129DE8` to `0x02130B44`). The copy item's affixes are now used when a
+  copy move starts for a waiting press, not on every press. A first rule (a
+  press expires 10 frames after it is made) missed Sword's third slash live (6
+  uses for 15 presses); the final one keeps a press while a copy move runs.
+- Private build `repros/move-166` (bridge `03784873…`), shared bridge
+  untouched: 93 cases pass, the 92 older ones equal to the shared record. Core
+  tests 484 assertions, `tests/speed` 46 checks, `scripts/check.py` pass.
+- Live: `20261014-221157` waded 117 frames at a median 0.9375 px a frame in a
+  42 px `Greenhouse` pool; `20261014-222720` used Sword's item 9 times for 15
+  presses (9 slashes), with the arrow and bleed.
+- Not run: copy abilities or the helper wading, F with a water mouthful live,
+  other copies' affix uses live, the owner's launcher.

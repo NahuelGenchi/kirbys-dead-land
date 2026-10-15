@@ -725,6 +725,87 @@ Check(!SpeedMatch.Brakes(KirbyActions.Ability, 0, 2048) && SpeedMatch.Move(Kirby
                 actions.Next(KirbyActions.Ability, 896) == SpeedMatch.Carry && actions.Direction(-1) == 1;
     Check(belowDash && roll, "An ability move faster than the dash (Wheel's roll) carries Kirby, turning with him");
 }
+{
+    // #166: with the running move the exhale and the wade are their own moves.
+    var actions = new SpeedMatch.ActionFilter();
+    actions.Next(KirbyActions.Float, 0, 0x02131298);
+    bool exhale = actions.Next(KirbyActions.Ability, 0, KirbyMoves.Exhale) == KirbyActions.Float;
+    actions.Next(KirbyActions.Float, 0, 0x02131298);
+    bool notExhale = actions.Next(KirbyActions.Ability, 0, 0x0212F80C) == KirbyActions.Ability;
+    actions.Reset();
+    bool landed = actions.Next(KirbyActions.Landing, 0, 0x021310D0) == KirbyActions.Landing &&
+                  actions.Next(KirbyActions.Ability, 0, KirbyMoves.Exhale) == KirbyActions.Float;
+    Check(exhale && notExhale && landed, "The exhale is its own move, after a float or on landing; another move after a float is not one");
+    actions.Reset();
+    bool wade = actions.Next(KirbyActions.Walk, 240, KirbyMoves.Wade) == SpeedMatch.Wade &&
+                actions.Next(KirbyActions.Walk, 352, KirbyMoves.Walk) == KirbyActions.Walk &&
+                actions.Next(KirbyActions.Walk, 352, KirbyMoves.MouthfulWalk) == KirbyActions.Walk;
+    Check(wade && SpeedMatch.Classify(SpeedMatch.Wade) == SpeedMatch.Motion.None && !SpeedMatch.Brakes(SpeedMatch.Wade, 0, 240) &&
+          SpeedMatch.Move(SpeedMatch.Wade, 1, 240, 300, 720, 300.9375, 720, MFlat) == (300.9375, 720),
+        "Walking on the bottom of water keeps the original wade, unscaled and unbraked; dry walks stay walks");
+    actions.Reset();
+    actions.Next(KirbyActions.Float);
+    Check(actions.Next(KirbyActions.Ability) == KirbyActions.Float && actions.Next(KirbyActions.Walk, 240) == KirbyActions.Walk,
+        "Without a move (the helper, an older bridge) the exhale follows a float and the walk is a walk");
+}
+{
+    // #166: a copy attack press uses the copy's item once the original starts one of the copy's moves.
+    const uint Sword = 0x0212F7EC, Cutter = 0x02129DE8;
+    uint Move(uint table, int index) => table + (uint)index * 24;
+    Check(KirbyMoves.IsCopyMove(Move(Sword, 3), Sword) && KirbyMoves.IsCopyMove(Move(0x02130B44, 1), 0x02130B44) &&
+          !KirbyMoves.IsCopyMove(0x021314D8, Sword) && !KirbyMoves.IsCopyMove(KirbyMoves.Exhale, Sword) &&
+          !KirbyMoves.IsCopyMove(Move(Sword, 3), 0) && !KirbyMoves.IsCopyMove(Move(Sword, 3) + 4, Sword) &&
+          !KirbyMoves.IsCopyMove(Sword - 24, Sword) && !KirbyMoves.IsCopyMove(KirbyMoves.Shared, 0x02130B44),
+        "Copy moves are the copy's own table entries, below the moves every form shares");
+    // Replays one ability's measured frames: press frames and (frame, move) changes.
+    int Uses(uint table, int[] presses, (int Frame, uint Move)[] changes, int frames)
+    {
+        var tracker = new CopyAttackPresses();
+        uint move = 0x021314D8;
+        int uses = 0;
+        for (int f = 0, c = 0; f < frames; f++)
+        {
+            while (c < changes.Length && changes[c].Frame == f) move = changes[c++].Move;
+            if (tracker.Next(presses.Contains(f), move, table)) uses++;
+        }
+        return uses;
+    }
+    int[] rapid = [0, 8, 16, 24, 32, 40, 48, 56];
+    // Sword, B every 8 frames: three slashes (the second and third start 5 and 7 frames after a press).
+    Check(Uses(Sword, rapid, [(0, Move(Sword, 3)), (13, Move(Sword, 4)), (39, Move(Sword, 5)), (93, 0x021314D8)], 120) == 3,
+        "Eight Sword presses that make a three-slash combo use the item three times");
+    // Sword, B every 16 frames as the live affix probe presses it: nine slashes in three combos, the
+    // third slash of each 10 frames after its press, and a new combo straight from the last slash.
+    int[] pulse = [.. Enumerable.Range(0, 15).Select(i => 8 + i * 16)];
+    Check(Uses(Sword, pulse, [(8, Move(Sword, 3)), (24, Move(Sword, 4)), (50, Move(Sword, 5)), (88, Move(Sword, 3)), (104, Move(Sword, 4)),
+        (130, Move(Sword, 5)), (168, Move(Sword, 3)), (184, Move(Sword, 4)), (210, Move(Sword, 5))], 240) == 9,
+        "Fifteen Sword presses, one every 16 frames, use the item once for each of the nine slashes they start");
+    Check(Uses(Sword, [25], [(24, Move(Sword, 4)), (50, Move(Sword, 5))], 60) == 1, "A press made during a slash waits for the next one");
+    // Fighter's jabs stay in one move however often B is pressed.
+    const uint Fighter = 0x0212AD20;
+    Check(Uses(Fighter, rapid, [(1, Move(Fighter, 3)), (107, 0x021314D8)], 120) == 1, "Fighter's repeated jabs, one move, use it once");
+    // Cutter: a throw per press from a stand, the catch (index 11) without one.
+    Check(Uses(Cutter, [0, 24, 48], [(0, Move(Cutter, 3)), (16, 0x021314D8), (24, Move(Cutter, 3)), (40, 0x021314D8), (48, Move(Cutter, 3)),
+        (64, 0x021314D8), (77, Move(Cutter, 11)), (85, 0x021314D8)], 120) == 3, "Each Cutter throw uses it; the catch that follows by itself does not");
+    // Beam, B every 8 frames: two whips, each a wind-up then the whip; the presses in between do nothing.
+    const uint Beam = 0x0212A818;
+    Check(Uses(Beam, rapid, [(0, Move(Beam, 7)), (1, Move(Beam, 3)), (37, 0x021314D8), (40, Move(Beam, 7)), (41, Move(Beam, 3)), (77, 0x021314D8)], 120) == 2,
+        "Beam's wind-up and whip are one use, and a press that did nothing does not add one");
+    // Jet, B every 8 frames: a burst and its follow-up for each press from a stand.
+    const uint Jet = 0x0212EF6C;
+    Check(Uses(Jet, rapid, [(0, Move(Jet, 3)), (1, Move(Jet, 4)), (19, 0x021314D8), (24, Move(Jet, 3)), (25, Move(Jet, 4)), (43, 0x021314D8),
+        (48, Move(Jet, 3)), (49, Move(Jet, 4)), (67, 0x021314D8)], 120) == 3, "Each Jet burst is one use");
+    // Presses that start nothing: in a recoil, during a change, in water (the water gun is shared).
+    Check(Uses(Sword, [0, 20], [(0, 0x02130CF4), (30, 0x021314D8)], 60) == 0 &&
+          Uses(Sword, [0], [(0, KirbyMoves.WaterGun), (30, 0x021314D8)], 60) == 0, "A press that starts no copy move uses nothing");
+    // A move that starts after the window is not the press's.
+    Check(Uses(Sword, [0], [(CopyAttackPresses.Window, Move(Sword, 3))], 30) == 0 &&
+          Uses(Sword, [0], [(CopyAttackPresses.Window - 1, Move(Sword, 3))], 30) == 1, "A press waits ten frames for its move");
+    var waitingPresses = new CopyAttackPresses();
+    waitingPresses.Next(true, 0x021314D8, Sword);
+    waitingPresses.Drop();
+    Check(!waitingPresses.Next(false, Move(Sword, 3), Sword), "Presses dropped for an F press start nothing");
+}
 var mAttack = SpeedMatch.Move(SpeedMatch.Carry, 1, 1024, 300, 720, 304, 720, MFlat);
 Check(MNear(mAttack.X - 300, 4 * SpeedMatch.GroundScale) && mAttack.Feet == 720 && !SpeedMatch.Brakes(SpeedMatch.Carry, 0, 1024) &&
       SpeedMatch.Move(SpeedMatch.Carry, 1, -256, 300, 720, 299, 720, MFlat).X == 299,
