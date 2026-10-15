@@ -2299,3 +2299,22 @@ the all-ability rendering tests as full gameplay acceptance.
   Timed and left: `kssu_world` 1.7 µs a call, `kssu_state` 0.3 µs (a bare
   Python call is 0.4 µs), under 2 µs a step together.
   Not run: the owner's play launcher, a window on the GPU, a long session.
+
+## 2026-10-14 — OAM and palettes read as blocks (#165)
+
+- `kssu_read_gpu` read OAM and the palettes one bus byte at a time. A
+  fourth wrapper stage (`tools/nds_graphics_patch.py`, `tools/nds_vendor.py`,
+  `src/nds/melon-rs-gpu.patch`) adds `Copy_GpuMemory`: the palettes or OAM
+  as `ARM9Read8` returns them, a powered-off engine's half as zeros. Reads
+  aligned to 8 bytes inside either 2 KiB use it; the far-object check reads
+  engine A's OAM through it too.
+- Case `gpu_block`: both whole areas and a partial read equal the bus read
+  one byte off. Private root `repros/gpu-165`, shared bridge untouched: 93
+  cases pass, the 92 older ones equal to the shared record. Verifiers: 29
+  renderer cases and 4 background cases with 0 mismatches, 64 native-init
+  cycles.
+- Python, new build: OAM 1 KiB 3.62 → 0.41 µs, palettes 512 B 2.02 →
+  0.40 µs; a frame's reads 0.036 → 0.028 ms. Live `movement`, 120 s
+  (`20261014-214926`): `Read` 0.0421 → 0.0387 ms a step against #160's
+  run; everything else within noise.
+- Not run: the owner's play launcher, a window on the GPU, a long session.

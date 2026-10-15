@@ -1,8 +1,8 @@
 diff --git a/src/melon/nds.rs b/src/melon/nds.rs
-index 0b039c8..686028c 100644
+index 0b039c8..fb9b952 100644
 --- a/src/melon/nds.rs
 +++ b/src/melon/nds.rs
-@@ -151,6 +151,31 @@ impl Nds {
+@@ -151,6 +151,36 @@ impl Nds {
          unsafe { sys::CurrentFrame(self.0.as_ref().expect("Couldn't get ref to pin")) }
      }
  
@@ -31,14 +31,19 @@ index 0b039c8..686028c 100644
 +
 +    pub fn main_frame(&mut self) -> u32 { sys::Get_MainFrame(self.0.pin_mut()) }
 +
++    pub fn gpu_memory(&mut self, address: u32, dest: &mut [u8]) -> bool {
++        if dest.len() > 0x800 { return false; }
++        unsafe { sys::Copy_GpuMemory(self.0.pin_mut(), dest.as_mut_ptr(), address, dest.len() as u32) }
++    }
++
      pub fn main_ram(&self) -> &[u8] {
          unsafe {
              let max_size = sys::MainRAMMaxSize(&self.0) as usize;
 diff --git a/src/melon/sys.rs b/src/melon/sys.rs
-index d0d2077..e8b3183 100644
+index d0d2077..80563bf 100644
 --- a/src/melon/sys.rs
 +++ b/src/melon/sys.rs
-@@ -290,6 +290,12 @@ mod sys {
+@@ -290,6 +290,13 @@ mod sys {
  
          pub unsafe fn CurrentFrame(nds: &NDS) -> u32;
  
@@ -48,6 +53,7 @@ index d0d2077..e8b3183 100644
 +        pub fn Set_MainScreenOnly(nds: Pin<&mut NDS>, enabled: bool) -> bool;
 +        pub unsafe fn Set_SkipIdleMain(nds: Pin<&mut NDS>, palette: *const u8) -> bool;
 +        pub fn Get_MainFrame(nds: Pin<&mut NDS>) -> u32;
++        pub unsafe fn Copy_GpuMemory(nds: Pin<&mut NDS>, dest: *mut u8, address: u32, count: u32) -> bool;
          pub unsafe fn MainRAM(nds: &NDS) -> *const u8;
          pub unsafe fn MainRAMMut(nds: Pin<&mut NDS>) -> *mut u8;
          pub unsafe fn MainRAMMaxSize(nds: &NDS) -> u32;
