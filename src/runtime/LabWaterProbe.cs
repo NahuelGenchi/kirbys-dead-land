@@ -21,7 +21,8 @@ namespace Kirby.Runtime;
 /// the floor in the middle of the widest stretch of water (deep water if the
 /// level has any), stands, walks right and left, jumps and walks again, and
 /// the original's action codes are counted for each step and listed in order
-/// (<c>0815</c> is swimming). The plan is short because a boss that wakes up
+/// (<c>0815</c> is swimming). The running moves are listed too, and the host
+/// distance of each source frame Kirby wades along the floor (#166). The plan is short because a boss that wakes up
 /// attacks about eight seconds later, and it stops if Kirby dies. Both modes
 /// record how deep every host water column is.
 /// </para>
@@ -52,6 +53,12 @@ internal static unsafe class LabWaterProbe
         [("stand", 60, 0), ("walk", 120, 16), ("walk", 180, 32), ("jump", 192, 1), ("jump", 300, 0), ("walkAfterJump", 360, 16)];
     private static readonly SortedDictionary<string, SortedDictionary<string, int>> wadeActions = [];
     private static readonly List<string> wadeOrder = [];
+    // #166: each change of the running move with its frame, and the host distance
+    // of each source frame spent in the wade (060B under 0x02131160) after another.
+    private static readonly List<string> wadeMoves = [];
+    private static readonly List<double> wadeSteps = [];
+    private static double? lastWadeX;
+    private static uint lastWadeFrame;
 
     internal static void Install(string output)
     {
@@ -136,6 +143,17 @@ internal static unsafe class LabWaterProbe
         // A death starts a new run with another hero somewhere else.
         if (hero.HashlinkPointer != wadeHero || hero.life <= 0) { wadeInterrupted = true; finishedAt = frame; return 0; }
         uint t = frame - placedAt!.Value;
+        if (frame != lastWadeFrame)
+        {
+            lastWadeFrame = frame;
+            machine.TryMove(out NdsMove move);
+            string moveText = $"{move.Action:X4}/{move.Descriptor:X8}/{move.Carry}";
+            if (wadeMoves.Count == 0 || !wadeMoves[^1].EndsWith(moveText)) wadeMoves.Add($"{t} {moveText}");
+            double x = (hero.cx + hero.xr) * 24;
+            bool wading = move.Action == Kirby.Core.KirbyActions.Walk && move.Descriptor == Kirby.Core.KirbyMoves.Wade;
+            if (wading && lastWadeX is { } last) wadeSteps.Add(Math.Round(x - last, 4));
+            lastWadeX = wading ? x : null;
+        }
         foreach (var (name, until, keys) in WadePlan)
         {
             if (t >= until) continue;
@@ -271,7 +289,13 @@ internal static unsafe class LabWaterProbe
         {
             frame = lastReportFrame,
             searched, waterCells, poolFloorCells, surroundings,
-            depths, wadeSite, wadeActions, wadeOrder, wadeInterrupted,
+            depths, wadeSite, wadeActions, wadeOrder, wadeInterrupted, wadeMoves,
+            wadeSpeed = wadeSteps.Count == 0 ? null : new
+            {
+                frames = wadeSteps.Count,
+                medianPxPerFrame = wadeSteps.Select(Math.Abs).Order().ElementAt(wadeSteps.Count / 2),
+                maxPxPerFrame = wadeSteps.Max(Math.Abs),
+            },
             site,
             placedAt, inhaleAt, consumedAt, swallowAt, finishedAt, timedOut,
             framesControlledBeforeInhale,

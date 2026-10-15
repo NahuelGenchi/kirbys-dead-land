@@ -22,6 +22,11 @@ frame that ended at the last VBlank was drawn (0), left out (1) or mixed (2).
 A scanline a display capture reads is always drawn, and sprites are drawn for
 every scanline at their usual time, so emulated state is the same either way.
 Off unless the bridge is asked.
+
+A fourth stage (#165) adds ``Copy_GpuMemory`` to the wrapper alone: the
+palettes or the OAM copied as a block, exactly as ``ARM9Read8`` returns them,
+so the host's reads of them no longer take one bus read a byte. It reads and
+changes nothing else.
 """
 import subprocess
 from pathlib import Path
@@ -216,6 +221,35 @@ CORE_EDITS_3 = {
     ],
 }
 
+# Fourth stage (#165), wrapper only, applied on top of the third.
+WRAPPER_EDITS_4 = {
+    "src/melon/cpp/Shims.h": [(
+        "    bool Copy_ObjVram(NDS &nds, u8 *dest, u32 offset, u32 count);\n",
+        "    bool Copy_ObjVram(NDS &nds, u8 *dest, u32 offset, u32 count);\n"
+        "    bool Copy_GpuMemory(NDS &nds, u8 *dest, u32 address, u32 count);\n",
+    )],
+    "src/melon/cpp/Shims.cpp": [(
+        "    bool Set_MainScreenOnly(NDS &nds, bool enabled)\n",
+        "    bool Copy_GpuMemory(NDS &nds, u8 *dest, u32 address, u32 count)\n"
+        "    {\n"
+        "        // The palettes at 0x05000000 or the OAM at 0x07000000, as ARM9Read8 returns\n"
+        "        // them: each 1 KB half reads as zero while its engine is powered off.\n"
+        "        const u32 region = address & 0xFF000000, offset = address & 0x00FFFFFF;\n"
+        "        const u8* source = region == 0x05000000 ? nds.GPU.Palette : region == 0x07000000 ? nds.GPU.OAM : nullptr;\n"
+        "        if (!dest || !source || offset > 0x800 || count > 0x800 - offset) return false;\n"
+        "        for (u32 at = offset; at < offset + count;)\n"
+        "        {\n"
+        "            const u32 half = (at & ~0x3FFu) + 0x400, end = half < offset + count ? half : offset + count;\n"
+        "            if (nds.PowerControl9 & ((at & 0x400) ? (1<<9) : (1<<1))) memcpy(dest + (at - offset), source + at, end - at);\n"
+        "            else memset(dest + (at - offset), 0, end - at);\n"
+        "            at = end;\n"
+        "        }\n"
+        "        return true;\n"
+        "    }\n\n"
+        "    bool Set_MainScreenOnly(NDS &nds, bool enabled)\n",
+    )],
+}
+
 GRAPHICS_WRAPPER_FILES = tuple(WRAPPER_EDITS)
 GRAPHICS_CORE_FILES = tuple(CORE_EDITS)
 
@@ -223,8 +257,8 @@ GRAPHICS_CORE_FILES = tuple(CORE_EDITS)
 def check_graphics_patch(vendor: Path, wrapper_revision: str, core_revision: str, apply=False):
     """Accept exactly pristine or a known stage of this patch; apply only after all checks."""
     writes = []
-    for root, revision, edits, second, third in ((vendor, wrapper_revision, WRAPPER_EDITS, WRAPPER_EDITS_2, WRAPPER_EDITS_3),
-                                                 (vendor / "melonDS", core_revision, CORE_EDITS, CORE_EDITS_2, CORE_EDITS_3)):
+    for root, revision, edits, second, third, fourth in ((vendor, wrapper_revision, WRAPPER_EDITS, WRAPPER_EDITS_2, WRAPPER_EDITS_3, WRAPPER_EDITS_4),
+                                                         (vendor / "melonDS", core_revision, CORE_EDITS, CORE_EDITS_2, CORE_EDITS_3, {})):
         for relative, replacements in edits.items():
             original = subprocess.check_output(["git", "-C", str(root), "show", f"{revision}:{relative}"], text=True)
             first = original
@@ -237,15 +271,20 @@ def check_graphics_patch(vendor: Path, wrapper_revision: str, core_revision: str
                 if staged.count(before) != 1:
                     raise SystemExit(f"Graphics patch second-stage precondition failed: {relative}")
                 staged = staged.replace(before, after)
-            patched = staged
+            thirdstaged = staged
             for before, after in third.get(relative, []):
-                if patched.count(before) != 1:
+                if thirdstaged.count(before) != 1:
                     raise SystemExit(f"Graphics patch third-stage precondition failed: {relative}")
+                thirdstaged = thirdstaged.replace(before, after)
+            patched = thirdstaged
+            for before, after in fourth.get(relative, []):
+                if patched.count(before) != 1:
+                    raise SystemExit(f"Graphics patch fourth-stage precondition failed: {relative}")
                 patched = patched.replace(before, after)
             target = root / relative
             actual = target.read_text()
             legacy = first.replace("LayerCapture[5]", "LayerCapture[4]").replace("plane >= 5", "plane >= 4").replace("plane < 5", "plane < 4").replace("            LayerCapture[4][at] = reinterpret_cast<u16*>(&GPU.Palette[GPU2D.Num ? 0x400 : 0])[i];\n", "")
-            if actual not in (original, legacy, first, staged, patched):
+            if actual not in (original, legacy, first, staged, thirdstaged, patched):
                 raise SystemExit(f"Unexpected graphics capture edits: {relative}; left untouched.")
             if actual != patched:
                 writes.append((target, patched))

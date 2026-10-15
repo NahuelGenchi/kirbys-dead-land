@@ -1,4 +1,4 @@
-"""Checked, idempotent additions to the pinned melon-rs wrapper (GPU reads, bounded savestate buffers, the block OBJ VRAM copy, the main-screen-only switch and the idle main screen switch)."""
+"""Checked, idempotent additions to the pinned melon-rs wrapper (GPU reads, bounded savestate buffers, the block OBJ VRAM copy, the main-screen-only switch, the idle main screen switch and the block palette and OAM copy)."""
 import subprocess
 from pathlib import Path
 GPU_EDITS = {
@@ -28,6 +28,15 @@ GPU_EDITS_3 = {
         '        pub unsafe fn MainRAM(nds: &NDS) -> *const u8;',
         '        pub unsafe fn Set_SkipIdleMain(nds: Pin<&mut NDS>, palette: *const u8) -> bool;\n        pub fn Get_MainFrame(nds: Pin<&mut NDS>) -> u32;\n        pub unsafe fn MainRAM(nds: &NDS) -> *const u8;'),
 }
+# Fourth stage (#165): the block palette and OAM copy of tools/nds_graphics_patch.py.
+GPU_EDITS_4 = {
+    'src/melon/nds.rs': (
+        '    pub fn main_ram(&self) -> &[u8] {',
+        '    pub fn gpu_memory(&mut self, address: u32, dest: &mut [u8]) -> bool {\n        if dest.len() > 0x800 { return false; }\n        unsafe { sys::Copy_GpuMemory(self.0.pin_mut(), dest.as_mut_ptr(), address, dest.len() as u32) }\n    }\n\n    pub fn main_ram(&self) -> &[u8] {'),
+    'src/melon/sys.rs': (
+        '        pub unsafe fn MainRAM(nds: &NDS) -> *const u8;',
+        '        pub unsafe fn Copy_GpuMemory(nds: Pin<&mut NDS>, dest: *mut u8, address: u32, count: u32) -> bool;\n        pub unsafe fn MainRAM(nds: &NDS) -> *const u8;'),
+}
 def check_gpu_patch(vendor: Path, revision: str, apply: bool = False):
     for relative, (before, after) in GPU_EDITS.items():
         original = subprocess.check_output(['git','-C',str(vendor),'show',f'{revision}:{relative}'],text=True)
@@ -51,8 +60,12 @@ def check_gpu_patch(vendor: Path, revision: str, apply: bool = False):
         before, after = GPU_EDITS_3[relative]
         if second.count(before) != 1:
             raise SystemExit(f'GPU patch third-stage precondition failed: {relative}')
-        patched = second.replace(before, after)
-        if target.read_text() not in (original,legacy,previous,first,second,patched):
+        third = second.replace(before, after)
+        before, after = GPU_EDITS_4[relative]
+        if third.count(before) != 1:
+            raise SystemExit(f'GPU patch fourth-stage precondition failed: {relative}')
+        patched = third.replace(before, after)
+        if target.read_text() not in (original,legacy,previous,first,second,third,patched):
             raise SystemExit(f'Unexpected GPU wrapper edits: {relative}; left untouched.')
         if apply and target.read_text()!=patched:
             target.write_text(patched)

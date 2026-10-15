@@ -2300,6 +2300,66 @@ the all-ability rendering tests as full gameplay acceptance.
   Python call is 0.4 µs), under 2 µs a step together.
   Not run: the owner's play launcher, a window on the GPU, a long session.
 
+## 2026-10-14 — OAM and palettes read as blocks (#165)
+
+- `kssu_read_gpu` read OAM and the palettes one bus byte at a time. A
+  fourth wrapper stage (`tools/nds_graphics_patch.py`, `tools/nds_vendor.py`,
+  `src/nds/melon-rs-gpu.patch`) adds `Copy_GpuMemory`: the palettes or OAM
+  as `ARM9Read8` returns them, a powered-off engine's half as zeros. Reads
+  aligned to 8 bytes inside either 2 KiB use it; the far-object check reads
+  engine A's OAM through it too.
+- Case `gpu_block`: both whole areas and a partial read equal the bus read
+  one byte off. Private root `repros/gpu-165`, shared bridge untouched: 93
+  cases pass, the 92 older ones equal to the shared record. Verifiers: 29
+  renderer cases and 4 background cases with 0 mismatches, 64 native-init
+  cycles.
+- Python, new build: OAM 1 KiB 3.62 → 0.41 µs, palettes 512 B 2.02 →
+  0.40 µs; a frame's reads 0.036 → 0.028 ms. Live `movement`, 120 s
+  (`20261014-214926`): `Read` 0.0421 → 0.0387 ms a step against #160's
+  run; everything else within noise.
+- Not run: the owner's play launcher, a window on the GPU, a long session.
+
+## 2026-10-14 — read the move, not only the action (#166)
+
+- The wade: on the bottom of water the walk action `060B` runs move
+  `0x02131160`, 0.9375 px a frame at most against the dry walk's 1.375. The
+  speed match scaled it as a dry walk (1.79 px a frame); it now keeps the
+  original's motion and walk cycle. `tests/speed` pool check: 177 wade frames
+  at exactly the original's velocity, failing with the old rule.
+- Player field 4 is 4 in water and 5 with a mouthful in water. The F check and
+  `kssu_set_ability`'s refusal now read 2 and 5. New bridge case `move_wade`;
+  it fails at the refusal on the bridge from before #166.
+- The exhale is known by its move (`0x021313D0`), not by the float before it.
+- Copy attacks: a headless survey of all 24 copies' moves (tables from
+  `0x02129DE8` to `0x02130B44`). The copy item's affixes are now used when a
+  copy move starts for a waiting press, not on every press. A first rule (a
+  press expires 10 frames after it is made) missed Sword's third slash live (6
+  uses for 15 presses); the final one keeps a press while a copy move runs.
+- Private build `repros/move-166` (bridge `03784873…`), shared bridge
+  untouched: 93 cases pass, the 92 older ones equal to the shared record. Core
+  tests 484 assertions, `tests/speed` 46 checks, `scripts/check.py` pass.
+- Live: `20261014-221157` waded 117 frames at a median 0.9375 px a frame in a
+  42 px `Greenhouse` pool; `20261014-222720` used Sword's item 9 times for 15
+  presses (9 slashes), with the arrow and bleed, and `20261014-225817` did the
+  same with frames captured.
+- Not run: copy abilities or the helper wading, F with a water mouthful live,
+  other copies' affix uses live, the owner's launcher.
+
+## 2026-10-14 — a real species in the free enemy slot, tried (#161)
+
+- `0x020936A4(type, unused, parameter)` loads a species' overlay and graphics
+  during play, as the room loader does. A headless probe ran it through the
+  call hook for the five species of the empty slot 2 (Knuckle Joe, Gim, Jungle
+  Bomb, Birdon, Tac) and spawned each as a proxy. Each one loaded in 1 or 2
+  frames, matched the ROM's file, and was taken by the bridge as a proxy.
+- Its own program runs: Knuckle Joe took Kirby from 76 to 50 health in 300
+  frames and could not be inhaled; Gim's yo-yo hit for 10. The other three
+  were inhaled and gave their copy. With Waddle Dee's update routine, Knuckle
+  Joe made no attack and gave Fighter, but his touch still hurt Kirby twice
+  for 8, which the Waddle Dee proxy did not from the same place.
+- Not adopted: one free slot, never drawn, and nothing gained once its program
+  is off. Recorded in `docs/ROM_INTERNALS.md` (Enemy slots). No code changed.
+
 ## 2026-10-14 — the ROM notes say where each fix candidate went (#163)
 
 - `docs/ROM_INTERNALS.md`, Fix candidates, has a column that points each

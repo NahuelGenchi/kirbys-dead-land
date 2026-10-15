@@ -46,6 +46,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
     /// </summary>
     internal double? BounceFloor => bounceFloor;
     private readonly SpeedMatch.ActionFilter motionActions = new();
+    private readonly CopyAttackPresses copyPresses = new();
     private readonly KirbyHelperMatch helperMatch = new();
     private readonly AnimationPacer walkCycle = new();
     private readonly CinematicWalk cinematicWalk = new();
@@ -207,7 +208,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         audio = new NdsAudio(nds);
         LabActivationTrace.Mark("Audio complete");
         pacer.Reset(); dash.Reset(); slideKey.Reset(); rollZones.Reset(); hostLanding.Reset(); slideHold.Reset(); CancelStomp(); previousAbility = nds.State.Ability; window = null;
-        motionActions.Reset(); helperMatch.Reset();
+        motionActions.Reset(); copyPresses.Reset(); helperMatch.Reset();
         previousInput = 0; previousDiveButton = false; upJumpClimbs = false; SlideStrike = GrabStrike = false;
         deathFrames = -1; deathAnchor = null; sourceDead = nds.Health == 0;
         session.Hero.radius = 9;
@@ -647,10 +648,12 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         int direction = (raw & 48) switch { 16 => 1, 32 => -1, _ => 0 };
         bool diveButton = KirbyInput.DiveButton;
         bool jumpPressed = (raw & 1) != 0 && (previousInput & 1) == 0;
-        // Each copy attack press (DS B while copied) uses the copy item's affixes (#57).
-        // A copied Kirby holds no mouthful (the original mouth-count bit stays stale after a swallow).
-        if ((raw & 2) != 0 && (previousInput & 2) == 0 && !session.Rules.IsBaseForm)
-            KirbyAbilityItems.UseAffixes(hero);
+        // A copy attack press (DS B while copied) uses the copy item's affixes (#57) once the
+        // original starts one of the copy's moves for it, after the step below (#166); with a
+        // bridge that cannot read the move, on the press. A copied Kirby holds no mouthful
+        // (the original mouth-count bit stays stale after a swallow).
+        bool copyPress = (raw & 2) != 0 && (previousInput & 2) == 0 && !session.Rules.IsBaseForm;
+        if (copyPress && !NdsRuntime.CanReadMove) KirbyAbilityItems.UseAffixes(hero);
         if (!stomp.Active && KirbyActions.CanStomp(action) && DiveRequested(raw, diveButton))
             BeginStomp(hero, action, centerY + 14.5);
         previousInput = raw;
@@ -749,7 +752,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
                 nds.Write(nds.State.Player + 0x98, stackalloc byte[2]);
             }
         }
-        PaceWalkCycle(action, matched);
+        PaceWalkCycle(action, matched && motionActions.Effective != SpeedMatch.Wade);
         if (fAttack) mask |= 2;
         helperMatch.Begin(nds);
         // A slide inside a roll-zone tunnel keeps rolling until Kirby is out (#115).
@@ -809,7 +812,11 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         int slideVx = slideHold.Holding && state.VxRaw != 0
             ? Math.Sign(state.VxRaw) * Math.Max(Math.Abs((int)state.VxRaw), SlideHold.Velocity) : state.VxRaw;
         ushort after = nds.Action;
-        ushort motion = motionActions.Next(after, state.VxRaw);
+        nds.TryMove(out NdsMove move);
+        // An F press owns the attack button while it runs: presses from before it start nothing of the copy's.
+        if (fBusy) copyPresses.Drop();
+        if (copyPresses.Next(copyPress, move.Descriptor, move.Table)) KirbyAbilityItems.UseAffixes(hero);
+        ushort motion = motionActions.Next(after, state.VxRaw, move.Descriptor);
         double x = state.X + originX * 24, feet = state.Y + originY * 24 + 14.5;
         terrainMap = map; terrainRollThrough = rollThrough;
         if (matched)
