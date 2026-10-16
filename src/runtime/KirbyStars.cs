@@ -24,8 +24,11 @@ internal sealed unsafe class KirbyStars
     private readonly Dictionary<uint, StarBox> bodies = [];
     private readonly Dictionary<uint, double> lastX = [];
     private readonly StarStrikes strikes = new();
+    private readonly List<StarSighting> abilityStars = [];
     /// <summary>Every original collision record of the source frame last scanned.</summary>
     internal ReadOnlySpan<NdsHit> Records => records.AsSpan(0, count);
+    /// <summary>The ability stars of the source frame last scanned, with their copy, countdown and state (#68).</summary>
+    internal IReadOnlyList<StarSighting> AbilityStars => abilityStars;
     /// <summary>Lab-only observer of (star kind, target, host damage, struck through its source enemy).</summary>
     internal static Action<StarKind, Entity, int, bool>? TestObserver;
     /// <summary>Lab-only observer of each star's host box (pixels) after every source frame.</summary>
@@ -35,7 +38,7 @@ internal sealed unsafe class KirbyStars
 
     public void Clear()
     {
-        stars.Clear(); bodies.Clear(); lastX.Clear(); strikes.Clear(); count = 0;
+        stars.Clear(); bodies.Clear(); lastX.Clear(); strikes.Clear(); abilityStars.Clear(); count = 0;
     }
 
     /// <summary>Read the stars and source bodies of the source frame just stepped.</summary>
@@ -67,12 +70,19 @@ internal sealed unsafe class KirbyStars
                 ? star with { Box = star.Box.Union(box), Damage = Math.Max(star.Damage, damage) }
                 : new Star(owner, kind, box, damage, 0);
         }
+        abilityStars.Clear();
+        Span<byte> fields = stackalloc byte[AbilityStar.StateOffset - AbilityStar.AbilityOffset + 1];
         foreach (var star in stars.Values.ToArray())
         {
             double x = star.Box.CenterX;
             int travel = lastX.TryGetValue(star.Address, out double previous) ? Math.Sign(x - previous) : 0;
             stars[star.Address] = star with { Travel = travel };
             lastX[star.Address] = x;
+            if (star.Kind != StarKind.Ability || star.Address + AbilityStar.StateOffset >= RamEnd) continue;
+            nds.Read(star.Address + AbilityStar.AbilityOffset, fields);
+            abilityStars.Add(new StarSighting(star.Address, fields[0],
+                BinaryPrimitives.ReadInt16LittleEndian(fields[(AbilityStar.CountdownOffset - AbilityStar.AbilityOffset)..]),
+                fields[^1]));
         }
         foreach (uint gone in lastX.Keys.Where(address => !stars.ContainsKey(address)).ToArray()) lastX.Remove(gone);
         strikes.Retain(stars.Keys);

@@ -18,8 +18,11 @@ namespace Kirby.Runtime;
 /// </summary>
 internal static class KirbyAbilityItems
 {
-    /// <summary>An ability item that went into Kirby's mouth, and where it lay.</summary>
-    internal sealed record Held(InventItem Item, int Cx, int Cy, nint Level);
+    /// <summary>
+    /// An ability item that went into Kirby's mouth, and where it lay.
+    /// <paramref name="Star"/>: it came with a caught ability star (#68).
+    /// </summary>
+    internal sealed record Held(InventItem Item, int Cx, int Cy, nint Level, bool Star = false);
 
     private static string outfitId = "";
     /// <summary>Lab-only observer of each replaced floor item: (original item ID, ability).</summary>
@@ -316,9 +319,10 @@ internal static class KirbyAbilityItems
     /// Settle the mouthful once the original swallow or spit has happened, and
     /// keep the weapon slots in step with Kirby's copy: the copy's item in one
     /// non-shield slot, no ability item in base form, and at most one shield.
-    /// Call once per host frame.
+    /// An item that leaves its slot goes to the ability star dropped with its
+    /// copy (#68). Call once per host frame.
     /// </summary>
-    public static void Sync(KirbySession session, MouthfulItems<Held> mouthful, bool mouthfulPending)
+    public static void Sync(KirbySession session, MouthfulItems<Held> mouthful, bool mouthfulPending, KirbyStarItems stars)
     {
         var hero = session.Hero;
         if (hero.destroyed || hero.inventory is not { } inventory) return;
@@ -327,7 +331,10 @@ internal static class KirbyAbilityItems
         {
             var (item, returned) = mouthful.Resolve(session.Rules.AbilityId);
             taken = item;
-            foreach (var back in returned) Return(hero, back);
+            // A star's item goes with the copy a spit loses; a floor item goes back where it lay.
+            foreach (var back in returned)
+                if (back.Star) KirbyStarItems.Spat(back.Item);
+                else Return(hero, back);
         }
         string? wanted = session.Rules.AbilityId;
         int count = inventory.nbWeapons;
@@ -343,8 +350,10 @@ internal static class KirbyAbilityItems
             else if (ability is not null)
             {
                 if (ability == wanted) { contents[slot] = SlotContent.Ability; continue; }
-                // Base form, or another copy's item: it leaves the slot.
+                // Base form, or another copy's item: it leaves the slot, and
+                // rides the star the original drops with a lost copy.
                 inventory.remove(item);
+                stars.Lose(item, ability);
                 items[slot] = null;
                 contents[slot] = SlotContent.Empty;
                 changed = true;

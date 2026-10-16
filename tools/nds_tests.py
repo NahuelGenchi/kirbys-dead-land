@@ -420,13 +420,26 @@ def run_case(name,clock=1):
             return {'simultaneous_native_proxies':capacity,'save_reload_destroy':True}
         if name=='copy_drop_reabsorb':
             transform(b,18);floor=[3 if y>=7 else 0 for y in range(9) for x in range(100)];dropped=False;consumed=False
+            # #68: the ability star's copy byte (+0x49), countdown (+0x4C) and
+            # state (+0x60: 1 bouncing, 0 once the inhale has caught it).
+            star=None;fields=[];gone=None;filled=None
             for i in range(180):
                 state=b.state();b.world(floor,state['x_raw'],state['y_raw'])
                 state=b.step(4 if i==0 else (2 if 30<=i<120 else (128 if i==125 else 0)))
                 if i==0:dropped=state['ability']==1
                 if 70<=i<120:consumed|=bool(b.action_flags()&2)
+                owners={h['owner'] for h in b.hits() if 0x02000000<=h['owner']<0x023ffff0 and struct.unpack('<I',b.read(h['owner']+0x30,4))[0]==0x02166a54}
+                if star is None and owners:star=min(owners)
+                if star is not None and star in owners:
+                    d=b.read(star,0x61);fields.append((i,d[0x49],struct.unpack_from('<h',d,0x4c)[0],d[0x60]))
+                elif star is not None and gone is None:gone=i
+                if gone is not None and filled is None and b.action_flags()&2:filled=i
             assert dropped and consumed and b.state()['ability']==18
-            return {'original_select_drop':True,'original_star_reinhale_swallow':18}
+            assert fields[0][0]==0 and fields[0][1:]==(18,480,1),fields[:2]
+            assert fields[-1][3]==0 and all(f[3]==1 for f in fields[:-1]) and gone==fields[-1][0]+1,(fields[-3:],gone)
+            assert filled is not None and filled>gone,(gone,filled)
+            return {'original_select_drop':True,'original_star_reinhale_swallow':18,'star_spawn':{'frame':0,'copy':18,'countdown':480,'state':1},
+                    'star_caught':{'frame':fields[-1][0],'countdown':fields[-1][2],'state':0},'star_record_gone':gone,'mouth_filled':filled}
         if name=='wheelie_ride':
             transform(b,8);floor=[3 if y>=7 else 0 for y in range(9) for x in range(100)]
             def helper_position():

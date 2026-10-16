@@ -42,6 +42,8 @@ public sealed class KirbyEnemies
     private readonly HashSet<nint> sourceHit = [];
     /// <summary>Floor ability items the original inhale put in Kirby's mouth this source tick.</summary>
     internal readonly List<KirbyAbilityItems.Held> Swallowed = [];
+    /// <summary>The original ability stars of the source frame just completed (#68).</summary>
+    internal IReadOnlyList<StarSighting> AbilityStars => stars.AbilityStars;
     /// <summary>The stored limited-use ability's item while F fires it (#102), else null.</summary>
     internal dc.tool.InventItem? FiringItem { get; set; }
     /// <summary>
