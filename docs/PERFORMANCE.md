@@ -203,6 +203,25 @@ Lab run, isolated profile, software drawing, `performance` power profile, 120 s,
 
 Checks on the final tree: `python3 scripts/check.py` passes (26 + 6 Python tests, 470 rule assertions, the runtime builds). The bridge built from this branch against a private copy of the vendor tree (`repros/gpu-165`, sha256 `bc7bbe99a52fe96a26a3fb93cb5b2305f1530f0a27b618a1aa063e58406dfbce`): all 93 `tools/nds_tests.py` cases pass, and the 92 older ones return what the shared record holds. `tools/verify_renderer.py`: 29 cases, 2,997,289 pixels, 0 mismatched, 0 unsupported objects; `tools/verify_background.py`: 4 cases of 44,089,344 values, 0 mismatches; `tools/verify_native_init.py`: 64 cycles pass. The shared bridge, its record and the shared vendor checkout were not replaced: play gets the change after the merge with `python3 tools/nds_build.py` and a new stage. The runtime did not change, so an older bridge keeps the per-byte reads.
 
+## The input read (#176)
+
+`KirbyInput` turns the host's controls into the DS keys the original reads, about twice a host frame. For each action it asked the host for the controller's bindings again, and tested each bound key through `dc.hxd.Key.Class.isDown`. A static Haxe function read through a proxy's `Class` is a new delegate on every access, with its argument boxed, so each test made garbage. With the lab's injected input most tests stop early; with keys pressed through the host's key table, as a keyboard's are (`KIRBY_LAB_REAL_KEYS=1`), every bound key is tested.
+
+One read now takes the binding arrays, the input modes and the host's key table (`hxd.Key.keyPressed`) once, and tests each key against that table. In the game's bytecode `Key.isDown(code)` is `keyPressed[code] > 0`, and false past the end of the table; the read keeps both. Controller buttons still go through `Controller.padIsDown`, an instance method that allocates nothing.
+
+Lab runs, 2026-10-16: isolated profile `repros/perf-174-kirby`, a new game from seed 174 each time (`KIRBY_LAB_SEED=174`), the `movement` plan, `KIRBY_LAB_PERF=quiet` with the hook counter (`KIRBY_LAB_PERF_HOOKS=1`), software drawing, `performance` power profile. "Before" is `main` with the lab tooling of #174 (runtime `a2a93f5a…`); "after" adds this branch (`ce6c7971…`). Two runs each, and a third `before` run with the lab's input; the frames over 20 and 33 ms leave out the frames in which the lab wrote its reports.
+
+| Input | Build | Runs | Host fps | Mean frame | Managed KB a frame | .NET collections a minute (median pause) | Frames over 20 / 33 ms | Input read |
+| :--- | :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+| the lab's | before | `20261016-151617`, `153025`, `174336` | 110.1 | 9.11 ms | 126.3 | 51 (7.5 ms) | 23 / 3 in 153 s | 20 µs, 1,704 B |
+| | after | `20261016-152041`, `152738` | 110.0 | 9.09 ms | 122.4 | 49 (7.9 ms) | 14 / 1 in 101 s | 11 µs, 14 B |
+| keys (`KIRBY_LAB_REAL_KEYS=1`) | before | `20261016-163507`, `164008` | 114.0 | 8.77 ms | 150.8 | 64 (6.6 ms) | 7 / 3 in 103 s | 73 µs, 13,948 B |
+| | after | `20261016-163631`, `163844` | 114.2 | 8.76 ms | 122.2 | 52 (7.6 ms) | 10 / 3 in 105 s | 19 µs, 8 B |
+
+With keys, a read went from 73 µs and 13.9 KB to 19 µs and 8 bytes: 28.6 KB less garbage a frame and 12 fewer .NET collections a minute. The frame times moved less than one run of the same build differs from the next.
+
+Behaviour, with traces and frame captures (`KIRBY_LAB_PERF=1`, the `movement` plan): with the lab's input, which is keyed on the original's frames, all four fixes together (`20261016-171529`) matched the #174 build (`170406`) in Kirby's original state and the host hero's position in all 2,930 original frames both runs reached. With keys through the host's key table (`KIRBY_LAB_REAL_KEYS=1`) a press is timed in host milliseconds, so the original frame that first sees it depends on frame timing: two runs of the #174 build (`171952`, `175309`) differed from each other in 331 of 2,968 original frames, and this branch's two runs (`172120`, `175437`) differed from them in 221 to 227, and from each other in none of 2,976. The plan's two hurtbox queries passed in every run.
+
 ## Checks run
 
 On the final tree, 2026-10-11:

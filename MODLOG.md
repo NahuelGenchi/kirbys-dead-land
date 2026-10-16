@@ -2411,3 +2411,18 @@ the all-ability rendering tests as full gameplay acceptance.
   +33% to +67% copy damage). With the filter off it listed "Rusty Sword I".
 - Not run: a forge NPC in a passage, a shield or a Legendary item in the forge,
   `ForgeRefine1`, the owner's launcher.
+
+## 2026-10-16 — the controls read once per input read (#176)
+
+- `KirbyInput` asked the host for the bindings again for every action and
+  tested keys through `dc.hxd.Key.Class.isDown`, a new delegate on every
+  access. A read now takes the bindings, the modes and `hxd.Key.keyPressed`
+  once (`isDown(code)` is `keyPressed[code] > 0` in the bytecode).
+- Live (`repros/perf-174-kirby`, seed 174, quiet, software, two or three runs
+  each): with the lab's input a read went 20 µs, 1,704 B → 11 µs, 14 B; with
+  keys through the host's key table (`KIRBY_LAB_REAL_KEYS=1`) 73 µs,
+  13,948 B → 19 µs, 8 B, and 150.8 → 122.2 KB a frame. With real keys two #174
+  runs differed in 331 of 2,968 original frames (presses timed in host
+  milliseconds) and this branch's runs from them in 221 to 227; with the lab's
+  input all four fixes matched #174 in every frame.
+- Not run: a controller, the owner's launcher.
