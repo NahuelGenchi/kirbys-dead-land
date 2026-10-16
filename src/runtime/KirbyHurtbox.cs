@@ -41,12 +41,12 @@ internal static unsafe class KirbyHurtbox
         { using var scope = Project(); orig(skill, area); };
         dc.tool.Hook_TargetHelper.filterByArea += (orig, helper, area) =>
         { using var scope = Project(); orig(helper, area); };
-        // Own movement, equipment placement, save data, and sprite positioning
-        // must continue to use the physical foot, even inside Level.update.
-        dc.en.Hook_Hero.preUpdate += (orig, hero) => Physical(hero, () => orig(hero));
-        dc.en.Hook_Hero.fixedUpdate += (orig, hero) => Physical(hero, () => orig(hero));
-        dc.en.Hook_Hero.postUpdate += (orig, hero) => Physical(hero, () => orig(hero));
-        dc.Hook_Entity.spriteUpdate += (orig, entity) => Physical(entity, () => orig(entity));
+        // Own movement, equipment placement and save data must continue to use
+        // the physical foot, even inside Level.update. The hero's preUpdate and
+        // fixedUpdate run there; KirbyMod's one handler for each wraps its work
+        // in Physical, since a second handler costs every call again (#177).
+        // postUpdate and spriteUpdate run in Level.postUpdate, after the
+        // projection is restored, so they need no hook.
         dc.Hook_Entity.serialize += (orig, entity, serializer) =>
             Physical(entity, () => orig(entity, serializer));
         // Pressure plates (including trap plates and pulley points) and hidden
@@ -102,7 +102,7 @@ internal static unsafe class KirbyHurtbox
         return value;
     }
 
-    private static void Physical(dc.Entity entity, Action original)
+    internal static void Physical(dc.Entity entity, Action original)
     {
         if (active?.Hero.HashlinkPointer != entity.HashlinkPointer) { original(); return; }
         PhysicalHero(original);
