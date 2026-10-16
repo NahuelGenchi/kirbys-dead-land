@@ -148,6 +148,13 @@ internal static unsafe class KirbyInput
     }
     public static ushort Read(KirbySession session)
     {
+        var mark = LabPerfProbe.Start();
+        ushort keys = ReadKeys(session);
+        LabPerfProbe.Stop(LabPerfProbe.Section.Input, mark);
+        return keys;
+    }
+    private static ushort ReadKeys(KirbySession session)
+    {
         Hero h = session.Hero;
         AnalogWalk = false;
         DiveButton = false;

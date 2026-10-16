@@ -47,7 +47,8 @@ internal static unsafe class LabWaterProbe
     private static readonly bool wade = Environment.GetEnvironmentVariable("KIRBY_LAB_WATER_WADE") == "1";
     private static object? depths, wadeSite;
     private static nint wadeHero;
-    private static bool wadeInterrupted;
+    private static bool wadeInterrupted, hostDone;
+    private static long hostPlaced;
     // Step, the source frame it ends at and the DS keys held (A 1, right 16, left 32).
     private static readonly (string Name, uint Until, ushort Keys)[] WadePlan =
         [("stand", 60, 0), ("walk", 120, 16), ("walk", 180, 32), ("jump", 192, 1), ("jump", 300, 0), ("walkAfterJump", 360, 16)];
@@ -136,6 +137,30 @@ internal static unsafe class LabWaterProbe
         wadeSite = new { cell = new[] { best.X, best.Y }, width = best.Width, surface, floor = (best.Y + 1) * 24,
             depth = (best.Y + 1) * 24 - surface, exported = Water(map, best.X, best.Y) };
         return true;
+    }
+
+    /// <summary>
+    /// The Beheaded baseline of the wade: the same spot, taken 3 s into the
+    /// level, then the wade plan's keys on its timeline in milliseconds.
+    /// </summary>
+    internal static void HostPlan(Hero hero, long t)
+    {
+        if (!wade || hostDone || t < 3000) return;
+        if (!searched)
+        {
+            searched = true;
+            depths = Survey(hero._level.map);
+            hostDone = !Wade(hero);
+            hostPlaced = t;
+            File.WriteAllText(Path.Combine(run!, "water-host.json"), JsonSerializer.Serialize(new { placed = !hostDone, depths, wadeSite }));
+            return;
+        }
+        // A death starts a new run with another hero somewhere else.
+        if (hero.HashlinkPointer != wadeHero) { hostDone = wadeInterrupted = true; return; }
+        long u = t - hostPlaced;
+        LabSmokeCapture.HostKey(hero, 13, u is >= 1000 and < 2000 or >= 5000 and < 6000);
+        LabSmokeCapture.HostKey(hero, 11, u is >= 2000 and < 3000);
+        LabSmokeCapture.HostKey(hero, 0, u is >= 3000 and < 3200);
     }
 
     private static ushort WadeInput(NdsRuntime machine, Hero hero, uint frame)

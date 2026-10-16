@@ -67,12 +67,16 @@ def main() -> None:
     parser.add_argument('--save-after', type=int, help='Request a normal host save after this many source frames.')
     parser.add_argument('--outfit', help='Set this outfit ID before starting the isolated new run.')
     parser.add_argument('--seconds', type=int, help='Offscreen test duration, default 45 seconds.')
+    parser.add_argument('--gpu', action='store_true', help='Draw the offscreen test on the GPU instead of in software.')
+    parser.add_argument('--shader-cache', action='store_true', help='Keep the GL driver\'s shader cache in the lab\'s cache folder for this test, as later runs would.')
     parser.add_argument('--toolkit', type=Path, default=Path.home() / 'Games/mods/universal-modder')
     args = parser.parse_args()
     if args.play and (args.input_plan or args.start_game or args.resume_game or args.save_after or args.seconds is not None or args.capture_fps):
         parser.error('--play cannot be combined with automated input, --start-game, or --seconds')
     if args.gdb and args.play:
         parser.error('--gdb is only available for bounded offscreen diagnostics')
+    if args.gpu and args.play:
+        parser.error('--gpu applies to offscreen tests; play always draws on the GPU')
     if args.start_game and args.resume_game:
         parser.error('--start-game and --resume-game are mutually exclusive')
     if args.probe_ability is not None and args.input_plan not in ('ability', 'screen'):
@@ -206,6 +210,12 @@ def main() -> None:
                     'ALSOFT_DRIVERS': 'null', 'LIBGL_ALWAYS_SOFTWARE': '1',
                     'DOTNET_DbgEnableMiniDump': '1', 'DOTNET_DbgMiniDumpType': '2',
                     'DOTNET_DbgMiniDumpName': str(run / 'crash-%p.dmp')})
+        if args.shader_cache:
+            env.pop('MESA_SHADER_CACHE_DISABLE')
+        if args.gpu:
+            # SDL's offscreen driver takes the first EGL device that starts: the
+            # GPU once its render node is visible and software drawing is not forced.
+            env.pop('LIBGL_ALWAYS_SOFTWARE')
     env['LD_PRELOAD'] = str(turbojpeg_library(root))
     if args.input_plan:
         env['KIRBY_LAB_INPUT_PLAN'] = args.input_plan
@@ -248,6 +258,8 @@ def main() -> None:
                '--dev-bind' if args.play else '--dev', '/dev']
     if args.play:
         command += ['/dev']
+    elif args.gpu and Path('/dev/dri').is_dir():
+        command += ['--dev-bind', '/dev/dri', '/dev/dri']
     command += ['--proc', '/proc', '--tmpfs', '/tmp']
     if args.play and Path('/tmp/.X11-unix').exists():
         command += ['--ro-bind', '/tmp/.X11-unix', '/tmp/.X11-unix']
@@ -298,7 +310,7 @@ def main() -> None:
     report = {'run': str(run), 'exit_code': process.returncode,
               'save_isolation_installed': (lab / 'save-isolation.ready').is_file(),
               'source_saves_unchanged': before == after,
-              'offscreen': not args.play, 'duration_limit_seconds': None if args.play else args.seconds,
+              'offscreen': not args.play, 'gpu': args.gpu, 'shader_cache': args.shader_cache, 'duration_limit_seconds': None if args.play else args.seconds,
               'frames': frames, 'expected_timeout': not args.play and process.returncode == -15, 'fatal_log': fatal}
     (run / 'report.json').write_text(json.dumps(report, indent=2) + '\n')
     print(json.dumps(report, indent=2))

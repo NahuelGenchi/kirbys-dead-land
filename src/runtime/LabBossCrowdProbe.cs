@@ -14,6 +14,7 @@ internal static class LabBossCrowdProbe
 {
     private static string? run, mode;
     private static uint? start, ready, fedAt;
+    private static long? hostReady;
     private static uint lastPoll = uint.MaxValue;
     private static bool fed, spawned, damageHookInstalled;
     private static readonly List<Mob> targets = [];
@@ -39,8 +40,9 @@ internal static class LabBossCrowdProbe
         Hook_Mob.onDamage += (orig, mob, attack) =>
         {
             orig(mob, attack);
-            if (!targets.Any(target => target.__uid == mob.__uid) ||
-                attack.source?.HashlinkPointer != KirbyMod.Instance?.ActiveSession?.Hero.HashlinkPointer) return;
+            // Kirby's hits, or the Beheaded's in the baseline run.
+            var player = KirbyMod.Instance?.ActiveSession?.Hero ?? ModCore.Modules.Game.Instance.HeroInstance;
+            if (!targets.Any(target => target.__uid == mob.__uid) || attack.source?.HashlinkPointer != player?.HashlinkPointer) return;
             outgoingHitCount++;
             outgoingDamage += Math.Max(0, attack.inflictedDmg);
             if (attack.inflictedDmg > 0) damagedTargets.Add(mob.__uid);
@@ -84,24 +86,8 @@ internal static class LabBossCrowdProbe
         }
         if (elapsed >= 200 && !spawned && machine.State.Ability == 18)
         {
-            spawned = true; ready = frame; unfinishedAtSpawn = machine.UnfinishedPasses;
-            double x = (hero.cx + hero.xr) * 24, y = (hero.cy + hero.yr) * 24;
-            // 31 fills every proxy slot. One Sword swing that hit 24 or more of them
-            // stopped the original for good until its collision pool was enlarged (#151).
-            int size = int.TryParse(Environment.GetEnvironmentVariable("KIRBY_LAB_CROWD_SIZE"), out int asked) ? Math.Clamp(asked, 1, 31) : 31;
-            for (int i = 0; i < size; i++)
-            {
-                var mob = Zombie.Class.create(hero._level, hero.cx + 3, hero.cy, 1, 1);
-                // Keep every durability target on the verified start platform;
-                // a wide row can cross room walls or pits in generated levels.
-                mob.setPosPixel(x + 55 + (i % 8), y);
-                if (mob.yr == 0) { mob.cy--; mob.yr = 1; }
-                // A stationary durability fixture tests routing/capacity without
-                // conflating 31 simultaneously running host attack behaviors.
-                mob.life = mob.maxLife = 1000;
-                mob.lockAiS(60);
-                targets.Add(mob); initialHp[mob.__uid] = mob.life;
-            }
+            ready = frame; unfinishedAtSpawn = machine.UnfinishedPasses;
+            Spawn(hero);
             Event("spawned-real-host-crowd", new { count = targets.Count, frame });
         }
         if (ready is uint at)
@@ -112,6 +98,47 @@ internal static class LabBossCrowdProbe
                 _ => 0,
             };
         return elapsed switch { >= 30 and < 80 => 2, >= 80 and < 84 => 128, _ => 0 };
+    }
+
+    private static void Spawn(Hero hero)
+    {
+        spawned = true;
+        double x = (hero.cx + hero.xr) * 24, y = (hero.cy + hero.yr) * 24;
+        // 31 fills every proxy slot. One Sword swing that hit 24 or more of them
+        // stopped the original for good until its collision pool was enlarged (#151).
+        int size = int.TryParse(Environment.GetEnvironmentVariable("KIRBY_LAB_CROWD_SIZE"), out int asked) ? Math.Clamp(asked, 1, 31) : 31;
+        for (int i = 0; i < size; i++)
+        {
+            var mob = Zombie.Class.create(hero._level, hero.cx + 3, hero.cy, 1, 1);
+            // Keep every durability target on the verified start platform;
+            // a wide row can cross room walls or pits in generated levels.
+            mob.setPosPixel(x + 55 + (i % 8), y);
+            if (mob.yr == 0) { mob.cy--; mob.yr = 1; }
+            // A stationary durability fixture tests routing/capacity without
+            // conflating 31 simultaneously running host attack behaviors.
+            mob.life = mob.maxLife = 1000;
+            mob.lockAiS(60);
+            targets.Add(mob); initialHp[mob.__uid] = mob.life;
+        }
+    }
+
+    /// <summary>
+    /// The Beheaded baseline of the crowd plan: the same 31 locked Zombies in
+    /// front of the host hero on Kirby's timeline in milliseconds: spawned at
+    /// 3.3 s, a step right two seconds later, then the first weapon held to 5 s.
+    /// </summary>
+    internal static void HostPlan(Hero hero, long t)
+    {
+        if (mode != "crowd") return;
+        if (!spawned && t >= 3333)
+        {
+            Spawn(hero);
+            hostReady = t;
+            Event("spawned-real-host-crowd", new { count = targets.Count, hostMs = t });
+        }
+        if (hostReady is not long at) return;
+        LabSmokeCapture.HostKey(hero, 13, t - at is >= 2000 and < 2267);
+        LabSmokeCapture.HostKey(hero, 2, t - at is >= 2267 and < 5000);
     }
 
     private static ushort BossInput(KirbySession session, NdsRuntime machine, uint frame)
