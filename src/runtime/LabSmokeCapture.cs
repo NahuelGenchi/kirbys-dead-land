@@ -98,6 +98,8 @@ internal static class LabSmokeCapture
             LabAbilityItemProbe.Install(run);
         if (Environment.GetEnvironmentVariable("KIRBY_LAB_INPUT_PLAN") == "rewards")
             LabRewardItemsProbe.Install(run);
+        if (Environment.GetEnvironmentVariable("KIRBY_LAB_INPUT_PLAN") == "forge")
+            LabForgeProbe.Install(run);
         if (Environment.GetEnvironmentVariable("KIRBY_LAB_INPUT_PLAN") == "scroll")
             LabScrollProbe.Install(run);
         if (Environment.GetEnvironmentVariable("KIRBY_LAB_INPUT_PLAN") == "tentacle")
@@ -135,6 +137,7 @@ internal static class LabSmokeCapture
             LabMovesProbe.Poll();
             LabItemProbe.Poll();
             LabScrollProbe.Poll();
+            LabForgeProbe.Poll();
             LabTentacleProbe.Poll();
             LabArrivalProbe.Poll();
             var source = KirbyMod.Instance?.NativeProvider?.Machine;

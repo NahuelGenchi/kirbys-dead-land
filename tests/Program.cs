@@ -1002,6 +1002,11 @@ Check(SpeedMatch.RiseVelocity(KirbyActions.Jump, -2682) == -2682 && SpeedMatch.R
     Check(!AbilityItems.Replaces(weapon: true, skill: false, shield: true, abilityItem: false), "A floor shield stays");
     Check(!AbilityItems.Replaces(weapon: false, skill: false, shield: false, abilityItem: false), "Amulets, food and other items stay");
     Check(!AbilityItems.Replaces(weapon: true, skill: false, shield: false, abilityItem: true), "An ability item is never replaced again");
+    Check(AbilityItems.ForgeLists(abilityItem: true, shield: false), "The forge lists the copy's ability item (#58)");
+    Check(AbilityItems.ForgeLists(abilityItem: false, shield: true), "The forge lists Kirby's shield");
+    Check(!AbilityItems.ForgeLists(abilityItem: false, shield: false), "The forge never lists the Rusty Sword or another host weapon or skill");
+    Check(AbilityItems.InfoLine(AbilityItems.HostDamageBonus(1, 2, false)) == "+67% copy damage",
+        "A forge upgrade of a level I+ item to I++ raises copy damage from +33% to +67%");
 
     // Host rule, checked against host cards: "Rusty Sword I+" shows "+33% damage".
     Check(AbilityItems.InfoLine(AbilityItems.HostDamageBonus(1, 1, false)) == "+33% copy damage", "Level I+ gives +33%");

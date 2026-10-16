@@ -48,7 +48,9 @@ preserved; generated assets and native dependencies remain in the private data r
   copy attacks like a weapon's (#57). Losing the copy (a hit or a discard) puts
   the item on the dropped ability star, which lasts 7 seconds: swallowing the
   star again gives back that same item, with its level, quality and affixes;
-  when the star runs out, the item is gone (#68). See
+  when the star runs out, the item is gone (#68). The forge rerolls and
+  upgrades the copy's item as it does a weapon, and never lists the starting
+  Rusty Sword (#58). See
   [ability items](docs/GAMEPLAY_FIDELITY.md#ability-items-intentional-addition).
 - Mutations that need Dead Cells weapons, ammo or skill use (Barbed Tips, Ripper,
   the backpack mutations, Kill Rhythm, Ranger's Gear, Scheme, Ammo, Support,
@@ -320,8 +322,11 @@ limited-use ability; Kirby has no health flask (#101).
 - In live Kirby runs the start level's starting bow, weapons and skills became
   ability items while shields and gold stayed. An ability item was inhaled, spat
   back to its cell, inhaled again and swallowed into its ability, which then
-  filled the weapon slot and the HUD; discarding cleared both. See
-  [ability items](docs/RUNTIME_LAUNCH.md#ability-items-55).
+  filled the weapon slot and the HUD; discarding cleared both. The forge listed
+  nothing before the first copy, then rerolled the copy's item and upgraded it
+  from I+ to I++ for gold (#58). See
+  [ability items](docs/RUNTIME_LAUNCH.md#ability-items-55) and
+  [forge](docs/RUNTIME_LAUNCH.md#forge-58).
 - Actual lab launches have preserved the hashes of the user's original local
   and Steam saves. DCCM disables achievements.
 

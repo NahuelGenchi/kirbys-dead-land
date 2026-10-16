@@ -36,6 +36,13 @@ public static class AbilityItems
         !abilityItem && (skill || weapon && !shield);
 
     /// <summary>
+    /// In a Kirby run the forge lists only ability items and shields (#58), on
+    /// top of the host's own test. The starting Rusty Sword, which stays in its
+    /// slot until the first copy, and any other host weapon or skill never show.
+    /// </summary>
+    public static bool ForgeLists(bool abilityItem, bool shield) => abilityItem || shield;
+
+    /// <summary>
     /// Dead Cells' own weapon damage bonus (InventItem.getDamageBonus, adjusted
     /// level from getAdjustedItemLevel and getStatBonusCount for non-amulets),
     /// as a fraction: copy damage is multiplied by 1 + this. The adjusted level

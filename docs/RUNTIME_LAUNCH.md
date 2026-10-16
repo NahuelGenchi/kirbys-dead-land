@@ -985,6 +985,47 @@ Not run live: a hit that knocks the copy off, making a helper, a star in a
 mouthful with an enemy or another item, an Elite's Legendary item on a star, a
 save while a star is out, and a star kept through a level change.
 
+### Forge (#58)
+
+`--input-plan forge` (`LabForgeProbe`) waits for a new run to settle and opens
+the passage forge with the constructor the forge NPC's `openUI` uses, while
+Kirby holds only the starting Rusty Sword. It then places a Sword ability item
+at level I with one "+" and the host `BleedOnHit` affix in front of Kirby, who
+inhales and swallows it. With 50,000 gold it opens the forge again, picks the
+item's reroll and then its upgrade as a click does (`select`, then the forge's
+own `onValidate`), and closes the forge as its cancel key does.
+`KIRBY_LAB_FORGE_UNFILTERED=1` turns the Kirby filter off. `forge.json` records
+what the forge tested and listed, its choices, its item card's texts, the prices
+and the item before and after each step.
+
+Separate root `repros/forge-58-20261015` (`research`, `oracle`, `rom` and `dotnet`
+linked from the private root), staged from this branch with the outfit pack
+`8e44122d…` and the shared bridge `bae16c0e…` (this branch does not change
+`src/nds`); runtime DLL
+`787b1cf2d59973c6ea89405309e74940869921526fdee145982a99c203774e5d`:
+
+```sh
+python3 scripts/launch_runtime.py \
+  --data-root "$HOME/.local/share/kirby-dead-cells/repros/forge-58-20261015" \
+  --seconds 75 --start-game --outfit KirbySuperStarUltra --input-plan forge --capture-fps 5
+```
+
+| Run | Filter | Result |
+| :--- | :--- | :--- |
+| `20261015-232122` | on | Before the first copy the slot held `StartSword` (the host's `canBeForged` true); the forge tested it, hid it and had no choices. With the copy it listed only `KirbyAbilitySword`, with two choices. Reroll: 700 gold taken, `BleedOnHit` became `DeathExplosion`; level I, one "+" and `Colorless` kept, `Rerolled` added. Upgrade: 1500 gold taken, one "+" more, `ForgeRefined` and `SlowDamage` added, bonus 0.333 → 0.667, card "Sword I++" and "+67% copy damage". After the forge closed the same item was the copy's, in the slot and on the HUD. `passed: true` |
+| `20261015-232306` | off | Without `--capture-fps`. Before the first copy the forge listed the Rusty Sword ("Rusty Sword I", "138 DPS") with two choices; the copy steps passed as above (reroll to `Grenade`, upgrade for 1620 gold). `passed: true` |
+
+Both ended by their time limit with saves unchanged and no fatal log lines. A
+captured frame of the first run shows the Minor Forge with the Sword I++ card and
+only the reroll left (790 gold): one upgrade per item is the host's limit without
+`ForgeRefine1`.
+
+Not run live: a forge NPC in a passage (the probe opens the same window
+directly), a shield or a Legendary item in the forge, a profile with
+`ForgeRefine1`, a level I base item (the host offers no reroll below adjusted
+level 2), and copy damage measured on an enemy after the upgrade (it reads the
+item bonus #56 measured).
+
 ## Scroll claim (#80)
 
 `--input-plan scroll` (`LabScrollProbe`) places Kirby on a clear floor of a new

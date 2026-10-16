@@ -2396,3 +2396,18 @@ the all-ability rendering tests as full gameplay acceptance.
 - Not run: a hit knocking the copy off, a helper, a star in a mouthful with
   something else, an Elite's Legendary item on a star, a save while a star is
   out, a level change with a star out, the owner's launcher.
+
+## 2026-10-15 — the forge rerolls and upgrades the copy's item (#58)
+
+- The passage forge already forges the copy's ability item with its own code:
+  the reroll keeps its level, "+", Legendary and `Colorless` (kept on reroll),
+  the upgrade adds a "+", and copy damage reads the new bonus at once. It also
+  listed the starting Rusty Sword before the first copy. `KirbyForge` lets it
+  list only ability items and shields in a Kirby run (`AbilityItems.ForgeLists`).
+- Core tests 505 assertions; `scripts/check.py` passes.
+- Live (`repros/forge-58-20261015`): with the filter the forge was empty before
+  the first copy; with the copy it listed only the Sword item, rerolled it (700
+  gold, `BleedOnHit` to `DeathExplosion`) and upgraded it to I++ (1500 gold,
+  +33% to +67% copy damage). With the filter off it listed "Rusty Sword I".
+- Not run: a forge NPC in a passage, a shield or a Legendary item in the forge,
+  `ForgeRefine1`, the owner's launcher.
