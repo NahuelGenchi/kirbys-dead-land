@@ -297,16 +297,58 @@ By what each costs a Kirby run; how each works is in [Host internals](HOST_INTER
 
 ## Fixes, ranked (#174)
 
-From the costs above, largest expected gain first. The expected gains are estimates from per-call costs and hook counts; each fix's section below gives what its runs measured.
+From the costs above, largest expected gain first. The expected gains are estimates from per-call costs and hook counts. The last column is what each fix measured alone against the #174 build, two runs each in software against three `before` runs (`repros/perf-174-kirby`, seed 174, 2026-10-16); each fix's PR records its runs and adds its own section here.
 
-| # | Cost now | Fix | Expected gain | Issue |
-| ---: | :--- | :--- | :--- | :--- |
-| 1 | The `HSprite.draw` hook: 79 calls a frame moving, 135 in the crowd, about 200 in the Greenhouse; about 70 KB a frame moving, more than half of all the garbage | Draw the outfit's host sprites from a blank atlas page and drop the hook | about −80 hooked calls and −70 KB a frame moving; .NET collections about half as often | #175 |
-| 2 | After the first held entity, `Mob.canUpdate`, `Entity.canUpdate` and four more stay on DCCM's managed path: +0.4 µs and +56 B on each of 500–900 calls a frame | Take DCCM's detour off them when the held-entity hooks are removed, and write it again before the next hold | −30 to −50 KB and −0.2 to −0.35 ms a frame for the rest of the session after the first hold | #178 |
-| 3 | Kirby's input read: a new delegate for every key test, arrays and Haxe strings, about 25 KB a frame with real keys | Read the key table once per read and keep the shield tag | about −25 KB a frame with a keyboard or a pad | #176 |
-| 4 | Two hurtbox hooks that only run after the projection has ended, and second handlers on `Hero.preUpdate` and `Hero.fixedUpdate` | Drop them; one handler each | −5 hooked calls a frame moving, −34 in the crowd | #177 |
-| 5 | The other always-on hooks: `getMovementSticks` 7.3, `HealFlask.isEnabled` 3.3, `hasUnlockedItem` 2, `updateWeapon` 2 and `updateHeadFx` 1 a frame | Replace each with a state set once at activation, or install it only while needed | about −15 hooked calls and −15 KB a frame | not done here: each guards a gameplay rule that needs its own live check |
-| 6 | The first Kirby frame, 47–64 ms | Compile the mod's hot paths ahead of time | about −30 ms once a session, during the arrival | not done here: once a session, under the arrival cinematic |
+| # | Cost now | Fix | Expected gain | Issue | Measured |
+| ---: | :--- | :--- | :--- | :--- | :--- |
+| 1 | The `HSprite.draw` hook: 79 calls a frame moving, 135 in the crowd, about 200 in the Greenhouse; about 70 KB a frame moving, more than half of all the garbage | Draw the outfit's host sprites from a blank atlas page and drop the hook | about −80 hooked calls and −70 KB a frame moving; .NET collections about half as often | #175 | −78.8 hooked calls and −72.6 KB a frame moving (126.3 → 53.7), −140.9 and −127.4 KB in the crowd; .NET collections 51 → 22 and 96 → 47 a minute |
+| 2 | After the first held entity, `Mob.canUpdate`, `Entity.canUpdate` and four more stay on DCCM's managed path: +0.4 µs and +56 B on each of 500–900 calls a frame | Take DCCM's detour off them when the held-entity hooks are removed, and write it again before the next hold | −30 to −50 KB and −0.2 to −0.35 ms a frame for the rest of the session after the first hold | #178 | in the crowd 481.7 → 201.6 hooked calls a frame (all 280 with no handler gone), −17.1 KB a frame (250.4 → 233.3), .NET collections 96 → 79 a minute, the mean frame −0.87 ms |
+| 3 | Kirby's input read: a new delegate for every key test, arrays and Haxe strings, about 25 KB a frame with real keys | Read the key table once per read and keep the shield tag | about −25 KB a frame with a keyboard or a pad | #176 | with keys through the host's key table, a read 73 µs and 13,948 B → 19 µs and 8 B; −28.6 KB a frame (150.8 → 122.2) |
+| 4 | Two hurtbox hooks that only run after the projection has ended, and second handlers on `Hero.preUpdate` and `Hero.fixedUpdate` | Drop them; one handler each | −5 hooked calls a frame moving, −34 in the crowd | #177 | −4.9 hooked calls and −6.0 KB a frame moving, −30.8 and −32.6 KB in the crowd |
+| 5 | The other always-on hooks: `getMovementSticks` 7.3, `HealFlask.isEnabled` 3.3, `hasUnlockedItem` 2, `updateWeapon` 2 and `updateHeadFx` 1 a frame | Replace each with a state set once at activation, or install it only while needed | about −15 hooked calls and −15 KB a frame | not done here: each guards a gameplay rule that needs its own live check | – |
+| 6 | The first Kirby frame, 47–64 ms | Compile the mod's hot paths ahead of time | about −30 ms once a session, during the arrival | not done here: once a session, under the arrival cinematic | – |
+
+## The four fixes together (#174)
+
+#175, #176, #177 and #178 on one branch (`measure/all2`: the #174 lab tooling and the four fix branches merged; runtime `f878decf…`, outfit pack `2cbd0a47…`), against the #174 build (`a2a93f5a…`, pack `8e44122d…`). Lab runs on 2026-10-16 in `repros/perf-174-kirby`, as in the table above, two runs each unless said. The frames over 20 and 33 ms leave out the lab's report frames.
+
+| Plan, drawing | Build | Runs | Host fps | Mean frame | p99 | Managed KB a frame | .NET collections a minute (median pause) | Frames over 20 / 33 ms | Hooked calls a frame |
+| :--- | :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `movement`, software | before | `20261016-151617`, `153025`, `174336` | 110.1 | 9.11 ms | 16.2 ms | 126.3 | 51 (7.5 ms) | 23 / 3 in 153 s | 108.6 |
+| | all four | `20261016-170048`, `174208` | 119.5 | 8.37 ms | 12.6 ms | 43.9 | 21 (5.9 ms) | 3 / 2 in 97 s | 24.7 |
+| `crowd`, software | before | `20261016-153148`, `155744`, `173139` | 85.6 | 11.69 ms | 22.0 ms | 250.4 | 96 (7.0 ms) | 152 / 18 in 153 s | 481.7 |
+| | all four | `20261016-163343`, `174040` | 102.4 | 9.77 ms | 15.4 ms | 68.5 | 28 (5.0 ms) | 18 / 7 in 97 s | 32.0 |
+| `movement`, GPU | before | `20261016-164133`, `164547` | 1,111.2 | 0.90 ms | 2.7 ms | 119.9 | 481 (7.3 ms) | 2 / 2 in 109 s | 107.0 |
+| | all four | `20261016-164258`, `164423` | 1,628.2 | 0.61 ms | 2.1 ms | 38.3 | 232 (5.6 ms) | 0 / 0 in 109 s | 23.1 |
+| `water`, GPU (wading in the Greenhouse) | before | `20261016-164712`, `174504`, `174927` | 568.5 | 1.76 ms | 10.5 ms | 260.0 | 533 (7.7 ms) | 6 / 3 in 194 s | 257.9 |
+| | all four | `20261016-174631`, `174759` | 1,036.8 | 0.96 ms | 2.5 ms | 38.5 | 153 (5.7 ms) | 2 / 2 in 130 s | 23.1 |
+
+- **Garbage.** A Kirby frame made 43.9 KB moving in software, against 126.3 before and 39.3 for Dead Cells alone with the mod idle ([Kirby against the Beheaded](#kirby-against-the-beheaded-174)), and 68.5 KB in the crowd, against 250.4. On the GPU, moving, 38.3 KB against 119.9.
+- **Hooked calls** fell to about 25 a frame moving: 8 once a frame for DCCM's events and the hooks the mod works in, 15.5 for the always-on hooks of row 5 of "Fixes, ranked", and about one for 30 Hz hooks; in the crowd, about 7 more for the enemies Kirby holds.
+- **.NET collections** came less than half as often (51 → 21 a minute moving and 96 → 28 in the crowd in software; on the GPU, where frames come ten times as fast, 481 → 232 moving and 533 → 153 wading), and their median pause fell from 7–8 ms to 5–6 ms: fewer finalizable objects survive each one.
+- **Frame time.** In software the mean frame fell by 0.74 ms moving (110.1 → 119.5 fps) and by 1.92 ms in the crowd (85.6 → 102.4 fps), and every run with the fixes was faster than every run without: moving 119.1 and 120.0 fps against 102.1 to 116.4, in the crowd 100.7 and 104.1 against 83.2 to 88.5. Drawing, most of a software frame, is unchanged. On the GPU the mean frame fell by a third moving (0.90 → 0.61 ms) and by 45% wading in the Greenhouse (1.76 → 0.96 ms): 565 to 576 fps in the three runs without the fixes, 1,035 and 1,038 with them.
+- **Slow frames.** Frames over 20 ms came 0.03 a second moving in software instead of 0.15, and 0.19 in the crowd instead of 1.0. Of the frames over 33 ms left, one a run is the first Kirby frame (row 6 of "Fixes, ranked", not done here); in the crowd, the frame the lab makes the 31 zombies appear in and the frame Kirby's sword first hits 30 of them at once, 570 to 650 KB of HashLink objects; in the Greenhouse, one 61 ms host frame a run with no mod work in it.
+
+The owner's reference, run `20261015-053030` (162 KB a frame, 8 frames over 33 ms in 44 s, captures on), compares with the `movement` rows: with the four fixes the same plan made 43.9 KB a frame against 126.3 before, and one frame over 33 ms a run, the first Kirby frame.
+
+Every run above ended by its time limit with no fatal log and the real saves unchanged. Runs during which other programs used more than 0.6 cores on average (another session's browser check at 16:28–17:02, another program's benchmark after 17:32) were run again and are in no table here: `20261016-162824`, `162949`, `163218`, `164837`, `165019`, `165144`, `165601`, `165729`, `165920`, `173307` and `173627`.
+
+## The bridge on its own (#174)
+
+A private script drove the shared bridge (`bae16c0e…`) from Python the way the runtime does: the recompiler, the ARM9 at twice the DS clock, the main screen only and the idle upper screen skipped, with a repeating walk, jump, walk back and inhale. Unpaced for 150 s, one step took 0.940 ms at the median, 1.021 ms on average and 1.009 ms at the 95th percentile (146,604 steps; a stack sampler was attached for part of that time). In the game the same step, `Native`, averaged 1.20 ms in the `movement` runs.
+
+120 stack samples of that process (`gdb -batch`), 96 of them inside `kssu_step`:
+
+| Where the step was | Share of the 96 |
+| :--- | ---: |
+| Recompiled ARM code | 50.0% |
+| Timers and the event scheduler | 16.7% |
+| The sound unit (SPU) | 12.5% |
+| Other emulation | 11.5% |
+| 2D drawing | 7.3% |
+| 3D | 2.1% |
+
+The mod uses every part: Kirby's sound effects come from the SPU, and the background capture from engine A's 2D drawing. About one sample in six was a memory access from recompiled code that took melonDS's slow path (`SlowRead9`, `SlowWrite9`). Fast memory would shorten those, but it needs a SIGSEGV handler and the bridge runs inside the game's process, which has its own; it stays off (`tools/nds_jit_patch.py`, #153). No bridge change came out of this, and the shared bridge was only read.
 
 ## Checks run
 
