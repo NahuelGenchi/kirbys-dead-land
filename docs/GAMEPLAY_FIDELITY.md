@@ -1954,10 +1954,10 @@ addition built from host items and the original inhale and swallow.
   keys stay. Crash, Paint, Mike and Cook items are taken with Interact into the F
   slot instead of being inhaled ([F slot](#f-slot-limited-use-abilities-intentional-deviation)).
   Saved levels are unserialized without `initItem` and keep their
-  items. Shop booths are a separate entity and still sell host weapons and
-  skills (#58). The run's starting Rusty Sword is equipped by the host, not
+  items. Altars, timed items and shop booths take their item another way
+  (next point). The run's starting Rusty Sword is equipped by the host, not
   dropped; it stays in its slot until the first copy replaces it (#39 owns the
-  rule that it never attacks).
+  rule that it never attacks), and the forge never lists it (#58, below).
 - **Challenge rewards and shops (#61).** Item altars (including pick-one groups
   behind kill-count and timed doors), timed items and shop booths take their item
   in their own constructors, not through `ItemDrop`. Their item is replaced the
@@ -2056,6 +2056,24 @@ addition built from host items and the original inhale and swallow.
   change keeps its item; a new run, a restored save and a revive replace the
   original machine, and its stars and their items with it. Every ability star
   lasts 7 s, with or without an item.
+- **Forge (#58).** The passage forge (`ForgeUnderground`, the Minor Forge)
+  lists each item in the weapon slots, the backpack and the skill slots that can
+  take a "+" (`InventItem.canBeForged`), with a reroll and an upgrade for gold.
+  In a Kirby run `KirbyForge` lets it list only ability items and shields
+  (`AbilityItems.ForgeLists`): the starting Rusty Sword, which the host would
+  list, and any other host weapon or skill never show, so before the first copy
+  the forge is empty. The copy's item goes through the host's own steps, as a
+  Dead Cells weapon does. The reroll rolls new affixes from the item's own pool
+  (`ItemGen.generateStats`), keeps its level, "+", Legendary and `Colorless`
+  (kept on reroll), and marks it `Rerolled`; the host offers it from adjusted
+  level 2, so not for a level I base item. The upgrade adds a "+" and
+  `ForgeRefined`, and possibly one more affix as for any weapon; the host allows
+  one per item (two once the Collector entry `ForgeRefine1` is bought), up to
+  three "+", never on a Legendary item. Each takes the host's price. Copy damage
+  reads the slot item's bonus every frame, so an upgrade from I+ to I++ raises
+  it from +33% to +67% at once, and the forge's item card shows the ability's
+  text with that line. The F slot's item (#102) is outside the host inventory,
+  so the forge never lists it.
 
 Limits: an ability item's proxy is an ordinary original enemy object, so base
 Kirby's attacks can strike it. In lab run `20261006-223514` a spit star struck a
@@ -2070,9 +2088,10 @@ original's 9-row window leaves the original early, and its item with it (run
 `20261015-224800`, after 217 frames). Not run live for #68: a hit that knocks the
 copy off (headless bridge hurts never did; the star is the same object), making
 a helper, a star in a mouthful with an enemy or another item, an Elite's
-Legendary item on a star, and a star kept through a level change. The forge
-and shops do not handle ability items yet (#58), and quality and affixes have
-no effect yet (#56, #57). Only the Prisoners' Quarters start level and items the
+Legendary item on a star, and a star kept through a level change. The forge was
+run live by opening its window from the probe, not at a forge in a passage, and
+only on a Sword item (#58): a shield, a Legendary item and `ForgeRefine1` were
+not. Only the Prisoners' Quarters start level and items the
 probe created were checked live; other biomes' loot, chests, timed doors, Boss
 Rush and the Collector's armory were not exercised.
 

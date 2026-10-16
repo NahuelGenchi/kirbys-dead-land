@@ -46,6 +46,7 @@ public sealed class KirbyMod(ModInfo info) : ModBase(info), IOnHeroUpdate,
         KirbyMutations.Install();
         KirbyMutationMenu.Install();
         KirbyCollector.Install();
+        KirbyForge.Install();
         KirbyHealing.Install();
         KirbyVines.Install();
         KirbyBumps.Install();

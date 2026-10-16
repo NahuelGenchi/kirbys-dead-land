@@ -258,7 +258,7 @@ internal static class LabAbilityItemProbe
     }
 
     /// <summary>The live floor item holding this exact item (a spat-out item is a new floor entity).</summary>
-    private static ItemDrop? FloorDrop(Hero hero, InventItem? item)
+    internal static ItemDrop? FloorDrop(Hero hero, InventItem? item)
     {
         if (item is null) return null;
         var entities = hero._level.entities;
@@ -274,7 +274,7 @@ internal static class LabAbilityItemProbe
         return null;
     }
 
-    private static bool SlotHolds(Hero hero, InventItem? item)
+    internal static bool SlotHolds(Hero hero, InventItem? item)
     {
         if (item is null) return false;
         for (int slot = 0; slot < hero.inventory.nbWeapons; slot++)
@@ -283,7 +283,7 @@ internal static class LabAbilityItemProbe
     }
 
     /// <summary>The item each HUD weapon slot is drawing from.</summary>
-    private static string?[] HudItems(Hero hero)
+    internal static string?[] HudItems(Hero hero)
     {
         if (hero._level?.game?.hud?.skillWeapons is not { } weapons) return [];
         var ids = new string?[weapons.length];
