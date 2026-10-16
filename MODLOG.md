@@ -2411,3 +2411,20 @@ the all-ability rendering tests as full gameplay acceptance.
   +33% to +67% copy damage). With the filter off it listed "Rusty Sword I".
 - Not run: a forge NPC in a passage, a shield or a Legendary item in the forge,
   `ForgeRefine1`, the owner's launcher.
+
+## 2026-10-16 — no hook on every host sprite draw (#175)
+
+- `KirbyHostVisuals` hooked `HSprite.draw`, the host's draw of every sprite,
+  to hide the outfit atlas's fallback pose: 78.9 hooked calls a frame moving,
+  135 in the crowd, about 200 wading in the Greenhouse, the Beheaded included.
+- The outfit's in-game page is now blank (`tools/build_outfit.py`); the skin
+  preview reads `kirbySuperStarUltraPreview0.png`. The hook and `OnFrame` are
+  gone. `scripts/stage_runtime.py --original-runtime` refuses an older pack.
+- Live (`repros/perf-174-kirby`, seed 174, quiet, software, two or three runs
+  each): moving, 126.3 → 53.7 KB a frame, 51 → 22 collections a minute,
+  108.6 → 29.8 hooked calls; in the crowd 250.4 → 123.0 KB, 96 → 47
+  collections, 481.7 → 340.8 calls, the mean frame 11.69 → 10.65 ms. Traces
+  matched the #174 build in all 2,907 shared original frames; the arrival and
+  the first moments of play look the same, with nothing of the outfit drawn.
+- Not run: the skin selector's preview, the owner's launcher, a window on the
+  GPU.
