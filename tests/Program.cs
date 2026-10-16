@@ -1053,6 +1053,68 @@ Check(SpeedMatch.RiseVelocity(KirbyActions.Jump, -2682) == -2682 && SpeedMatch.R
     mouth.Observe(mouthFull: false, baseForm: true);
     Check(!mouth.Emptied && mouth.Count == 0, "Settling clears the spit state");
 }
+{
+    // A dropped ability star keeps its item for 7 seconds (#68).
+    Check(AbilityStar.Shortened(480) == 420 && AbilityStar.Shortened(479) == 419, "A new star loses 60 of its original 480 frames");
+    Check(AbilityStar.Shortened(420) is null && AbilityStar.Shortened(1) is null, "A shortened star is never shortened again");
+    const uint StarAt = 0x02049FFC, OtherAt = 0x0204A098;
+    const byte Sword = 18, Fire = 11;
+    static StarSighting Seen(uint address, byte ability, int countdown, byte state = 1) => new(address, ability, countdown, state);
+    object item = new();
+
+    var stars = new StarItems<object>();
+    stars.Observe([Seen(StarAt, Sword, 480)]);
+    Check(stars.NewStars.Count == 1 && stars.NewStars[0].Countdown == 480, "A new star is reported with its countdown");
+    Check(stars.Lose(item, Sword) == StarAt && ReferenceEquals(stars.ItemOf(StarAt), item) && stars.Carried == 1,
+        "The lost copy's item joins the star dropped with it");
+    stars.Observe([Seen(StarAt, Sword, 419)]);
+    Check(stars.NewStars.Count == 0 && stars.Carried == 1, "The shortened star is the same star");
+    for (int countdown = 418; countdown >= 1; countdown--) stars.Observe([Seen(StarAt, Sword, countdown)]);
+    Check(stars.Carried == 1 && stars.Gone.Count == 0, "The star carries its item to its last frame");
+    stars.Observe([]);
+    Check(stars.Gone.Count == 1 && ReferenceEquals(stars.Gone[0], item) && stars.Carried == 0, "A star that runs out takes its item with it");
+
+    stars = new StarItems<object>();
+    Check(stars.Lose(item, Sword) is null && stars.Waiting == 1, "An item lost before its star appears waits for it");
+    stars.Observe([Seen(StarAt, Sword, 480)]);
+    Check(stars.Paired.Count == 1 && stars.Paired[0].Star == StarAt && stars.Waiting == 0, "The star appearing next frame takes the waiting item");
+    stars.Observe([Seen(StarAt, Sword, 300, AbilityStar.Caught)]);
+    Check(stars.Caught.Count == 0 && stars.Lose(new object(), Sword) is null, "A caught star is not over while its record lasts, and takes no other item");
+    stars.Observe([]);
+    Check(stars.Caught.Count == 1 && ReferenceEquals(stars.Caught[0], item) && stars.Gone.Count == 0,
+        "The original inhale catching the star hands its item over");
+
+    stars = new StarItems<object>();
+    stars.Observe([Seen(StarAt, Sword, 420)]);
+    stars.Lose(item, Sword);
+    for (int i = 0; i < 3; i++) stars.Observe([]);
+    stars.Observe([Seen(StarAt, Sword, 400)]);
+    Check(ReferenceEquals(stars.ItemOf(StarAt), item) && stars.Gone.Count == 0, "A star missing from the records for a few frames keeps its item");
+    int missing = 0;
+    while (stars.Gone.Count == 0 && missing < 50) { stars.Observe([]); missing++; }
+    Check(missing == StarItems<object>.MissingFrames + 1, "A star missing for longer is gone with its item");
+
+    stars = new StarItems<object>();
+    stars.Observe([Seen(OtherAt, Fire, 480)]);
+    stars.Lose(item, Sword);
+    int waited = 0;
+    while (stars.Gone.Count == 0 && waited < 50) { stars.Observe([Seen(OtherAt, Fire, 479 - waited)]); waited++; }
+    Check(waited == StarItems<object>.PairFrames && stars.ItemOf(OtherAt) is null,
+        "With no star of its copy the item is gone; another copy's star never takes it");
+
+    stars = new StarItems<object>();
+    for (int i = 0; i < 30; i++) stars.Observe([Seen(StarAt, Sword, 420 - i)]);
+    Check(stars.Lose(item, Sword) is null, "A star dropped long before the loss does not take the item");
+
+    stars = new StarItems<object>();
+    stars.Observe([Seen(StarAt, Sword, 480)]);
+    stars.Lose(item, Sword);
+    stars.Observe([Seen(StarAt, Fire, 480)]);
+    Check(stars.Gone.Count == 1 && stars.ItemOf(StarAt) is null && stars.NewStars.Count == 1, "A new star at a freed address is not the old one");
+    stars.Lose(item, Fire);
+    stars.Clear();
+    Check(stars.Carried == 0 && stars.Waiting == 0, "Clearing forgets every star and item");
+}
 
 // Copy critical hits (#88).
 {

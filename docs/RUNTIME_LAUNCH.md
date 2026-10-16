@@ -929,6 +929,62 @@ B every 16 frames for 240 frames, then stops while its life is sampled.
 
 Not run: the Grenade affix, on-kill affixes and a forge reroll in play.
 
+### Dropped star keeps its item (#68)
+
+`KIRBY_LAB_ITEMS_STAR=catch … --input-plan items` makes the probe's floor item a
+Sword ability item (Sleep ends by itself and drops no star), and after the swallow
+gives the copy's item one "+" and the host `Grenade` affix. It removes the
+grenade's ability item, which lay where the star could bounce, and places Kirby
+on the nearest dry floor closed by walls at least three cells tall within 30
+cells on both sides. It then discards with Select, walks to the star, holds B
+until the star's item is in the mouth and presses Down until the copy is back.
+A second discard leaves the star alone. `KIRBY_LAB_ITEMS_STAR=spit` presses B
+instead of Down once the item is in the mouth. `ability-star.json` records every
+step of the star's item from `KirbyStarItems.TestObserver`, and every 30 frames
+the star's position and countdown.
+
+Separate root `repros/star-68-20261015` (`research`, `oracle`, `rom` and `dotnet`
+linked from the private root), staged from this branch with the outfit pack
+`8e44122d…` and the shared bridge `bae16c0e7dafbec06239e0212cac1b436ed25db01aaaeeb1d03d6eaf7aed0169`
+(this branch does not change `src/nds`); final runtime DLL
+`d6c0f93e5f8ed45113edaa17f1b541fdf511765e98ab48cd26c63e2e66b03aa2`:
+
+```sh
+KIRBY_LAB_ITEMS_STAR=catch python3 scripts/launch_runtime.py \
+  --data-root "$HOME/.local/share/kirby-dead-cells/repros/star-68-20261015" \
+  --seconds 115 --start-game --outfit KirbySuperStarUltra --input-plan items
+```
+
+| Run | Mode | Result |
+| :--- | :--- | :--- |
+| `20261015-225428` | catch | Star at the discard (frame 4890), countdown written 480 → 420, item on it at once. Caught at 5012, in the mouth at 5034, copy back at 5070 with the same item (same object, level I, one "+", `Grenade`, bonus 0.333) in the slot and the HUD. Second star from 5141 carried the item; its countdown ran down to 0 and the star and item were gone at 5574, 433 frames after the discard. Item on no floor and in no slot. `passed: true` |
+| `20261015-225837` | catch | Same steps: caught at 4942, in the mouth at 4961, same item back; the second star ran out 433 frames after its discard (5069 → 5502). `passed: true` |
+| `20261015-225640` | spit | Caught at 4941, in the mouth at 4960; the spit lost the item (`spat`) at 4989, with Kirby in base form and the item on no floor and in no slot. `passed: true` |
+
+All three ended by their time limit with saves unchanged and no fatal log
+lines. Earlier runs of the probe in the same root found its own setup problems:
+
+- `20261015-224359`: facing the star, the inhale also took the grenade's Fire
+  item lying beyond it, and the probe's single Down press came while that inhale
+  was still ending, so Kirby kept a two-object mouthful. The probe now removes
+  that item and presses Down until the copy is back.
+- `20261015-224800`: the re-catch passed (same Jet item back), but the second
+  star bounced off a ledge into the lower room, below the original's 9-row
+  window, and left the original after 217 frames with its countdown above 1;
+  its item went with it. The probe now picks a floor closed by walls.
+- `20261015-225205`: the floor item was Sleep, which the original ends by itself
+  without a star; the item was gone 10 frames after the copy, as the rule says.
+  The probe now forces a Sword item.
+
+The bridge case `copy_drop_reabsorb` (`tools/nds_tests.py`) now also checks the
+star fields: at the Select frame the ability star holds copy 18, countdown 480
+and state 1; the inhale catches it at frame 57 (countdown 423, state 0), its
+record is gone at 58 and the mouth fills at 69.
+
+Not run live: a hit that knocks the copy off, making a helper, a star in a
+mouthful with an enemy or another item, an Elite's Legendary item on a star, a
+save while a star is out, and a star kept through a level change.
+
 ## Scroll claim (#80)
 
 `--input-plan scroll` (`LabScrollProbe`) places Kirby on a clear floor of a new

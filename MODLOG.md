@@ -2374,3 +2374,25 @@ the all-ability rendering tests as full gameplay acceptance.
   the bridge suite, the verifiers or the game is gone (#150 and #153 ran
   all three), and the collision pool joins what was checked in play.
 - Not run: anything live; documentation only.
+
+## 2026-10-15 — the dropped star keeps the copy's item for 7 seconds (#68)
+
+- Owner decision on #54: losing the copy (a hit or a discard) puts its ability
+  item on the original ability star, which lasts 7 s; swallowing the star again
+  gives back the same item, and when the star runs out both are gone.
+- The original star keeps its copy byte at +0x49, a 480-frame countdown at
+  +0x4C and a state at +0x60 (0 once the inhale has caught it). The runtime
+  writes each new star's countdown 60 lower, pairs the lost item with the star
+  of that copy (`StarItems`, `KirbyStarItems`), and puts a caught star's item in
+  the mouthful once the original mouth fills. A spat star's item is gone, never
+  back on the floor. Core tests 501 assertions; `scripts/check.py` passes; the
+  bridge case `copy_drop_reabsorb` now checks the star fields (caught at 57,
+  record gone at 58, mouth full at 69).
+- Live (`repros/star-68-20261015`): two catch runs got the same Sword item back
+  (level, "+", `Grenade`) and saw the second star run out 433 frames after its
+  discard, taking the item; a spit run lost the item with the copy. Earlier runs
+  showed a star leaving early when it bounces into a drop deeper than the
+  original's 9-row window, and Sleep dropping no star.
+- Not run: a hit knocking the copy off, a helper, a star in a mouthful with
+  something else, an Elite's Legendary item on a star, a save while a star is
+  out, a level change with a star out, the owner's launcher.

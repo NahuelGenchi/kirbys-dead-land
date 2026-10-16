@@ -79,6 +79,8 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
     private readonly KirbyEnemies enemies = new();
     /// <summary>Floor ability items in Kirby's mouth until the original swallow or spit settles them.</summary>
     private readonly MouthfulItems<KirbyAbilityItems.Held> mouthfulItems = new();
+    /// <summary>The ability items Kirby's dropped stars carry (#68).</summary>
+    private readonly KirbyStarItems starItems = new();
     /// <summary>
     /// Host life per original damage point for this target. Host enemy life
     /// grows with its tier; the same host curve keeps original abilities as
@@ -259,7 +261,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         EndDetachedDeath();
         save.Value = new KirbySave(); boundSave = null;
         lastSession?.Rules.Reset(); pendingCopy = false; importHostHealth = false; sourceLevel = 0;
-        mouthfulItems.Clear();
+        mouthfulItems.Clear(); starItems.Clear();
         deathFrames = -1; deathAnchor = null; sourceDead = false;
         if (nds is not null) { enemies.Clear(nds); nds.LoadState(config.SeedStatePath); }
         KirbyFSlot.Reset();
@@ -280,13 +282,14 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
             session.Rules.Restore(value.Ability, value.Shield, value.AbilityEmpowered, value.PendingEmpowerment);
             if (value.KirbyActive && value.HostBody is not null) originalBody = value.HostBody;
             pendingCopy = value.PendingCopy;
-            mouthfulItems.Clear();
+            mouthfulItems.Clear(); starItems.Clear();
             enemies.Restore(value.Enemies);
             KirbyFSlot.Restore(session, value.FSlot);
         }
         else if (boundSave is not null)
         {
             nds!.LoadState(config.SeedStatePath); session.Rules.Reset(); KirbyFSlot.Reset(); pendingCopy = false; window = null;
+            starItems.Clear();
         }
         boundSave = save.Value;
         boundSave.Capture = CaptureSave;
@@ -434,7 +437,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         RenderSource();
         LabPerfProbe.Stop(LabPerfProbe.Section.Render, mark);
         mark = LabPerfProbe.Start();
-        KirbyAbilityItems.Sync(session, mouthfulItems, pendingCopy);
+        KirbyAbilityItems.Sync(session, mouthfulItems, pendingCopy, starItems);
         KirbyFSlot.Update(session);
         LabPerfProbe.Stop(LabPerfProbe.Section.Items, mark);
         mark = LabPerfProbe.Start();
@@ -544,6 +547,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         window = null;
         renderer?.ResetPalette();
         pendingCopy = false;
+        starItems.Clear();
         KirbyFSlot.Sequence.Reset();
         if (!session.Rules.IsBaseForm) session.DropAbility();
         previousAbility = nds.State.Ability;
@@ -803,6 +807,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         LabPerfProbe.Stop(LabPerfProbe.Section.Complete, mark);
         foreach (var swallowed in enemies.Swallowed) mouthfulItems.Add(swallowed, KirbyAbilityItems.AbilityOf(swallowed.Item)!);
         enemies.Swallowed.Clear();
+        if (starItems.Follow(nds, enemies.AbilityStars, hero, mouthfulItems)) pendingCopy = true;
         NdsState state = nds.State;
         // The original's landing hop: its falling speed turns upward on a floor, still in the fall action.
         if (nds.Action != KirbyActions.Fall || launch.Active || stomp.Active) bounceFloor = null;

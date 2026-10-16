@@ -29,7 +29,7 @@ in [NDS_BRIDGE.md](NDS_BRIDGE.md). The original bootstrap experiment remains in
 | Sound | Original stereo sound effects continue; the source music player is muted so Dead Cells music remains |
 | Enemy collision | Live host enemies have paired source collision objects with their host dimensions; original routines resolve damage cadence, suction, grabs, throws and Cook |
 | Enemy projectiles | Live hostile host arrows/grenades have paired copyless source objects; original suction, mouthful, spit star and swallow decide their fate |
-| Star projectiles | The ROM moves Kirby's spit, big spit and discarded ability stars through host terrain (spit stars burst on walls, the ability star bounces). Each star strikes host enemies once and staggers them with the host dive's stun and bump; paired enemies take spit-star damage through their source object, all others from the host (see below) |
+| Star projectiles | The ROM moves Kirby's spit, big spit and discarded ability stars through host terrain (spit stars burst on walls, the ability star bounces). Each star strikes host enemies once and staggers them with the host dive's stun and bump; paired enemies take spit-star damage through their source object, all others from the host. The ability star lasts 7 s and carries the lost copy's ability item (#68; see below) |
 | Screen-wide attacks | Paint, Mike and Crash hit every enemy in the Dead Cells view: enemies the original cannot reach (no live source object, or one outside the original's window) take the attack's original damage from the host (see [Screen-wide attacks](#screen-wide-attacks-69)) |
 | Boss collision | Original resistance bits prevent inhale, Suplex capture and Cook; damage still uses original collision/debounce, while the host retains boss AI and phases |
 | Host triggers | Pressure plates (trap plates and pulley points too), hidden triggers and carnivorous plants (`CarnivorousPlant.onTouch`, see [Carnivorous plants](#carnivorous-plants-113)) test Kirby's physical foot on the ground, as for the Beheaded; enemy attacks and the plant's hit area still test the projected original hurtbox. Host flip platforms (`FlipPF`, the Castlevania iron platforms) flip when Kirby lands on them: the original controller reaching the ground after a downward move is handed to each of them as the Beheaded's landing, without the host's stun, fall damage or other land-signal listeners (#119) |
@@ -300,6 +300,15 @@ records from the native hit list and strikes host enemies with them:
   star is a harmless collectible. By owner request it strikes each host enemy it
   crosses once for 52 source damage, the single spit star's original value. It
   keeps bouncing and can still be inhaled again to recover the ability.
+- **Discarded ability star, lifetime (#68, intentional deviation):** the
+  original star's constructor (`0x02166D80`) stores its copy byte at +0x49 and a
+  countdown of 480 frames (8 s) at +0x4C, and its update ends the star when the
+  countdown reaches zero. By owner decision on #54 the star lasts 7 s: the first
+  time `KirbyStarItems` sees a star whose countdown is above 420, it writes the
+  countdown 60 lower (`AbilityStar.Shortened`), so each star is shortened once.
+  The original countdown skips a frame now and then as the star bounces, so it
+  ran 433 frames (7.2 s) live, as 480 ran 495 frames in the bridge. The star
+  carries the lost copy's ability item ([Ability items](#ability-items-intentional-addition)).
 
 The host strikes each enemy at most once per star (`StarStrikes`). On a paired
 enemy the original collision decides how often a big star hits: `star_big`
@@ -600,8 +609,9 @@ enemy, so original death reactions stay in the same tick as the host kill.
 `CopyDamageScale` in the core keeps the tested pairing rule for a single
 multiplier.
 
-The bonus ends whenever the copy is lost: a hit that knocks it off, a discard
-(a re-caught star is an ordinary Sword), creating a helper, spitting the Elite
+The bonus ends whenever the copy is lost: a hit that knocks it off or a
+discard (unless Kirby swallows the dropped star again within its 7 s, which
+gives back the same Legendary item, #68), creating a helper, spitting the Elite
 out before swallowing, or a new run. It survives saves and biome transitions.
 Ordinary enemies keep the uniform random roll and give a base item, so a Sword
 copied from them has no bonus beyond its item level. Bosses are unchanged because they resist inhale. Known limit: source
@@ -835,7 +845,7 @@ its offer with the same call, so the two agree). The list is
 | Porcupack, Acrobatipack, Armadillopack (`P_Backpack_*`) | Use a weapon or shield carried in the backpack |
 | Kill Rhythm (`P_AttackSpeed_Combo`) | Needs two different weapons; both buttons fire the same ability |
 | Ranger's Gear, Scheme (`P_DmgSkillRanged`, `P_DmgSkl`) | Follow a skill use |
-| Ammo (`P_Ammo`) | Multiplies weapon ammo; its Kirby version (a longer-lived ability star) waits for #68 |
+| Ammo (`P_Ammo`) | Multiplies weapon ammo; its Kirby version (a longer-lived ability star, on top of #68's 7 s) is not built |
 | Support (`P_DeployedDmg`) | Needs a deployed skill; Kirby deploys none, and his helper's position is not readable from the source machine |
 | Parting Gift, Networking (`P_DeathBomb`, `P_ShareDamage`) | Follow ranged attacks; every copy attack counts as melee in a Kirby run |
 | Extended Healing, Emergency Triage, Tainted Flask, Cursed Flask (`P_Hot`, `P_QuickHeal`, `P_CorruptedHealing`, `P_CursedFlask`) | Change, follow or refill the health flask; Kirby has none (#101) |
@@ -2024,9 +2034,28 @@ addition built from host items and the original inhale and swallow.
   weapon (removed: it is unusable to Kirby), else an empty slot, else a shield
   other than the retained one (dropped to the floor). The host HUD is then
   reassigned with `Hero.hudInitItems` (`HUD.refreshItems` only redraws each
-  slot's current item). Losing the copy removes its item; #56 will keep it with
-  the dropped star for 7 seconds. The HUD overlay of the original icon (#18)
-  still draws over the slot.
+  slot's current item). Losing the copy takes its item out of the slot onto the
+  dropped star (below). The HUD overlay of the original icon (#18) still draws
+  over the slot.
+- **Dropped star (#68, owner decision on #54).** When Kirby loses his copy, by a
+  hit that knocks it off or a discard, its item leaves the slot and rides the
+  original ability star dropped with that copy: `StarItems` pairs it with a star
+  of the same copy byte first seen within 10 source frames of the loss. The star
+  lasts 7 s ([Star projectiles](#star-projectiles)). When the original inhale
+  catches it (+0x60 turns 0, and its collision record is gone the next frame),
+  the item waits for the original mouth to fill (11 frames after the record
+  went in the bridge, 19 to 22 live) and then joins the mouthful as a floor item
+  does. The original
+  swallow gives back that same item, with its level, quality and affixes. A spit
+  loses it with the copy, as the original loses the copy: it never goes back to
+  the floor. In a mouthful of several objects the original roulette decides, and
+  a star's item that is not chosen is gone. When the star runs out, or leaves the
+  original any other way, its item is gone with it. A copy lost without a star
+  loses its item 10 frames later, as before: Sleep, which the original ends by
+  itself, and making a helper. A star the original keeps through a host level
+  change keeps its item; a new run, a restored save and a revive replace the
+  original machine, and its stars and their items with it. Every ability star
+  lasts 7 s, with or without an item.
 
 Limits: an ability item's proxy is an ordinary original enemy object, so base
 Kirby's attacks can strike it. In lab run `20261006-223514` a spit star struck a
@@ -2034,7 +2063,14 @@ spat item's proxy and, before the recoil rule above, pushed the item three cells
 A single spit star is therefore expected to burst on an ability item as on an
 enemy (not checked visually). Making the proxy inhalable but not hittable needs a
 bridge change. Items in Kirby's mouth when the game is saved are not kept; after a
-reload, the original swallow gives a new base item of that ability. The forge
+reload, the original swallow gives a new base item of that ability. Nor is a
+star's item: a star restored with a save carries none, so re-inhaling it gives a
+new base item. A star that bounces off a ledge into a drop deeper than the
+original's 9-row window leaves the original early, and its item with it (run
+`20261015-224800`, after 217 frames). Not run live for #68: a hit that knocks the
+copy off (headless bridge hurts never did; the star is the same object), making
+a helper, a star in a mouthful with an enemy or another item, an Elite's
+Legendary item on a star, and a star kept through a level change. The forge
 and shops do not handle ability items yet (#58), and quality and affixes have
 no effect yet (#56, #57). Only the Prisoners' Quarters start level and items the
 probe created were checked live; other biomes' loot, chests, timed doors, Boss

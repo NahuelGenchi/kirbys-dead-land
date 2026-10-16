@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Text.Json;
 using dc.en;
 using dc.en.inter;
@@ -20,6 +21,12 @@ namespace Kirby.Runtime;
 /// where it lay without a copy; he inhales it again and swallows it with DOWN,
 /// which must copy its ability and put that same item in a weapon slot and the
 /// HUD; SELECT then discards the copy, which must clear the slot.
+/// KIRBY_LAB_ITEMS_STAR (#68) gives the copy's item a "+" and an affix before
+/// the discard and follows the star it rides. With "catch" Kirby inhales the
+/// star and swallows it, which must put that same item back in the slot; a
+/// second discard then leaves the star alone, and the star and its item must be
+/// gone after 7 seconds. With "spit" Kirby spits the caught star out, which
+/// must lose the item with the copy.
 /// </summary>
 internal static class LabAbilityItemProbe
 {
@@ -53,6 +60,20 @@ internal static class LabAbilityItemProbe
     private static bool secondInMouth, slotHoldsSwallowedItem, hudShowsCopy, slotClearedAfterDiscard, hudClearedAfterDiscard;
 
     private static readonly bool keep = Environment.GetEnvironmentVariable("KIRBY_LAB_ITEMS_KEEP") == "1";
+    private static readonly string? starMode = Environment.GetEnvironmentVariable("KIRBY_LAB_ITEMS_STAR") switch
+    {
+        null or "" or "0" => null,
+        "spit" => "spit",
+        _ => "catch",
+    };
+    private static readonly List<object> starEvents = [];
+    private static readonly Dictionary<uint, double> starX = [];
+    private static uint? starAddress, discardedAt, carriedAt, caughtAt, inMouthAt, copiedBackAt, droppedAgainAt, carriedAgainAt, goneAt, lastStarSeen;
+    private static int? shortenedFrom, shortenedTo, lastCountdown;
+    private static object? enclosedSpot;
+    private static readonly List<object> starTrace = [];
+    private static string? itemBefore, itemAfter, goneReason;
+    private static bool copiedBack, sameItemBack, hudShowsCopyBack, itemOnFloorAfter, itemInSlotAfter;
     private static readonly bool resume = Environment.GetEnvironmentVariable("KIRBY_LAB_ITEMS_RESUME") == "1";
 
     internal static void Install(string output)
@@ -78,6 +99,42 @@ internal static class LabAbilityItemProbe
         KirbyAbilityItems.TestSlot = (ability, level, fromFloor) => Event("slot", new { ability, level, fromFloor });
         KirbyAbilityItems.TestReturned = (drop, cx, cy) => { returned = drop; Event("returned", new { cx, cy }); };
         KirbyInput.TestOverride = Input;
+        if (starMode is null) return;
+        KirbyStars.TestTrace = (address, kind, box) =>
+        {
+            if (kind != StarKind.Ability || KirbyMod.Instance?.NativeProvider?.Machine is not { } machine) return;
+            uint frame = machine.State.Frame;
+            starX[address] = box.CenterX;
+            lastStarSeen = frame;
+            Span<byte> countdown = stackalloc byte[2];
+            machine.Read(address + AbilityStar.CountdownOffset, countdown);
+            lastCountdown = BinaryPrimitives.ReadInt16LittleEndian(countdown);
+            if (frame % 30 == 0) starTrace.Add(new { frame, address, x = box.CenterX, top = box.Top, countdown = lastCountdown });
+        };
+        KirbyStarItems.TestObserver = (kind, item, details) =>
+        {
+            uint? frame = KirbyMod.Instance?.NativeProvider?.Machine?.State.Frame;
+            bool ours = item is not null && swordItem is not null && item.HashlinkPointer == swordItem.HashlinkPointer;
+            starEvents.Add(new { frame, kind, ours, details });
+            Event("star-" + kind, new { ours, details });
+            if (kind == "shortened" && shortenedFrom is null)
+            {
+                var value = JsonSerializer.SerializeToElement(details);
+                shortenedFrom = value.GetProperty("from").GetInt32();
+                shortenedTo = value.GetProperty("to").GetInt32();
+            }
+            if (!ours) return;
+            switch (kind)
+            {
+                case "carried":
+                    if (phase == 22) carriedAgainAt ??= frame; else carriedAt ??= frame;
+                    starAddress = details as uint?;
+                    break;
+                case "caught": caughtAt ??= frame; break;
+                case "in-mouth": inMouthAt ??= frame; break;
+                case "gone": goneAt ??= frame; goneReason ??= details as string ?? "star ended"; break;
+            }
+        };
     }
 
     internal static void Poll() { }
@@ -126,6 +183,53 @@ internal static class LabAbilityItemProbe
         if (hero.yr == 0) { hero.cy--; hero.yr = 1; }
         hero.dx = hero.dy = hero.bdx = hero.bdy = 0;
         return new { spot.X, spot.Y };
+    }
+
+    /// <summary>
+    /// For the star checks (#68): place Kirby on the nearest dry floor that walls
+    /// at least three cells tall close on both sides within 30 cells, with no
+    /// drop between them, no ability item on the floor within 12 cells and no
+    /// enemy within 16.
+    /// </summary>
+    private static object? MoveToEnclosedFloor(Hero hero)
+    {
+        var map = hero._level.map;
+        var items = new List<(int X, int Y)>();
+        var enemies = new List<(int X, int Y)>();
+        var entities = hero._level.entities;
+        for (int j = 0; j < entities.length; j++)
+        {
+            if (entities.getDyn(j) is ItemDrop { destroyed: false } drop && KirbyAbilityItems.IsAbilityItem(drop.item)) items.Add((drop.cx, drop.cy));
+            if (entities.getDyn(j) is Mob { destroyed: false } mob) enemies.Add((mob.cx, mob.cy));
+        }
+        bool Floor(int x, int y) => (Cell(map, x, y) & 3) == 0 && (Cell(map, x, y - 1) & 3) == 0 &&
+            (Cell(map, x, y + 1) & 3) != 0 && map.getRoomAt(x, y) is not null && map.getWaterSurfaceY(x, y) <= 0;
+        bool Wall(int x, int y) => (Cell(map, x, y) & 3) != 0 && (Cell(map, x, y - 1) & 3) != 0 && (Cell(map, x, y - 2) & 3) != 0;
+        int? Reach(int x, int y, int step)
+        {
+            for (int i = 1; i <= 30; i++)
+            {
+                if (Wall(x + step * i, y)) return i;
+                if (!Floor(x + step * i, y)) return null;
+            }
+            return null;
+        }
+        (int X, int Y, int Left, int Right)? best = null;
+        int bestDistance = int.MaxValue;
+        for (int y = 3; y < map.hei - 2; y++)
+        for (int x = 2; x < map.wid - 2; x++)
+        {
+            if (!Floor(x, y) || Reach(x, y, -1) is not { } left || Reach(x, y, 1) is not { } right || left + right < 6) continue;
+            if (items.Any(o => Math.Abs(o.X - x) <= 12 && Math.Abs(o.Y - y) <= 4)) continue;
+            if (enemies.Any(e => Math.Abs(e.X - x) <= 16 && Math.Abs(e.Y - y) <= 8)) continue;
+            int distance = Math.Abs(x - hero.cx) + Math.Abs(y - hero.cy);
+            if (distance < bestDistance) { bestDistance = distance; best = (x, y, left, right); }
+        }
+        if (best is not { } spot) return null;
+        hero.setPosPixel(spot.X * 24 + 12, (spot.Y + 1) * 24);
+        if (hero.yr == 0) { hero.cy--; hero.yr = 1; }
+        hero.dx = hero.dy = hero.bdx = hero.bdy = 0;
+        return new { spot.X, spot.Y, spot.Left, spot.Right };
     }
 
     /// <summary>KIRBY_LAB_ITEMS_QUALITY=N gives the probe's Broadsword N "+" before it is dropped (#56).</summary>
@@ -220,6 +324,8 @@ internal static class LabAbilityItemProbe
                 carriedAffix = sword.item.hasAffix("BleedOnHit".AsHaxeString());
                 sword.replaceItem(KirbyAbilityItems.Create("Sword", 1));
             }
+            // #68 needs a copy the original discards as a star; Sleep ends by itself without one.
+            else if (starMode is not null) sword.replaceItem(KirbyAbilityItems.Create("Sword", 1));
             swordItem = sword.item;
             swordAbility = KirbyAbilityItems.AbilityOf(swordItem);
             grenadeAbility = KirbyAbilityItems.AbilityOf(grenade.item);
@@ -289,6 +395,18 @@ internal static class LabAbilityItemProbe
                         Next(frame, 10);
                         return 0;
                     }
+                    if (starMode is not null && swordItem is not null)
+                    {
+                        // #68: a "+" and an affix the star must carry back.
+                        swordItem.addAffix("QualityUp".AsHaxeString(), Ref<bool>.In(true));
+                        swordItem.addAffix("Grenade".AsHaxeString(), Ref<bool>.In(true));
+                        itemBefore = Describe(swordItem);
+                        // The grenade's ability item lies where the star may bounce; the inhale must catch the star alone.
+                        if (grenade is { destroyed: false }) grenade.destroy();
+                        // A star that bounces off a ledge falls out of the original's 9-row window and ends early.
+                        enclosedSpot = MoveToEnclosedFloor(hero);
+                        Event("star-item", new { item = itemBefore, enclosedSpot });
+                    }
                     if (keep)
                     {
                         // Keep the copy for a save: give its item a rerolled-style affix, as the forge would.
@@ -330,16 +448,49 @@ internal static class LabAbilityItemProbe
                 }
                 return 0;
             case 5: // Discard with SELECT until base form; the slot and HUD must clear.
-                if (session.Rules.IsBaseForm && settledAt is null) settledAt = t;
-                if (settledAt is uint since && t - since >= 90 || t > 400)
+                if (session.Rules.IsBaseForm && settledAt is null) { settledAt = t; discardedAt = frame; }
+                if (settledAt is uint since && t - since >= (starMode is null ? 90 : 30) || t > 400)
                 {
                     slotClearedAfterDiscard = session.Rules.IsBaseForm && SlotAbility(hero) is null;
                     hudClearedAfterDiscard = !HudItems(hero).Any(id => AbilityItems.AbilityOf(id) is not null);
                     Event("discarded", new { baseForm = session.Rules.IsBaseForm, slot = SlotAbility(hero), hud = HudItems(hero) });
+                    if (starMode is not null) { Next(frame, 20); return 0; }
                     Finish(frame);
                     return 0;
                 }
-                return settledAt is null && t >= 10 ? Pulse(t, 4) : (ushort)0;
+                return settledAt is null && t >= (starMode is null ? 10 : 60) ? Pulse(t, 4) : (ushort)0;
+            case 20: // Go to the star and hold the original inhale until its item is in the mouth.
+                if (inMouthAt is not null) { Next(frame, starMode == "spit" ? 23 : 21); return 0; }
+                if (goneAt is not null || t > 420) { FinishStar(session, hero, frame); return 0; }
+                if (caughtAt is not null) return 2;
+                if (starAddress is not { } address || !starX.TryGetValue(address, out double x)) return 0;
+                double dx = x - (hero.cx + hero.xr) * 24;
+                ushort toward = dx < 0 ? (ushort)32 : (ushort)16;
+                if (Math.Abs(dx) > 40) return toward;
+                return Math.Sign(dx) != hero.dir && Math.Abs(dx) > 4 ? toward : (ushort)2;
+            case 21: // Swallow with DOWN: the copy must come back with the same item.
+                if (session.Rules.AbilityId == swordAbility && copiedBackAt is null) copiedBackAt = frame;
+                if (copiedBackAt is not null && frame - copiedBackAt.Value >= 30 || t > 300)
+                {
+                    copiedBack = session.Rules.AbilityId == swordAbility;
+                    itemAfter = Describe(swordItem);
+                    sameItemBack = copiedBack && SlotHolds(hero, swordItem) && itemAfter == itemBefore;
+                    hudShowsCopyBack = swordAbility is not null && HudItems(hero).Contains(AbilityItems.ItemId(swordAbility));
+                    Event("star-copied-back", new { copiedBack, sameItemBack, itemAfter, hud = HudItems(hero) });
+                    // The same item now waits for the second discard and the star's end.
+                    starAddress = null; caughtAt = inMouthAt = null; goneAt = null; goneReason = null;
+                    Next(frame, 22);
+                    return 0;
+                }
+                // Down until the copy is back: a press while the inhale is still ending does nothing.
+                return copiedBackAt is null && t >= 10 ? Pulse(t, 128) : (ushort)0;
+            case 22: // Discard again and leave the star: it and its item must be gone after 7 s.
+                if (session.Rules.IsBaseForm && droppedAgainAt is null) droppedAgainAt = frame;
+                if (goneAt is not null && frame - goneAt.Value >= 60 || t > 900) { FinishStar(session, hero, frame); return 0; }
+                return droppedAgainAt is null && t >= 10 ? Pulse(t, 4) : (ushort)0;
+            case 23: // Spit the caught star out with B: the item must go with the copy.
+                if (goneAt is not null && frame - goneAt.Value >= 90 || t > 400) { FinishStar(session, hero, frame); return 0; }
+                return goneAt is null && t >= 20 ? Pulse(t, 2) : (ushort)0;
         }
         return 0;
     }
@@ -365,6 +516,40 @@ internal static class LabAbilityItemProbe
         }, new JsonSerializerOptions { WriteIndented = true }));
         // Then the normal pause screen (its constructor pauses the game); see pause-cards.jsonl.
         _ = new dc.ui.pause.DefaultPause();
+    }
+
+    /// <summary>What the star must carry: the item object, its level, "+", Legendary, affixes and damage bonus.</summary>
+    private static string? Describe(InventItem? item) => item is null ? null : JsonSerializer.Serialize(new
+    {
+        pointer = item.HashlinkPointer.ToString("x"), item = item.getItemKind()?.ToString(), level = item.getRawItemLevel(),
+        quality = item.getUpgradeLevel(), legendary = item.hasAffix("Legendary".AsHaxeString()),
+        affixes = KirbyAbilityItems.Affixes(item), bonus = item.getDamageBonus(),
+    });
+
+    private static void FinishStar(KirbySession session, Hero hero, uint frame)
+    {
+        itemOnFloorAfter = FloorDrop(hero, swordItem) is not null;
+        itemInSlotAfter = SlotHolds(hero, swordItem);
+        bool baseForm = session.Rules.IsBaseForm;
+        // From the second discard (catch) to the frame the star's item was gone.
+        int? lifetime = droppedAgainAt is uint dropped && goneAt is uint gone ? (int)(gone - dropped) : null;
+        // The star ran out (its last countdown) rather than falling out of the original's window.
+        bool starLeft = lastStarSeen is uint seen && goneAt is uint end && seen <= end && lastCountdown <= 1;
+        bool shortened = shortenedFrom == AbilityStar.OriginalLifetime && shortenedTo == AbilityStar.Lifetime;
+        bool passed = starMode == "spit"
+            ? carriedAt is not null && shortened && caughtAt is not null && inMouthAt is not null && goneReason == "spat" &&
+              baseForm && !itemOnFloorAfter && !itemInSlotAfter
+            : carriedAt is not null && shortened && copiedBack && sameItemBack && hudShowsCopyBack && carriedAgainAt is not null &&
+              goneAt is not null && goneReason == "star ended" && lifetime is >= AbilityStar.Lifetime and <= AbilityStar.Lifetime + 30 &&
+              starLeft && baseForm && !itemOnFloorAfter && !itemInSlotAfter;
+        File.WriteAllText(Path.Combine(run!, "ability-star.json"), JsonSerializer.Serialize(new
+        {
+            mode = starMode, swordAbility, itemBefore, itemAfter, discardedAt, carriedAt, starAddress, shortenedFrom, shortenedTo,
+            caughtAt, inMouthAt, copiedBackAt, copiedBack, sameItemBack, hudShowsCopyBack, droppedAgainAt, carriedAgainAt, goneAt, goneReason,
+            lifetime, lastStarSeen, lastCountdown, starLeft, enclosedSpot, baseForm, itemOnFloorAfter, itemInSlotAfter, phase,
+            events = starEvents, trace = starTrace, passed,
+        }, new JsonSerializerOptions { WriteIndented = true }));
+        Finish(frame);
     }
 
     private static void Next(uint frame, int next)

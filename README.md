@@ -45,7 +45,10 @@ preserved; generated assets and native dependencies remain in the private data r
   rarity. It cannot be picked up: inhale it and swallow it to copy that ability;
   spitting it out puts it back. While copied, the ability's item fills a weapon
   slot and the HUD. Its passives (affixes such as bleed or the arrow shot) act on
-  copy attacks like a weapon's (#57). See
+  copy attacks like a weapon's (#57). Losing the copy (a hit or a discard) puts
+  the item on the dropped ability star, which lasts 7 seconds: swallowing the
+  star again gives back that same item, with its level, quality and affixes;
+  when the star runs out, the item is gone (#68). See
   [ability items](docs/GAMEPLAY_FIDELITY.md#ability-items-intentional-addition).
 - Mutations that need Dead Cells weapons, ammo or skill use (Barbed Tips, Ripper,
   the backpack mutations, Kill Rhythm, Ranger's Gear, Scheme, Ammo, Support,
@@ -80,7 +83,8 @@ preserved; generated assets and native dependencies remain in the private data r
   still moves them through the level: spit stars burst on walls, the discarded
   star bounces. A star staggers each enemy it hits with the host dive's stun and
   knockback. A discarded star, harmless in the ROM, hits for the single
-  spit star's original 52 damage. This is a deliberate deviation; see
+  spit star's original 52 damage, and lasts 7 seconds instead of the ROM's 8
+  (#68). These are deliberate deviations; see
   [star projectiles](docs/GAMEPLAY_FIDELITY.md#star-projectiles).
 - Each ordinary enemy consumed by the original Cook also drops one Dead Cells
   healing food item through the game's own loot drop. Cook's original damage is
