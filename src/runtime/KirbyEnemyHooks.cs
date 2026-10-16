@@ -33,6 +33,7 @@ internal static class KirbyEnemyHooks
         if (mob) mobIdle = 0; else otherIdle = 0;
         if (mob && !mobs)
         {
+            DccmDetours.Attach("en.Mob.canUpdate", "en.Mob.fixedUpdate");
             // The level checks canUpdate before invoking subclass updates. Mob's normal
             // implementation ignores isFreeze whenever it has an attack target. A held
             // mob stops here, so Entity.canUpdate is never asked about one.
@@ -42,6 +43,7 @@ internal static class KirbyEnemyHooks
         }
         if (!mob && !others)
         {
+            DccmDetours.Attach("Entity.canUpdate", "en.Bullet.fixedUpdate", "en.Grenade.fixedUpdate");
             // Bullets, grenades and items inherit Entity.canUpdate. A projectile's own
             // fixedUpdate moves, collides and detonates it, so it is skipped while inhaled.
             Hook_Entity.canUpdate += EntityCanUpdate;
@@ -51,6 +53,7 @@ internal static class KirbyEnemyHooks
         }
         if (!positions)
         {
+            DccmDetours.Attach("Entity.updatePositionXY");
             Hook_Entity.updatePositionXY += UpdatePositionXY;
             positions = true;
         }
@@ -59,7 +62,9 @@ internal static class KirbyEnemyHooks
     /// <summary>
     /// Remove the hooks nothing held needs any more. Called once between host
     /// frames, never from inside a hooked function: staying installed longer only
-    /// costs time, as a handler with nothing held calls straight through.
+    /// costs time, as a handler with nothing held calls straight through. DCCM
+    /// keeps an unhooked function detoured into .NET, so the detour of each one
+    /// removed is taken off, and written again before it is next added (#178).
     /// </summary>
     internal static void Relax(bool mobHeld, bool otherHeld)
     {
@@ -69,6 +74,7 @@ internal static class KirbyEnemyHooks
         {
             Hook_Mob.canUpdate -= MobCanUpdate;
             Hook_Mob.fixedUpdate -= MobFixedUpdate;
+            DccmDetours.Detach("en.Mob.canUpdate", "en.Mob.fixedUpdate");
             mobs = false;
         }
         if (others && otherIdle > Linger)
@@ -76,11 +82,13 @@ internal static class KirbyEnemyHooks
             Hook_Entity.canUpdate -= EntityCanUpdate;
             Hook_Bullet.fixedUpdate -= BulletFixedUpdate;
             Hook_Grenade.fixedUpdate -= GrenadeFixedUpdate;
+            DccmDetours.Detach("Entity.canUpdate", "en.Bullet.fixedUpdate", "en.Grenade.fixedUpdate");
             others = false;
         }
         if (positions && !mobs && !others)
         {
             Hook_Entity.updatePositionXY -= UpdatePositionXY;
+            DccmDetours.Detach("Entity.updatePositionXY");
             positions = false;
         }
     }
