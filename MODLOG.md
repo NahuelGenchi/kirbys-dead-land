@@ -2411,3 +2411,27 @@ the all-ability rendering tests as full gameplay acceptance.
   +33% to +67% copy damage). With the filter off it listed "Rusty Sword I".
 - Not run: a forge NPC in a passage, a shield or a Legendary item in the forge,
   `ForgeRefine1`, the owner's launcher.
+
+## 2026-10-16 — inside a Dead Cells frame, against the Beheaded's (#174)
+
+- Dead Cells v35 read the way the ROM was, read-only: `hlboot.dat` (SHA-256
+  `59350cad…`) disassembled with crashlink into a private index (37,448
+  functions), DCCM 35.13.6 read as IL. Disassembly, index and notes stay in
+  `research/dc-re` in the private data root. docs/HOST_INTERNALS.md records the
+  frame loop, the 30 Hz entity loop, level generation and loading, the two
+  collectors, DCCM's hook layer and what each kind of mod call costs.
+- Findings: a hooked host function costs about 2 µs and 920 B a call through
+  DCCM's managed path and leaves a finalizable object, so nearly every .NET
+  collection is a blocking generation-1 one of 6–8 ms; removing a handler leaves
+  the function detoured into .NET for the session; the game runs the
+  workstation collector, not the server one this record claimed.
+- Lab tooling: `KIRBY_LAB_PERF=quiet`, `_HOST`, `_HOOKS`, `_ALLOC`,
+  `KIRBY_LAB_BARE`, `KIRBY_LAB_SEED`, `KIRBY_LAB_REAL_KEYS`, and
+  `launch_runtime.py --gpu`, `--shader-cache` and `--crash-dump`.
+- Live (`repros/perf-174-kirby`, `repros/perf-174-beheaded`, seed 174, one run
+  each): Kirby moving, software drawing, 108.1 fps, 126.5 KB a frame, 108.7
+  hooked calls a frame (`HSprite.draw` 78.9), 47 collections of 7.4 ms; the
+  Beheaded 125.8 fps and 134.6 KB; Dead Cells alone 137.6 fps and 39.3 KB. On
+  the GPU 1,092.9, 1,272.7 and 1,853.4 fps. docs/PERFORMANCE.md has the tables
+  and the fixes ranked: #175, #178, #176, #177.
+- Not run: windowed play, more than one run of each, level load times.

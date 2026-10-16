@@ -69,6 +69,7 @@ def main() -> None:
     parser.add_argument('--seconds', type=int, help='Offscreen test duration, default 45 seconds.')
     parser.add_argument('--gpu', action='store_true', help='Draw the offscreen test on the GPU instead of in software.')
     parser.add_argument('--shader-cache', action='store_true', help='Keep the GL driver\'s shader cache in the lab\'s cache folder for this test, as later runs would.')
+    parser.add_argument('--crash-dump', choices=['heap', 'small', 'off'], default='heap', help='What a crashing offscreen test writes: a dump with the heap (about the size of the game\'s memory), a small one with the threads\' stacks, or none.')
     parser.add_argument('--toolkit', type=Path, default=Path.home() / 'Games/mods/universal-modder')
     args = parser.parse_args()
     if args.play and (args.input_plan or args.start_game or args.resume_game or args.save_after or args.seconds is not None or args.capture_fps):
@@ -210,6 +211,13 @@ def main() -> None:
                     'ALSOFT_DRIVERS': 'null', 'LIBGL_ALWAYS_SOFTWARE': '1',
                     'DOTNET_DbgEnableMiniDump': '1', 'DOTNET_DbgMiniDumpType': '2',
                     'DOTNET_DbgMiniDumpName': str(run / 'crash-%p.dmp')})
+        # A dump with the heap is as large as the game's memory (6-7 GB), and the
+        # crashed game holds that memory until it is written.
+        if args.crash_dump == 'small':
+            env['DOTNET_DbgMiniDumpType'] = '1'
+        elif args.crash_dump == 'off':
+            for key in ['DOTNET_DbgEnableMiniDump', 'DOTNET_DbgMiniDumpType', 'DOTNET_DbgMiniDumpName']:
+                env.pop(key)
         if args.shader_cache:
             env.pop('MESA_SHADER_CACHE_DISABLE')
         if args.gpu:
