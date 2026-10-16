@@ -69,8 +69,8 @@ public sealed unsafe class KirbySpriteRenderer : IDisposable
         this.hero = hero ?? throw new ArgumentNullException(nameof(hero));
         backgroundEffects = new NdsBackgroundEffects(hero);
         if (flashStrength < 1) softener = new PaletteFlashSoftener(2, flashStrength);
-        // Body pixels are supplied by the original machine. KirbyHostVisuals
-        // skips the host body sprite; weapon pixels are redrawn separately.
+        // Body pixels are supplied by the original machine. The host body sprite
+        // draws the outfit's blank page; weapon pixels are redrawn separately.
     }
 
     private static void ReadGpu(NdsRuntime nds, uint address, byte[] data)

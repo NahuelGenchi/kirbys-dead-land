@@ -7,7 +7,19 @@ import hashlib
 import fcntl
 from pathlib import Path
 import shutil
+import sys
 from setup_runtime import DEFAULT_ROOT, DCCM_VERSION
+
+
+def blank_outfit_page(pack: Path, project: Path) -> bool:
+    """Whether an outfit pack's in-game page is blank, as the runtime expects (#175)."""
+    sys.path.insert(0, str(project / 'tools'))
+    from build_outfit import MODEL, Pak, image_read
+    pak = Pak(pack)
+    try:
+        return image_read(pak, f'atlas/{MODEL}0.png').getbbox() is None
+    finally:
+        pak.file.close()
 
 
 def main() -> None:
@@ -35,6 +47,13 @@ def main() -> None:
     built = project / 'src/runtime/bin/Release/net10.0/output/KirbySuperStarUltra'
     if not (built / 'Kirby.Runtime.dll').is_file():
         raise SystemExit('First run scripts/setup_runtime.py --build.')
+    mod = lab / 'coremod/mods/KirbySuperStarUltra'
+    outfit = args.outfit_pack or mod / 'outfit.pak'
+    # The runtime no longer hides the outfit's host sprites itself; an older pack
+    # would draw its static fallback pose over Kirby.
+    if args.original_runtime and outfit.is_file() and not blank_outfit_page(outfit, project):
+        raise SystemExit(f'{outfit} predates the blank in-game outfit page (#175). '
+                         'Rebuild it with tools/build_outfit.py and stage it with --outfit-pack.')
     if not (game / 'hlboot.dat').is_file() or not (game / 'steam.hdll').is_file():
         raise SystemExit('Expected the owned native Linux Steam game with hlboot.dat and steam.hdll.')
     # The official SDK bundle includes an optional emulator. It is not required
@@ -52,7 +71,6 @@ def main() -> None:
     for relative in ['core/host/startup/DeadCellsModding', 'core/native/linux-x64/hl']:
         executable = lab / 'coremod' / relative
         executable.chmod(executable.stat().st_mode | 0o111)
-    mod = lab / 'coremod/mods/KirbySuperStarUltra'
     shutil.copytree(built, mod, dirs_exist_ok=True)
     if args.assets:
         if not args.assets.is_file():

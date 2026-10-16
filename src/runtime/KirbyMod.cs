@@ -293,7 +293,6 @@ public sealed class KirbyMod(ModInfo info) : ModBase(info), IOnHeroUpdate,
     void IOnFrameUpdate.OnFrameUpdate(double dt)
     {
         if (provider is null) return;
-        KirbyHostVisuals.OnFrame();
         NativeProvider?.OnHostFrame(dt);
         var native = NativeProvider;
         var held = native?.Enemies.Held ?? default;
