@@ -66,84 +66,106 @@ internal static unsafe class KirbyInput
     }
     private static int Get(ArrayBytes_Int? a, int index) => a is not null && (uint)index < (uint)a.length
         ? ((int*)a.bytes)[index] : -1;
-    public static bool Down(ControllerAccess access, int action) => KeyDown(access, action) || PadDown(access, action);
-    private static bool KeyDown(ControllerAccess access, int action)
+
+    /// <summary>
+    /// The binding arrays, input modes and key states one read uses, taken from
+    /// the host once (#176). Asking the host again for each action made about
+    /// half a kilobyte of managed garbage per action: a static host function
+    /// such as <c>Key.isDown</c> is a new delegate on every access.
+    /// </summary>
+    private readonly struct Bindings
     {
-        Controller c = access.parent;
-        BindingProfiles b = c.get_bindings();
-        if ((c.mode & Controller.Class.ENABLE_KEY) != 0)
-            foreach (var a in new[] { b.primary, b.secondary, b.third })
-            {
-                int key = Get(a, action);
-                if (key >= 0 && dc.hxd.Key.Class.isDown(key)) return true;
-            }
-        return false;
+        private readonly Controller controller;
+        // Keyboard bindings (primary, secondary, third), then controller ones (A, B, C).
+        private readonly ArrayBytes_Int? key0, key1, key2, pad0, pad1, pad2;
+        // hxd.Key.keyPressed: hxd.Key.isDown(code) is keyPressed[code] > 0, 0 past its end.
+        private readonly ArrayBytes_Int? pressed;
+        public readonly bool Keys, Pad;
+
+        public Bindings(ControllerAccess access)
+        {
+            controller = access.parent;
+            BindingProfiles b = controller.get_bindings();
+            int mode = controller.mode;
+            Keys = (mode & Controller.Class.ENABLE_KEY) != 0;
+            Pad = (mode & Controller.Class.ENABLE_PAD) != 0;
+            key0 = b.primary; key1 = b.secondary; key2 = b.third;
+            pad0 = b.padA; pad1 = b.padB; pad2 = b.padC;
+            pressed = Keys ? dc.hxd.Key.Class.keyPressed : null;
+        }
+
+        public bool IsDown(int key) => Get(pressed, key) > 0;
+
+        public int KeyOf(int profile, int action) => Get(profile switch { 0 => key0, 1 => key1, _ => key2 }, action);
+        public int ButtonOf(int profile, int action) => Get(profile switch { 0 => pad0, 1 => pad1, _ => pad2 }, action);
+        public bool PadIsDown(int button) => controller.padIsDown(button);
+
+        public bool Down(int action) => KeyDown(action) || PadDown(action);
+        public bool KeyDown(int action)
+        {
+            if (Keys)
+                for (int profile = 0; profile < 3; profile++)
+                {
+                    int key = KeyOf(profile, action);
+                    if (key >= 0 && IsDown(key)) return true;
+                }
+            return false;
+        }
+        public bool PadDown(int action)
+        {
+            if (Pad)
+                for (int profile = 0; profile < 3; profile++)
+                {
+                    int button = ButtonOf(profile, action);
+                    if (button >= 0 && controller.padIsDown(button)) return true;
+                }
+            return false;
+        }
     }
-    private static bool PadDown(ControllerAccess access, int action)
-    {
-        Controller c = access.parent;
-        BindingProfiles b = c.get_bindings();
-        if ((c.mode & Controller.Class.ENABLE_PAD) != 0)
-            foreach (var a in new[] { b.padA, b.padB, b.padC })
-            {
-                int key = Get(a, action);
-                if (key >= 0 && c.padIsDown(key)) return true;
-            }
-        return false;
-    }
+
     /// <summary>
     /// Dodge splits by key: a Shift key slides (Kirby's roll), and every other
     /// key bound to Dodge (Ctrl by default) guards. The controller's Dodge
     /// button slides in the controller layout and guards without it.
     /// </summary>
-    private static (bool Guard, bool Slide) DodgeDown(ControllerAccess access)
+    private static (bool Guard, bool Slide) DodgeDown(in Bindings input)
     {
-        Controller c = access.parent;
-        BindingProfiles b = c.get_bindings();
         bool guard = false, slide = false;
-        if ((c.mode & Controller.Class.ENABLE_KEY) != 0)
-            foreach (var a in new[] { b.primary, b.secondary, b.third })
+        if (input.Keys)
+            for (int profile = 0; profile < 3; profile++)
             {
-                int key = Get(a, DodgeAction);
-                if (key < 0 || !dc.hxd.Key.Class.isDown(key)) continue;
+                int key = input.KeyOf(profile, DodgeAction);
+                if (key < 0 || !input.IsDown(key)) continue;
                 if ((key & 0xFF) == ShiftKey) slide = true; else guard = true;
             }
-        if ((c.mode & Controller.Class.ENABLE_PAD) != 0)
-            foreach (var a in new[] { b.padA, b.padB, b.padC })
+        if (input.Pad)
+            for (int profile = 0; profile < 3; profile++)
             {
-                int key = Get(a, DodgeAction);
-                if (key < 0 || !c.padIsDown(key)) continue;
+                int button = input.ButtonOf(profile, DodgeAction);
+                if (button < 0 || !input.PadIsDown(button)) continue;
                 if (ControllerLayout) slide = true; else guard = true;
             }
         return (guard, slide);
     }
-    private static bool JumpOnlyFromUp(ControllerAccess access)
+    private static bool JumpOnlyFromUp(in Bindings input)
     {
-        Controller c = access.parent;
-        BindingProfiles b = c.get_bindings();
         bool any = false;
-        if ((c.mode & Controller.Class.ENABLE_KEY) != 0)
-        {
-            ArrayBytes_Int[] keys = [b.primary, b.secondary, b.third];
-            foreach (var array in keys)
+        if (input.Keys)
+            for (int profile = 0; profile < 3; profile++)
             {
-                int key = Get(array, 0);
-                if (key < 0 || !dc.hxd.Key.Class.isDown(key)) continue;
-                if (!keys.Any(other => Get(other, 10) == key)) return false;
+                int key = input.KeyOf(profile, 0);
+                if (key < 0 || !input.IsDown(key)) continue;
+                if (!(input.KeyOf(0, 10) == key || input.KeyOf(1, 10) == key || input.KeyOf(2, 10) == key)) return false;
                 any = true;
             }
-        }
-        if ((c.mode & Controller.Class.ENABLE_PAD) != 0)
-        {
-            ArrayBytes_Int[] buttons = [b.padA, b.padB, b.padC];
-            foreach (var array in buttons)
+        if (input.Pad)
+            for (int profile = 0; profile < 3; profile++)
             {
-                int button = Get(array, 0);
-                if (button < 0 || !c.padIsDown(button)) continue;
-                if (!buttons.Any(other => Get(other, 10) == button)) return false;
+                int button = input.ButtonOf(profile, 0);
+                if (button < 0 || !input.PadIsDown(button)) continue;
+                if (!(input.ButtonOf(0, 10) == button || input.ButtonOf(1, 10) == button || input.ButtonOf(2, 10) == button)) return false;
                 any = true;
             }
-        }
         return any;
     }
     public static ushort Read(KirbySession session)
@@ -153,30 +175,32 @@ internal static unsafe class KirbyInput
         DiveButton = false;
         JumpFromUpOnly = false;
         SlideButton = false;
-        // The host Heal binding (F by default) fires the stored limited-use ability (#102).
-        KirbyFSlot.Held = Available(h) && Down(h.controller, HealAction);
-        if (TestOverride?.Invoke(session) is ushort test) return WithShieldGuard(session, test);
-        if (!Available(h)) return 0;
+        bool available = Available(h);
         var c = h.controller;
-        DiveButton = Down(c, DiveAction);
+        Bindings input = available ? new Bindings(c) : default;
+        // The host Heal binding (F by default) fires the stored limited-use ability (#102).
+        KirbyFSlot.Held = available && input.Down(HealAction);
+        if (TestOverride?.Invoke(session) is ushort test) return WithShieldGuard(session, test, available ? input : null);
+        if (!available) return 0;
+        DiveButton = input.Down(DiveAction);
         ushort keys = 0;
-        if (Down(c, 0)) keys |= 1; // DS A: original jump, flight, slide combinations.
-        (bool guard, bool slide) = DodgeDown(c);
+        if (input.Down(0)) keys |= 1; // DS A: original jump, flight, slide combinations.
+        (bool guard, bool slide) = DodgeDown(input);
         if (guard) keys |= 512; // DS L: original guard.
         SlideButton = slide; // Down + A on the ground: original slide (KirbyNdsProvider.Step).
-        if (KeyDown(c, 4)) keys |= 2; // Skill 1: original inhale/ability/spit.
+        if (input.KeyDown(4)) keys |= 2; // Skill 1: original inhale/ability/spit.
         // The weapon buttons already attack on a controller: its Skill 1 guards.
-        if (PadDown(c, 4)) keys |= (ushort)(ControllerLayout ? 512 : 2);
+        if (input.PadDown(4)) keys |= (ushort)(ControllerLayout ? 512 : 2);
         // DS SELECT: original copy discard, verified against the ROM. A controller's Skill 2 must be held.
-        bool padDiscard = PadDown(c, 5);
-        if (KeyDown(c, 5) || (ControllerLayout ? discard.Update(padDiscard, Lib_std.sys_time()) : padDiscard)) keys |= 4;
-        if (Down(c, 28)) keys |= 1024; // DS X: create/return the original CPU helper.
-        if (Down(c, 11)) keys |= 32;
-        if (Down(c, 13)) keys |= 16;
+        bool padDiscard = input.PadDown(5);
+        if (input.KeyDown(5) || (ControllerLayout ? discard.Update(padDiscard, Lib_std.sys_time()) : padDiscard)) keys |= 4;
+        if (input.Down(28)) keys |= 1024; // DS X: create/return the original CPU helper.
+        if (input.Down(11)) keys |= 32;
+        if (input.Down(13)) keys |= 16;
         bool digitalHorizontal = (keys & 48) != 0;
         double stickX = 0;
-        if (Down(c, 10)) keys |= 64;
-        if (Down(c, 12)) keys |= 128;
+        if (input.Down(10)) keys |= 64;
+        if (input.Down(12)) keys |= 128;
         // Original DS directions are digital. Honour the selected movement stick
         // and existing dead zone when turning host analog input into DS directions.
         if (c.parent.gc?.device is { } device && (c.parent.mode & Controller.Class.ENABLE_PAD) != 0)
@@ -203,7 +227,7 @@ internal static unsafe class KirbyInput
             if ((stick & 48) != 0) stickX = Math.Abs(tilt[0]);
         }
         AnalogWalk = !digitalHorizontal && stickX > 0 && stickX < AnalogDashTilt;
-        JumpFromUpOnly = (keys & 1) != 0 && JumpOnlyFromUp(c);
+        JumpFromUpOnly = (keys & 1) != 0 && JumpOnlyFromUp(input);
         if (dc.Main.Class.ME.options.invertPlayerMovements)
         {
             ushort directions = (ushort)(keys & 240);
@@ -214,20 +238,23 @@ internal static unsafe class KirbyInput
         for (int slot = 0; slot < h.inventory.nbWeapons; slot++)
         {
             var item = h.inventory.getEquippedWeaponOn(slot);
-            if (item?.hasTag("Shield".AsHaxeString()) == true) continue;
-            if (Down(c, slot + 2)) keys |= 2;
+            if (item?.hasTag(ShieldTag) == true) continue;
+            if (input.Down(slot + 2)) keys |= 2;
         }
-        return WithShieldGuard(session, keys);
+        return WithShieldGuard(session, keys, input);
     }
-    private static ushort WithShieldGuard(KirbySession session, ushort keys)
+    private static dc.String? shieldTag;
+    // Built once: each new host string is a host allocation and a managed wrapper.
+    private static dc.String ShieldTag => shieldTag ??= "Shield".AsHaxeString();
+    private static ushort WithShieldGuard(KirbySession session, ushort keys, Bindings? input)
     {
         var hero = session.Hero;
         for (int slot = 0; slot < hero.inventory.nbWeapons; slot++)
         {
             var item = hero.inventory.getEquippedWeaponOn(slot);
-            if (item?.hasTag("Shield".AsHaxeString()) == true &&
+            if (item?.hasTag(ShieldTag) == true &&
                 session.Rules.CanUse(HostWeaponKind.Shield, item.permanentId.ToString(CultureInfo.InvariantCulture)) &&
-                Down(hero.controller, slot + 2)) keys |= 512;
+                (input ?? new Bindings(hero.controller)).Down(slot + 2)) keys |= 512;
         }
         // The source guard handles native body contact while the same held
         // shield independently follows the host's real parry/counter path.
