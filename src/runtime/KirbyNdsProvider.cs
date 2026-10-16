@@ -565,6 +565,8 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         nint level = hero._level.HashlinkPointer;
         if (sourceLevel != 0 && sourceLevel != level)
         {
+            keptStars.Clear();
+            foreach (var star in enemies.AbilityStars) keptStars.Add(star.Address);
             enemies.Clear(nds!);
             nds!.CleanupRoom();
             window = null;
@@ -1038,6 +1040,37 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         }
         nds!.World(cells, targetX, targetY);
         window = (originX, originY);
+        GatherStars();
+    }
+    // Ability stars the original had when the host level changed, until the new level's first window.
+    private readonly List<uint> keptStars = [];
+    /// <summary>
+    /// The window of a new host level rebases the original's objects with
+    /// Kirby, so an ability star keeps its place beside him, which in the new
+    /// level can be inside terrain. The original lifts a star that is inside
+    /// terrain about 100 px a frame without counting it down, and above the
+    /// 9-row window no cell is free, so it rose out of reach until it left, its
+    /// item with it (run 20261016-020236, bridge case star_level_change). Each
+    /// star comes through the exit with Kirby instead: it goes on from his
+    /// position, where the host just put him.
+    /// </summary>
+    private void GatherStars()
+    {
+        if (keptStars.Count == 0) return;
+        NdsState kirby = nds!.State;
+        Span<byte> position = stackalloc byte[8];
+        Span<byte> update = stackalloc byte[4];
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(position, kirby.XRaw);
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(position[4..], kirby.YRaw);
+        foreach (uint star in keptStars)
+        {
+            nds.Read(star + 0x30, update);
+            if (System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(update) != StarProjectiles.AbilityUpdate) continue;
+            nds.Write(star + AbilityStar.PositionOffset, position);
+            nds.Write(star + AbilityStar.DrawnOffset, position);
+            Diagnostic?.Invoke("star-gathered", new { star, kirby.XRaw, kirby.YRaw });
+        }
+        keptStars.Clear();
     }
     /// <summary>
     /// Keep the terrain window where it is while the original is inside a logic

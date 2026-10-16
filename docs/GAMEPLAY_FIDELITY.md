@@ -611,7 +611,7 @@ multiplier.
 
 The bonus ends whenever the copy is lost: a hit that knocks it off or a
 discard (unless Kirby swallows the dropped star again within its 7 s, which
-gives back the same Legendary item, #68), creating a helper, spitting the Elite
+gives back the same Legendary item, #68, checked live in #172), creating a helper, spitting the Elite
 out before swallowing, or a new run. It survives saves and biome transitions.
 Ordinary enemies keep the uniform random roll and give a base item, so a Sword
 copied from them has no bonus beyond its item level. Bosses are unchanged because they resist inhale. Known limit: source
@@ -2052,10 +2052,15 @@ addition built from host items and the original inhale and swallow.
   a star's item that is not chosen is gone. When the star runs out, or leaves the
   original any other way, its item is gone with it. A copy lost without a star
   loses its item 10 frames later, as before: Sleep, which the original ends by
-  itself, and making a helper. A star the original keeps through a host level
-  change keeps its item; a new run, a restored save and a revive replace the
-  original machine, and its stars and their items with it. Every ability star
-  lasts 7 s, with or without an item.
+  itself, and making a helper. A host level change keeps the original's stars
+  and their items, and the new level's first window puts each star at Kirby's
+  position, so it comes through the exit with him (#172). Left at its place
+  beside him, as the window keeps the original's other objects, a star could be
+  inside the new level's terrain: the original then lifts it about 100 px a frame
+  without counting it down until it leaves the 9-row window, its item with it
+  (run `20261016-020236`, bridge case `star_level_change`). A new run, a
+  restored save and a revive replace the original machine, and its stars and
+  their items with it. Every ability star lasts 7 s, with or without an item.
 - **Forge (#58).** The passage forge (`ForgeUnderground`, the Minor Forge)
   lists each item in the weapon slots, the backpack and the skill slots that can
   take a "+" (`InventItem.canBeForged`), with a reroll and an upgrade for gold.
@@ -2069,7 +2074,8 @@ addition built from host items and the original inhale and swallow.
   level 2, so not for a level I base item. The upgrade adds a "+" and
   `ForgeRefined`, and possibly one more affix as for any weapon; the host allows
   one per item (two once the Collector entry `ForgeRefine1` is bought), up to
-  three "+", never on a Legendary item. Each takes the host's price. Copy damage
+  three "+", never on a Legendary item. Each takes the host's price, which it
+  derives from the item's own cost: 0 for the starting shield. Copy damage
   reads the slot item's bonus every frame, so an upgrade from I+ to I++ raises
   it from +33% to +67% at once, and the forge's item card shows the ability's
   text with that line. The F slot's item (#102) is outside the host inventory,
@@ -2085,13 +2091,19 @@ reload, the original swallow gives a new base item of that ability. Nor is a
 star's item: a star restored with a save carries none, so re-inhaling it gives a
 new base item. A star that bounces off a ledge into a drop deeper than the
 original's 9-row window leaves the original early, and its item with it (run
-`20261015-224800`, after 217 frames). Not run live for #68: a hit that knocks the
-copy off (headless bridge hurts never did; the star is the same object), making
-a helper, a star in a mouthful with an enemy or another item, an Elite's
-Legendary item on a star, and a star kept through a level change. The forge was
-run live by opening its window from the probe, not at a forge in a passage, and
-only on a Sword item (#58): a shield, a Legendary item and `ForgeRefine1` were
-not. Only the Prisoners' Quarters start level and items the
+`20261015-224800`, after 217 frames). Run live for #172
+([runtime record](RUNTIME_LAUNCH.md#dropped-star-keeps-its-item-68)): a host
+hit that knocked the copy off (above half health the original drops it on 1 hit
+in 12, so #68's few headless hurts kept it; the twelfth in a row knocked it off,
+[ROM internals](ROM_INTERNALS.md#copy-loss-on-a-hit)), an Elite's Legendary
+item on a star, and a star through a level change. Not run live: making a
+helper, a star in a mouthful with an enemy or another item, and a save while a
+star is out. The forge was run live from the probe and through a passage forge
+NPC, on a Sword item, a Legendary Sword item and the starting shield (#58,
+#172): it listed the shield beside the copy's item, refused the Legendary
+item's upgrade, kept it Legendary on a reroll, and gave the shield a "+". The
+NPC's first meeting (the probe marks it met) and `ForgeRefine1` were not run.
+Only the Prisoners' Quarters start level and items the
 probe created were checked live; other biomes' loot, chests, timed doors, Boss
 Rush and the Collector's armory were not exercised.
 

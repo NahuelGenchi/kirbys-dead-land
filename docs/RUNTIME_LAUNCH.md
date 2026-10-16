@@ -981,9 +981,63 @@ star fields: at the Select frame the ability star holds copy 18, countdown 480
 and state 1; the inhale catches it at frame 57 (countdown 423, state 0), its
 record is gone at 58 and the mouth fills at 69.
 
-Not run live: a hit that knocks the copy off, making a helper, a star in a
-mouthful with an enemy or another item, an Elite's Legendary item on a star, a
-save while a star is out, and a star kept through a level change.
+The cases left open were run live for #172. `KIRBY_LAB_ITEMS_STAR=hit`, `elite`
+and `level` end as `catch` does (catch, swallow, second discard, star runs out).
+`hit` leaves the discard to a host Zombie with 30,000 life, held 1.5 cells in
+front of Kirby with its AI locked. Every 2 s it hits Kirby through the host's
+own hit (`AttackUtils.hit` with a `createFromMob` attack, as `LabCombatProbe`
+sends one), which reaches `Hero.applyAttackResult` and the original hurt as a
+swing does. The probe sets Kirby's life back to full after each hit: above half
+health the original knocks the copy off 1 time in 12
+([ROM internals](ROM_INTERNALS.md#copy-loss-on-a-hit)). Once the copy is off it
+removes the Zombie and catches the star. `elite` swallows an Elite Zombie, held
+the same way, instead of the floor item, and keeps the Legendary item it gives
+as it is. `level` discards beside the first unlocked level exit, takes the exit
+once the star carries the item, and catches the star in the next level.
+
+Separate root `repros/live-68-58-20261016` (`research`, `oracle`, `rom` and
+`dotnet` linked from the private root), staged from this branch with the outfit
+pack `8e44122d…` and the shared bridge `bae16c0e…` (this branch does not change
+`src/nds`); runtime DLL
+`94a0a2632f3e90a706ac26f75eb5e4058636050c8e8209fb2ad927548a50dc67` for runs
+`20261016-015640` to `020236`, and
+`a38020e9bc12d854994089afff080280cbf575b54369b6e917817c700900d16a`, with the
+level change fix below, from `20261016-021612` on:
+
+```sh
+KIRBY_LAB_ITEMS_STAR=hit python3 scripts/launch_runtime.py \
+  --data-root "$HOME/.local/share/kirby-dead-cells/repros/live-68-58-20261016" \
+  --seconds 200 --start-game --outfit KirbySuperStarUltra --input-plan items
+```
+
+| Run | Mode | Result |
+| :--- | :--- | :--- |
+| `20261016-015640` | hit | Host hits at source frames 4921, 5041 and 5161, each 76 → 68 health. The third knocked the copy off: at 5162 the star was first seen, its countdown written 480 → 420, and the item joined it in the same frame. Caught at 5220, in the mouth at 5240, copy back at 5276 with the same item (same object, level I, one "+", `Grenade`, bonus 0.333) in the slot and the HUD. The second star carried it from 5347 and ran out 433 frames later (5780). Item on no floor and in no slot. `passed: true` |
+| `20261016-020016` | elite | The Elite Zombie gave Sword with a Legendary item (level I, no "+", bonus 1.25; empowered). Discard at 4606: the star carried the item from that frame (480 → 420). Caught at 4672, in the mouth at 4691, copy back at 4728 with the same Legendary item, bonus 1.25, in the slot and the HUD. The re-caught copy is not empowered, which only decides whether a new copy item is made Legendary; the item and its bonus are back. The second star ran out 435 frames after its discard. `passed: true` |
+| `20261016-020236` | level | The star carried the item from the discard (4875); the exit to `T_SewerShort` was taken at 4905 (countdown 390) and the level changed at 5018 with the same star and its item. Kept at its place beside Kirby (16 px to his left and 96 px above his feet at the exit), the star did what a star inside terrain does in the bridge case below: it rose about 100 px a frame with its countdown held at 280, out of the 9-row window, and left the original at 5348, its item with it. The passage room is low there, but which cell held it was not read. Kirby never reached it. `passed: false` |
+| `20261016-021612` | level | With the fix: exit at 4909 (countdown 390), level changed at 5021, and in that frame the star was put at Kirby's position. Caught at 5025, in the mouth at 5026, copy back at 5063 with the same item (same object, level I, one "+", `Grenade`, bonus 0.333) in the slot and the HUD. In the passage the second star bounced in the room (tops 387 to 446) and ran out 433 frames after its discard (5134 → 5567). Item on no floor and in no slot. `passed: true` |
+
+These four runs and the first `hit` run below all ended by their time limit
+with saves unchanged and no fatal log lines.
+
+The first `hit` run, `20261016-015036`, let the Zombie act on its own: it leapt
+over Kirby, stood by the level's portal and never hit him in two minutes, so no
+hurt reached the original. The probe now holds it in place and sends its hits.
+
+Run `20261016-020236` found a runtime bug, fixed in #172. A new level's first
+window rebases the original's objects with Kirby, so a star keeps its place
+beside him, which in the new level can be inside terrain. The bridge case
+`star_level_change` (`tools/nds_tests.py`) shows what the original does then:
+with all but a pocket around Kirby solid, the star rose from y 66.75 to -1982 in
+20 frames with its countdown held at 441, because above the window no cell is
+free. `KirbyNdsProvider` now notes the original's ability stars when the host
+level changes and, after the new level's first window, puts each one at
+Kirby's position, where the host just placed him. Moved there (+0x78 and +0x80)
+in the same case, the star bounced inside the pocket (y 134 to 158.75) for 120
+frames and its countdown ran from 440 to 333.
+
+Not run live: making a helper, a star in a mouthful with an enemy or another
+item, and a save while a star is out.
 
 ### Forge (#58)
 
@@ -1020,11 +1074,37 @@ captured frame of the first run shows the Minor Forge with the Sword I++ card an
 only the reroll left (790 gold): one upgrade per item is the host's limit without
 `ForgeRefine1`.
 
-Not run live: a forge NPC in a passage (the probe opens the same window
-directly), a shield or a Legendary item in the forge, a profile with
-`ForgeRefine1`, a level I base item (the host offers no reroll below adjusted
-level 2), and copy damage measured on an enemy after the upgrade (it reads the
-item bonus #56 measured).
+Run again for #172 in the root `repros/live-68-58-20261016` above.
+`KIRBY_LAB_FORGE_LEGENDARY=1` first gives Kirby the starting shield
+(`StartShield`, the Old Wooden Shield) through the inventory, and makes the
+copy's item Legendary, otherwise the same Sword I+ with `BleedOnHit`. With the
+copy it picks the Legendary item's upgrade, then its reroll, then the shield's
+upgrade. `KIRBY_LAB_FORGE_NPC=1` takes the first unlocked exit after the swallow
+(or the one `KIRBY_LAB_EXIT` names), stands Kirby beside the passage's forge NPC
+(`SmallBlacksmith`) and calls its own `onActivate`, which opens the window; the
+window before the copy is still opened by the probe. This profile has never met
+the NPC, so the probe marks it met first (`progress = 1`): a first visit would
+play its meeting cinematic before the forge. Runtime DLL `a38020e9…` for
+`20261016-021905`, and `1c1675aedb28fa3d2eb821dab12127fbc999bd8a5c7a9e1cd8752c5ea9eeaed0`
+(the shield check takes the host's price as it is) for `20261016-022150`:
+
+```sh
+KIRBY_LAB_FORGE_NPC=1 KIRBY_LAB_FORGE_LEGENDARY=1 python3 scripts/launch_runtime.py \
+  --data-root "$HOME/.local/share/kirby-dead-cells/repros/live-68-58-20261016" \
+  --seconds 130 --start-game --outfit KirbySuperStarUltra --input-plan forge --capture-fps 5
+```
+
+| Run | Mode | Result |
+| :--- | :--- | :--- |
+| `20261016-021905` | Legendary, window from the probe | Before the copy the forge listed the shield ("Old Wooden Shield I", two choices) and hid the Rusty Sword. With the copy it listed `KirbyAbilitySword` ("Sword I-L", "+125% copy damage") and the shield, four choices. The Legendary item's upgrade was refused: no gold taken, no "+", no `ForgeRefined`. Its reroll took 830 gold and turned `BleedOnHit` into `FrontArrow` and `SlowDamage`; level I, one "+", Legendary and `Colorless` kept, `Rerolled` added, bonus 1.25 kept. The shield's upgrade made it "Old Wooden Shield I+" (`QualityUp`, `ForgeRefined`, `BleedShield`) and took no gold: the host prices both choices from the item's own cost (`InventItem.getForgeRefineCost` from `getDefaultPriceWithoutAffixes`), which is 0 for the starting shield. The copy kept the same item. `passed: false` only because the probe expected a price above 0 |
+| `20261016-022150` | Legendary, forge NPC | The start level had unlocked exits to `T_SewerShort`, `T_Greenhouse` and `T_Courtyard`; the `T_SewerShort` passage had the Collector, the forge NPC and the `PerkMaster`. The NPC's activation opened the forge. Same results: shield and Sword I-L listed with four choices, the Legendary upgrade refused, the reroll (830 gold) to `Grenade` and `DeathFire` with Legendary kept, the shield to I+ (`CounterAttack`, `ForgeRefined`) for 0 gold, and the same item the copy's after the forge closed. `passed: true` |
+
+Both ended by their time limit with saves unchanged and no fatal log lines.
+
+Not run live: the forge NPC's first meeting, a profile with `ForgeRefine1`, a
+level I base item (the host offers no reroll below adjusted level 2), a shield
+with a price, and copy damage measured on an enemy after the upgrade (it reads
+the item bonus #56 measured).
 
 ## Scroll claim (#80)
 

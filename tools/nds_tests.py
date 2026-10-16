@@ -440,6 +440,40 @@ def run_case(name,clock=1):
             assert filled is not None and filled>gone,(gone,filled)
             return {'original_select_drop':True,'original_star_reinhale_swallow':18,'star_spawn':{'frame':0,'copy':18,'countdown':480,'state':1},
                     'star_caught':{'frame':fields[-1][0],'countdown':fields[-1][2],'state':0},'star_record_gone':gone,'mouth_filled':filled}
+        if name=='star_level_change':
+            # #172: a host level change rebases the original's objects with Kirby,
+            # which can leave an ability star inside the new window's terrain. Here
+            # all but a pocket around Kirby turns solid: the original lifts the star
+            # out of the window without counting it down. Put back at Kirby's
+            # position (+0x78 and +0x80, as GatherStars does), it bounces on in the
+            # pocket and its countdown runs again.
+            transform(b,18);floor=[3 if y>=7 else 0 for y in range(9) for x in range(100)];star=None
+            def ability_stars():
+                return {h['owner'] for h in b.hits() if 0x02000000<=h['owner']<0x023ffff0 and struct.unpack('<I',b.read(h['owner']+0x30,4))[0]==0x02166a54}
+            def star_fields():
+                d=b.read(star,0x88);return struct.unpack_from('<i',d,0x84)[0]/65536,struct.unpack_from('<h',d,0x4c)[0],d[0x60]
+            for i in range(40):
+                state=b.state();b.world(floor,state['x_raw'],state['y_raw']);b.step(4 if i==0 else 0)
+                if star is None and ability_stars():star=min(ability_stars())
+            assert star is not None and b.state()['ability']==1
+            column=(b.state()['x_raw']>>16)//24;start=star_fields()
+            pocket=[0 if 5<=y<=6 and abs(x-column)<=1 else 3 for y in range(9) for x in range(100)]
+            assert pocket[int(start[0])//24*100+(struct.unpack('<i',b.read(star+0x80,4))[0]>>16)//24]==3,start
+            inside=[]
+            for i in range(20):
+                state=b.state();b.world(pocket,state['x_raw'],state['y_raw']);b.step(0);inside.append(star_fields())
+            assert all(f[1]==start[1] for f in inside) and inside[-1][0]<-1500 and star in ability_stars(),inside[-3:]
+            state=b.state();position=struct.pack('<ii',state['x_raw'],state['y_raw'])
+            b.write(star+0x80,position);b.write(star+0x78,position)
+            gathered=[]
+            for i in range(120):
+                state=b.state();b.world(pocket,state['x_raw'],state['y_raw']);b.step(0);gathered.append(star_fields())
+            assert star in ability_stars() and all(0<=f[0]<9*24 for f in gathered),gathered[-3:]
+            bouncing=sum(f[2]==1 for f in gathered)
+            assert gathered[0][1]-gathered[-1][1]>=90 and bouncing>=100,(gathered[0],gathered[-1],bouncing)
+            return {'start':{'y':start[0],'countdown':start[1]},'inside_terrain':{'frames':20,'y':inside[-1][0],'countdown':inside[-1][1]},
+                    'at_kirby':{'frames':120,'y_range':[min(f[0] for f in gathered),max(f[0] for f in gathered)],
+                                'countdown':[gathered[0][1],gathered[-1][1]],'bouncing_frames':bouncing}}
         if name=='wheelie_ride':
             transform(b,8);floor=[3 if y>=7 else 0 for y in range(9) for x in range(100)]
             def helper_position():
@@ -1356,7 +1390,7 @@ def main():
         result=run_case(args.case,args.arm9_clock)
         # The emulator's log shares stdout and may stop mid-line: start the result on its own line.
         print('\nRESULT '+json.dumps({'case':args.case,'result':result}),flush=True);return
-    cases=['scene_doors', 'far_shot_draw', 'room_food', 'proxy_birth_contact', 'proxy_birth_inhale', 'proxy_contact', 'proxy_contact_sword', 'proxy_touch_off', 'proxy_swallow_touch_off', 'proxy_suplex_touch_off', 'proxy_ice_detach', 'proxy_ice_release', 'proxy_lethal', 'motion', 'ladder', 'ladder_top', 'ladder_top_stomp', 'one_way', 'solid_ceiling', 'water', 'proxy_water', 'proxy_water_sword', 'proxy_water_below', 'hurt_water', 'proxy_swallow', 'hazard_spit', 'hazard_swallow', 'star_spit', 'star_spit_wall', 'star_big', 'star_ability', 'proxy_sword', 'proxy_reuse', 'proxy_cache', 'proxy_save', 'proxy_mix', 'mix_no_limited', 'boss_inhale', 'boss_suplex', 'boss_cook', 'boss_sword', 'proxy_capacity', 'copy_drop_reabsorb', 'wheelie_ride', 'proxy_suplex', 'proxy_cook', 'audio', 'hurt', 'hurt_lethal', 'hurt_cold', 'guard', 'health_invulnerable', 'health_sync', 'proxy_size', 'f_slot', 'f_slot_save', 'f_slot_plasma', 'move_mouthful', 'move_wade', 'helper_reaction', 'helper_move', 'helper_owns', 'obj_vram_block', 'gpu_block', 'main_screen_only', 'skip_idle_main', 'arm9_clock', 'recompiler', 'hit_pool', 'step_between_passes']
+    cases=['scene_doors', 'far_shot_draw', 'room_food', 'proxy_birth_contact', 'proxy_birth_inhale', 'proxy_contact', 'proxy_contact_sword', 'proxy_touch_off', 'proxy_swallow_touch_off', 'proxy_suplex_touch_off', 'proxy_ice_detach', 'proxy_ice_release', 'proxy_lethal', 'motion', 'ladder', 'ladder_top', 'ladder_top_stomp', 'one_way', 'solid_ceiling', 'water', 'proxy_water', 'proxy_water_sword', 'proxy_water_below', 'hurt_water', 'proxy_swallow', 'hazard_spit', 'hazard_swallow', 'star_spit', 'star_spit_wall', 'star_big', 'star_ability', 'proxy_sword', 'proxy_reuse', 'proxy_cache', 'proxy_save', 'proxy_mix', 'mix_no_limited', 'boss_inhale', 'boss_suplex', 'boss_cook', 'boss_sword', 'proxy_capacity', 'copy_drop_reabsorb', 'star_level_change', 'wheelie_ride', 'proxy_suplex', 'proxy_cook', 'audio', 'hurt', 'hurt_lethal', 'hurt_cold', 'guard', 'health_invulnerable', 'health_sync', 'proxy_size', 'f_slot', 'f_slot_save', 'f_slot_plasma', 'move_mouthful', 'move_wade', 'helper_reaction', 'helper_move', 'helper_owns', 'obj_vram_block', 'gpu_block', 'main_screen_only', 'skip_idle_main', 'arm9_clock', 'recompiler', 'hit_pool', 'step_between_passes']
     if not args.skip_abilities:cases += [f'ability-{i}' for i in range(2,26)]
     if args.arm9_clock!=1:return survey(cases,args.arm9_clock)
     results=[]
