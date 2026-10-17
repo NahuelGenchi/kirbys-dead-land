@@ -26,6 +26,8 @@ internal static unsafe class LabShieldHoldProbe
     private static int shieldAction = -1;
     private static readonly HashSet<int> directionKeys = [];
     private static bool? heldBeforePress, heldAfterRelax;
+    // Original frames polled while the probe held the shield (pressedFrames) and, of
+    // those, frames with the handler on; the input read runs several times a frame.
     private static int heldFrames, pressedFrames, chargingFrames, chargingHeldFrames, directionReads, ownerTurned;
     private static readonly List<string> events = [];
 
@@ -94,7 +96,6 @@ internal static unsafe class LabShieldHoldProbe
         {
             LabSmokeCapture.HostKey(hero, shieldAction, true);
             LabSmokeCapture.HostKey(hero, 11, held is >= LeftFrom and < LeftTo);
-            pressedFrames++;
             // The production reader turns the held keys into the original's buttons.
             return null;
         }
@@ -117,6 +118,7 @@ internal static unsafe class LabShieldHoldProbe
         bool charging = hostShield?.isCharging() == true;
         if (releaseAt is null)
         {
+            pressedFrames++;
             if (handler) heldFrames++;
             if (charging) { chargingFrames++; if (handler) chargingHeldFrames++; }
         }
