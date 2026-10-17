@@ -30,7 +30,7 @@ Relevant environment variables are used only by the lab helper:
 - `KIRBY_LAB_RESUME_GAME=1`: call the game's normal saved-run launch action once.
 - `KIRBY_LAB_SAVE_AFTER`: request a normal host save after this many original engine frames.
 - `KIRBY_LAB_OUTFIT`: outfit ID assigned before starting that private run.
-- `KIRBY_LAB_INPUT_PLAN`: `movement`, `combat`, `ability`, `visual`, `breakable`, `boss`, `crowd`, `aim`, `repro`, `hazard`, `stars`, `water`, `items`, `scroll`, `tentacle` or `arrival`, for a reproducible offscreen test. `repro` tests normal keyboard/controller bindings and keeps the normal tutorials. `items` is the ability item check (see [ability items](#ability-items-55)).
+- `KIRBY_LAB_INPUT_PLAN`: `movement`, `combat`, `ability`, `visual`, `breakable`, `boss`, `crowd`, `aim`, `shield`, `repro`, `hazard`, `stars`, `water`, `items`, `scroll`, `tentacle` or `arrival`, for a reproducible offscreen test. `repro` tests normal keyboard/controller bindings and keeps the normal tutorials. `items` is the ability item check (see [ability items](#ability-items-55)).
 - `KIRBY_LAB_CROWD_SIZE`: Zombies the `crowd` plan spawns, 1 to 31 (default 31), exposed as `--crowd-size`. Until #151 one Sword swing that hit 24 or more stopped the original. `boss-crowd.json` counts the frames that ended inside a pass since the crowd appeared (`unfinishedSinceSpawn`) and, 300 frames after it appeared, decides `passed`: 24 or more Zombies hit (30 of the 31 are bound at once) and at most 30 such frames. A stopped original ends every frame inside one. A death starts a new run; `passed` and `unfinishedSinceSpawn` keep the crowd's values.
 - `KIRBY_LAB_TEST_ABILITY`: optional source ability ID for the ability probe, exposed as `--probe-ability 2..25`. The probe prepares it through original inhale, supplied swallowed content, and Down before measuring combat. The separate `combat` probe uses a real enemy's random copy result.
 - `KIRBY_LAB_TEST_SCROLLS`: optional `B,T,S` scroll counts for the ability probe, exposed as `--probe-scrolls`. Before measuring, the probe adds that many real `BrutalityUp`, `TacticUp` and `SurvivalUp` items (`InventItem.fromItem`) through the normal inventory and calls the host's `Hero.computeTiers`. `ability-damage.json` then records the tiers, the host and core colorless multipliers, and each copy hit's source HP drop and host damage.
@@ -781,6 +781,13 @@ With the fix (runtime SHA-256 `15b0b560908f0627bb0131a3464690f047ed055704ba7f1ea
 | `20261005-215401` | Right | Hit `Normal`; the attack entered the next original collision tick |
 
 All three runs reached their time limit without fatal errors, and the real saves were unchanged. Holding the opposite direction while raising the shield was traced but not resolved (see [GAMEPLAY_FIDELITY.md](GAMEPLAY_FIDELITY.md)).
+
+The host reads the held direction for the shield only while it charges, inside the masked hero update, through `KirbyInput`'s handler on `HeroWeaponsManager.updateWeapon`. Since #188 that handler is added only while the shield's binding is down, or the assist mode attacks by itself, and taken off 30 host frames later once no weapon charges. `--input-plan shield` (`LabShieldHoldProbe`) checks it: it equips the starting shield through the inventory, holds its binding through the host's key table for 120 original frames with Left held from the 40th to the 80th, and writes `shield.json` and `shield-events.txt`. It passes when the handler is off before the press, on in every frame polled while the shield is held (the first excepted) and every frame it charges, the host reads a real direction key there, and the handler comes off after the release and stays off for 60 frames. Run `20261017-031430` (`repros/live-188-kirby`, seed 174) passed: 118 frames held and charging with the handler on, 1,074 direction reads, 40 shield turns while Left was held, the handler off 16 original frames after the release. It ended at the time limit with no fatal log and the real saves unchanged.
+
+```sh
+python3 scripts/launch_runtime.py --data-root ~/.local/share/kirby-dead-cells/repros/live-188-kirby \
+  --seconds 50 --start-game --outfit KirbySuperStarUltra --input-plan shield
+```
 
 ## Ability items (#55)
 
