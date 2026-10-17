@@ -2412,6 +2412,88 @@ the all-ability rendering tests as full gameplay acceptance.
 - Not run: a forge NPC in a passage, a shield or a Legendary item in the forge,
   `ForgeRefine1`, the owner's launcher.
 
+## 2026-10-16 — inside a Dead Cells frame, against the Beheaded's (#174)
+
+- Dead Cells v35 read the way the ROM was, read-only: `hlboot.dat` (SHA-256
+  `59350cad…`) disassembled with crashlink into a private index (37,448
+  functions), DCCM 35.13.6 read as IL. Disassembly, index and notes stay in
+  `research/dc-re` in the private data root. docs/HOST_INTERNALS.md records
+  the frame loop, the 30 Hz entity loop, level generation and loading, the two
+  collectors, DCCM's hook layer and what each kind of mod call costs.
+- Findings: a hooked host function costs about 2 µs and 920 B a call through
+  DCCM's managed path and leaves a finalizable object, so nearly every .NET
+  collection is a blocking generation-1 one of 6–8 ms; removing a handler
+  leaves the function detoured into .NET for the session; the game runs the
+  workstation collector, not the server one this record claimed.
+- Lab tooling: `KIRBY_LAB_PERF=quiet`, `_HOST`, `_HOOKS`, `_ALLOC`,
+  `KIRBY_LAB_BARE`, `KIRBY_LAB_SEED`, `KIRBY_LAB_REAL_KEYS`, and
+  `launch_runtime.py --gpu`, `--shader-cache` and `--crash-dump`.
+- Live (`repros/perf-174-kirby`, `repros/perf-174-beheaded`, seed 174, one run
+  each): Kirby moving, software drawing, 108.1 fps, 126.5 KB a frame, 108.7
+  hooked calls a frame (`HSprite.draw` 78.9), 47 collections of 7.4 ms; the
+  Beheaded 125.8 fps and 134.6 KB; Dead Cells alone 137.6 fps and 39.3 KB. On
+  the GPU 1,092.9, 1,272.7 and 1,853.4 fps. docs/PERFORMANCE.md has the tables
+  and the fixes ranked: #175, #178, #176, #177.
+- The four fixes together (`measure/all2`, two runs each unless said): moving
+  in software 126.3 → 43.9 KB a frame, 108.6 → 24.7 hooked calls, 9.11 →
+  8.37 ms; in the crowd 250.4 → 68.5 KB, 481.7 → 32.0 calls, 11.69 → 9.77 ms,
+  frames over 20 ms 1.0 → 0.19 a second; on the GPU 0.90 → 0.61 ms moving and
+  1.76 → 0.96 ms wading in the Greenhouse (569 → 1,037 fps).
+- The bridge alone, driven from Python like the runtime drives it: 0.94 ms a
+  step at the median, half of it recompiled ARM code, a sixth timers and the
+  event scheduler, an eighth the SPU. No bridge change: fast memory stays off.
+- Not run: windowed play, level load times, the owner's launcher.
+
+## 2026-10-16 — no hook on every host sprite draw (#175)
+
+- `KirbyHostVisuals` hooked `HSprite.draw`, the host's draw of every sprite,
+  to hide the outfit atlas's fallback pose: 78.9 hooked calls a frame moving,
+  135 in the crowd, about 200 wading in the Greenhouse, the Beheaded included.
+- The outfit's in-game page is now blank (`tools/build_outfit.py`); the skin
+  preview reads `kirbySuperStarUltraPreview0.png`. The hook and `OnFrame` are
+  gone. `scripts/stage_runtime.py --original-runtime` refuses an older pack.
+- Live (`repros/perf-174-kirby`, seed 174, quiet, software, two or three runs
+  each): moving, 126.3 → 53.7 KB a frame, 51 → 22 collections a minute,
+  108.6 → 29.8 hooked calls; in the crowd 250.4 → 123.0 KB, 96 → 47
+  collections, 481.7 → 340.8 calls, the mean frame 11.69 → 10.65 ms. Traces
+  matched the #174 build in all 2,907 shared original frames; the arrival and
+  the first moments of play look the same, with nothing of the outfit drawn.
+- Not run: the skin selector's preview, the owner's launcher, a window on the
+  GPU.
+
+## 2026-10-16 — DCCM's detour taken off unhooked host functions (#178)
+
+- Removing a DCCM handler leaves the function detoured into .NET for the
+  session (0.77 µs and 56 B a call): 280 calls a frame with no handler in the
+  crowd. Turning DCCM's direct route back on crashed the game after the held
+  enemies were let go in 3 of 4 crowd runs, so that version was dropped.
+- `DccmDetours` undoes the detour (`NativeHooks.HookHandle.Disable`) when
+  `KirbyEnemyHooks.Relax` leaves a function with no handler, writes it again
+  (`Enable`) before the next `Hold`, and remakes the manager's closure over
+  the new trampoline. Reflection; nothing changes if DCCM's fields are
+  missing.
+- Live (`repros/perf-174-kirby`, seed 174, crowd, quiet, software): 250.4 →
+  233.3 KB a frame, 96 → 79 collections a minute, 481.7 → 201.6 hooked calls
+  (280.0 → 0 with no handler), the mean frame 11.69 → 10.82 ms. No crash in
+  the 8 crowd runs with it, each the same fight (66 hits, 2,046 damage).
+- Not run: another mod hooking the same functions, a hold across a level
+  change, the owner's launcher.
+
+## 2026-10-16 — the controls read once per input read (#176)
+
+- `KirbyInput` asked the host for the bindings again for every action and
+  tested keys through `dc.hxd.Key.Class.isDown`, a new delegate on every
+  access. A read now takes the bindings, the modes and `hxd.Key.keyPressed`
+  once (`isDown(code)` is `keyPressed[code] > 0` in the bytecode).
+- Live (`repros/perf-174-kirby`, seed 174, quiet, software, two or three runs
+  each): with the lab's input a read went 20 µs, 1,704 B → 11 µs, 14 B; with
+  keys through the host's key table (`KIRBY_LAB_REAL_KEYS=1`) 73 µs,
+  13,948 B → 19 µs, 8 B, and 150.8 → 122.2 KB a frame. With real keys two #174
+  runs differed in 331 of 2,968 original frames (presses timed in host
+  milliseconds) and this branch's runs from them in 221 to 227; with the lab's
+  input all four fixes matched #174 in every frame.
+- Not run: a controller, the owner's launcher.
+
 ## 2026-10-16 — two hurtbox hooks dropped (#177)
 
 - `Hero.postUpdate` and `Entity.spriteUpdate` run from `Level.postUpdate`,
