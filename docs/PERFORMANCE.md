@@ -12,7 +12,7 @@ Three costs stood out on `main`.
 
 - The original frame itself, about 3 ms. The bridge uses melonDS's interpreter.
 - The read of OBJ VRAM after it, 1.3 ms: one bus read for each of 262,144 bytes.
-- Hooks on host functions that run for every entity. With a handler installed, each call of a hooked function costs about 2 µs more and leaves about 920 bytes of managed garbage, whatever the handler decides (measured in the game on `Mob.canUpdate`: 4.4 µs and 1,840 bytes hooked at `Mob` and `Entity`, 0.77 µs and 56 bytes after the handlers are removed, 0.38 µs and nothing for a function never hooked). At the start of the Prisoners' Quarters the host called `Entity.canUpdate` 370–590 times and `Mob.canUpdate` 140–330 times a frame. DCCM runs the game with the server garbage collector, not concurrent, so that garbage became a pause of about 5 ms nearly five times a second (288 collections a minute in the movement runs below).
+- Hooks on host functions that run for every entity. With a handler installed, each call of a hooked function costs about 2 µs more and leaves about 920 bytes of managed garbage, whatever the handler decides (measured in the game on `Mob.canUpdate`: 4.4 µs and 1,840 bytes hooked at `Mob` and `Entity`, 0.77 µs and 56 bytes after the handlers are removed, 0.38 µs and nothing for a function never hooked). At the start of the Prisoners' Quarters the host called `Entity.canUpdate` 370–590 times and `Mob.canUpdate` 140–330 times a frame. That garbage became a pause of about 5 ms nearly five times a second (288 collections a minute in the movement runs below). This paragraph first said DCCM runs the server collector; in the game it is the workstation collector in its concurrent mode ([Host internals](HOST_INTERNALS.md#two-garbage-collectors), #174).
 
 ## What #123 changed
 
@@ -126,6 +126,18 @@ Not verified: windowed play with a controller, more than one live run per config
 
 `KIRBY_LAB_PERF=1` in the shell that runs `launch_runtime.py` makes `LabPerfProbe` write `perf.json` in the run folder every two seconds: host frame intervals, the time and managed bytes of each stage, original steps, texture uploads, calls of the held-entity hooks, collections and their pause. It counts only host frames that stepped Kirby, after the first one. It is off in play, where each mark costs one static test.
 
+Since #174 it also counts the Beheaded's frames in a run without Kirby, lists every frame over 20 ms with what was in it (`perf-frames.json`), and takes these switches, all set in the same shell and ignored in play:
+
+- `KIRBY_LAB_PERF=quiet`: no frame captures, trace or machine dumps, and the probes write their reports twice a second, so the figures are those of a played frame.
+- `KIRBY_LAB_PERF_HOST=1`: times the host's own phases (the frame, events, update, `Level.update`, `Level.postUpdate`, drawing, texture uploads, present). It adds about 20 µs a frame.
+- `KIRBY_LAB_PERF_HOOKS=1`: counts the calls of every hooked host function a frame, and how many of them found no handler.
+- `KIRBY_LAB_PERF_ALLOC=1`: samples the runtime's allocations by type.
+- `KIRBY_LAB_BARE=1`: loads the mod with none of its gameplay hooks, for a "Dead Cells alone" baseline.
+- `KIRBY_LAB_SEED=<n>`: starts every new game with that seed, so runs before and after a change play the same level.
+- `KIRBY_LAB_REAL_KEYS=1`: plays the input plan through the host's key table, as a keyboard would, instead of handing Kirby the plan's keys directly.
+
+`launch_runtime.py --gpu` draws an offscreen test on the GPU instead of in software, and `--shader-cache` keeps the GL driver's shader cache in the lab's cache folder for that run.
+
 The `Kirby pacing:` log line, once a minute in any run including play, gives host and original fps, the mean time of the original step and of the drawing, and how many original frames ended inside a logic pass (#134): a few at each ability or helper load, otherwise none. More than that means Kirby can be drawn a terrain cell off for single frames again (docs/NDS_BRIDGE.md, Where a source frame ends). Check `powerprofilesctl get` first: the power-saver profile alone took the game well below 60 fps on 2026-10-10.
 
 ## The original on the recompiler (#153)
@@ -203,6 +215,160 @@ Lab run, isolated profile, software drawing, `performance` power profile, 120 s,
 
 Checks on the final tree: `python3 scripts/check.py` passes (26 + 6 Python tests, 470 rule assertions, the runtime builds). The bridge built from this branch against a private copy of the vendor tree (`repros/gpu-165`, sha256 `bc7bbe99a52fe96a26a3fb93cb5b2305f1530f0a27b618a1aa063e58406dfbce`): all 93 `tools/nds_tests.py` cases pass, and the 92 older ones return what the shared record holds. `tools/verify_renderer.py`: 29 cases, 2,997,289 pixels, 0 mismatched, 0 unsupported objects; `tools/verify_background.py`: 4 cases of 44,089,344 values, 0 mismatches; `tools/verify_native_init.py`: 64 cycles pass. The shared bridge, its record and the shared vendor checkout were not replaced: play gets the change after the merge with `python3 tools/nds_build.py` and a new stage. The runtime did not change, so an older bridge keeps the per-byte reads.
 
+## Kirby against the Beheaded (#174)
+
+What a Dead Cells frame costs with and without Kirby. How the host runs that frame, and why its hooks cost what they do, is in [Host internals](HOST_INTERNALS.md).
+
+Lab runs on 2026-10-16 in the isolated profiles `repros/perf-174-kirby` and `repros/perf-174-beheaded` of the private data root, `performance` power profile, one run each. Every run starts a new game with the same seed (`KIRBY_LAB_SEED=174`), so it plays the same level, and uses `KIRBY_LAB_PERF=quiet`: no frame captures, and the probes write their reports twice a second. "Dead Cells alone" has the mod loaded but idle (`KIRBY_LAB_BARE=1`, no gameplay hooks). "Beheaded" is the same game with the mod's hooks on and the Beheaded's outfit. Software drawing is llvmpipe; GPU drawing is the AMD Radeon R9 380 (radeonsi), offscreen and without vsync (`--gpu`). Runtime: `main` (`f6b691b`) with the #174 lab tooling; bridge `bae16c0e7dafbec06239e0212cac1b436ed25db01aaaeeb1d03d6eaf7aed0169`. The frames over 20 and 33 ms leave out the frames in which the lab wrote its reports. Every run ended by its time limit with no fatal log and the real saves unchanged.
+
+| Plan, drawing | Game | Host fps | Mean frame | Managed KB a frame | .NET collections (median pause) | Frames over 20 / 33 ms | Hooked calls a frame |
+| :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `movement`, software | Dead Cells alone | 137.6 | 7.27 ms | 39.3 | 18 (1.8 ms) | 2 / 1 | 6.6 |
+| | Beheaded | 125.8 | 7.95 ms | 134.6 | 52 (7.0 ms) | 3 / 1 | 103.8 |
+| | Kirby | 108.1 | 9.25 ms | 126.5 | 47 (7.4 ms) | 14 / 1 | 108.7 |
+| `movement`, GPU | Dead Cells alone | 1,853.4 | 0.54 ms | 21.1 | 143 (3.5 ms) | 2 / 2 | 6.0 |
+| | Beheaded | 1,272.7 | 0.79 ms | 113.7 | 475 (6.7 ms) | 0 / 0 | not counted |
+| | Kirby | 1,092.9 | 0.92 ms | 119.9 | 430 (7.2 ms) | 1 / 1 | 107.0 |
+| `crowd`, software | Beheaded | 119.5 | 8.37 ms | 217.3 | 78 (6.9 ms) | 7 / 2 | not counted |
+| | Kirby | 84.5 | 11.83 ms | 251.3 | 74 (7.3 ms) | 46 / 2 | 482.4 |
+| `crowd`, GPU | Beheaded | 906.6 | 1.10 ms | 195.8 | 602 (6.7 ms) | 0 / 0 | not counted |
+| | Kirby | 674.3 | 1.48 ms | 214.8 | 475 (6.8 ms) | 2 / 1 | not counted |
+| `water`, wading in the Greenhouse, software | Beheaded | 54.5 | 18.34 ms | 280.2 | 37 (6.8 ms) | 204 / 6 | not counted |
+| | Kirby | 47.3 | 21.15 ms | 277.3 | 32 (7.5 ms) | 927 / 11 | not counted |
+| `water`, wading in the Greenhouse, GPU | Dead Cells alone | 1,211.2 | 0.83 ms | 21.8 | 75 (3.5 ms) | 2 / 2 | 6.0 |
+| | Beheaded | 673.2 | 1.49 ms | 237.6 | 423 (7.1 ms) | 1 / 1 | 234.4 in a later run |
+| | Kirby | 556.4 | 1.80 ms | 262.1 | 388 (7.2 ms) | 1 / 1 | not counted |
+
+Runs `20261016-124219`, `123929`, `123108`, `124440`, `121811`, `123338`, `121130`, `123458`, `122051`, `121931`, `121510`, `121340`, `151256`, `122312`, `122212` and `151517`, in table order; 50 s of played frames for `movement` and `crowd`, 40–44 s for `water`. The `crowd` plan has no "Dead Cells alone" row: without the mod its 30 Zombies are free, and that is another fight.
+
+What the table shows:
+
+- **The mod's hooks cost the Beheaded too.** Against Dead Cells alone, the Beheaded allocates 95 KB more a frame moving and 216 KB more in the Greenhouse, and its .NET collections pause about four times as long (7.0 against 1.8 ms). On the GPU its frame is 0.25 ms longer moving and 0.66 ms longer in the Greenhouse. The `HSprite.draw` hook was on for every outfit.
+- **Kirby adds the original's step.** The mod's whole step took 1.41 ms, of which the original frame in melonDS was 1.21 ms and `Prepare` 0.14 ms. The original runs at 60 Hz, so at 108 fps that is 0.55 steps a host frame. The mod's drawing took 0.15 ms a frame, the equipment layer 0.11 ms, the hero synchronization 0.10 ms and the input read 0.04 ms.
+- **On the GPU everything is short.** Kirby's frame is 0.92 ms against 0.54 ms for Dead Cells alone, and a 7 ms collection still fits in a 60 Hz frame. What a 7 ms pause costs depends on the display: at 144 Hz a frame has 6.9 ms.
+
+Where the time of a software-drawn `movement` frame goes, from the host phases (`KIRBY_LAB_PERF_HOST=1`, runs `20261016-122412` and `122613`):
+
+| Phase | Kirby | Beheaded |
+| :--- | ---: | ---: |
+| Whole frame | 8.79 ms, 139 KB | 7.77 ms, 147 KB |
+| Game update, with the mod's frame work | 1.82 ms, 58 KB | 0.93 ms, 70 KB |
+| of it: `Level.update` | 0.56 ms, 29 KB | 0.51 ms, 29 KB |
+| `Level.postUpdate` | 0.08 ms, 10 KB | 0.15 ms, 29 KB |
+| Drawing the scene | 6.60 ms, 72 KB | 6.46 ms, 67 KB |
+| Scene sync, texture uploads, present | 0.30 ms | 0.23 ms |
+
+Drawing is three quarters of a software-drawn frame, and play draws on the GPU. The drawing's garbage is all the `HSprite.draw` hook's: no other managed code runs while the scene is drawn.
+
+Frames over 20 ms, by what took the time (the probe's classification of each slow frame, lab frames included):
+
+| Run | Over 20 ms | .NET collection | Host | Lab report | Mod | First Kirby frame | HashLink collection | Over 33 ms |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Kirby, `movement`, software | 19 | 11 | 3 | 4 | 0 | 1 | 0 | 2 |
+| Beheaded, `movement`, software | 7 | 1 | 3 | 3 | – | – | 0 | 1 |
+| Dead Cells alone, `movement`, software | 3 | 0 | 2 | 1 | – | – | 0 | 1 |
+| Kirby, `crowd`, software | 57 | 35 | 11 | 6 | 3 | 1 | 1 | 4 |
+| Kirby, `water`, software | 1,058 | 32 | 897 | 128 | 0 | 1 | 0 | 18 |
+| Beheaded, `water`, software | 254 | 37 | 176 | 41 | – | – | 0 | 10 |
+
+- **.NET collections** are most of Kirby's slow frames outside water: 6–8 ms pauses on top of a 9–12 ms frame.
+- **The first Kirby frame** took 47–64 ms in every run: 45–48 ms of mod work, 12–15 ms of it the first original step and the rest the mod's code compiled on first use.
+- **The host's own slow frames** are drawing in software: one 90 ms frame about nine seconds into the Beheaded's and Dead Cells alone's `movement` runs (89.6 ms of it drawing where the phases were timed), and the Greenhouse's water, which llvmpipe draws at 18–21 ms a frame. On the GPU the same water ran at 556–1,211 fps with one or two slow frames.
+
+The reference the owner gave, `repros/merge-20261015` run `20261015-053030` (software drawing, frame captures on), allocated 162 KB a frame and had 8 frames over 33 ms in 44 s. The quiet `movement` run above, on `main` with the #174 tooling, allocated 126.5 KB a frame without the lab's work (130 KB with it) and had 2 frames over 33 ms in 50 s, one of them a lab report. Most of the difference is the captures.
+
+Not measured: windowed play with vsync, more than one run of each, and the Beheaded's hooked calls on the GPU outside the Greenhouse.
+
+## Found inside Dead Cells, ranked (#174)
+
+By what each costs a Kirby run; how each works is in [Host internals](HOST_INTERNALS.md).
+
+| # | What | Where it shows | Evidence |
+| ---: | :--- | :--- | :--- |
+| 1 | A hooked host function crosses into .NET on every call: about 2 µs and 920 B, whatever the handler does | 108.7 calls a frame with Kirby moving, 482 in the crowd; most of the 126–251 KB a frame he allocates | IL, hook counter |
+| 2 | Each of those calls leaves a finalizable object, so its garbage cannot die young: almost every .NET collection is a blocking generation-1 one of 6–8 ms | 11 of the 19 frames over 20 ms moving, 35 of 57 in the crowd; 1.8–3.5 ms pauses without the hooks | IL, runs |
+| 3 | Every sprite is drawn through one function, `HSprite.draw`, 79 times a frame moving and about 200 in the Greenhouse | a hook there was half of all the garbage; on the GPU in the Greenhouse it took the Beheaded's frame from 0.83 to 1.49 ms | bytecode, runs |
+| 4 | Removing a handler leaves the function detoured into .NET for the session (0.77 µs and 56 B a call); DCCM's direct route back to the original is never taken by DCCM itself, and turning it back on crashed the game | `Mob.canUpdate` and `Entity.canUpdate`, 500–900 calls a frame, after the first held enemy; 3 of 4 `crowd` runs crashed | IL, runs (#123, #178) |
+| 5 | Entities update in a strict order: every `preUpdate` and `fixedUpdate` (30 Hz) inside `Level.update`, every `postUpdate` and `spriteUpdate` after it | two hurtbox hooks ran after their projection had ended, 5 calls a frame moving and 34 in the crowd, for nothing | bytecode, hook counter |
+| 6 | A static Haxe function read through a proxy builds a delegate on every call; `AsHaxeString` allocates in both heaps | Kirby's input allocated 25 KB a frame more with real keys than with the lab's injected input | IL, runs |
+| 7 | Drawing is most of a software-drawn frame (6.6 of 8.8 ms), and one draw takes about 90 ms, probably a shader made on first use (not traced) | a 90 ms frame in every Beheaded movement run; on the GPU the whole host frame is 0.5–0.8 ms | runs |
+| 8 | Levels are generated and loaded on the main thread; the game forces one HashLink full collection a level | loads, not play inside a level; HashLink's collector costs little in a level (5–17 KB a frame) | bytecode, runs |
+| 9 | The first frame with Kirby takes 47–64 ms: the mod's code compiling on first use and a 12–15 ms first original step | once a session | runs |
+
+## Fixes, ranked (#174)
+
+From the costs above, largest expected gain first. The expected gains are estimates from per-call costs and hook counts. The last column is what each fix measured alone against the #174 build, two runs each in software against three `before` runs (`repros/perf-174-kirby`, seed 174, 2026-10-16); each fix's PR records its runs and adds its own section here.
+
+| # | Cost now | Fix | Expected gain | Issue | Measured |
+| ---: | :--- | :--- | :--- | :--- | :--- |
+| 1 | The `HSprite.draw` hook: 79 calls a frame moving, 135 in the crowd, about 200 in the Greenhouse; about 70 KB a frame moving, more than half of all the garbage | Draw the outfit's host sprites from a blank atlas page and drop the hook | about −80 hooked calls and −70 KB a frame moving; .NET collections about half as often | #175 | −78.8 hooked calls and −72.6 KB a frame moving (126.3 → 53.7), −140.9 and −127.4 KB in the crowd; .NET collections 51 → 22 and 96 → 47 a minute |
+| 2 | After the first held entity, `Mob.canUpdate`, `Entity.canUpdate` and four more stay on DCCM's managed path: +0.4 µs and +56 B on each of 500–900 calls a frame | Take DCCM's detour off them when the held-entity hooks are removed, and write it again before the next hold | −30 to −50 KB and −0.2 to −0.35 ms a frame for the rest of the session after the first hold | #178 | in the crowd 481.7 → 201.6 hooked calls a frame (all 280 with no handler gone), −17.1 KB a frame (250.4 → 233.3), .NET collections 96 → 79 a minute, the mean frame −0.87 ms |
+| 3 | Kirby's input read: a new delegate for every key test, arrays and Haxe strings, about 25 KB a frame with real keys | Read the key table once per read and keep the shield tag | about −25 KB a frame with a keyboard or a pad | #176 | with keys through the host's key table, a read 73 µs and 13,948 B → 19 µs and 8 B; −28.6 KB a frame (150.8 → 122.2) |
+| 4 | Two hurtbox hooks that only run after the projection has ended, and second handlers on `Hero.preUpdate` and `Hero.fixedUpdate` | Drop them; one handler each | −5 hooked calls a frame moving, −34 in the crowd | #177 | −4.9 hooked calls and −6.0 KB a frame moving, −30.8 and −32.6 KB in the crowd |
+| 5 | The other always-on hooks: `getMovementSticks` 7.3, `HealFlask.isEnabled` 3.3, `hasUnlockedItem` 2, `updateWeapon` 2 and `updateHeadFx` 1 a frame | Replace each with a state set once at activation, or install it only while needed | about −15 hooked calls and −15 KB a frame | not done here: each guards a gameplay rule that needs its own live check | – |
+| 6 | The first Kirby frame, 47–64 ms | Compile the mod's hot paths ahead of time | about −30 ms once a session, during the arrival | not done here: once a session, under the arrival cinematic | – |
+
+## The four fixes together (#174)
+
+#175, #176, #177 and #178 on one branch (`measure/all2`: the #174 lab tooling and the four fix branches merged; runtime `f878decf…`, outfit pack `2cbd0a47…`), against the #174 build (`a2a93f5a…`, pack `8e44122d…`). Lab runs on 2026-10-16 in `repros/perf-174-kirby`, as in the table above, two runs each unless said. The frames over 20 and 33 ms leave out the lab's report frames.
+
+| Plan, drawing | Build | Runs | Host fps | Mean frame | p99 | Managed KB a frame | .NET collections a minute (median pause) | Frames over 20 / 33 ms | Hooked calls a frame |
+| :--- | :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `movement`, software | before | `20261016-151617`, `153025`, `174336` | 110.1 | 9.11 ms | 16.2 ms | 126.3 | 51 (7.5 ms) | 23 / 3 in 153 s | 108.6 |
+| | all four | `20261016-170048`, `174208` | 119.5 | 8.37 ms | 12.6 ms | 43.9 | 21 (5.9 ms) | 3 / 2 in 97 s | 24.7 |
+| `crowd`, software | before | `20261016-153148`, `155744`, `173139` | 85.6 | 11.69 ms | 22.0 ms | 250.4 | 96 (7.0 ms) | 152 / 18 in 153 s | 481.7 |
+| | all four | `20261016-163343`, `174040` | 102.4 | 9.77 ms | 15.4 ms | 68.5 | 28 (5.0 ms) | 18 / 7 in 97 s | 32.0 |
+| `movement`, GPU | before | `20261016-164133`, `164547` | 1,111.2 | 0.90 ms | 2.7 ms | 119.9 | 481 (7.3 ms) | 2 / 2 in 109 s | 107.0 |
+| | all four | `20261016-164258`, `164423` | 1,628.2 | 0.61 ms | 2.1 ms | 38.3 | 232 (5.6 ms) | 0 / 0 in 109 s | 23.1 |
+| `water`, GPU (wading in the Greenhouse) | before | `20261016-164712`, `174504`, `174927` | 568.5 | 1.76 ms | 10.5 ms | 260.0 | 533 (7.7 ms) | 6 / 3 in 194 s | 257.9 |
+| | all four | `20261016-174631`, `174759` | 1,036.8 | 0.96 ms | 2.5 ms | 38.5 | 153 (5.7 ms) | 2 / 2 in 130 s | 23.1 |
+
+- **Garbage.** A Kirby frame made 43.9 KB moving in software, against 126.3 before and 39.3 for Dead Cells alone with the mod idle ([Kirby against the Beheaded](#kirby-against-the-beheaded-174)), and 68.5 KB in the crowd, against 250.4. On the GPU, moving, 38.3 KB against 119.9.
+- **Hooked calls** fell to about 25 a frame moving: 8 once a frame for DCCM's events and the hooks the mod works in, 15.5 for the always-on hooks of row 5 of "Fixes, ranked", and about one for 30 Hz hooks; in the crowd, about 7 more for the enemies Kirby holds.
+- **.NET collections** came less than half as often (51 → 21 a minute moving and 96 → 28 in the crowd in software; on the GPU, where frames come ten times as fast, 481 → 232 moving and 533 → 153 wading), and their median pause fell from 7–8 ms to 5–6 ms: fewer finalizable objects survive each one.
+- **Frame time.** In software the mean frame fell by 0.74 ms moving (110.1 → 119.5 fps) and by 1.92 ms in the crowd (85.6 → 102.4 fps), and every run with the fixes was faster than every run without: moving 119.1 and 120.0 fps against 102.1 to 116.4, in the crowd 100.7 and 104.1 against 83.2 to 88.5. Drawing, most of a software frame, is unchanged. On the GPU the mean frame fell by a third moving (0.90 → 0.61 ms) and by 45% wading in the Greenhouse (1.76 → 0.96 ms): 565 to 576 fps in the three runs without the fixes, 1,035 and 1,038 with them.
+- **Slow frames.** Frames over 20 ms came 0.03 a second moving in software instead of 0.15, and 0.19 in the crowd instead of 1.0. Of the frames over 33 ms left, one a run is the first Kirby frame (row 6 of "Fixes, ranked", not done here); in the crowd, the frame the lab makes the 31 zombies appear in and the frame Kirby's sword first hits 30 of them at once, 570 to 650 KB of HashLink objects; in the Greenhouse, one 61 ms host frame a run with no mod work in it.
+
+The owner's reference, run `20261015-053030` (162 KB a frame, 8 frames over 33 ms in 44 s, captures on), compares with the `movement` rows: with the four fixes the same plan made 43.9 KB a frame against 126.3 before, and one frame over 33 ms a run, the first Kirby frame.
+
+Every run above ended by its time limit with no fatal log and the real saves unchanged. Runs during which other programs used more than 0.6 cores on average (another session's browser check at 16:28–17:02, another program's benchmark after 17:32) were run again and are in no table here: `20261016-162824`, `162949`, `163218`, `164837`, `165019`, `165144`, `165601`, `165729`, `165920`, `173307` and `173627`.
+
+## The bridge on its own (#174)
+
+A private script drove the shared bridge (`bae16c0e…`) from Python the way the runtime does: the recompiler, the ARM9 at twice the DS clock, the main screen only and the idle upper screen skipped, with a repeating walk, jump, walk back and inhale. Unpaced for 150 s, one step took 0.940 ms at the median, 1.021 ms on average and 1.009 ms at the 95th percentile (146,604 steps; a stack sampler was attached for part of that time). In the game the same step, `Native`, averaged 1.20 ms in the `movement` runs.
+
+120 stack samples of that process (`gdb -batch`), 96 of them inside `kssu_step`:
+
+| Where the step was | Share of the 96 |
+| :--- | ---: |
+| Recompiled ARM code | 50.0% |
+| Timers and the event scheduler | 16.7% |
+| The sound unit (SPU) | 12.5% |
+| Other emulation | 11.5% |
+| 2D drawing | 7.3% |
+| 3D | 2.1% |
+
+The mod uses every part: Kirby's sound effects come from the SPU, and the background capture from engine A's 2D drawing. About one sample in six was a memory access from recompiled code that took melonDS's slow path (`SlowRead9`, `SlowWrite9`). Fast memory would shorten those, but it needs a SIGSEGV handler and the bridge runs inside the game's process, which has its own; it stays off (`tools/nds_jit_patch.py`, #153). No bridge change came out of this, and the shared bridge was only read.
+
+## The sprite draw hook (#175)
+
+`KirbyHostVisuals` hooked `HSprite.draw` to skip every host sprite drawn from the outfit atlas: the arrival corpse, which uses the atlas before `Hero.initGfx`, the hero body, the death corpse and afterimage trails, all of which would show the outfit's static fallback pose. The host draws every sprite on screen through that one function, so the hook made each of them a call into the runtime, about 2 µs and 920 bytes ([What #123 changed](#what-123-changed)): 78.9 a frame with Kirby moving at the start of the Prisoners' Quarters, 135 in the `crowd` plan and about 200 wading in the Greenhouse. It was installed whenever the original runtime was enabled, so the Beheaded paid it too.
+
+The outfit's in-game atlas page is now blank (`tools/build_outfit.py`), so those sprites draw nothing, and the hook is gone. The skin selector's preview rows read the fallback pose from a page of their own, `kirbySuperStarUltraPreview0.png`. `scripts/stage_runtime.py --original-runtime` refuses an outfit pack whose in-game page is not blank, since the runtime no longer hides it: play needs the pack rebuilt with `tools/build_outfit.py` and staged with `--outfit-pack`.
+
+Lab runs, 2026-10-16: isolated profile `repros/perf-174-kirby`, a new game from seed 174 each time (`KIRBY_LAB_SEED=174`), `KIRBY_LAB_PERF=quiet` with the hook counter (`KIRBY_LAB_PERF_HOOKS=1`), software drawing, `performance` power profile. "Before" is `main` with the lab tooling of #174 (runtime `a2a93f5a…`) and an outfit pack built from `main` (`8e44122d…`); "after" adds this branch (runtime `34ff593d…`) and the pack rebuilt from it (`2cbd0a47…`). The frames over 20 and 33 ms leave out the frames in which the lab wrote its reports.
+
+| Plan | Build | Runs | Host fps | Mean frame | p99 | Managed KB a frame | .NET collections a minute (median pause) | Frames over 20 / 33 ms | Hooked calls a frame |
+| :--- | :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `movement` | before | `20261016-151617`, `153025`, `174336` | 110.1 | 9.11 ms | 16.2 ms | 126.3 | 51 (7.5 ms) | 23 / 3 in 153 s | 108.6 |
+| | after | `20261016-151918`, `152901` | 110.2 | 9.09 ms | 14.9 ms | 53.7 | 22 (6.3 ms) | 12 / 2 in 101 s | 29.8 |
+| `crowd` | before | `20261016-153148`, `155744`, `173139` | 85.6 | 11.69 ms | 22.0 ms | 250.4 | 96 (7.0 ms) | 152 / 18 in 153 s | 481.7 |
+| | after | `20261016-153312`, `173448` | 94.1 | 10.65 ms | 17.5 ms | 123.0 | 47 (5.6 ms) | 37 / 9 in 99 s | 340.8 |
+
+Hooked calls fell by 78.8 a frame moving and 140.9 in the crowd, the garbage by 72.6 KB a frame moving (57%) and 127.4 KB in the crowd (51%), and .NET collections came less than half as often. Moving, the frame times moved less than one run of the same build differs from the next (102.1 to 116.4 fps for the three `before` runs). In the crowd the mean frame was 1.0 ms shorter and frames over 20 ms came 0.37 a second instead of 1.0; the slower `after` run (89.6 fps) was faster than the fastest `before` one (88.5), though the two `after` runs were 9 fps apart. Every `crowd` run played the same fight: 31 proxies at most, 30 targets hit 66 times for 2,046 damage.
+
+Behaviour, with traces and frame captures (`KIRBY_LAB_PERF=1`, the `movement` plan): Kirby's original state (position, speed, ability, health, graphic, flags and facing) and the host hero's position were the same as on the #174 build in all 2,907 original frames both runs reached (`20261016-170406` before, `170534` after; two runs of the #174 build, `170406` and `171656`, matched in all 3,000 they shared), and the plan's two hurtbox queries passed in both. Captured ten times a second from the start of play (`172903` before, `173003` after), the 47 moments both runs captured at the same original frame and animation frame show Kirby drawn the same and nothing of the outfit: in a 96-pixel square around Kirby the crops differ by 0.25 of 255 at the median, and the largest difference, 9.7, is the background, where the camera stood a few pixels apart. The arrival itself, captured ten times a second (`175605` before, `175705` after), looks the same in both: the cells cross the floor and rise, the head pops in a flash of light, and Kirby first shows in the same capture of `headPopStart` (its frames 20 and 19), with nothing of the outfit drawn before him. The 9 captures taken at the same animation frame in both differ by 0.59 of 255 at the median, the cells' particles and the light.
+
 ## The detour after the last handler (#178)
 
 `KirbyEnemyHooks` stops the host from moving an enemy, projectile or item that the original engine holds. Its six hooks are added when something becomes held and removed between host frames once nothing of that kind has been held for 30 frames ([What #123 changed](#what-123-changed)): `Mob.canUpdate` and `Mob.fixedUpdate` for enemies; `Entity.canUpdate`, `Bullet.fixedUpdate` and `Grenade.fixedUpdate` for the other kinds; `Entity.updatePositionXY` for positions. DCCM 35.13.6 removes a handler by taking it off its list and nothing more. The function stays detoured into .NET for the rest of the session, and each call pays 0.77 µs and 56 bytes, against 0.38 µs and nothing for a function never hooked. In the `crowd` plan that was 280 calls a frame with no handler at all, 259 of them `Mob.canUpdate`.
@@ -239,9 +405,9 @@ Measured or seen in #123 and not changed.
 
 - **The original frame, about 2.6 ms.** The bridge ran melonDS's interpreter. A recompiler was left out of #123: it changes the emulated timing that the recorded bridge evidence rests on. #153 added it behind a switch (The original on the recompiler, above).
 - **A pile of enemies in recoil.** With the 30 fixture targets of the `crowd` plan stacked on one spot, the original frame takes about 6 ms. #150 found what that was: the first swing hit all of them and stopped the original for good, and the time was an ARM9 that never rests again, not the original's code for overlapping actors. #151 removed the stop ([the collision pool](#the-collision-pool-151)). Twenty stacked targets, which it survives, cost about 3.6 ms (the table above). Thirty proxies spread over the room cost about 0.9 ms together.
-- **`HSprite.draw`.** `KirbyHostVisuals` hooks it to keep the Beheaded's graphics away from Kirby, and the host calls it 77–140 times a frame. It is needed on every frame while the outfit is on. At the per-call figure above that is 70–130 KB of the 166 KB a frame still allocated; this share is an estimate, not a measurement.
+- **`HSprite.draw`.** `KirbyHostVisuals` hooked it to keep the Beheaded's graphics away from Kirby, and the host calls it 77–140 times a frame. #175 left the outfit's in-game page blank instead and removed the hook ([the sprite draw hook](#the-sprite-draw-hook-175)): 72.6 KB a frame less with Kirby moving, 127.4 KB in the crowd.
 - **The texture upload.** A drawn frame still uploads the whole 1024×512 texture, about 0.6 ms in the lab.
-- **The garbage collector mode** comes from DCCM's `runtimeconfig.json`. Overriding it from the environment (`DOTNET_gcServer=0`, `DOTNET_gcConcurrent=1`) changed nothing measurable.
+- **The garbage collector mode.** DCCM's shell `runtimeconfig.json` asks for the server collector, but the game runs the workstation one in its concurrent mode (#174). Overriding it from the environment (`DOTNET_gcServer=0`, `DOTNET_gcConcurrent=1`) changed nothing measurable, which fits.
 - **A host shader made on first use.** The host logs `Shader missing from cache: shaderLinker_ad70e08c` the first time one sprite combination is drawn, here when a Zombie first hit Kirby. In the lab that one frame took 1.3 s. The same line is in 123 earlier lab and play logs back to 2026-10-04, so it is not new; what it costs on the GPU was not measured.
 
 ## Not verified
