@@ -159,6 +159,8 @@ A machine built this way always runs the recompiler's frame loop. The second sta
 - **The clock (#150).** A block counts its cycles with the bus timings of the ARM9 clock it was compiled at. When `kssu_arm9_clock` asks for a clock other than the last one asked for, it sets `kssu_recompile_flush`: the clock changes as the next frame begins, and the blocks are discarded before that frame's first ARM9 slice.
 - **Saved states.** Loading discards the compiled blocks, and the end of a block is where an interrupt lands, so a state saved and loaded on the recompiler does not continue byte for byte as the run did. The interpreter does.
 
+The first frame run after a machine opens or loads a state translates all the code it runs. With the shared bridge outside the game (#193), from the seed state with the runtime's settings: the first frame on the recompiler took 11.5–12.2 ms and the next ones about 1.0 ms, and the first one after loading the seed again 10.2 ms; on the interpreter 3.5 ms, then about 2.0 ms.
+
 What the recompiler changes is timing below the frame: an interrupt or a scheduled event lands at the end of a compiled block instead of after the instruction, and the cost of a block is counted when it is compiled. The runtime uses it unless `Recompiler` is `false` (docs/GAMEPLAY_FIDELITY.md, The original on the recompiler). Tools and tests keep the interpreter.
 
 Evidence, all on a private build (`repros/jit-153`, bridge SHA-256 `c05c82a925ec151cba1cf2df3d465e14d0259969bbd802947db137410b35c6e5`); the shared bridge binary was not rebuilt:

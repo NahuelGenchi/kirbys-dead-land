@@ -160,6 +160,7 @@ internal static unsafe class LabPerfProbe
             double a, b, c;
             hl_gc_stats(&a, &b, &c);
             hlStats = true;
+            LabActivationTrace.HashlinkGc = HashlinkGc;
             string? file = File.ReadLines("/proc/self/maps").Select(l => l.Split(' ', StringSplitOptions.RemoveEmptyEntries))
                 .Where(f => f.Length >= 6 && f[5].EndsWith("/libhl.so", StringComparison.Ordinal)).Select(f => f[5]).FirstOrDefault();
             if (file is null || !NativeLibrary.TryLoad(file, out nint handle) ||
@@ -169,6 +170,14 @@ internal static unsafe class LabPerfProbe
             markCount = (int*)(export + GcStatsFromExport + MarkCountOffset);
         }
         catch (Exception) when (!hlStats) { }
+    }
+
+    /// <summary>HashLink's collections so far and its memory, for the lab's activation trace (#193).</summary>
+    private static string HashlinkGc()
+    {
+        double allocated = 0, allocations = 0, memory = 0;
+        hl_gc_stats(&allocated, &allocations, &memory);
+        return $" (HashLink: {(markCount is null ? -1 : *markCount)} collections, {allocated / 1048576:0} MB allocated, {memory / 1048576:0} MB)";
     }
 
     private static void ReadHashlink(out double allocated, out double allocations, out int marks)
