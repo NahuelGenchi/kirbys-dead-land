@@ -1482,3 +1482,25 @@ bite, so a run holds four bites. The plan's times are wall-clock and drift a few
 frames against the original's frames, which is why the air-press runs differ.
 Not run: a ceiling above the plant, a `placedOnGround` plant, Gardener-boss
 plants, a float or a copy ability on a plant, walking onto one, normal play.
+
+## Lab plans on the host key table (#202)
+
+Since #176 `KirbyInput` reads the host's key table (`hxd.Key.keyPressed`) directly instead of calling `Key.isDown`, so a probe that presses a key through a `Key.isDown` hook no longer reaches it. #200 fixed the `aim` plan (see above). Four more plans pressed keys `KirbyInput` reads, and since #202 they hold those keys in the key table through `LabSmokeCapture.HostKey` (by action) or `HostKeyCode` (by key code), as a key event would:
+
+- `healing` and `fslot`: the Heal key (action 7), which sets `KirbyFSlot.Held`. In `main`'s healing run (`repros/live-base-healing`, `20261017-025924`) the key was held for 90 frames and the stored Mike kept all 3 uses; the 2026-10-10 runs above left 2.
+- `combat`: the shield key during the parry, which adds the source guard (DS L, 512) in `KirbyInput`'s shield check. `combat.json` now records it as `sourceGuardAtParry`.
+- `repro`: every keyboard key of the plan (`actions`, `keys`). Only keys the plan pressed are released. Controller buttons (`padKeys`) still go through the `Controller.padIsDown` hook, which `KirbyInput` calls.
+
+Keys only the host reads keep their hooks, which still work: Interact (action 6) in `healing`, `fslot` and `cook`, and the `Key.isPressed` hooks for the Heal key and for the repro plan's presses. `cook` presses nothing else, so it is unchanged and was not run.
+
+Separate data root `repros/keys-202` (runtime `Kirby.Runtime.dll` SHA-256 `33ce7fb431f66a5c3fc9b1b425b47a216519ce875f2154d0398a131da7a92715`, outfit pack `2cbd0a47…` from `outfit-build-main`, bridge `bae16c0e7dafbec06239e0212cac1b436ed25db01aaaeeb1d03d6eaf7aed0169`). Each run went through a copy of the `perfrun.sh` runner (`repros/keys-202-tools`), one game at a time, `--start-game --crash-dump off --outfit KirbySuperStarUltra`, `KIRBY_LAB_SEED=174` unless noted:
+
+| Run | Plan | Result |
+| :--- | :--- | :--- |
+| `20261017-075656` | `healing`, `KIRBY_LAB_HEALING_SWORD=1 KIRBY_LAB_HEALING_EXIT=1`, 100 s, `--capture-fps 1` (the settings of `main`'s run) | The Heal hold fired one Mike shout: 3 → 2 uses at frame 4915, Sword back. No `HealFlask.onStart`, life still 15 after the hold. The fountain, activated by Interact on its press frame, asked 76 and gave 38 (15 → 53). The exit to `T_SewerShort` kept Mike × 2. |
+| `20261017-075854` | `combat`, 60 s | Zombie swallowed into Fighter (source 5), shield 266 retained and allowed, `tryToUse` accepted, parry started, counter seen, `sourceGuardAtParry` true. |
+| `20261017-080018` | `repro`, `KIRBY_LAB_REPRO_PLAN` = `repros/keys-202/plan-keys.json` (Right 2.0–3.0 s, Jump 3.5–3.6 s, first weapon 5.0–6.0 s, Left 7.0–8.0 s, key 40 9.0–9.5 s), 45 s | Every keyboard key reached the source mask and each release cleared it: D (Right, action 13) 16, Kirby walked 195 px; Space (Jump, 0) 1, a 50 px jump; the left mouse button (first weapon, 2) 2; A (Left, 11) 32, back 206 px; raw ArrowDown (40) 128. |
+| `20261017-080127` | `fslot`, 170 s | Every F press fired: Crash killed its 126-life Zombie, Mike's three shouts emptied the slot, Paint fired, Sword came back each time. The stored Cook swung four times and came back unused (no food), so taking Paint put Cook back on the floor; in phase 10 Kirby's focus stayed on that Cook item and the last Mike was never taken before the time limit. On this seed's level the phase-7 walk right ends at x 3687.5, where Kirby also stopped while holding Right in the repro run, so the Cook Zombie, placed two cells to his right, most likely stood behind that obstacle. |
+| `20261017-080542` | `fslot`, 170 s, no seed (a random level, as the 2026-10-09 pass), `--capture-fps 1` | Every phase passed: Crash killed its 123-life Zombie; Mike's three shouts; Cook took over Paint (Paint back on the floor), then fired, was used and its Zombie dropped one host food item; Paint fired; the last Mike was stored and the host save written; F followed by a 20-damage host hit during the switch (76 → 61) still finished the shout (used, 3 → 2) and brought Sword back. |
+
+Every run reached its time limit with no fatal log, real saves unchanged and no crash dump. Not run: a `fslot` resume (`--resume-game`), a controller, a remapped profile, the owner's launcher.

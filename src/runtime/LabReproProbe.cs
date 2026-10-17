@@ -54,7 +54,8 @@ internal static unsafe class LabReproProbe
         string? plan = Environment.GetEnvironmentVariable("KIRBY_LAB_REPRO_PLAN");
         if (plan is not null) steps = JsonSerializer.Deserialize<Step[]>(File.ReadAllText(plan),
             new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? [];
-        dc.hxd.Hook__Key.isDown += (orig, key) => held.Contains(key) || orig(key);
+        // Held keys go through the host's key table, which KirbyInput reads (#176);
+        // the host alone reads key presses, through this hook.
         dc.hxd.Hook__Key.isPressed += (orig, key) => pressed.Contains(key) || orig(key);
         Hook_Controller.padIsDown += (orig, controller, key) => padHeld.Contains(key) || orig(controller, key);
         Hook_Controller.padIsPressed += (orig, controller, key) => padPressed.Contains(key) || orig(controller, key);
@@ -177,6 +178,14 @@ internal static unsafe class LabReproProbe
         }
     }
 
+    /// <summary>Holds these keys in the host's key table and releases the plan's other ones.</summary>
+    private static void Hold(HashSet<int> keys)
+    {
+        foreach (int key in held) if (!keys.Contains(key)) LabSmokeCapture.HostKeyCode(key, false);
+        foreach (int key in keys) LabSmokeCapture.HostKeyCode(key, true);
+        held = keys;
+    }
+
     private static void Event(string name, Weapon weapon) => File.AppendAllText(Path.Combine(run!, "repro-events.jsonl"),
         JsonSerializer.Serialize(new { elapsed, name, weapon = weapon.GetType().FullName, item = weapon.item.permanentId }) + "\n");
 
@@ -189,7 +198,7 @@ internal static unsafe class LabReproProbe
         // The normal outfit has no source machine; inputs and host positions
         // are still traced so host movement can be compared with Kirby's.
         if (hero is not { destroyed: false } || hero._level is null || provider is null)
-        { held.Clear(); pressed.Clear(); padHeld.Clear(); padPressed.Clear(); return; }
+        { Hold([]); pressed.Clear(); padHeld.Clear(); padPressed.Clear(); return; }
         if (began is null && hero.awake && !hero._level.game.hasCinematic()) began = clock.Elapsed.TotalSeconds;
         elapsed = began is double at ? clock.Elapsed.TotalSeconds - at : -1;
         if (healthFixture && nds is not null) HealthFixture(hero, nds);
@@ -347,7 +356,7 @@ internal static unsafe class LabReproProbe
         }
         next.Remove(-1);
         pressed = next.Except(held).ToHashSet();
-        held = next;
+        Hold(next);
         padPressed = nextPad.Except(padHeld).ToHashSet();
         padHeld = nextPad;
         File.AppendAllText(Path.Combine(run, "host-motion.jsonl"), JsonSerializer.Serialize(new

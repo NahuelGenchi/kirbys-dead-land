@@ -43,9 +43,10 @@ internal static class LabFSlotProbe
     {
         run = output;
         dc.tool.Hook_Tutorial.tryToStart += (_, _, _) => false;
+        // The Heal key is held in the host's key table, which KirbyInput reads (#176);
+        // the host alone reads Interact and key presses, through these hooks.
         dc.hxd.Hook__Key.isDown += (orig, key) =>
-            key == interactKey && interactAt is uint i && lastTick - i < 8 ||
-            key == healKey && healAt is uint h && lastTick - h < 5 || orig(key);
+            key == interactKey && interactAt is uint i && lastTick - i < 8 || orig(key);
         dc.hxd.Hook__Key.isPressed += (orig, key) =>
             key == interactKey && interactAt is uint i && lastTick == i ||
             key == healKey && healAt is uint h && lastTick == h || orig(key);
@@ -94,9 +95,13 @@ internal static class LabFSlotProbe
     {
         var machine = KirbyMod.Instance?.NativeProvider?.Machine;
         if (machine is null) return 0;
-        if (decidedAt == machine.State.Frame) return decided;
-        decidedAt = machine.State.Frame;
-        return decided = Decide(session, machine);
+        if (decidedAt != machine.State.Frame)
+        {
+            decidedAt = machine.State.Frame;
+            decided = Decide(session, machine);
+        }
+        LabSmokeCapture.HostKey(session.Hero, HealAction, healAt is uint h && lastTick - h < 5);
+        return decided;
     }
 
     private static ushort Decide(KirbySession session, NdsRuntime machine)

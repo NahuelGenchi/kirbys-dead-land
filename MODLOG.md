@@ -2649,3 +2649,22 @@ the all-ability rendering tests as full gameplay acceptance.
   `20261017-073710`, before the Dodge change, failed only that one.
 - Not run: the other plans that still hold keys through `Key.isDown` hooks
   (healing, F slot, combat, cook, repro).
+
+## 2026-10-17 — four more lab plans press keys KirbyInput reads (#202)
+
+- Since #176 `KirbyInput` reads the host's key table, so `Key.isDown` hooks
+  no longer reach it. Besides `aim` (#200), this broke the Heal key in the
+  `healing` and `fslot` plans (`main`'s healing run kept Mike at 3 uses), the
+  shield key's source guard in `combat`, and every keyboard key of a `repro`
+  plan.
+- Those keys are now held in the key table through `LabSmokeCapture.HostKey`
+  or the new `HostKeyCode` (by key code). Interact and the `isPressed` hooks,
+  which only the host reads, stay. `cook` presses only Interact: unchanged.
+  `combat.json` gains `sourceGuardAtParry`.
+- Live (`repros/keys-202`): healing `20261017-075656` (Mike 3 → 2, no flask,
+  fountain 15 → 53), combat `075854` (counter, guard at the parry), repro
+  `080018` (each key reached the source mask), fslot `080542` on a random level
+  (every phase). With seed 174 (`080127`) every F press fired but the Cook
+  Zombie most likely stood past where Kirby's walk stops, so Cook came back
+  unused and the last phase timed out.
+- Not run: `cook`, a `fslot` resume, a controller, the owner's launcher.

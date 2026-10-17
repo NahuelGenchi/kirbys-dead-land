@@ -322,7 +322,12 @@ internal static class LabSmokeCapture
     internal static unsafe void HostKey(dc.en.Hero hero, int action, bool down)
     {
         var bindings = hero.controller.parent.get_bindings().primary;
-        int key = (uint)action < (uint)bindings.length ? ((int*)bindings.bytes)[action] : -1;
+        HostKeyCode((uint)action < (uint)bindings.length ? ((int*)bindings.bytes)[action] : -1, down);
+    }
+
+    /// <summary>Holds or releases one key code in the host's key table, as <see cref="HostKey"/> does for an action.</summary>
+    internal static unsafe void HostKeyCode(int key, bool down)
+    {
         if (key < 0) return;
         int* state = HostKeyState(key);
         int frame = dc.hxd.Timer.Class.frameCount;
