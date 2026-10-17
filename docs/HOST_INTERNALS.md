@@ -92,7 +92,7 @@ What each kind of call costs, from the IL, with the measured figures where there
 | `HSprite.draw` | 78.9 | hides the Beheaded's sprites drawn from the outfit atlas (#175 removes it) |
 | `ControllerAccess.getMovementSticks` | 7.3 | keeps the host from walking the hero (#185 removes it) |
 | `Entity.spriteUpdate` | 3.9 | hurtbox projection, never active there (#177 removes it) |
-| `HealFlask.isEnabled` | 3.3 | no flask while Kirby plays |
+| `HealFlask.isEnabled` | 3.3 | no flask while Kirby plays (#186 removes it) |
 | `ItemMetaManager.hasUnlockedItem` | 2.0 | the Collector's rule for ability items |
 | `HeroWeaponsManager.updateWeapon` | 2.0 | the ability's weapon slots |
 | `Boot.mainLoop`, `Boot.update`, `Boot.render`, `HUD.postUpdate`, the Steam sync | 1 each | DCCM's own |

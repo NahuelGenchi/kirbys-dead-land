@@ -2555,3 +2555,17 @@ the all-ability rendering tests as full gameplay acceptance.
   the player's left stick outside it; its key checks fail on `main` too since
   #176 (it presses keys through `Key.isDown`).
 - Not run: a real controller stick, the owner's launcher.
+
+## 2026-10-17 — the health flask out of Kirby's skills (#186)
+
+- The hook on `HealFlask.isEnabled` is gone. A Kirby session takes the flask
+  out of the hero's main skills with the host's `unregisterSkill` and puts it
+  back in its place when it ends; a handler on `HeroMainSkillsManager.serialize`
+  writes it into a save made in between.
+- Live (`repros/perf-185-kirby`, seed 174, quiet, software, three `before`
+  runs on `main` 28f4086 and two with the change): 24.9 → 21.6 hooked calls a
+  frame moving, 32.3 → 28.7 in the crowd; 44.6 → 41.8 and 69.5 → 65.6 KB a
+  frame. The `healing` plan gave the same lives, fountain heal and F slot as
+  `main`, through a level exit, with the flask out of the skills.
+- Not run: a run save during a Kirby session (the `serialize` handler), the
+  owner's launcher.

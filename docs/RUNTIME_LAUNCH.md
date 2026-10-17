@@ -1354,6 +1354,21 @@ Not run: a fountain placed by the level generator, other stored abilities after 
 level change, Collector or merchant HUD refreshes, and normal play with
 `./play-kirby`.
 
+Since #186 a Kirby session takes the flask out of the hero's skills instead of
+turning it off through `HealFlask.isEnabled`, and the plan also records where
+the flask is: among the skills, or held by the session. `20261017-025728`
+(`repros/live-186-kirby`, seed 174, Sword and exit): the session held the flask
+from activation; the probe's `KirbyHealing.Deactivate` put it back sixth of nine
+skills and `Activate` took it out again; F held for 90 frames started no flask
+(life 15 → 15); the fountain asked 76 and gave 38 (15 → 53, the original the
+same) and was marked used; after the exit to `T_SewerShort` the slot showed Mike
+× 3 and the flask was still out of the skills. `main` on the same plan
+(`20261017-025924`, `repros/live-base-healing`) gave the same lives, heal,
+fountain and slot. Both ended by the time limit with no fatal log and the real
+saves unchanged. Not run: a run save during a Kirby session. The level exit
+wrote only the profile, which holds no skill list, so the `serialize` handler
+that writes the flask into a run save was not exercised.
+
 ## Carnivorous plants (#113)
 
 `LabMovesProbe` has a `plant` scenario for `KIRBY_LAB_MOVES_SETUP`: it takes the
