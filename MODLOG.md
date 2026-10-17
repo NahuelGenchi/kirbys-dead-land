@@ -2438,3 +2438,261 @@ the all-ability rendering tests as full gameplay acceptance.
 - Not run: making a helper, a star in a mouthful with something else, a save
   while a star is out, the forge NPC's first meeting, `ForgeRefine1`, the
   owner's launcher.
+
+## 2026-10-16 — inside a Dead Cells frame, against the Beheaded's (#174)
+
+- Dead Cells v35 read the way the ROM was, read-only: `hlboot.dat` (SHA-256
+  `59350cad…`) disassembled with crashlink into a private index (37,448
+  functions), DCCM 35.13.6 read as IL. Disassembly, index and notes stay in
+  `research/dc-re` in the private data root. docs/HOST_INTERNALS.md records
+  the frame loop, the 30 Hz entity loop, level generation and loading, the two
+  collectors, DCCM's hook layer and what each kind of mod call costs.
+- Findings: a hooked host function costs about 2 µs and 920 B a call through
+  DCCM's managed path and leaves a finalizable object, so nearly every .NET
+  collection is a blocking generation-1 one of 6–8 ms; removing a handler
+  leaves the function detoured into .NET for the session; the game runs the
+  workstation collector, not the server one this record claimed.
+- Lab tooling: `KIRBY_LAB_PERF=quiet`, `_HOST`, `_HOOKS`, `_ALLOC`,
+  `KIRBY_LAB_BARE`, `KIRBY_LAB_SEED`, `KIRBY_LAB_REAL_KEYS`, and
+  `launch_runtime.py --gpu`, `--shader-cache` and `--crash-dump`.
+- Live (`repros/perf-174-kirby`, `repros/perf-174-beheaded`, seed 174, one run
+  each): Kirby moving, software drawing, 108.1 fps, 126.5 KB a frame, 108.7
+  hooked calls a frame (`HSprite.draw` 78.9), 47 collections of 7.4 ms; the
+  Beheaded 125.8 fps and 134.6 KB; Dead Cells alone 137.6 fps and 39.3 KB. On
+  the GPU 1,092.9, 1,272.7 and 1,853.4 fps. docs/PERFORMANCE.md has the tables
+  and the fixes ranked: #175, #178, #176, #177.
+- The four fixes together (`measure/all2`, two runs each unless said): moving
+  in software 126.3 → 43.9 KB a frame, 108.6 → 24.7 hooked calls, 9.11 →
+  8.37 ms; in the crowd 250.4 → 68.5 KB, 481.7 → 32.0 calls, 11.69 → 9.77 ms,
+  frames over 20 ms 1.0 → 0.19 a second; on the GPU 0.90 → 0.61 ms moving and
+  1.76 → 0.96 ms wading in the Greenhouse (569 → 1,037 fps).
+- The bridge alone, driven from Python like the runtime drives it: 0.94 ms a
+  step at the median, half of it recompiled ARM code, a sixth timers and the
+  event scheduler, an eighth the SPU. No bridge change: fast memory stays off.
+- Not run: windowed play, level load times, the owner's launcher.
+
+## 2026-10-16 — no hook on every host sprite draw (#175)
+
+- `KirbyHostVisuals` hooked `HSprite.draw`, the host's draw of every sprite,
+  to hide the outfit atlas's fallback pose: 78.9 hooked calls a frame moving,
+  135 in the crowd, about 200 wading in the Greenhouse, the Beheaded included.
+- The outfit's in-game page is now blank (`tools/build_outfit.py`); the skin
+  preview reads `kirbySuperStarUltraPreview0.png`. The hook and `OnFrame` are
+  gone. `scripts/stage_runtime.py --original-runtime` refuses an older pack.
+- Live (`repros/perf-174-kirby`, seed 174, quiet, software, two or three runs
+  each): moving, 126.3 → 53.7 KB a frame, 51 → 22 collections a minute,
+  108.6 → 29.8 hooked calls; in the crowd 250.4 → 123.0 KB, 96 → 47
+  collections, 481.7 → 340.8 calls, the mean frame 11.69 → 10.65 ms. Traces
+  matched the #174 build in all 2,907 shared original frames; the arrival and
+  the first moments of play look the same, with nothing of the outfit drawn.
+- Not run: the skin selector's preview, the owner's launcher, a window on the
+  GPU.
+
+## 2026-10-16 — DCCM's detour taken off unhooked host functions (#178)
+
+- Removing a DCCM handler leaves the function detoured into .NET for the
+  session (0.77 µs and 56 B a call): 280 calls a frame with no handler in the
+  crowd. Turning DCCM's direct route back on crashed the game after the held
+  enemies were let go in 3 of 4 crowd runs, so that version was dropped.
+- `DccmDetours` undoes the detour (`NativeHooks.HookHandle.Disable`) when
+  `KirbyEnemyHooks.Relax` leaves a function with no handler, writes it again
+  (`Enable`) before the next `Hold`, and remakes the manager's closure over
+  the new trampoline. Reflection; nothing changes if DCCM's fields are
+  missing.
+- Live (`repros/perf-174-kirby`, seed 174, crowd, quiet, software): 250.4 →
+  233.3 KB a frame, 96 → 79 collections a minute, 481.7 → 201.6 hooked calls
+  (280.0 → 0 with no handler), the mean frame 11.69 → 10.82 ms. No crash in
+  the 8 crowd runs with it, each the same fight (66 hits, 2,046 damage).
+- Not run: another mod hooking the same functions, a hold across a level
+  change, the owner's launcher.
+
+## 2026-10-16 — the controls read once per input read (#176)
+
+- `KirbyInput` asked the host for the bindings again for every action and
+  tested keys through `dc.hxd.Key.Class.isDown`, a new delegate on every
+  access. A read now takes the bindings, the modes and `hxd.Key.keyPressed`
+  once (`isDown(code)` is `keyPressed[code] > 0` in the bytecode).
+- Live (`repros/perf-174-kirby`, seed 174, quiet, software, two or three runs
+  each): with the lab's input a read went 20 µs, 1,704 B → 11 µs, 14 B; with
+  keys through the host's key table (`KIRBY_LAB_REAL_KEYS=1`) 73 µs,
+  13,948 B → 19 µs, 8 B, and 150.8 → 122.2 KB a frame. With real keys two #174
+  runs differed in 331 of 2,968 original frames (presses timed in host
+  milliseconds) and this branch's runs from them in 221 to 227; with the lab's
+  input all four fixes matched #174 in every frame.
+- Not run: a controller, the owner's launcher.
+
+## 2026-10-16 — two hurtbox hooks dropped (#177)
+
+- `Hero.postUpdate` and `Entity.spriteUpdate` run from `Level.postUpdate`,
+  after the hurtbox projection has ended, so their `Physical` handlers never
+  found it on. They are gone, and `KirbyMod`'s own handlers on
+  `Hero.preUpdate` and `Hero.fixedUpdate` run their work inside `Physical`
+  instead of a second handler each (same order: the hurtbox handler was added
+  last, so it already ran outermost).
+- Live (`repros/perf-174-kirby`, seed 174, quiet, software, two or three runs
+  each): 108.6 → 103.7 hooked calls a frame moving, 481.7 → 450.9 in the
+  crowd; 126.3 → 120.3 and 250.4 → 217.8 KB a frame. Traces matched the #174
+  build in all 2,912 shared original frames.
+- Not run: the owner's launcher, every hurtbox case of the projection's own
+  record.
+
+## 2026-10-17 — a live check of main after the four speed fixes (#190)
+
+- `main` at `28f4086` (#179–#183 merged) built, staged in a new isolated
+  profile (`repros/main-28f4086`) and run with the settings of "The four
+  fixes together (#174)": seed 174, quiet, hook counter, software drawing.
+  `movement` (`20261017-001113`) and `crowd` (`20261017-001241`) ended by
+  their time limit with no fatal log and the real saves unchanged.
+- Against `measure/all2`, which has the same source: 42.6 and 68.0 KB a frame
+  (43.9 and 68.5), the same kinds of slow frames and the same crowd fight;
+  109.5 and 96.1 fps (119.5 and 102.4), the difference outside the mod's own
+  work and within the spread of earlier runs of one build.
+- Not run: a second run of each, the GPU, the Greenhouse, real keys, traces
+  with frame captures, the owner's launcher.
+
+## 2026-10-17 — the mod compiled ahead of time (#184)
+
+- The first host frame in which the original steps, at the end of the arrival,
+  took 53.6–54.6 ms: 30.8–31.3 ms of it the .NET JIT compiling 261 methods,
+  12 ms the first original step. The lab's new arrival record
+  (`perf-arrival.json`) times every frame from Kirby's activation to his 600th
+  counted frame, with the JIT in each stage and host phase.
+- The build compiles the packed `Kirby.Core` and `Kirby.Runtime` ahead of time
+  (ReadyToRun) with crossgen2 10.0.12, restored from NuGet;
+  `-p:ModReadyToRun=false` packs the IL alone.
+- Live (`repros/perf-184`, seed 174, movement, quiet, software, two runs
+  each): the first Kirby frame 53.6–54.6 → 38.3–39.3 ms, its JIT 30.8–31.3 →
+  14.7–14.9 ms (261 → 135 methods); played frames, garbage and collections
+  unchanged. The arrival captures looked the same, and Kirby's original state
+  matched the IL build in all 866 shared original frames. Crossgen2's
+  cross-module options gained 1–3 ms more and were left out.
+- Not run: GPU drawing, a window with vsync, a first launch after a reboot,
+  the owner's launcher.
+
+## 2026-10-17 — the movement sticks through the host's own setting (#185)
+
+- The hook on `ControllerAccess.getMovementSticks` is gone. The masked hero
+  update sets each stick whose function is movement to none and puts the
+  options back after it, and back for the player while a charging weapon
+  reads its aim (`WithHostDirections`).
+- Live (`repros/perf-185-kirby`, seed 174, quiet, software, three `before`
+  runs on `main` 28f4086 and two with the change): 24.9 → 17.6 hooked calls a
+  frame moving, 32.3 → 24.9 in the crowd; 44.6 → 37.5 and 69.5 → 62.0 KB a
+  frame. The `aim` plan saw no movement stick inside the masked update and
+  the player's left stick outside it; its key checks fail on `main` too since
+  #176 (it presses keys through `Key.isDown`).
+- Not run: a real controller stick, the owner's launcher.
+
+## 2026-10-17 — the health flask out of Kirby's skills (#186)
+
+- The hook on `HealFlask.isEnabled` is gone. A Kirby session takes the flask
+  out of the hero's main skills with the host's `unregisterSkill` and puts it
+  back in its place when it ends; a handler on `HeroMainSkillsManager.serialize`
+  writes it into a save made in between.
+- Live (`repros/perf-185-kirby`, seed 174, quiet, software, three `before`
+  runs on `main` 28f4086 and two with the change): 24.9 → 21.6 hooked calls a
+  frame moving, 32.3 → 28.7 in the crowd; 44.6 → 41.8 and 69.5 → 65.6 KB a
+  frame. The `healing` plan gave the same lives, fountain heal and F slot as
+  `main`, through a level exit, with the flask out of the skills.
+- Not run: a run save during a Kirby session (the `serialize` handler), the
+  owner's launcher.
+
+## 2026-10-17 — the Collector's unlock check hooked only while it runs (#187)
+
+- `KirbyCollector`'s handler on `ItemMetaManager.hasUnlockedItem` is added by
+  the first `canInvestOnItem` check of a Kirby run and taken off between host
+  frames 30 frames after the last one, with DCCM's detour, instead of staying
+  on for the whole session.
+- Live (`repros/perf-185-kirby`, seed 174, quiet, software, three `before`
+  runs on `main` 28f4086 and two with the change): 24.9 → 22.8 hooked calls a
+  frame moving, 32.3 → 30.2 in the crowd; 44.6 → 42.1 and 69.5 → 66.9 KB a
+  frame. The Collector check gave `main`'s counts, gates and lists, with the
+  handler on only from Kirby's first check.
+- Not seen: the handler coming off after a Collector visit. Not run: the
+  owner's launcher.
+
+## 2026-10-17 — the weapon update hooked only while the shield is held (#188)
+
+- `KirbyInput`'s handler on `HeroWeaponsManager.updateWeapon`, which lets a
+  charging weapon read the real directions inside the masked hero update, is
+  added while the retained shield's binding is down or the assist mode attacks
+  by itself, and taken off 30 host frames later once no weapon charges, with
+  DCCM's detour. New `shield` lab plan (`LabShieldHoldProbe`).
+- Live (`repros/perf-185-kirby`, seed 174, quiet, software, three `before`
+  runs on `main` 28f4086 and two with the change): 24.9 → 22.8 hooked calls a
+  frame moving, 32.3 → 30.2 in the crowd; 44.6 → 42.4 and 69.5 → 66.8 KB a
+  frame. The `shield` plan passed: the handler on in every held, charging
+  frame, the host reading the real directions and turning the shield, and off
+  after the release.
+- Not run: the assist mode's automatic attack, the owner's launcher.
+
+## 2026-10-17 — the head effects left to the host's own head flag (#189)
+
+- The hook on `HeroHead.updateHeadFx` is gone. The Kirby outfit has no head,
+  so the host returns before the head's particle emitter; activation now also
+  sets `heroHasHead` false. `Fx.heroHeadPopFinal` is still skipped.
+- Live (`repros/perf-185-kirby`, seed 174, quiet, software, three `before`
+  runs on `main` 28f4086 and two with the change): 24.9 → 23.9 hooked calls a
+  frame moving, 32.3 → 31.1 in the crowd; 44.6 → 43.5 and 69.5 → 68.1 KB a
+  frame. The `arrival` plan, with captures, matched `main`'s animations and
+  frames, with no head flag, eye or head particle on through the arrival and
+  no flame above Kirby.
+- Not run: `PolloPower` during a Kirby session, the owner's launcher.
+
+## 2026-10-17 — the machine and the equipment atlas readied during the level load (#193)
+
+- The arrival's activation frame took 752–792 ms: `OnActivated` 302–331 ms
+  (the ROM's SHA-256 70 ms, opening the machine 214–221 ms, audio 9–10 ms)
+  and the first equipment draw 387–397 ms, nearly all of it the host loading
+  the outfit's equipment atlas (0.37–0.38 s), then 27 ms of texture uploads.
+- The runtime no longer hashes the ROM before opening it; the bridge checks
+  it. A hook on the host's atlas flush, which each level load runs, opens the
+  first machine on a worker thread and gets the equipment atlas so the host
+  keeps it.
+- Live (`repros/perf-193`, seed 174, movement, quiet, software): the
+  activation frame 752–792 → 100–114 ms (nine runs), the first original
+  step's frame and the step itself unchanged. In
+  lifecycle runs the atlas load moved into the level load (1.04–1.14 s
+  there), the rest of the load to the activation was 0.59–0.64 s shorter, and
+  from the flush to Kirby's first draw the new build was 0.12–0.27 s sooner.
+  After a death the next activation no longer makes the atlas's textures
+  again (0.34 s). The arrival captures looked the same, and Kirby's original
+  state matched in all 880 traced frames.
+- The first original step, 12 ms against 1.2 ms later, is the recompiler
+  translating the first frame's code. Moving it would change the original's
+  frames or the core, so it is left.
+- Not run: GPU drawing, a window, the owner's launcher, a first launch after
+  a reboot, the host's `reloadCache`, the machine opened on the game thread.
+
+## 2026-10-17 — the lab aim plan presses keys KirbyInput reads (#200)
+
+- The `aim` plan had failed on `main` since #176: `LabWeaponAimProbe` pressed
+  its keys through a hook on `Key.isDown`, and `KirbyInput` now reads the
+  host's key table directly, so every pressed key read as nothing.
+- The probe now writes the key table, as `LabSmokeCapture.HostKey` does
+  (new `LabSmokeCapture.HostKeyState` gives a key's entry), and its
+  `Key.isDown` hook is gone. Its Dodge check follows #75: Shift slides with no
+  guard bit, Ctrl guards (512).
+- Live (`repros/aim-200`, seed 174): `20261017-074001` passed every check;
+  `20261017-073710`, before the Dodge change, failed only that one.
+- Not run: the other plans that still hold keys through `Key.isDown` hooks
+  (healing, F slot, combat, cook, repro).
+
+## 2026-10-17 — four more lab plans press keys KirbyInput reads (#202)
+
+- Since #176 `KirbyInput` reads the host's key table, so `Key.isDown` hooks
+  no longer reach it. Besides `aim` (#200), this broke the Heal key in the
+  `healing` and `fslot` plans (`main`'s healing run kept Mike at 3 uses), the
+  shield key's source guard in `combat`, and every keyboard key of a `repro`
+  plan.
+- Those keys are now held in the key table through `LabSmokeCapture.HostKey`
+  or the new `HostKeyCode` (by key code). Interact and the `isPressed` hooks,
+  which only the host reads, stay. `cook` presses only Interact: unchanged.
+  `combat.json` gains `sourceGuardAtParry`.
+- Live (`repros/keys-202`): healing `20261017-075656` (Mike 3 → 2, no flask,
+  fountain 15 → 53), combat `075854` (counter, guard at the parry), repro
+  `080018` (each key reached the source mask), fslot `080542` on a random level
+  (every phase). With seed 174 (`080127`) every F press fired but the Cook
+  Zombie most likely stood past where Kirby's walk stops, so Cook came back
+  unused and the last phase timed out.
+- Not run: `cook`, a `fslot` resume, a controller, the owner's launcher.

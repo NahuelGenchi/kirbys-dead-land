@@ -29,7 +29,7 @@ The real `core/mdk/ref/GameProxy.dll` was inspected using Mono.Cecil, and the ru
 
 The NuGet dependency `DeadCellsCoreModding.MDK` version 1.0.1 is an MSBuild bridge. It requires the installed release MDK through `DCCM_MDK_ROOT`; installing only that NuGet package is insufficient. The upstream MDK shell installer edits shell configuration and global NuGet sources, so this project uses command-local environment variables instead.
 
-Compiler: official .NET SDK **10.0.401**, installed under `/home/rayzza/.local/share/kirby-dead-cells/dotnet`. SDK archive SHA-512 is pinned in `scripts/setup_runtime.py`, from [Microsoft release metadata](https://builds.dotnet.microsoft.com/dotnet/release-metadata/10.0/releases.json).
+Compiler: official .NET SDK **10.0.401**, installed under `/home/rayzza/.local/share/kirby-dead-cells/dotnet`. SDK archive SHA-512 is pinned in `scripts/setup_runtime.py`, from [Microsoft release metadata](https://builds.dotnet.microsoft.com/dotnet/release-metadata/10.0/releases.json). Since #184 the build also restores `Microsoft.NETCore.App.Crossgen2.linux-x64` from NuGet at the runtime version the SDK carries (10.0.12, about 38 MB) and compiles the packed `Kirby.Core` and `Kirby.Runtime` ahead of time with it (`src/runtime/Kirby.Runtime.csproj`; [the first Kirby frame](PERFORMANCE.md#the-first-kirby-frame-184)).
 
 ## Concrete host API
 

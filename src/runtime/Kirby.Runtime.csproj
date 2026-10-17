@@ -16,4 +16,42 @@
     <ModAssembly Include="Kirby.Core" />
     <OutputFiles Include="$(MSBuildProjectDirectory)/config.json" />
   </ItemGroup>
+
+  <!-- The packed Kirby.Core and Kirby.Runtime carry ahead-of-time (ReadyToRun) code, so the
+       first frame Kirby plays does not wait for the JIT (#184). The IL build in bin/ is
+       unchanged. -p:ModReadyToRun=false packs the IL alone. -->
+  <PropertyGroup>
+    <ModReadyToRun Condition="'$(ModReadyToRun)' == ''">true</ModReadyToRun>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(ModReadyToRun)' == 'true'">
+    <PackageDownload Include="Microsoft.NETCore.App.Crossgen2.$(NETCoreSdkRuntimeIdentifier)" Version="[$(BundledNETCoreAppPackageVersion)]" />
+  </ItemGroup>
+  <Target Name="ModReadyToRunInputs">
+    <PropertyGroup>
+      <ModReadyToRunPath>$(IntermediateOutputPath)r2r/</ModReadyToRunPath>
+      <ModCrossgen>$(NuGetPackageRoot)microsoft.netcore.app.crossgen2.$(NETCoreSdkRuntimeIdentifier)/$(BundledNETCoreAppPackageVersion)/tools/crossgen2</ModCrossgen>
+    </PropertyGroup>
+    <ItemGroup>
+      <!-- The game runs on the SDK's own runtime, so its framework is the reference. -->
+      <ModReadyToRunReference Include="$(NetCoreRoot)shared/Microsoft.NETCore.App/$(BundledNETCoreAppPackageVersion)/*.dll" />
+      <ModReadyToRunReference Include="@(ReferencePath)" Condition="'%(ReferencePath.FrameworkReferenceName)' == '' and '%(ReferencePath.ReferenceSourceTarget)' != 'ProjectReference'" />
+      <ModReadyToRunReference Include="@(_MDK_ModAssembly_Dll)" />
+    </ItemGroup>
+  </Target>
+  <Target Name="CompileModReadyToRun" DependsOnTargets="ModReadyToRunInputs"
+          Inputs="@(_MDK_ModAssembly_Dll);@(ModReadyToRunReference);$(MSBuildProjectFullPath)"
+          Outputs="@(_MDK_ModAssembly_Dll->'$(ModReadyToRunPath)%(Filename)%(Extension)')">
+    <Error Condition="!Exists('$(ModCrossgen)')" Text="crossgen2 was not restored: $(ModCrossgen)" />
+    <!-- One image per assembly: each is its own version bubble, as the SDK compiles them. -->
+    <WriteLinesToFile File="$(ModReadyToRunPath)%(_MDK_ModAssembly_Dll.Filename).rsp" Overwrite="true"
+                      Lines="%(_MDK_ModAssembly_Dll.FullPath);-o:$(ModReadyToRunPath)%(_MDK_ModAssembly_Dll.Filename)%(_MDK_ModAssembly_Dll.Extension);--targetos:linux;--targetarch:x64;-O;@(ModReadyToRunReference->'-r:%(FullPath)')" />
+    <Exec Command="&quot;$(ModCrossgen)&quot; @&quot;$(ModReadyToRunPath)%(_MDK_ModAssembly_Dll.Filename).rsp&quot;" />
+  </Target>
+  <Target Name="PackModReadyToRun" BeforeTargets="CopyOutputFiles" DependsOnTargets="CompileModReadyToRun"
+          Condition="'$(ModReadyToRun)' == 'true'">
+    <ItemGroup>
+      <OutputFiles Remove="@(_MDK_ModAssembly_Dll)" />
+      <OutputFiles Include="@(_MDK_ModAssembly_Dll->'$(ModReadyToRunPath)%(Filename)%(Extension)')" />
+    </ItemGroup>
+  </Target>
 </Project>

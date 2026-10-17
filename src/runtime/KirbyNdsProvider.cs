@@ -154,9 +154,34 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
     private long paceStepTicks, paceRenderTicks;
     private int paceFrames, paceSteps, paceLocked, paceIdle, paceDoubled, paceUnfinished;
     private double paceStarted;
+    // The machine a worker has been opening since the level began loading (#193).
+    private Task<nint>? opening;
+    /// <summary>
+    /// A level of a Kirby run is loading. What Kirby's arrival would otherwise
+    /// load in its first frame is prepared now (#193): the outfit's equipment
+    /// atlas is fetched before the host drops the atlases this level has not
+    /// asked for, and the first machine is opened on a worker thread.
+    /// </summary>
+    public void LevelLoading()
+    {
+        LabActivationTrace.Mark("Level loading", gc: true);
+        KirbySpriteRenderer.EquipmentAtlas();
+        LabActivationTrace.Mark("Equipment atlas fetched", gc: true);
+        if (nds is not null || opening is not null) return;
+        string library = Path.Combine(modRoot, "libkssu_bridge.so"), rom = config.RomPath, state = config.SeedStatePath;
+        opening = Task.Run(() => NdsRuntime.Open(library, rom, state));
+    }
+    private nint TakeOpenedMachine()
+    {
+        if (opening is not { } task)
+            return NdsRuntime.Open(Path.Combine(modRoot, "libkssu_bridge.so"), config.RomPath, config.SeedStatePath);
+        opening = null;
+        LabActivationTrace.Mark(task.IsCompleted ? "Opened machine ready" : "Waiting for the opened machine");
+        return task.GetAwaiter().GetResult();
+    }
     public void OnActivated(KirbySession session)
     {
-        LabActivationTrace.Mark("OnActivated enter");
+        LabActivationTrace.Mark("OnActivated enter", gc: true);
         EndDetachedDeath();
         bool firstActivation = nds is null;
         double hostHealthRatio = session.Hero.life / (double)Math.Max(1, session.Hero.maxLife);
@@ -168,7 +193,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         if (originalBody.BodyHeight > 4) originalBody = new(16.8, 54, 2.25, originalBody.MaxLife);
         if (nds is null)
         {
-            nds = new NdsRuntime(Path.Combine(modRoot, "libkssu_bridge.so"), config.RomPath, config.SeedStatePath);
+            nds = new NdsRuntime(TakeOpenedMachine());
             // The upper screen is read only for a screen-wide effect, and only
             // by readers that ask whether the frame was drawn.
             nds.SkipIdleScreen(true);
@@ -556,9 +581,9 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
     private void RenderSource()
     {
         if (nds is null || renderer is null) return;
-        if (firstRender) LabActivationTrace.Mark("First source Render begin");
+        if (firstRender) LabActivationTrace.Mark("First source Render begin", gc: true);
         renderer.Render(nds);
-        if (firstRender) { LabActivationTrace.Mark("First source Render complete"); firstRender = false; }
+        if (firstRender) { LabActivationTrace.Mark("First source Render complete", gc: true); firstRender = false; }
     }
     private void EnterLevel(Hero hero)
     {

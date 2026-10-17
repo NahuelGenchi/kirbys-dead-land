@@ -28,6 +28,8 @@ from build_assets import atlas_bytes, read_atlas, write_pak
 
 ROOT = Path.home() / '.local/share/kirby-dead-cells'
 MODEL = 'kirbySuperStarUltra'
+# The skin preview's own page; the in-game page stays blank (#175).
+PREVIEW_PAGE = MODEL + 'Preview0.png'
 OUTFIT = 'KirbySuperStarUltra'
 BUILDER = 'kirby-original-runtime-outfit-v1'
 ABILITY_PREFIX = 'KirbyAbility'
@@ -178,8 +180,13 @@ def build(pak, decoded, out, icon_dir):
     pal.save(atlas / f'{MODEL}_default_s.png')
     pal.save(atlas / f'{MODEL}Weapons_default_s.png')
     encoded = palette_encode(image, lookup)
-    encoded.save(atlas / f'{MODEL}0.png')
-    Image.new('RGBA', image.size, (128, 128, 255, 255)).save(atlas / f'{MODEL}0_n.png')
+    # The running ROM draws Kirby. The host body, its corpses and afterimage
+    # trails draw from the in-game page, so it is blank; only the skin preview
+    # shows the fallback pose, from a page of its own (#175).
+    Image.new('RGBA', image.size).save(atlas / f'{MODEL}0.png')
+    encoded.save(atlas / PREVIEW_PAGE)
+    for page in (f'{MODEL}0.png', PREVIEW_PAGE):
+        Image.new('RGBA', image.size, (128, 128, 255, 255)).save(atlas / page.replace('.png', '_n.png'))
     source_rows = read_atlas(pak.read('atlas/beheaded.atlas'))
     rows = [dict(row, page=f'{MODEL}0.png', x=0, y=0, w=image.width, h=image.height,
                  ox=round(row['ow'] / 2 + origin[0]), oy=round(row['oh'] / 2 + origin[1]))
@@ -203,7 +210,7 @@ def build(pak, decoded, out, icon_dir):
     if any(r['name'].startswith(MODEL + '_') for r in previews):
         raise ValueError('Source already contains a Kirby preview')
     additions = [dict(r, name=r['name'].replace('beheaded_', MODEL + '_', 1),
-                      page=f'{MODEL}0.png', x=0, y=0, w=image.width, h=image.height,
+                      page=PREVIEW_PAGE, x=0, y=0, w=image.width, h=image.height,
                       ox=round(r['ow'] / 2 + origin[0]), oy=round(r['oh'] / 2 + origin[1]))
                  for r in previews if r['name'].startswith('beheaded_')]
     (atlas / 'heroSkins.atlas').write_bytes(atlas_bytes(previews + additions))
@@ -243,7 +250,8 @@ def build(pak, decoded, out, icon_dir):
     if {(r['name'], r['index']) for r in rows} != {(r['name'], r['index']) for r in source_rows}:
         raise ValueError('Fallback host animation coverage differs')
     return dict(outfit=OUTFIT, model=MODEL, fallback_pose='bkir group 0 pose 184',
-                fallback_origin=origin, fallback_frames=len(rows), preview_frames=len(additions),
+                fallback_origin=origin, fallback_frames=len(rows), fallback_page='blank',
+                preview_page=PREVIEW_PAGE, preview_frames=len(additions),
                 icon_cell=cell, equipment=equipment, ability_item_cells=ability_cells,
                 shared_resources='Existing cardIcons pixels and heroSkins rows preserved; the outfit icon and preview and 24 ability item icons appended.',
                 live_rendering='Original ROM OAM through KirbySpriteRenderer; fallback atlas has no source timing.')

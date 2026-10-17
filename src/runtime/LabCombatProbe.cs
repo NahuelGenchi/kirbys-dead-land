@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Reflection;
 using Path = System.IO.Path;
 using System.Text.Json;
 using dc.en;
@@ -31,7 +32,10 @@ internal static unsafe class LabCombatProbe
     private static uint? parryAt;
     private static string? copiedAbility, abilityAtParry;
     private static byte? copiedSourceAbility;
-    private static int shieldKey = -1;
+    private static int shieldAction = -1;
+    // The source guard (DS L) that KirbyInput adds while the shield key is held at the parry.
+    private static bool sourceGuardAtParry;
+    private static readonly FieldInfo InputField = typeof(KirbyNdsProvider).GetField("input", BindingFlags.NonPublic | BindingFlags.Instance)!;
     // KIRBY_LAB_COMBAT_ELITE=1 makes the swallowed Zombie an Elite and records
     // the copy damage that the second Zombie takes from each original hit.
     private static readonly bool eliteVictim = Environment.GetEnvironmentVariable("KIRBY_LAB_COMBAT_ELITE") == "1";
@@ -56,8 +60,6 @@ internal static unsafe class LabCombatProbe
         Hook_HeroWeaponsManager.hasButtonDownForWeapon += (orig, manager, weapon) => ShieldHeld(weapon) || orig(manager, weapon);
         Hook_HeroWeaponsManager.hasButtonPressedForWeapon += (orig, manager, weapon) =>
             (ShieldHeld(weapon) && lastTick == parryAt) || orig(manager, weapon);
-        dc.hxd.Hook__Key.isDown += (orig, key) =>
-            (key == shieldKey && parryAt is uint at && lastTick - at < 3) || orig(key);
         Hook_Mob.applyAttackResult += (orig, mob, attack) =>
         {
             int before = mob.life;
@@ -82,6 +84,15 @@ internal static unsafe class LabCombatProbe
     }
 
     private static ushort? Input(KirbySession session)
+    {
+        ushort? keys = Decide(session);
+        // The shield key is held in the host's key table, which KirbyInput's
+        // shield guard reads (#176); the host's weapon queries are hooked above.
+        LabSmokeCapture.HostKey(session.Hero, shieldAction, parryAt is uint at && lastTick - at < 3);
+        return keys;
+    }
+
+    private static ushort? Decide(KirbySession session)
     {
         var machine = KirbyMod.Instance?.NativeProvider?.Machine;
         if (machine is null) return 0;
@@ -109,11 +120,7 @@ internal static unsafe class LabCombatProbe
             hostShield = hero.weaponsManager.findItemInMain(shield) as BaseShield;
             equipped = hostShield is not null;
             for (int slot = 0; slot < hero.inventory.nbWeapons; slot++)
-                if (hero.inventory.getEquippedWeaponOn(slot)?.permanentId == shield.permanentId)
-                {
-                    var bindings = hero.controller.parent.get_bindings().primary;
-                    if (slot + 2 < bindings.length) shieldKey = ((int*)bindings.bytes)[slot + 2];
-                }
+                if (hero.inventory.getEquippedWeaponOn(slot)?.permanentId == shield.permanentId) shieldAction = slot + 2;
             Stage($"Shield weapon found={equipped}; creating Zombie");
             victim = Spawn(hero, 36);
             if (eliteVictim) victim.setElite(true); // No Elite skills: keep the swallow deterministic.
@@ -164,6 +171,8 @@ internal static unsafe class LabCombatProbe
         if (run.Length == 0 || session is null || machine is null) return;
         if (machine.State.Frame == lastReportFrame) return;
         lastReportFrame = machine.State.Frame;
+        if (parryAt is uint at && lastTick - at < 3 && KirbyMod.Instance?.NativeProvider is { } provider &&
+            InputField.GetValue(provider) is ushort input && (input & 512) != 0) sourceGuardAtParry = true;
         if (parryStarted && !attackSent && attacker is not null)
         {
             attackSent = true;
@@ -194,6 +203,7 @@ internal static unsafe class LabCombatProbe
             sameShieldAllowed = shieldId is not null && session.Rules.CanUse(HostWeaponKind.Shield, shieldId),
             parryTried,
             useAccepted,
+            sourceGuardAtParry,
             parryStarted,
             attackSent,
             countered,

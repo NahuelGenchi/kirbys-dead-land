@@ -1,42 +1,28 @@
 using dc.en;
-using dc.libs.heaps.slib;
-using ModCore.Utilities;
 
 namespace Kirby.Runtime;
 
 /// <summary>
-/// Host graphics that belong to the Beheaded rather than Kirby. The outfit
-/// atlas holds one static fallback pose for every host animation; the running
-/// ROM supplies Kirby's real graphics, so that fallback must never be drawn.
+/// Host graphics that belong to the Beheaded rather than Kirby. The running ROM
+/// supplies Kirby's real graphics. The outfit atlas's in-game page is blank
+/// (tools/build_outfit.py), so the host body, its arrival and death corpses and
+/// afterimage trails draw nothing without a hook on every host sprite (#175).
 /// </summary>
 internal static class KirbyHostVisuals
 {
-    private const string OutfitAtlas = "atlas/kirbySuperStarUltra.atlas";
     private static string outfitId = "";
-    private static nint outfitLibrary;
     /// <summary>Set while original damage is applied through the host's hit path.</summary>
     internal static bool SuppressHitBlink;
 
     public static void Install(string outfit)
     {
         outfitId = outfit;
-        // The arrival corpse (before the hero exists), the hero body, its death
-        // corpse and host afterimage trails all draw HSprites from the outfit
-        // atlas, which would show the static fallback pose instead of Kirby.
-        Hook_HSprite.draw += (orig, sprite, context) =>
-        {
-            if (outfitLibrary != 0 && sprite.lib?.HashlinkPointer == outfitLibrary) return;
-            orig(sprite, context);
-        };
         // The Beheaded's spirit flame follows its neck, which sits above Kirby's
-        // head. The outfit has no host head, but the arrival cinematic still
-        // ignites it: silence its emitter while Kirby is active, and skip the
-        // ignition burst that would leave a flame column on Kirby's head. The
-        // spirit crawling to the body and leaving it at death keep their FX.
-        dc.tool.Hook_HeroHead.updateHeadFx += (orig, head, time) =>
-        {
-            if (KirbyMod.Instance?.ActiveSession is null) orig(head, time);
-        };
+        // head. The outfit has no host head (its skin row's head is false), so
+        // HeroHead.updateHeadFx returns before its emitter (#189), but the
+        // arrival cinematic still ignites it: skip the ignition burst that would
+        // leave a flame column on Kirby's head. The spirit crawling to the body
+        // and leaving it at death keep their FX.
         dc.Hook_Fx.heroHeadPopFinal += (orig, fx, hero, color, flash, circle) =>
         {
             if (!KirbySelected() || hero is null) orig(fx, hero, color, flash, circle);
@@ -56,17 +42,15 @@ internal static class KirbyHostVisuals
         string.Equals(dc.Main.Class.ME?.user?.heroSkin?.ToString(), outfitId, StringComparison.Ordinal);
 
     /// <summary>
-    /// Track the outfit atlas through the host asset manager. The arrival
-    /// corpse uses it before Hero.initGfx runs, and a biome transition can
-    /// replace the library instance.
+    /// Clear head particles that were alive when Kirby took over the hero. The
+    /// head stays off as the host sets it from the outfit's skin row
+    /// (<c>Hero.initColorMap</c>), so the host's own check keeps the emitter
+    /// silent; set here once, it holds whatever ran before the session (#189).
     /// </summary>
-    public static void OnFrame()
+    public static void ClearHead(Hero hero)
     {
-        outfitLibrary = KirbySelected() && dc.Main.Class.ME?.curProcess is dc.pr.Game
-            ? dc.Assets.Class.lib.get(OutfitAtlas.AsHaxeString())?.HashlinkPointer ?? 0
-            : 0;
+        if (hero.heroHead is not { } head) return;
+        head.killAllParticles();
+        head.heroHasHead = false;
     }
-
-    /// <summary>Clear head particles that were alive when Kirby took over the hero.</summary>
-    public static void ClearHead(Hero hero) => hero.heroHead?.killAllParticles();
 }

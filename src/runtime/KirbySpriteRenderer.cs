@@ -69,8 +69,8 @@ public sealed unsafe class KirbySpriteRenderer : IDisposable
         this.hero = hero ?? throw new ArgumentNullException(nameof(hero));
         backgroundEffects = new NdsBackgroundEffects(hero);
         if (flashStrength < 1) softener = new PaletteFlashSoftener(2, flashStrength);
-        // Body pixels are supplied by the original machine. KirbyHostVisuals
-        // skips the host body sprite; weapon pixels are redrawn separately.
+        // Body pixels are supplied by the original machine. The host body sprite
+        // draws the outfit's blank page; weapon pixels are redrawn separately.
     }
 
     private static void ReadGpu(NdsRuntime nds, uint address, byte[] data)
@@ -238,12 +238,10 @@ public sealed unsafe class KirbySpriteRenderer : IDisposable
         // animation. The controller independently gates actual weapon use.
         bool shield = animation.StartsWith("block", StringComparison.OrdinalIgnoreCase) ||
                       animation.StartsWith("parry", StringComparison.OrdinalIgnoreCase);
-        // The asset manager resets each atlas's "used" flag before a biome
-        // transition and explicitly destroys unused libraries in flushCache.
-        // preventAutoDispose only protects GPU eviction, not that lifecycle.
-        // Reacquire through get so it marks the live atlas used and replaces a
-        // library whose pages were destroyed during the transition.
-        SpriteLib currentLibrary = dc.Assets.Class.lib.get("atlas/kirbySuperStarUltraWeapons.atlas".AsHaxeString());
+        bool first = equipment is null;
+        if (first) LabActivationTrace.Mark("Equipment atlas get begin", gc: true);
+        SpriteLib currentLibrary = EquipmentAtlas();
+        if (first) LabActivationTrace.Mark("Equipment atlas get returned", gc: true);
         if (equipment is null || equipmentLibrary?.HashlinkPointer != currentLibrary.HashlinkPointer)
         {
             equipment?.remove();
@@ -252,15 +250,18 @@ public sealed unsafe class KirbySpriteRenderer : IDisposable
             equipmentNormal = null;
             equipmentLibrary.preventAutoDispose();
             equipmentLibrary.ensureTexturesAllocated();
+            if (first) LabActivationTrace.Mark("Equipment textures allocated", gc: true);
             equipment = new HSprite(equipmentLibrary, host.groupName, Ref<int>.In(host.frame), null!);
             equipment.pivot.isUndefined = false;
             equipment.pivot.usingFactor = true;
             equipment.pivot.centerFactorX = equipment.pivot.centerFactorY = .5;
             equipment.setFrame(host.frame);
+            if (first) LabActivationTrace.Mark("Equipment sprite created");
         }
         AttachSibling(equipment, host, ref equipmentLayer, true);
         equipment.set(equipmentLibrary!, host.groupName, Ref<int>.In(host.frame), Ref<bool>.In(false));
         ConfigureEquipmentShaders(host);
+        if (first) LabActivationTrace.Mark("Equipment shaders configured");
         // The host's palette and lighting shaders are rendered in its opaque
         // actor pass. A new HSprite defaults to Alpha, which selects a different
         // LightedLayers pass and does not reproduce the host material.
@@ -276,6 +277,20 @@ public sealed unsafe class KirbySpriteRenderer : IDisposable
         equipment.visible = hero.visible && host.visible && (baseForm || shield) && !arriving;
         equipment.posChanged = true;
     }
+
+    /// <summary>
+    /// The outfit's equipment atlas, through the host asset manager. The manager
+    /// resets each atlas's "used" flag before a biome transition and destroys
+    /// the unused libraries in flushCache; preventAutoDispose only protects GPU
+    /// eviction, not that lifecycle. Reacquiring through get marks the live
+    /// atlas used and replaces a library whose pages were destroyed during the
+    /// transition. A Kirby run also gets it just before each level's flushCache
+    /// (#193), so the first level loads it during the load and a level after a
+    /// death keeps it, instead of the arrival's first frame loading it (0.37 s)
+    /// or making its textures again (0.34 s).
+    /// </summary>
+    internal static SpriteLib EquipmentAtlas() =>
+        dc.Assets.Class.lib.get("atlas/kirbySuperStarUltraWeapons.atlas".AsHaxeString());
 
     private void ConfigureEquipmentShaders(HSprite host)
     {

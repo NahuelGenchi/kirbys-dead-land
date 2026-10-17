@@ -12,6 +12,13 @@ namespace Kirby.Runtime;
 /// prerequisites (Health Flask I first, then any required item), a hidden entry
 /// counts as unlocked (#101), so a profile that never bought the hidden flask can
 /// still invest. Nothing is written to the save.
+/// <para>
+/// The host asks <c>hasUnlockedItem</c> a few times every frame for its own
+/// reasons, and a hooked call costs a managed call and its garbage whatever the
+/// handler decides. Only <c>canInvestOnItem</c>'s checks need it, so its handler is
+/// installed from the first check and taken off between host frames once no
+/// check has run for a while (#187).
+/// </para>
 /// </summary>
 internal static class KirbyCollector
 {
@@ -19,7 +26,15 @@ internal static class KirbyCollector
     private static Dictionary<string, (int Group, int CellCost)>? rows;
     /// <summary>Depth of <c>canInvestOnItem</c> calls in a Kirby run.</summary>
     private static int prerequisiteCheck;
+    /// <summary>Whether the <c>hasUnlockedItem</c> handler is installed, and host frames since a check last needed it.</summary>
+    private static bool holding;
+    private static int idle;
+    // Host frames the handler stays after the last check, so a Collector panel
+    // that checks its entries again does not add and remove it each time.
+    private const int Linger = 30;
 
+    /// <summary>Whether the <c>hasUnlockedItem</c> handler is installed now (lab report).</summary>
+    internal static bool Holding => holding;
     /// <summary>Lab-only: list every entry and keep the host count, to compare with the filtered Collector.</summary>
     internal static bool TestUnfiltered;
     /// <summary>Lab-only observer of each Collector entry the panel tested: (item ID, listed).</summary>
@@ -39,16 +54,39 @@ internal static class KirbyCollector
         Hook_ItemMetaManager.canInvestOnItem += (orig, meta, id) =>
         {
             if (!Active()) return orig(meta, id);
+            Hold();
             prerequisiteCheck++;
             try { return orig(meta, id); }
             finally { prerequisiteCheck--; }
         };
-        Hook_ItemMetaManager.hasUnlockedItem += (orig, meta, id) =>
-        {
-            bool unlocked = orig(meta, id);
-            return prerequisiteCheck > 0 && id?.ToString() is { } item && Row(item) is { } row
-                ? CollectorMenu.MeetsPrerequisite(item, row.Group, unlocked) : unlocked;
-        };
+    }
+
+    private static void Hold()
+    {
+        idle = 0;
+        if (holding) return;
+        DccmDetours.Attach("tool.ItemMetaManager.hasUnlockedItem");
+        Hook_ItemMetaManager.hasUnlockedItem += HasUnlockedItem;
+        holding = true;
+    }
+
+    /// <summary>
+    /// Remove the <c>hasUnlockedItem</c> handler once no check has needed it for a
+    /// while, and DCCM's detour with it (#178). Called once between host frames.
+    /// </summary>
+    internal static void Relax()
+    {
+        if (!holding || ++idle <= Linger) return;
+        Hook_ItemMetaManager.hasUnlockedItem -= HasUnlockedItem;
+        DccmDetours.Detach("tool.ItemMetaManager.hasUnlockedItem");
+        holding = false;
+    }
+
+    private static bool HasUnlockedItem(Hook_ItemMetaManager.orig_hasUnlockedItem orig, ItemMetaManager meta, dc.String? id)
+    {
+        bool unlocked = orig(meta, id);
+        return prerequisiteCheck > 0 && id?.ToString() is { } item && Row(item) is { } row
+            ? CollectorMenu.MeetsPrerequisite(item, row.Group, unlocked) : unlocked;
     }
 
     private static bool Active() => !TestUnfiltered && KirbyMod.Instance?.ActiveSession is not null;

@@ -23,6 +23,11 @@ internal static class LabSmokeCapture
     private static bool savedRenderTree;
     private static int captureFps;
     private static readonly HashSet<(int Width, int Height)> queriedHurtboxes = [];
+    // The input plan, which the Beheaded baselines follow through the host's keys.
+    private static readonly string? plan = Environment.GetEnvironmentVariable("KIRBY_LAB_INPUT_PLAN");
+    private static long? hostStart;
+    private static readonly bool RealKeys = Environment.GetEnvironmentVariable("KIRBY_LAB_REAL_KEYS") == "1";
+    private static long lastPoll, hostTraced = -1;
     [DllImport("kssu_bridge", EntryPoint = "kssu_save_state", CallingConvention = CallingConvention.Cdecl)]
     private static extern int SaveNdsState(nint handle, [MarshalAs(UnmanagedType.LPUTF8Str)] string path);
     [DllImport("libGL.so.1")] private static extern void glGetIntegerv(uint name, [Out] int[] value);
@@ -43,13 +48,18 @@ internal static class LabSmokeCapture
         // Interactive play keeps only outfit selection. It must not capture a
         // growing framebuffer trace or inject smoke-test actions.
         if (Environment.GetEnvironmentVariable("KIRBY_LAB_PLAY") == "1") return;
+        // A fixed seed plays the same level in every run, so runs before and after a change compare.
+        if (int.TryParse(Environment.GetEnvironmentVariable("KIRBY_LAB_SEED"), out int fixedSeed))
+            dc.Hook_User.newGame += (orig, user, _, level, custom, scoring, mode) => orig(user, fixedSeed, level, custom, scoring, mode);
         if (int.TryParse(Environment.GetEnvironmentVariable("KIRBY_LAB_CAPTURE_FPS"), out int requestedFps))
             captureFps = Math.Clamp(requestedFps, 1, 30);
         if (captureFps > 0) LabAudioCapture.Install(run, () => clock.ElapsedMilliseconds);
         if (Environment.GetEnvironmentVariable("KIRBY_LAB_INPUT_PLAN") == "movement")
         {
             dc.tool.Hook_Tutorial.tryToStart += (_, _, _) => false;
-            KirbyInput.TestOverride = session =>
+            // KIRBY_LAB_REAL_KEYS=1 plays the same plan through the host's key
+            // table, as the Beheaded's does, so Kirby's own input reading runs.
+            if (!RealKeys) KirbyInput.TestOverride = session =>
             {
                 var machine = KirbyMod.Instance?.NativeProvider?.Machine;
                 if (machine is null) return 0;
@@ -84,6 +94,8 @@ internal static class LabSmokeCapture
             LabBossCrowdProbe.Install(run, Environment.GetEnvironmentVariable("KIRBY_LAB_INPUT_PLAN")!);
         if (Environment.GetEnvironmentVariable("KIRBY_LAB_INPUT_PLAN") == "aim")
             LabWeaponAimProbe.Install(run);
+        if (Environment.GetEnvironmentVariable("KIRBY_LAB_INPUT_PLAN") == "shield")
+            LabShieldHoldProbe.Install(run);
         if (Environment.GetEnvironmentVariable("KIRBY_LAB_INPUT_PLAN") == "repro")
             LabReproProbe.Install(run);
         if (Environment.GetEnvironmentVariable("KIRBY_LAB_INPUT_PLAN") == "hazard")
@@ -120,29 +132,60 @@ internal static class LabSmokeCapture
             if (frameSleep is [var low, var high] && int.TryParse(low, out int min) && int.TryParse(high, out int max))
                 Thread.Sleep(sleepRandom.Next(min, max + 1));
             frames++;
-            LabCombatProbe.Poll();
-            LabAbilityProbe.Poll();
-            LabCookProbe.Poll();
-            LabHealingProbe.Poll();
-            LabFSlotProbe.Poll();
-            LabVisualProbe.Poll();
-            LabBreakableProbe.Poll();
-            LabBossCrowdProbe.Poll();
-            LabWeaponAimProbe.Poll();
-            LabReproProbe.Poll();
-            LabHazardProbe.Poll();
-            LabWaterProbe.Poll();
-            LabStarProbe.Poll();
-            LabScreenProbe.Poll();
-            LabMovesProbe.Poll();
-            LabItemProbe.Poll();
-            LabScrollProbe.Poll();
-            LabForgeProbe.Poll();
-            LabTentacleProbe.Poll();
-            LabArrivalProbe.Poll();
-            var source = KirbyMod.Instance?.NativeProvider?.Machine;
-            if (source is not null && source.State.Frame != lastSource)
+            var pollMark = LabPerfProbe.Start();
+            // Quiet perf runs keep the probes' reports but write them twice a second, in frames reported apart.
+            bool poll = !LabPerfProbe.Quiet || clock.ElapsedMilliseconds - lastPoll >= 500;
+            if (poll && LabPerfProbe.Quiet) { lastPoll = clock.ElapsedMilliseconds; LabPerfProbe.LabSpike(); }
+            if (poll)
             {
+                LabCombatProbe.Poll();
+                LabAbilityProbe.Poll();
+                LabCookProbe.Poll();
+                LabHealingProbe.Poll();
+                LabFSlotProbe.Poll();
+                LabVisualProbe.Poll();
+                LabBreakableProbe.Poll();
+                LabBossCrowdProbe.Poll();
+                LabWeaponAimProbe.Poll();
+                LabShieldHoldProbe.Poll();
+                LabReproProbe.Poll();
+                LabHazardProbe.Poll();
+                LabWaterProbe.Poll();
+                LabStarProbe.Poll();
+                LabScreenProbe.Poll();
+                LabMovesProbe.Poll();
+                LabItemProbe.Poll();
+                LabScrollProbe.Poll();
+                LabForgeProbe.Poll();
+                LabTentacleProbe.Poll();
+                LabArrivalProbe.Poll();
+            }
+            var host = ModCore.Modules.Game.Instance.HeroInstance;
+            // The plan starts once the Beheaded plays, after the run's opening cinematic.
+            if (hostStart is long since && clock.ElapsedMilliseconds - since < 3000 && !HostPlays(host)) hostStart = null;
+            if ((KirbyMod.Instance?.ActiveSession is null || RealKeys && plan == "movement") && HostPlays(host))
+            {
+                hostStart ??= clock.ElapsedMilliseconds;
+                long t = clock.ElapsedMilliseconds - hostStart.Value;
+                if (plan == "movement") HostMovement(host!, t);
+                else if (plan == "crowd") LabBossCrowdProbe.HostPlan(host!, t);
+                else if (plan == "water") LabWaterProbe.HostPlan(host!, t);
+                // Where the Beheaded is, once a second for the plan's first 15 s.
+                if (t / 1000 > hostTraced && t < 15000)
+                {
+                    hostTraced = t / 1000;
+                    LocalFile.AppendAllText(Path.Combine(run, "host-plan.jsonl"), JsonSerializer.Serialize(new
+                    {
+                        t, x = (host!.cx + host.xr) * 24, y = (host.cy + host.yr) * 24, host.dir,
+                        weapon = host.inventory?.getEquippedWeaponOn(0)?.getItemKind()?.ToString(),
+                    }) + "\n");
+                }
+            }
+            LabPerfProbe.Stop(LabPerfProbe.Section.Lab, pollMark);
+            var source = KirbyMod.Instance?.NativeProvider?.Machine;
+            if (source is not null && source.State.Frame != lastSource && !LabPerfProbe.Quiet)
+            {
+                var traceMark = LabPerfProbe.Start();
                 var state = source.State;
                 checkpointStart ??= state.Frame;
                 lastSource = state.Frame;
@@ -194,6 +237,7 @@ internal static class LabSmokeCapture
                     gameTimeRunning = hero?._level?.game?.isGameTimeRunning(),
                     tutorial = hero?._level?.game?.user?.tutorial?.current?.ToString(),
                 }) + "\n");
+                LabPerfProbe.Stop(LabPerfProbe.Section.Lab, traceMark);
                 if (!savedCheckpoint && int.TryParse(Environment.GetEnvironmentVariable("KIRBY_LAB_SAVE_AFTER"), out int saveAfter) &&
                     state.Frame - checkpointStart.Value >= saveAfter && main.writeSave())
                 {
@@ -227,6 +271,9 @@ internal static class LabSmokeCapture
             int interval = captureFps > 0 && (gameplay || captureAll) ? 1000 / captureFps : LabVisualProbe.ActiveEffect ? 100 : 2000;
             if (clock.ElapsedMilliseconds - lastCapture < interval) return;
             lastCapture = clock.ElapsedMilliseconds;
+            // The capture and the machine dump below are the lab's own work: KIRBY_LAB_PERF reports their frames apart.
+            var captureMark = LabPerfProbe.Start();
+            if (!LabPerfProbe.Quiet) LabPerfProbe.LabSpike();
             LocalFile.WriteAllText(Path.Combine(run, "frames.json"), JsonSerializer.Serialize(new
             {
                 frames,
@@ -235,6 +282,11 @@ internal static class LabSmokeCapture
                 loading = main.isLoading,
                 outfit = main.user?.heroSkin?.ToString(),
             }));
+            if (LabPerfProbe.Quiet)
+            {
+                LabPerfProbe.Stop(LabPerfProbe.Section.Lab, captureMark);
+                return;
+            }
             Capture(Path.Combine(run, $"frame-{frames:000000}.ppm"));
             if (captureFps > 0)
                 LocalFile.AppendAllText(Path.Combine(run, "captures.jsonl"), JsonSerializer.Serialize(new
@@ -253,7 +305,56 @@ internal static class LabSmokeCapture
                 source.Read(0x02000000, ram);
                 LocalFile.WriteAllBytes(Path.Combine(run, "latest-nds.ram"), ram);
             }
+            LabPerfProbe.Stop(LabPerfProbe.Section.Lab, captureMark);
         };
+    }
+
+    /// <summary>The host hero plays: alive, awake, in a level without a cinematic.</summary>
+    internal static bool HostPlays(dc.en.Hero? hero) =>
+        hero is { destroyed: false, life: > 0, awake: true } && hero._level is not null && !hero._level.game.hasCinematic();
+
+    /// <summary>
+    /// Holds or releases a host action (13 right, 11 left, 0 jump, 2 first
+    /// weapon, 12 down) through the host's own key table, as a key event does:
+    /// a positive frame number is held, pressed on that frame, a negative one
+    /// released. The Beheaded baselines of the plans add no hook.
+    /// </summary>
+    internal static unsafe void HostKey(dc.en.Hero hero, int action, bool down)
+    {
+        var bindings = hero.controller.parent.get_bindings().primary;
+        HostKeyCode((uint)action < (uint)bindings.length ? ((int*)bindings.bytes)[action] : -1, down);
+    }
+
+    /// <summary>Holds or releases one key code in the host's key table, as <see cref="HostKey"/> does for an action.</summary>
+    internal static unsafe void HostKeyCode(int key, bool down)
+    {
+        if (key < 0) return;
+        int* state = HostKeyState(key);
+        int frame = dc.hxd.Timer.Class.frameCount;
+        if (down && *state <= 0) *state = frame;
+        else if (!down && *state > 0) *state = -frame;
+    }
+
+    /// <summary>
+    /// A key code's entry in the host's key table (<c>hxd.Key.keyPressed</c>),
+    /// which <see cref="KirbyInput"/> reads directly (#176): the frame it went
+    /// down, negative once released.
+    /// </summary>
+    internal static unsafe int* HostKeyState(int key)
+    {
+        var keys = dc.hxd.Key.Class.keyPressed;
+        // The table grows with the first event of each key; a run without a real key has none.
+        if (key >= keys.length) keys.resize(key + 1);
+        return (int*)keys.bytes + key;
+    }
+
+    /// <summary>The movement plan for the Beheaded: Kirby's timeline (walk right, jump, attack, crouch) in milliseconds.</summary>
+    private static void HostMovement(dc.en.Hero hero, long t)
+    {
+        HostKey(hero, 13, t is >= 3000 and < 5000);
+        HostKey(hero, 0, t is >= 6000 and < 6200);
+        HostKey(hero, 2, t is >= 9000 and < 11000);
+        HostKey(hero, 12, t is >= 11000 and < 13000);
     }
 
     private static unsafe void ProbeHurtbox(dc.en.Hero hero, NdsRuntime machine)

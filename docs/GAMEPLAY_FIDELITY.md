@@ -910,7 +910,10 @@ is unlocked, and Flask II, Gold Reserves I (`Money1`) and Recycling I (`Recyclin
 also name Health Flask I as their required item. While that check runs in a Kirby run,
 `KirbyCollector` answers `hasUnlockedItem` with true for a hidden entry
 (`CollectorMenu.MeetsPrerequisite`), so a profile that never bought the flask can
-still invest. Nothing is written to the save. Live run `20261008-221942`
+still invest. Nothing is written to the save. Since #187 that `hasUnlockedItem`
+handler is installed by the first such check and taken off between host frames 30
+frames after the last one, so the host's other calls, about two a frame in play,
+no longer go through it. Live run `20261008-221942`
 relocked Health Flask I and II with the other hidden entries: the host refused
 Random Starter Shield and Gold Reserves, the Kirby run allowed both (count 0 →
 14), and the panel listed none of the twelve hidden entries and all five kept
@@ -922,10 +925,16 @@ Issue #101. The owner wants F (host action 7) for Kirby's stored limited-use
 ability (#102), so Kirby has no health flask. He heals by eating Dead Cells food
 (level food, enemy drops and Cook's food) and at health fountains.
 
-- `HealFlask.isEnabled` already returns false while the host's Captain Chicken
-  pet is active. `KirbyHealing` returns false for a Kirby session the same way,
-  so `Heal.isUsingInputs` ignores F, fountains and flask recharges have no flask
-  to fill, and the HUD rebuild leaves out the flask's slot.
+- A Kirby session takes the hero's `HealFlask` out of its main skills with the
+  host's own `HeroMainSkillsManager.unregisterSkill` and puts it back in its
+  place when the session ends (#186). Until #186 `KirbyHealing` turned it off
+  through `HealFlask.isEnabled`, as the host does while its Captain Chicken pet
+  is active. Either way no healing skill reads F, fountains and flask recharges
+  have no flask to fill, and the HUD rebuild leaves out the flask's slot. A save
+  writes the skill list, so `HeroMainSkillsManager.serialize` puts the flask back
+  for the save alone: the run keeps its flask and its charges. No lab run has
+  written a run save yet, so that handler is not exercised; the `healing` plan
+  checks the rest ([Runtime launch](RUNTIME_LAUNCH.md#f-slot-and-fountain-2026-10-10)).
 - The fountain (`en.inter.Fountain`) is untouched until its cinematic ends:
   `onActivate` still requires missing health (or infection), marks the fountain
   used and plays `cine.HealFountain`. Its `applyEffect` clears infection and calls
@@ -2168,7 +2177,12 @@ went on to the original collision. Raising the shield while holding the opposite
 direction is not resolved: the original guard keeps Kirby's facing, the host
 turns its shield toward the held direction within its own update, and the
 provider resets the host direction to Kirby's facing every source frame. The
-direction a hit is checked against in that case was not measured.
+direction a hit is checked against in that case was not measured. The host reads
+the held direction there only while the shield charges, through `KirbyInput`'s
+`updateWeapon` handler, which lets it see the real direction bindings inside the
+masked hero update; since #188 that handler is added only while the shield's
+binding is down (or the assist mode attacks by itself) and taken off 30 host
+frames after, once no weapon charges.
 Ice damage and its surviving frozen block, background-effect placement, and an
 actual biome transition have passed live checks. The final native suite passes
 68 cases; source audio and host SDL coexistence tests also pass. Confirmed source

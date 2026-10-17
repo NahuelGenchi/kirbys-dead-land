@@ -26,6 +26,8 @@ internal static class LabHealingProbe
     private static Fountain? fountain;
     private static int? lifeAfterHurt, lifeAfterHeal, sourceAfterHeal, lifeBeforeFountain, lifeAfterFountain, sourceAfterFountain, maxLife;
     private static bool? flaskEnabled, flaskCanUse, flaskUnlocked;
+    private static bool? flaskInSkills, flaskStowed, flaskRestored, flaskStowedAgain;
+    private static string? skillsStowed, skillsRestored, skillsStowedAgain;
     private static int flaskStarts;
     private static (int Requested, int Given)? fountainHeal;
     private static bool? fountainUsed;
@@ -78,9 +80,10 @@ internal static class LabHealingProbe
             effectFrame = lastTick;
             Stage($"Fountain heal: host asked {requested}, Kirby got {given}");
         };
-        // Hold only the real bindings, as a player would.
+        // Hold only the real bindings, as a player would. The Heal key is held in
+        // the host's key table, which KirbyInput reads (#176); the host alone reads
+        // Interact and key presses, through these hooks.
         dc.hxd.Hook__Key.isDown += (orig, key) =>
-            key == healKey && healFrom is uint from && lastTick - from < 90 ||
             key == interactKey && interactAt is uint at && lastTick - at < 8 || orig(key);
         dc.hxd.Hook__Key.isPressed += (orig, key) =>
             key == healKey && healFrom is uint from && lastTick == from ||
@@ -94,13 +97,25 @@ internal static class LabHealingProbe
         unsafe { return action < bindings.length ? ((int*)bindings.bytes)[action] : -1; }
     }
 
-    private static dc.tool.mainSkills.HealFlask? Flask(Hero hero)
+    private static dc.tool.mainSkills.HealFlask? Flask(Hero hero) => InSkills(hero) ?? KirbyHealing.StowedFlask;
+
+    // The flask among the hero's main skills, where a Kirby session leaves none (#186).
+    private static dc.tool.mainSkills.HealFlask? InSkills(Hero hero)
     {
         var skills = hero.mainSkillsManager?.skills;
         if (skills is null) return null;
         for (int i = 0; i < skills.length; i++)
             if (skills.getDyn(i) is dc.tool.mainSkills.HealFlask flask) return flask;
         return null;
+    }
+
+    private static string Skills(Hero hero)
+    {
+        var skills = hero.mainSkillsManager?.skills;
+        if (skills is null) return "";
+        var names = new List<string>();
+        for (int i = 0; i < skills.length; i++) names.Add(skills.getDyn(i)?.GetType().Name ?? "null");
+        return string.Join(",", names);
     }
 
     private static ushort? Input(KirbySession session)
@@ -111,6 +126,22 @@ internal static class LabHealingProbe
         start ??= tick;
         uint elapsed = tick - start.Value;
         var hero = session.Hero;
+        LabSmokeCapture.HostKey(hero, HealAction, healFrom is uint from && tick - from < 90);
+        if (flaskInSkills is null)
+        {
+            // The session holds the flask out of the hero's skills (#186). Ending it
+            // puts the flask back in its place; a new one takes it out again.
+            flaskInSkills = InSkills(hero) is not null;
+            flaskStowed = KirbyHealing.StowedFlask is not null;
+            skillsStowed = Skills(hero);
+            KirbyHealing.Deactivate();
+            flaskRestored = InSkills(hero) is not null && KirbyHealing.StowedFlask is null;
+            skillsRestored = Skills(hero);
+            KirbyHealing.Activate(hero);
+            flaskStowedAgain = InSkills(hero) is null && KirbyHealing.StowedFlask is not null;
+            skillsStowedAgain = Skills(hero);
+            Stage($"Flask in skills={flaskInSkills} stowed={flaskStowed}; restored={flaskRestored} [{skillsRestored}]; stowed again={flaskStowedAgain} [{skillsStowedAgain}]");
+        }
         if (flaskUnlocked is null)
         {
             // The flask must be owned for its absence to mean anything.
@@ -181,7 +212,7 @@ internal static class LabHealingProbe
             flaskEnabled = flask?.isEnabled();
             flaskCanUse = flask?.canUse();
             healFrom = tick;
-            Stage($"Holding Heal key {healKey} for 90 frames; flask present={flask is not null} enabled={flaskEnabled} canUse={flaskCanUse}");
+            Stage($"Holding Heal key {healKey} for 90 frames; flask in skills={InSkills(hero) is not null} stowed={KirbyHealing.StowedFlask is not null} enabled={flaskEnabled} canUse={flaskCanUse}");
             return 0;
         }
         if (tick - healFrom.Value < 150) return 0;
@@ -251,6 +282,9 @@ internal static class LabHealingProbe
         {
             frame = lastReportFrame,
             flaskUnlocked, maxLife, lifeAfterHurt,
+            flaskInSkills, flaskStowed, flaskRestored, flaskStowedAgain,
+            skillsStowed, skillsRestored, skillsStowedAgain,
+            flaskInSkillsNow = InSkills(hero) is not null, flaskStowedNow = KirbyHealing.StowedFlask is not null,
             healKey, flaskEnabled, flaskCanUse, flaskStarts,
             lifeAfterHeal, sourceAfterHeal,
             interactKey, interactAt, focused = fountain is not null && hero.focused?.HashlinkPointer == fountain.HashlinkPointer,
