@@ -2598,6 +2598,19 @@ the all-ability rendering tests as full gameplay acceptance.
   after the release.
 - Not run: the assist mode's automatic attack, the owner's launcher.
 
+## 2026-10-17 — the head effects left to the host's own head flag (#189)
+
+- The hook on `HeroHead.updateHeadFx` is gone. The Kirby outfit has no head,
+  so the host returns before the head's particle emitter; activation now also
+  sets `heroHasHead` false. `Fx.heroHeadPopFinal` is still skipped.
+- Live (`repros/perf-185-kirby`, seed 174, quiet, software, three `before`
+  runs on `main` 28f4086 and two with the change): 24.9 → 23.9 hooked calls a
+  frame moving, 32.3 → 31.1 in the crowd; 44.6 → 43.5 and 69.5 → 68.1 KB a
+  frame. The `arrival` plan, with captures, matched `main`'s animations and
+  frames, with no head flag, eye or head particle on through the arrival and
+  no flame above Kirby.
+- Not run: `PolloPower` during a Kirby session, the owner's launcher.
+
 ## 2026-10-17 — the machine and the equipment atlas readied during the level load (#193)
 
 - The arrival's activation frame took 752–792 ms: `OnActivated` 302–331 ms
