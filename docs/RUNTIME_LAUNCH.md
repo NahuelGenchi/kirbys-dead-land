@@ -1197,6 +1197,18 @@ real panel but wrote no file because the panel pauses the level;
 9, same lists), and `20261008-195058`/`195152` matched the final pair on a build
 that differed only in the probe's layout.
 
+Since #187 the `hasUnlockedItem` handler that answers the prerequisite check
+(#101) is added by the first `canInvestOnItem` check of a Kirby run and taken off
+between host frames 30 frames after the last one, and `collector.json` records
+whether it is on. `20261017-030331` (`repros/live-187-kirby`, seed 174): host
+count 0 and Kirby count 14; Random Starter Shield and Gold Reserves closed to the
+host's check and open to Kirby's; 44 entries tested, none of the twelve hidden
+listed and all five kept listed; the handler off before the checks and after the
+host's own, on after Kirby's and while the panel listed. `main` gave the same
+counts, gates and lists (`20261017-030442`, `repros/live-base-collector`). Both
+ended at the time limit with no fatal log and the real saves unchanged. The
+handler coming off was not seen here: the panel stays open to the end of the run.
+
 ## Healing without the flask (2026-10-08)
 
 Issue #101. `--input-plan healing` (`LabHealingProbe`) unlocks Health Flask I
