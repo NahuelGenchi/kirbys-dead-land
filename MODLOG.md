@@ -2541,3 +2541,18 @@ the all-ability rendering tests as full gameplay acceptance.
   cross-module options gained 1–3 ms more and were left out.
 - Not run: GPU drawing, a window with vsync, a first launch after a reboot,
   the owner's launcher.
+
+## 2026-10-17 — the weapon update hooked only while the shield is held (#188)
+
+- `KirbyInput`'s handler on `HeroWeaponsManager.updateWeapon`, which lets a
+  charging weapon read the real directions inside the masked hero update, is
+  added while the retained shield's binding is down or the assist mode attacks
+  by itself, and taken off 30 host frames later once no weapon charges, with
+  DCCM's detour. New `shield` lab plan (`LabShieldHoldProbe`).
+- Live (`repros/perf-185-kirby`, seed 174, quiet, software, three `before`
+  runs on `main` 28f4086 and two with the change): 24.9 → 22.8 hooked calls a
+  frame moving, 32.3 → 30.2 in the crowd; 44.6 → 42.4 and 69.5 → 66.8 KB a
+  frame. The `shield` plan passed: the handler on in every held, charging
+  frame, the host reading the real directions and turning the shield, and off
+  after the release.
+- Not run: the assist mode's automatic attack, the owner's launcher.

@@ -94,7 +94,7 @@ What each kind of call costs, from the IL, with the measured figures where there
 | `Entity.spriteUpdate` | 3.9 | hurtbox projection, never active there (#177 removes it) |
 | `HealFlask.isEnabled` | 3.3 | no flask while Kirby plays |
 | `ItemMetaManager.hasUnlockedItem` | 2.0 | the Collector's rule for ability items |
-| `HeroWeaponsManager.updateWeapon` | 2.0 | the ability's weapon slots |
+| `HeroWeaponsManager.updateWeapon` | 2.0 | lets a charging weapon read the real directions (#188 installs it only while the shield is held) |
 | `Boot.mainLoop`, `Boot.update`, `Boot.render`, `HUD.postUpdate`, the Steam sync | 1 each | DCCM's own |
 | `Main.update`, `Tutorial.tryToStart` | 1, 0.6 | the lab's probes (not in play), and the mod's tutorial rule |
 | `Level.update`, `Hero.preUpdate`, `Hero.postUpdate`, `HeroHead.updateHeadFx` | 1 each | the mod's projection, input and hero synchronization, and the hidden spirit flame |
