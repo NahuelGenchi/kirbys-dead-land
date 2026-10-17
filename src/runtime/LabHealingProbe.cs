@@ -78,9 +78,10 @@ internal static class LabHealingProbe
             effectFrame = lastTick;
             Stage($"Fountain heal: host asked {requested}, Kirby got {given}");
         };
-        // Hold only the real bindings, as a player would.
+        // Hold only the real bindings, as a player would. The Heal key is held in
+        // the host's key table, which KirbyInput reads (#176); the host alone reads
+        // Interact and key presses, through these hooks.
         dc.hxd.Hook__Key.isDown += (orig, key) =>
-            key == healKey && healFrom is uint from && lastTick - from < 90 ||
             key == interactKey && interactAt is uint at && lastTick - at < 8 || orig(key);
         dc.hxd.Hook__Key.isPressed += (orig, key) =>
             key == healKey && healFrom is uint from && lastTick == from ||
@@ -111,6 +112,7 @@ internal static class LabHealingProbe
         start ??= tick;
         uint elapsed = tick - start.Value;
         var hero = session.Hero;
+        LabSmokeCapture.HostKey(hero, HealAction, healFrom is uint from && tick - from < 90);
         if (flaskUnlocked is null)
         {
             // The flask must be owned for its absence to mean anything.
