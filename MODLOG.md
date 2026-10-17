@@ -2412,6 +2412,38 @@ the all-ability rendering tests as full gameplay acceptance.
 - Not run: a forge NPC in a passage, a shield or a Legendary item in the forge,
   `ForgeRefine1`, the owner's launcher.
 
+## 2026-10-16 — live checks of the dropped star and the forge (#172)
+
+- The cases #68 and #58 left open, run live in `repros/live-68-58-20261016`
+  with new probe modes: `KIRBY_LAB_ITEMS_STAR=hit`, `elite` and `level`,
+  `KIRBY_LAB_FORGE_LEGENDARY=1` and `KIRBY_LAB_FORGE_NPC=1`.
+- Hit: a host Zombie's hits reached the original hurt, and the third knocked the
+  copy off. The original drops the copy on 1 hit in 12 above half health and 1
+  in 24 at half or less (now in ROM internals), which is why headless hurts kept
+  it. The item rode the star and the re-swallow gave the same item back. Elite:
+  the Legendary item rode the star and came back with its +125% bonus.
+- Level change: the first run found a bug. The star kept its place beside
+  Kirby, and in the passage the original lifted it out of the 9-row window, as
+  it does a star inside terrain, until it left with its item.
+  `KirbyNdsProvider` now puts each original ability star at Kirby's position
+  with the new level's first window; the bridge case `star_level_change` shows
+  both. The rerun caught the star in the passage and got the same item back.
+- Forge: the shield was listed beside the copy's item, the Legendary item's
+  upgrade was refused and its reroll kept it Legendary, and a passage forge
+  NPC's own activation opened the window. The host prices the starting shield's
+  upgrade at 0 gold.
+- `scripts/check.py` passes (505 core assertions); the bridge case
+  `star_level_change` passes on the shared bridge (`--case`, no evidence file
+  written). The full bridge suite and the verifiers were not run.
+- 2026-10-17, merged with main (the speed work of #174 to #193): the five
+  cases passed again in `repros/merge-173-20261017` (runs `20261017-200119` to
+  `201408`, runtime `f619a323…`), and a movement run, `201639`, ended by its
+  time limit with no fatal log line. `scripts/check.py` and the bridge case
+  `star_level_change` pass on the merged tree.
+- Not run: making a helper, a star in a mouthful with something else, a save
+  while a star is out, the forge NPC's first meeting, `ForgeRefine1`, the
+  owner's launcher.
+
 ## 2026-10-16 — inside a Dead Cells frame, against the Beheaded's (#174)
 
 - Dead Cells v35 read the way the ROM was, read-only: `hlboot.dat` (SHA-256

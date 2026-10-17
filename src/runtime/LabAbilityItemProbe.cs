@@ -26,7 +26,13 @@ namespace Kirby.Runtime;
 /// star and swallows it, which must put that same item back in the slot; a
 /// second discard then leaves the star alone, and the star and its item must be
 /// gone after 7 seconds. With "spit" Kirby spits the caught star out, which
-/// must lose the item with the copy.
+/// must lose the item with the copy. The other modes end as "catch" does:
+/// "hit" leaves the discard to a host Zombie, whose hits reach Kirby every two
+/// seconds through the host's own hit, with Kirby at full health after each
+/// one, until the original's copy-loss roll knocks the copy off;
+/// "elite" takes the copy and its Legendary item from an Elite Zombie instead
+/// of a floor item; "level" discards beside a level exit and takes it while the
+/// star is out, then catches the star in the next level.
 /// </summary>
 internal static class LabAbilityItemProbe
 {
@@ -64,6 +70,9 @@ internal static class LabAbilityItemProbe
     {
         null or "" or "0" => null,
         "spit" => "spit",
+        "hit" => "hit",
+        "elite" => "elite",
+        "level" => "level",
         _ => "catch",
     };
     private static readonly List<object> starEvents = [];
@@ -75,6 +84,21 @@ internal static class LabAbilityItemProbe
     private static string? itemBefore, itemAfter, goneReason;
     private static bool copiedBack, sameItemBack, hudShowsCopyBack, itemOnFloorAfter, itemInSlotAfter;
     private static readonly bool resume = Environment.GetEnvironmentVariable("KIRBY_LAB_ITEMS_RESUME") == "1";
+    // "hit": the host attacks and original hurts until the copy left, and when its item met the star.
+    private static uint? knockedAt, lostAt, firstStar;
+    private static uint nextHitAt;
+    private static int sentHits, hostHits;
+    private static readonly List<object> hurts = [];
+    private static readonly Dictionary<uint, uint> starFirstSeen = [];
+    // "elite": the copy's empowerment after the Elite swallow and after the star swallow.
+    private static uint? eliteCopiedAt;
+    private static bool? empoweredAfterSwallow, empoweredAfterCatch;
+    private static bool legendaryBefore;
+    // "level": the exit taken while the star is out, and the star in the next level.
+    private static Exit? exit;
+    private static nint levelBefore;
+    private static uint? exitAt, levelChangedAt, seenAfterLevelAt, gatheredAt;
+    private static int? countdownAtExit, countdownAfterLevel;
 
     internal static void Install(string output)
     {
@@ -105,12 +129,41 @@ internal static class LabAbilityItemProbe
             if (kind != StarKind.Ability || KirbyMod.Instance?.NativeProvider?.Machine is not { } machine) return;
             uint frame = machine.State.Frame;
             starX[address] = box.CenterX;
+            starFirstSeen.TryAdd(address, frame);
             lastStarSeen = frame;
             Span<byte> countdown = stackalloc byte[2];
             machine.Read(address + AbilityStar.CountdownOffset, countdown);
             lastCountdown = BinaryPrimitives.ReadInt16LittleEndian(countdown);
-            if (frame % 30 == 0) starTrace.Add(new { frame, address, x = box.CenterX, top = box.Top, countdown = lastCountdown });
+            if (levelChangedAt is not null && address == starAddress && seenAfterLevelAt is null)
+            {
+                seenAfterLevelAt = frame;
+                countdownAfterLevel = lastCountdown;
+            }
+            if (frame % 30 == 0)
+            {
+                Span<byte> state = stackalloc byte[1];
+                machine.Read(address + AbilityStar.StateOffset, state);
+                starTrace.Add(new { frame, address, x = box.CenterX, top = box.Top, countdown = lastCountdown, state = state[0] });
+            }
         };
+        if (starMode == "hit")
+            KirbyNdsProvider.Diagnostic = (kind, value) =>
+            {
+                if (phase != 30) return;
+                // A host attack the original receives, and each change of the original's health it makes.
+                if (kind == "host-attack") hostHits++;
+                else if (kind == "source-health")
+                    hurts.Add(new { frame = KirbyMod.Instance?.NativeProvider?.Machine?.State.Frame, hostHits,
+                        action = KirbyMod.Instance?.NativeProvider?.Machine?.Action.ToString("X4"), value });
+            };
+        else if (starMode == "level")
+            KirbyNdsProvider.Diagnostic = (kind, value) =>
+            {
+                // The new level's first window puts the star at Kirby's position (KirbyNdsProvider.GatherStars).
+                if (kind != "star-gathered") return;
+                gatheredAt ??= KirbyMod.Instance?.NativeProvider?.Machine?.State.Frame;
+                Event(kind, value);
+            };
         KirbyStarItems.TestObserver = (kind, item, details) =>
         {
             uint? frame = KirbyMod.Instance?.NativeProvider?.Machine?.State.Frame;
@@ -126,9 +179,11 @@ internal static class LabAbilityItemProbe
             if (!ours) return;
             switch (kind)
             {
+                case "lost": lostAt ??= frame; break;
                 case "carried":
                     if (phase == 22) carriedAgainAt ??= frame; else carriedAt ??= frame;
                     starAddress = details as uint?;
+                    firstStar ??= starAddress;
                     break;
                 case "caught": caughtAt ??= frame; break;
                 case "in-mouth": inMouthAt ??= frame; break;
@@ -316,6 +371,18 @@ internal static class LabAbilityItemProbe
         {
             if (frame - placedAt.Value < 60) return 0;
             int dir = hero.dir >= 0 ? 1 : -1;
+            if (starMode == "elite")
+            {
+                // An Elite's copy is always Sword, with a Legendary item (#56); no floor item this time.
+                zombie = dc.en.mob.Zombie.Class.create(hero._level, hero.cx + 2 * dir, hero.cy, 1, 1);
+                zombie.setPosPixel((hero.cx + hero.xr) * 24 + 36 * dir, (hero.cy + hero.yr) * 24);
+                if (zombie.yr == 0) { zombie.cy--; zombie.yr = 1; }
+                zombie.setElite(true);
+                Event("elite-spawned", new { zombie.cx, zombie.cy, zombie.elite });
+                spawnedAt = phaseAt = frame;
+                phase = 40;
+                return 0;
+            }
             sword = Spawn(hero, "BroadSword", hero.cx + dir);
             grenade = Spawn(hero, "ExplosiveGrenade", hero.cx - 3 * dir);
             shield = Spawn(hero, "StartShield", hero.cx + 6 * dir);
@@ -403,9 +470,21 @@ internal static class LabAbilityItemProbe
                         itemBefore = Describe(swordItem);
                         // The grenade's ability item lies where the star may bounce; the inhale must catch the star alone.
                         if (grenade is { destroyed: false }) grenade.destroy();
+                        if (starMode == "level")
+                        {
+                            // Beside a door, as LabLifecycleProbe stands: the host walks Kirby into it.
+                            exit = FindExit(hero);
+                            if (exit is null) { Event("no-exit", new { }); FinishStar(session, hero, frame); return 0; }
+                            levelBefore = hero._level.HashlinkPointer;
+                            hero.setPosPixel((exit.cx + exit.xr - 1.5) * 24, (exit.cy + exit.yr) * 24);
+                            if (hero.yr == 0) { hero.cy--; hero.yr = 1; }
+                            hero.dx = hero.dy = hero.bdx = hero.bdy = 0;
+                            enclosedSpot = new { exit.cx, exit.cy, destination = exit.destLevel?.ToString() };
+                        }
                         // A star that bounces off a ledge falls out of the original's 9-row window and ends early.
-                        enclosedSpot = MoveToEnclosedFloor(hero);
+                        else enclosedSpot = MoveToEnclosedFloor(hero);
                         Event("star-item", new { item = itemBefore, enclosedSpot });
+                        if (starMode == "hit") { Next(frame, 30); return 0; }
                     }
                     if (keep)
                     {
@@ -454,7 +533,7 @@ internal static class LabAbilityItemProbe
                     slotClearedAfterDiscard = session.Rules.IsBaseForm && SlotAbility(hero) is null;
                     hudClearedAfterDiscard = !HudItems(hero).Any(id => AbilityItems.AbilityOf(id) is not null);
                     Event("discarded", new { baseForm = session.Rules.IsBaseForm, slot = SlotAbility(hero), hud = HudItems(hero) });
-                    if (starMode is not null) { Next(frame, 20); return 0; }
+                    if (starMode is not null) { Next(frame, starMode == "level" ? 50 : 20); return 0; }
                     Finish(frame);
                     return 0;
                 }
@@ -473,6 +552,7 @@ internal static class LabAbilityItemProbe
                 if (copiedBackAt is not null && frame - copiedBackAt.Value >= 30 || t > 300)
                 {
                     copiedBack = session.Rules.AbilityId == swordAbility;
+                    empoweredAfterCatch = session.Rules.AbilityEmpowered;
                     itemAfter = Describe(swordItem);
                     sameItemBack = copiedBack && SlotHolds(hero, swordItem) && itemAfter == itemBefore;
                     hudShowsCopyBack = swordAbility is not null && HudItems(hero).Contains(AbilityItems.ItemId(swordAbility));
@@ -491,8 +571,97 @@ internal static class LabAbilityItemProbe
             case 23: // Spit the caught star out with B: the item must go with the copy.
                 if (goneAt is not null && frame - goneAt.Value >= 90 || t > 400) { FinishStar(session, hero, frame); return 0; }
                 return goneAt is null && t >= 20 ? Pulse(t, 2) : (ushort)0;
+            case 30: // A host Zombie hits Kirby until a hit knocks the copy off; then catch the star as "catch" does.
+                if (zombie is null)
+                {
+                    if (t < 30) return 0;
+                    int side = hero.dir >= 0 ? 1 : -1;
+                    zombie = dc.en.mob.Zombie.Class.create(hero._level, hero.cx + 2 * side, hero.cy, 1, 1);
+                    zombie.setPosPixel((hero.cx + hero.xr) * 24 + 36 * side, (hero.cy + hero.yr) * 24);
+                    if (zombie.yr == 0) { zombie.cy--; zombie.yr = 1; }
+                    // Kirby never attacks it, and it must last until the copy is off.
+                    zombie.maxLife = zombie.life = 30000;
+                    nextHitAt = frame + 60;
+                    Event("zombie", new { zombie.cx, zombie.cy });
+                    return 0;
+                }
+                if (session.Rules.IsBaseForm)
+                {
+                    knockedAt = frame;
+                    Event("knocked-off", new { sentHits, hostHits, hurts = hurts.Count, lostAt, carriedAt, starAddress });
+                    // The inhale must catch the star alone.
+                    if (!zombie.destroyed) zombie.destroy();
+                    Next(frame, 20);
+                    return 0;
+                }
+                // Above half health the original drops the copy on 1 hit in 12 (0x0210e270); at half or less, 1 in 24.
+                if (hero.life < hero.maxLife) hero.life = hero.maxLife;
+                // Left to itself the Zombie leapt past Kirby and stood still (run 20261016-015036). It holds its
+                // place, and each hit goes through the host's own hit on the hero, as a swing's does (LabCombatProbe).
+                if (!zombie.destroyed) zombie.lockAiS(1);
+                if (frame >= nextHitAt && !zombie.destroyed)
+                {
+                    dc.tool.atk.AttackUtils.Class.hit(dc.tool.atk.AttackUtils.Class.createFromMob(zombie, 10, null), hero);
+                    sentHits++;
+                    nextHitAt = frame + 120;
+                }
+                if (sentHits > 60) FinishStar(session, hero, frame);
+                return 0;
+            case 40: // Inhale the Elite Zombie and swallow it with DOWN; then discard the copy as "catch" does.
+                if (zombie is { destroyed: false, life: > 0 } && eliteCopiedAt is null)
+                {
+                    // It holds its place for the inhale (see case 30).
+                    zombie.lockAiS(1);
+                    if (t > 600) FinishStar(session, hero, frame);
+                    return t >= 20 ? (ushort)2 : (ushort)0;
+                }
+                if (machine.State.Ability == 1) return eliteCopiedAt is null ? (ushort)128 : (ushort)0;
+                if (session.Rules.AbilityId is null)
+                {
+                    if (t > 900) FinishStar(session, hero, frame);
+                    return 0;
+                }
+                eliteCopiedAt ??= frame;
+                if (frame - eliteCopiedAt.Value < 60) return 0;
+                swordAbility = session.Rules.AbilityId;
+                swordItem = KirbyAbilityItems.CopyItem(hero);
+                empoweredAfterSwallow = session.Rules.AbilityEmpowered;
+                legendaryBefore = swordItem?.hasAffix("Legendary".AsHaxeString()) == true;
+                itemBefore = Describe(swordItem);
+                enclosedSpot = MoveToEnclosedFloor(hero);
+                Event("star-item", new { item = itemBefore, enclosedSpot, empoweredAfterSwallow });
+                Next(frame, 5);
+                return 0;
+            case 50: // Take the exit once the star carries the item; then catch the star in the next level.
+                if (exitAt is null)
+                {
+                    if (carriedAt is null) { if (t > 60) FinishStar(session, hero, frame); return 0; }
+                    exitAt = frame;
+                    countdownAtExit = lastCountdown;
+                    Event("exit", new { destination = exit?.destLevel?.ToString(), starAddress, countdownAtExit });
+                    exit!.onActivate(hero, false);
+                    return 0;
+                }
+                if (hero._level.HashlinkPointer == levelBefore)
+                {
+                    if (t > 1800) FinishStar(session, hero, frame);
+                    return 0;
+                }
+                levelChangedAt = frame;
+                Event("level-changed", new { sourceFrames = frame - exitAt.Value, starAddress, goneAt, goneReason });
+                Next(frame, 20);
+                return 0;
         }
         return 0;
+    }
+
+    private static Exit? FindExit(Hero hero)
+    {
+        var entities = hero._level.entities;
+        for (int j = 0; j < entities.length; j++)
+            if (entities.getDyn(j) is Exit { destroyed: false, locked: false } candidate && !string.IsNullOrEmpty(candidate.destLevel?.ToString()))
+                return candidate;
+        return null;
     }
 
     /// <summary>
@@ -536,17 +705,32 @@ internal static class LabAbilityItemProbe
         // The star ran out (its last countdown) rather than falling out of the original's window.
         bool starLeft = lastStarSeen is uint seen && goneAt is uint end && seen <= end && lastCountdown <= 1;
         bool shortened = shortenedFrom == AbilityStar.OriginalLifetime && shortenedTo == AbilityStar.Lifetime;
-        bool passed = starMode == "spit"
-            ? carriedAt is not null && shortened && caughtAt is not null && inMouthAt is not null && goneReason == "spat" &&
-              baseForm && !itemOnFloorAfter && !itemInSlotAfter
-            : carriedAt is not null && shortened && copiedBack && sameItemBack && hudShowsCopyBack && carriedAgainAt is not null &&
-              goneAt is not null && goneReason == "star ended" && lifetime is >= AbilityStar.Lifetime and <= AbilityStar.Lifetime + 30 &&
-              starLeft && baseForm && !itemOnFloorAfter && !itemInSlotAfter;
+        bool caughtBack = carriedAt is not null && shortened && copiedBack && sameItemBack && hudShowsCopyBack && carriedAgainAt is not null &&
+            goneAt is not null && goneReason == "star ended" && lifetime is >= AbilityStar.Lifetime and <= AbilityStar.Lifetime + 30 &&
+            starLeft && baseForm && !itemOnFloorAfter && !itemInSlotAfter;
+        // "hit": source frames between the star's first sighting and the copy's item leaving its slot.
+        uint? lossAt = lostAt ?? carriedAt;
+        int? starToLoss = lossAt is uint loss && firstStar is uint star && starFirstSeen.TryGetValue(star, out uint seenFirst)
+            ? (int)(loss - seenFirst) : null;
+        bool passed = starMode switch
+        {
+            "spit" => carriedAt is not null && shortened && caughtAt is not null && inMouthAt is not null && goneReason == "spat" &&
+                baseForm && !itemOnFloorAfter && !itemInSlotAfter,
+            "hit" => caughtBack && knockedAt is not null && starToLoss is >= -StarItems<InventItem>.PairFrames and <= StarItems<InventItem>.PairFrames,
+            "elite" => caughtBack && legendaryBefore,
+            "level" => caughtBack && levelChangedAt is not null && seenAfterLevelAt is not null && gatheredAt is not null,
+            _ => caughtBack,
+        };
         File.WriteAllText(Path.Combine(run!, "ability-star.json"), JsonSerializer.Serialize(new
         {
             mode = starMode, swordAbility, itemBefore, itemAfter, discardedAt, carriedAt, starAddress, shortenedFrom, shortenedTo,
             caughtAt, inMouthAt, copiedBackAt, copiedBack, sameItemBack, hudShowsCopyBack, droppedAgainAt, carriedAgainAt, goneAt, goneReason,
             lifetime, lastStarSeen, lastCountdown, starLeft, enclosedSpot, baseForm, itemOnFloorAfter, itemInSlotAfter, phase,
+            hit = starMode == "hit" ? new { knockedAt, sentHits, hostHits, hurtCount = hurts.Count, hurts, lostAt, firstStar, starToLoss } : null,
+            elite = starMode == "elite" ? new { empoweredAfterSwallow, empoweredAfterCatch, legendaryBefore } : null,
+            level = starMode == "level"
+                ? new { destination = exit?.destLevel?.ToString(), exitAt, levelChangedAt, gatheredAt, seenAfterLevelAt, countdownAtExit, countdownAfterLevel }
+                : null,
             events = starEvents, trace = starTrace, passed,
         }, new JsonSerializerOptions { WriteIndented = true }));
         Finish(frame);
@@ -565,7 +749,8 @@ internal static class LabAbilityItemProbe
         bool shieldKept = shield is not null && !KirbyAbilityItems.IsAbilityItem(shield.item);
         File.WriteAllText(Path.Combine(run!, "ability-items.json"), JsonSerializer.Serialize(new
         {
-            scan, clearSpot, swordAbility, grenadeAbility, shieldKept, swordUsefulToKirby, swordPaired, followedSuction, firstInMouth, mouthEmptied,
+            // A star mode's own result is ability-star.json; "elite" takes no floor item.
+            starMode, scan, clearSpot, swordAbility, grenadeAbility, shieldKept, swordUsefulToKirby, swordPaired, followedSuction, firstInMouth, mouthEmptied,
             spatCopied, returnedToOrigin, secondInMouth, copied, slotAbility, slotHoldsSwallowedItem, hudShowsCopy,
             slotClearedAfterDiscard, hudClearedAfterDiscard, phase,
             // Ability items are "useful" to Kirby since #61 (a shop short of gold says so); the floor press

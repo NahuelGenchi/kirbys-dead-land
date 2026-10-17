@@ -14,6 +14,9 @@ public static class AbilityStar
     public const int AbilityOffset = 0x49;
     public const int CountdownOffset = 0x4C;
     public const int StateOffset = 0x60;
+    /// <summary>An original object's 16.16 position (x, y), and the copy it is drawn from, which the bridge's World moves with it.</summary>
+    public const int PositionOffset = 0x80;
+    public const int DrawnOffset = 0x78;
     /// <summary>The value at <see cref="StateOffset"/> once the original inhale has caught the star.</summary>
     public const byte Caught = 0;
     /// <summary>The original countdown at spawn.</summary>

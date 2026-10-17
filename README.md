@@ -86,7 +86,9 @@ preserved; generated assets and native dependencies remain in the private data r
   star bounces. A star staggers each enemy it hits with the host dive's stun and
   knockback. A discarded star, harmless in the ROM, hits for the single
   spit star's original 52 damage, and lasts 7 seconds instead of the ROM's 8
-  (#68). These are deliberate deviations; see
+  (#68). A star still out when Kirby takes a level exit starts again at his
+  position in the next level, so it cannot be left inside a wall there (#172).
+  These are deliberate deviations; see
   [star projectiles](docs/GAMEPLAY_FIDELITY.md#star-projectiles).
 - Each ordinary enemy consumed by the original Cook also drops one Dead Cells
   healing food item through the game's own loot drop. Cook's original damage is
@@ -324,7 +326,9 @@ limited-use ability; Kirby has no health flask (#101).
   back to its cell, inhaled again and swallowed into its ability, which then
   filled the weapon slot and the HUD; discarding cleared both. The forge listed
   nothing before the first copy, then rerolled the copy's item and upgraded it
-  from I+ to I++ for gold (#58). See
+  from I+ to I++ for gold (#58). Opened by a passage's forge NPC, it listed a
+  shield beside a Legendary copy item, refused that item's upgrade and kept it
+  Legendary on a reroll (#172). See
   [ability items](docs/RUNTIME_LAUNCH.md#ability-items-55) and
   [forge](docs/RUNTIME_LAUNCH.md#forge-58).
 - Actual lab launches have preserved the hashes of the user's original local

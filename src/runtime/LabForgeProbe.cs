@@ -23,6 +23,15 @@ namespace Kirby.Runtime;
 /// affixes, the upgrade must add a "+", and each must take its price. The forge
 /// then closes as its cancel key does, and the same item must still be the
 /// copy's, in the slot and on the HUD.
+/// KIRBY_LAB_FORGE_LEGENDARY=1 gives Kirby a shield first, which the forge must
+/// list beside the hidden Rusty Sword, and makes the copy's item Legendary, as
+/// an Elite's copy is. With the copy, the forge must list both items; the
+/// Legendary item's upgrade must be refused (the forge's own check), its reroll
+/// must keep it Legendary, and the shield's upgrade must add a "+".
+/// KIRBY_LAB_FORGE_NPC=1 takes a level exit to the passage after the swallow
+/// and opens the forge there through the forge NPC's own activation, as a
+/// player does (KIRBY_LAB_EXIT picks the exit by destination). Its first
+/// meeting cinematic is skipped by marking the NPC as met.
 /// </summary>
 internal static class LabForgeProbe
 {
@@ -44,6 +53,17 @@ internal static class LabForgeProbe
         affixesChanged, rerolledMark, refineTookPrice, refineAddedPlus, refinedMark, bonusRose, cardShowsBonus;
     private static int choicesBefore = -1, choicesWithCopy = -1;
     private static List<(string Id, bool Shown)> listedWithCopy = [];
+    // KIRBY_LAB_FORGE_LEGENDARY: a shield in a slot and a Legendary copy item.
+    private static readonly bool legendary = Environment.GetEnvironmentVariable("KIRBY_LAB_FORGE_LEGENDARY") == "1";
+    private static InventItem? shield;
+    private static int copyChoice = -1, shieldChoice = -1, levelBefore, shieldLevelBefore;
+    private static bool shieldListedBefore, legendaryRefineRefused, legendaryRerollKept, shieldRefined;
+    // KIRBY_LAB_FORGE_NPC: the passage forge NPC opens the window.
+    private static readonly bool viaNpc = Environment.GetEnvironmentVariable("KIRBY_LAB_FORGE_NPC") == "1";
+    private static Exit? exit;
+    private static nint levelAtExit;
+    private static dc.en.inter.npc.SmallBlacksmith? npc;
+    private static bool npcOpening, openedByNpc;
 
     internal static void Install(string output)
     {
@@ -52,6 +72,21 @@ internal static class LabForgeProbe
         KirbyForge.TestUnfiltered = unfiltered;
         KirbyForge.TestListed = (id, shown) => listed.Add((id, shown));
         KirbyInput.TestOverride = Input;
+        if (!viaNpc) return;
+        // The window the NPC opens: its first item is listed from the forge's own constructor.
+        dc.ui.Hook_ForgeUnderground.addItem += (orig, opened, entry, parent) =>
+        {
+            if (npcOpening && forge is null)
+            {
+                npcOpening = false;
+                openedByNpc = true;
+                forge = opened;
+                forgeStep = "copy";
+                forgeFrames = 0;
+                listed.Clear();
+            }
+            return orig(opened, entry, parent);
+        };
     }
 
     private static string?[] Ids(Hero hero, Func<Inventory, int, InventItem?> get, int count) =>
@@ -107,8 +142,19 @@ internal static class LabForgeProbe
         uint t = phaseAt is { } at ? frame - at : 0;
         switch (phase)
         {
-            case 0: // Only the starting Rusty Sword: the forge must list nothing.
+            case 0: // Only the starting Rusty Sword: the forge must list nothing (with a shield: the shield alone).
             {
+                if (legendary && shield is null)
+                {
+                    // The normal inventory path, as a taken shield goes (LabCombatProbe).
+                    shield = new InventItem(new InventItemKind.Weapon("StartShield".AsHaxeString()));
+                    hero.inventory.add(shield);
+                    if (hero.weaponsManager is dc.tool.hero.weap.BeheadedWeaponsManager manager)
+                        manager.onEquippedItemsUpdated(Ref<bool>.In(false));
+                    phaseAt = frame;
+                    return 0;
+                }
+                if (legendary && t < 30) return 0;
                 var slots = Ids(hero, (inventory, i) => inventory.getEquippedWeaponOn(i), hero.inventory.nbWeapons);
                 for (int i = 0; i < hero.inventory.nbWeapons; i++)
                     if (hero.inventory.getEquippedWeaponOn(i) is { } held && held.getItemKind()?.ToString() == "StartSword")
@@ -131,8 +177,9 @@ internal static class LabForgeProbe
             {
                 if (t < 30) return 0;
                 int dir = hero.dir >= 0 ? 1 : -1;
-                item = KirbyAbilityItems.Create("Sword", 1);
-                item.addAffix("QualityUp".AsHaxeString(), Ref<bool>.In(true));
+                // With KIRBY_LAB_FORGE_LEGENDARY, Legendary as an Elite's copy item is (#56) and otherwise the same
+                // item, so Legendary is the only difference from the item the forge upgraded in #58.
+                item = KirbyAbilityItems.Create("Sword", 1, 1, legendary, []);
                 item.addAffix("BleedOnHit".AsHaxeString(), Ref<bool>.In(true));
                 var drop = new ItemDrop(hero._level, hero.cx + dir, hero.cy, item, true, Ref<bool>.In(false));
                 drop.init();
@@ -150,11 +197,66 @@ internal static class LabForgeProbe
                 results["copied"] = new { ability = session.Rules.AbilityId, slotHoldsItem, hud = LabAbilityItemProbe.HudItems(hero) };
                 if (!slotHoldsItem) { Finish(session, frame, "the swallowed item is not in a slot"); return 0; }
                 hero._level.game.data.money = 50000;
+                if (viaNpc) { Next(frame, 10); return 0; }
                 pendingOpen = "copy";
                 Next(frame, 4);
                 return 0;
             case 4: // The forge has closed and the game runs again.
-                if (t >= 60) Finish(session, frame, null);
+                if (t >= 60) Finish(session, frame, results.ContainsKey("forgeWithCopy") ? null : "the forge never opened with the copy");
+                return 0;
+            case 10: // To the passage: stand beside a door, as LabLifecycleProbe does, and take it.
+            {
+                string? wanted = Environment.GetEnvironmentVariable("KIRBY_LAB_EXIT");
+                var exits = new List<object>();
+                var entities = hero._level.entities;
+                for (int j = 0; j < entities.length; j++)
+                    if (entities.getDyn(j) is Exit { destroyed: false } candidate)
+                    {
+                        string? destination = candidate.destLevel?.ToString();
+                        exits.Add(new { destination, candidate.locked });
+                        if (candidate.locked || string.IsNullOrEmpty(destination)) continue;
+                        if (exit is null || (destination == wanted && exit.destLevel?.ToString() != wanted)) exit = candidate;
+                    }
+                results["exits"] = exits;
+                if (exit is null) { Finish(session, frame, "no unlocked exit in the start level"); return 0; }
+                levelAtExit = hero._level.HashlinkPointer;
+                hero.setPosPixel((exit.cx + exit.xr - 1.5) * 24, (exit.cy + exit.yr) * 24);
+                if (hero.yr == 0) { hero.cy--; hero.yr = 1; }
+                exit.onActivate(hero, false);
+                Next(frame, 11);
+                return 0;
+            }
+            case 11: // In the passage: find the forge NPC and stand beside it.
+            {
+                if (hero._level.HashlinkPointer == levelAtExit)
+                {
+                    if (t > 1800) Finish(session, frame, "the exit never led to another level");
+                    return 0;
+                }
+                var npcs = new List<string>();
+                var entities = hero._level.entities;
+                for (int j = 0; j < entities.length; j++)
+                    if (entities.getDyn(j) is Npc { destroyed: false } other)
+                    {
+                        npcs.Add(other.GetType().FullName ?? "");
+                        if (other is dc.en.inter.npc.SmallBlacksmith smith) npc ??= smith;
+                    }
+                results["passage"] = new { destination = exit?.destLevel?.ToString(), npcs, money = hero._level.game.data.money };
+                if (npc is null) { Finish(session, frame, "no forge NPC in this passage"); return 0; }
+                hero.setPosPixel((npc.cx + npc.xr - 1.5) * 24, (npc.cy + npc.yr) * 24);
+                if (hero.yr == 0) { hero.cy--; hero.yr = 1; }
+                hero.dx = hero.dy = hero.bdx = hero.bdy = 0;
+                Next(frame, 12);
+                return 0;
+            }
+            case 12: // Talk to it: its own activation opens the forge.
+                if (t < 60) return 0;
+                results["npc"] = new { npc!.cx, npc.cy, progressBefore = npc.progress, hero = new { hero.cx, hero.cy } };
+                // A first meeting plays a cinematic before the forge; this lab profile has not met it yet.
+                npc.progress = 1;
+                npcOpening = true;
+                npc.onActivate(hero, false);
+                Next(frame, 4);
                 return 0;
         }
         return 0;
@@ -179,10 +281,12 @@ internal static class LabForgeProbe
             if (forgeFrames < 30) return;
             choicesBefore = forge.choices.length;
             rustySwordListed = listed.Any(entry => entry.Id == "StartSword" && entry.Shown);
+            shieldListedBefore = listed.Any(entry => entry.Id == "StartShield" && entry.Shown);
             results["forgeBefore"] = new { listed = Listed(listed), choices = choicesBefore, card = CardTexts() };
             Close(game);
             return;
         }
+        if (legendary) { PollLegendary(game); return; }
         var data = game.data;
         switch (forgeFrames)
         {
@@ -238,6 +342,83 @@ internal static class LabForgeProbe
         }
     }
 
+    /// <summary>
+    /// KIRBY_LAB_FORGE_LEGENDARY with the copy: the Legendary item's upgrade,
+    /// then its reroll, then the shield's upgrade. Each listed item has two
+    /// choices in listing order, its reroll and then its upgrade.
+    /// </summary>
+    private static void PollLegendary(dc.pr.Game game)
+    {
+        var data = game.data;
+        switch (forgeFrames)
+        {
+            case 30:
+                choicesWithCopy = forge!.choices.length;
+                listedWithCopy = [.. listed];
+                results["forgeWithCopy"] = new { listed = Listed(listed), choices = choicesWithCopy, card = CardTexts() };
+                copyChoice = 2 * ShownIndex(AbilityItems.ItemId("Sword"));
+                shieldChoice = 2 * ShownIndex("StartShield");
+                moneyBefore = data.money;
+                levelBefore = item!.getUpgradeLevel();
+                results["beforeRefine"] = Describe(item);
+                if (copyChoice >= 0) Choose(copyChoice + 1);
+                return;
+            case 45:
+                // The forge's refine check refuses a Legendary item (ForgeUnderground.hx:328).
+                legendaryRefineRefused = copyChoice >= 0 && data.money == moneyBefore && item!.getUpgradeLevel() == levelBefore &&
+                    !item.hasAffix("ForgeRefined".AsHaxeString()) && item.hasAffix("Legendary".AsHaxeString());
+                results["legendaryRefine"] = new { moneyBefore, moneyAfter = data.money, after = Describe(item!), card = CardTexts() };
+                return;
+            case 60:
+                moneyBefore = data.money;
+                cost = item!.getForgeRerollCost();
+                affixesBefore = Rolled(item);
+                if (copyChoice >= 0) Choose(copyChoice);
+                return;
+            case 75:
+                rerollTookPrice = cost > 0 && data.money == moneyBefore - cost;
+                affixesChanged = !Rolled(item!).SequenceEqual(affixesBefore);
+                rerolledMark = item!.hasAffix("Rerolled".AsHaxeString());
+                legendaryRerollKept = rerollTookPrice && item.hasAffix("Legendary".AsHaxeString()) && item.hasAffix("Colorless".AsHaxeString()) &&
+                    item.getRawItemLevel() == 1 && item.getUpgradeLevel() == levelBefore &&
+                    KirbyAbilityItems.CopyItem(game.hero)?.HashlinkPointer == item.HashlinkPointer;
+                results["legendaryReroll"] = new
+                {
+                    cost, moneyBefore, moneyAfter = data.money, affixesBefore, affixesAfter = Rolled(item), after = Describe(item), card = CardTexts(),
+                };
+                return;
+            case 90:
+                moneyBefore = data.money;
+                cost = shield?.getForgeRefineCost() ?? 0;
+                shieldLevelBefore = shield?.getUpgradeLevel() ?? -1;
+                results["shieldBefore"] = shield is null ? null : Describe(shield);
+                if (shieldChoice >= 0) Choose(shieldChoice + 1);
+                return;
+            case 105:
+                // The host prices it from the item's own cost, which is 0 for the starting shield (run 20261016-021905).
+                shieldRefined = shield is not null && shieldChoice >= 0 && data.money == moneyBefore - cost &&
+                    shield.getUpgradeLevel() == shieldLevelBefore + 1 && shield.hasAffix("ForgeRefined".AsHaxeString());
+                results["shieldRefine"] = new { cost, moneyBefore, moneyAfter = data.money, after = shield is null ? null : Describe(shield), card = CardTexts() };
+                return;
+            case 120:
+                Close(game);
+                return;
+        }
+    }
+
+    /// <summary>The position of an item among the listed ones, or -1.</summary>
+    private static int ShownIndex(string id)
+    {
+        int index = 0;
+        foreach (var entry in listed)
+        {
+            if (!entry.Shown) continue;
+            if (entry.Id == id) return index;
+            index++;
+        }
+        return -1;
+    }
+
     /// <summary>Pick a choice as a click on it does: select it, then the forge's own validate.</summary>
     private static void Choose(int index)
     {
@@ -269,19 +450,23 @@ internal static class LabForgeProbe
         bool copyKept = session.Rules.AbilityId == "Sword" && item is not null && LabAbilityItemProbe.SlotHolds(hero, item) &&
             LabAbilityItemProbe.HudItems(hero).Contains(AbilityItems.ItemId("Sword")) &&
             KirbyAbilityItems.CopyItem(hero)?.HashlinkPointer == item.HashlinkPointer;
+        // With KIRBY_LAB_FORGE_LEGENDARY the shield is listed too.
         bool onlyCopyListed = listedWithCopy.Any(entry => entry.Shown) &&
-            listedWithCopy.All(entry => entry.Shown == (entry.Id == AbilityItems.ItemId("Sword")));
+            listedWithCopy.All(entry => entry.Shown == (entry.Id == AbilityItems.ItemId("Sword") || (legendary && entry.Id == "StartShield")));
         bool before = rustySwordInSlot && rustySwordForgeable &&
-            (unfiltered ? rustySwordListed && choicesBefore == 2 : !rustySwordListed && choicesBefore == 0);
-        bool passed = error is null && before && slotHoldsItem && choicesWithCopy == 2 && onlyCopyListed &&
-            rerollTookPrice && rerollKept && affixesChanged && rerolledMark &&
-            refineTookPrice && refineAddedPlus && refinedMark && bonusRose && cardShowsBonus && copyKept;
+            (unfiltered ? rustySwordListed && choicesBefore == (legendary ? 4 : 2)
+                : !rustySwordListed && (legendary ? shieldListedBefore && choicesBefore == 2 : choicesBefore == 0));
+        bool reached = !viaNpc || openedByNpc;
+        bool passed = error is null && before && slotHoldsItem && onlyCopyListed && reached && copyKept && (legendary
+            ? choicesWithCopy == 4 && legendaryRefineRefused && legendaryRerollKept && affixesChanged && rerolledMark && shieldRefined
+            : choicesWithCopy == 2 && rerollTookPrice && rerollKept && affixesChanged && rerolledMark &&
+              refineTookPrice && refineAddedPlus && refinedMark && bonusRose && cardShowsBonus);
         File.WriteAllText(Path.Combine(run!, "forge.json"), JsonSerializer.Serialize(new
         {
-            unfiltered, error, phase, results, rustySwordInSlot, rustySwordForgeable, rustySwordListed, choicesBefore,
-            slotHoldsItem, choicesWithCopy, onlyCopyListed, rerollTookPrice, rerollKept, affixesChanged, rerolledMark,
-            refineTookPrice, refineAddedPlus, refinedMark, bonusRose, cardShowsBonus, copyKept,
-            itemAfter = item is null ? null : Describe(item), passed,
+            unfiltered, legendary, viaNpc, openedByNpc, error, phase, results, rustySwordInSlot, rustySwordForgeable, rustySwordListed,
+            shieldListedBefore, choicesBefore, slotHoldsItem, choicesWithCopy, onlyCopyListed, rerollTookPrice, rerollKept, affixesChanged,
+            rerolledMark, refineTookPrice, refineAddedPlus, refinedMark, bonusRose, cardShowsBonus, legendaryRefineRefused,
+            legendaryRerollKept, shieldRefined, copyKept, itemAfter = item is null ? null : Describe(item), passed,
         }, new JsonSerializerOptions { WriteIndented = true }));
     }
 }
