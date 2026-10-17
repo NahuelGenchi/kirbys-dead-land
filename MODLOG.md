@@ -2508,3 +2508,17 @@ the all-ability rendering tests as full gameplay acceptance.
   build in all 2,912 shared original frames.
 - Not run: the owner's launcher, every hurtbox case of the projection's own
   record.
+
+## 2026-10-17 — a live check of main after the four speed fixes (#190)
+
+- `main` at `28f4086` (#179–#183 merged) built, staged in a new isolated
+  profile (`repros/main-28f4086`) and run with the settings of "The four
+  fixes together (#174)": seed 174, quiet, hook counter, software drawing.
+  `movement` (`20261017-001113`) and `crowd` (`20261017-001241`) ended by
+  their time limit with no fatal log and the real saves unchanged.
+- Against `measure/all2`, which has the same source: 42.6 and 68.0 KB a frame
+  (43.9 and 68.5), the same kinds of slow frames and the same crowd fight;
+  109.5 and 96.1 fps (119.5 and 102.4), the difference outside the mod's own
+  work and within the spread of earlier runs of one build.
+- Not run: a second run of each, the GPU, the Greenhouse, real keys, traces
+  with frame captures, the owner's launcher.

@@ -439,6 +439,24 @@ On the final tree, 2026-10-11:
 
 The shared bridge binary, its provenance and `oracle/bridge-test-results.json` were not replaced, and the shared vendor checkout was not patched: play needs `python3 tools/nds_build.py` and a new stage to get the bridge half. With the older bridge the runtime still works; it then keeps the per-byte read and draws both screens.
 
+On `main` at `28f4086`, 2026-10-17 (#190): the four fixes as merged (#179–#183), which no lab run had played before. Its `src/` is that of `measure/all2` in [the four fixes together](#the-four-fixes-together-174).
+
+- `python3 scripts/check.py`: passes (26 + 6 Python tests, 505 rule assertions, the runtime builds; runtime `0659fedf…`).
+- Lab runs in a new isolated profile, `repros/main-28f4086`, staged with outfit pack `2cbd0a47…` and bridge `bae16c0e…`, with the settings of the four fixes' rows: a new game from seed 174, `KIRBY_LAB_PERF=quiet` with the hook counter, 80 s, software drawing, `performance` power profile, and `--crash-dump small`. Both ended by their time limit with no fatal log, no dump and the real saves unchanged, as did a third `movement` run that other programs disturbed (`20261017-000945`, 0.84 cores; not in the table). The frames over 20 and 33 ms leave out the lab's report frames.
+
+| Plan, drawing | Build | Runs | Host fps | Mean frame | p99 | Managed KB a frame | .NET collections a minute (median pause) | Frames over 20 / 33 ms | Hooked calls a frame |
+| :--- | :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `movement`, software | all four | `20261016-170048`, `174208` | 119.5 | 8.37 ms | 12.6 ms | 43.9 | 21 (5.9 ms) | 3 / 2 in 97 s | 24.7 |
+| | `main` | `20261017-001113` | 109.5 | 9.14 ms | 14.0 ms | 42.6 | 17 (6.1 ms) | 3 / 1 in 48 s | 23.9 |
+| `crowd`, software | all four | `20261016-163343`, `174040` | 102.4 | 9.77 ms | 15.4 ms | 68.5 | 28 (5.0 ms) | 18 / 7 in 97 s | 32.0 |
+| | `main` | `20261017-001241` | 96.1 | 10.40 ms | 15.9 ms | 68.0 | 25 (5.0 ms) | 9 / 3 in 48 s | 31.1 |
+
+- **Garbage, collections and slow frames** are those of the four fixes: 42.6 and 68.0 KB a frame against 43.9 and 68.5, and frames over 20 ms 0.06 a second moving and 0.19 in the crowd, against 0.03 and 0.19 (0.15 and 1.0 before the fixes). The frames over 33 ms are the same events: moving, the first Kirby frame (53.7 ms); in the crowd, the frame the zombies appear in (63.0 ms) and the first sword hit on 30 of them (40.7 and 83.7 ms), after the same number of original steps as in the four fixes' runs. The crowd run's first Kirby frame is not among them: the probe counts a frame only when the frame before it also stepped Kirby, and the first one it counted was a 20.5 ms catch-up of three original steps. That run played the same fight as before (31 proxies at most, 30 targets hit 66 times for 2,046 damage) and logged the detach.
+- **Hooked calls:** `ItemMetaManager.hasUnlockedItem` ran once a frame here and twice in all 69 hook-counted runs in `repros/perf-174-kirby`; the rest matched. The code is the same and the two profiles' saves are not; which state decides it was not traced.
+- **Frame time:** 8% fewer frames a second moving and 6% fewer in the crowd. The mod's own work per original frame was at most 3% longer (1.72 against 1.67 ms moving, 2.66 against 2.60 and 2.64 ms in the crowd), and so was the original's frame in the same bridge (1.21 against 1.18 and 1.19 ms moving). The rest of the frame, the host's own and mostly drawing in software, took 0.6 to 0.7 ms longer moving (8.20 against 7.50 and 7.56 ms) and 0.4 to 0.6 ms longer in the crowd (8.75 against 8.11 and 8.36 ms). Runs of one build have spread as widely before (the #174 build's three moving runs, 102.1 to 116.4 fps; the disturbed run of this one, 114.8 fps), so one run of each does not show a slowdown.
+
+Not run on `main`: a second run of each plan, the GPU and Greenhouse rows, keys through the host's key table, behaviour traces with frame captures, and the owner's launcher.
+
 ## Left as they are
 
 Measured or seen in #123 and not changed.
