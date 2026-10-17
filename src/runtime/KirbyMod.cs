@@ -319,6 +319,7 @@ public sealed class KirbyMod(ModInfo info) : ModBase(info), IOnHeroUpdate,
         var native = NativeProvider;
         var held = native?.Enemies.Held ?? default;
         KirbyEnemyHooks.Relax(held.Mob, held.Other);
+        KirbyCollector.Relax();
         camera?.Update(session?.Hero._level ?? native?.DeathLevel, session is not null || native?.PlayingDeath == true);
         if (session is null) LabPerfProbe.HostFrame(Game.Instance.HeroInstance);
         LabPerfProbe.Frame();
