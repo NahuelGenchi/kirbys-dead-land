@@ -34,10 +34,15 @@ internal static unsafe class KirbyInput
     private const double DiscardHold = 0.3;
     private static readonly HeldButton discard = new(DiscardHold);
     private const double AnalogDashTilt = 0.75;
-    private sealed record Suppression(ControllerAccess Access, ArrayBytes_Int[] Arrays, int[] Saved, Suppression? Parent);
+    // Sticks holds the options' left and right stick functions as the scope found them.
+    private sealed record Suppression(ControllerAccess Access, ArrayBytes_Int[] Arrays, int[] Saved, (int Left, int Right) Sticks, Suppression? Parent);
     private static Suppression? suppressed;
+    // The controller whose host weapon reads the real direction bindings now (lab report, #188).
     private static ControllerAccess? directionReader;
-    private static ArrayBytes_Int? noSticks;
+    // A stick's function in the host options: ControllerAccess.getMovementSticks lists
+    // the sticks set to 0, getCameraSticks those set to 1 and OptionsBase.get_padKeys
+    // those set to 2. No host function lists a stick set to -1.
+    private const int MovementStick = 0, NoStick = -1;
     // Action IDs confirmed against this host's Options.configController. 36 is
     // the dedicated dive attack: Kirby's stomp starts the host dive itself.
     private static readonly int[] movementActions = [0, 1, 4, 5, 10, 11, 12, 13, 28, 36];
@@ -47,14 +52,52 @@ internal static unsafe class KirbyInput
     // hxd.Key.SHIFT; the left and right keys add a location flag above the low byte.
     private const int ShiftKey = 16;
     private static readonly int[] directionActions = [10, 11, 12, 13];
+    // updateWeapon reads the direction bindings only while its weapon charges. In a
+    // Kirby run only the retained shield reaches the host's weapon use (TryUseWeapon),
+    // from its binding or the assist mode's auto-hit, so the handler that lets it read
+    // them is installed while one of those may start a charge or one lasts (#188).
+    private static bool weaponHook;
+    private static int weaponIdle;
+    // Host frames the handler stays after the shield binding was last down.
+    private const int WeaponLinger = 30;
     public static void Install()
     {
-        Hook_ControllerAccess.getMovementSticks += (orig, access, alternate) =>
-            suppressed?.Access.HashlinkPointer == access.HashlinkPointer && directionReader?.HashlinkPointer != access.HashlinkPointer
-                ? noSticks ??= ArrayUtils.CreateInt() : orig(access, alternate);
-        Hook_HeroWeaponsManager.updateWeapon += (orig, manager, slot) =>
-            WithHostDirections(manager.hero, () => orig(manager, slot));
     }
+    /// <summary>Whether the weapon handler is installed now (lab report).</summary>
+    internal static bool WeaponUpdateHeld => weaponHook;
+    /// <summary>A host weapon reads the real direction bindings now (lab report).</summary>
+    internal static bool ReadingHostDirections => directionReader is not null;
+    private static void HoldWeaponUpdate()
+    {
+        weaponIdle = 0;
+        if (weaponHook) return;
+        DccmDetours.Attach("tool.hero.HeroWeaponsManager.updateWeapon");
+        Hook_HeroWeaponsManager.updateWeapon += UpdateWeapon;
+        weaponHook = true;
+    }
+    /// <summary>
+    /// Remove the weapon handler once the shield binding has not been down for a
+    /// while and no weapon of the hero still charges, and DCCM's detour with it (#178).
+    /// Called once between host frames.
+    /// </summary>
+    internal static void RelaxWeaponUpdate(Hero? hero)
+    {
+        weaponIdle = Math.Min(weaponIdle + 1, WeaponLinger + 1);
+        if (!weaponHook || weaponIdle <= WeaponLinger || hero is not null && Charging(hero)) return;
+        Hook_HeroWeaponsManager.updateWeapon -= UpdateWeapon;
+        DccmDetours.Detach("tool.hero.HeroWeaponsManager.updateWeapon");
+        weaponHook = false;
+    }
+    private static bool Charging(Hero hero)
+    {
+        var weapons = hero.weaponsManager?.mainWeapons;
+        if (weapons is null) return false;
+        for (int i = 0; i < weapons.length; i++)
+            if (weapons.getDyn(i) is Weapon weapon && weapon.isCharging()) return true;
+        return false;
+    }
+    private static void UpdateWeapon(Hook_HeroWeaponsManager.orig_updateWeapon orig, HeroWeaponsManager manager, int slot) =>
+        WithHostDirections(manager.hero, () => orig(manager, slot));
     public static bool Available(Hero hero)
     {
         ControllerAccess access = hero.controller;
@@ -185,6 +228,7 @@ internal static unsafe class KirbyInput
         bool available = Available(h);
         var c = h.controller;
         Bindings input = available ? new Bindings(c) : default;
+        if (dc.Main.Class.ME.options.assistMode.modeAuto) HoldWeaponUpdate();
         // The host Heal binding (F by default) fires the stored limited-use ability (#102).
         KirbyFSlot.Held = available && input.Down(HealAction);
         if (TestOverride?.Invoke(session) is ushort test) return WithShieldGuard(session, test, available ? input : null);
@@ -261,7 +305,11 @@ internal static unsafe class KirbyInput
             var item = hero.inventory.getEquippedWeaponOn(slot);
             if (item?.hasTag(ShieldTag) == true &&
                 session.Rules.CanUse(HostWeaponKind.Shield, item.permanentId.ToString(CultureInfo.InvariantCulture)) &&
-                (input ?? new Bindings(hero.controller)).Down(slot + 2)) keys |= 512;
+                (input ?? new Bindings(hero.controller)).Down(slot + 2))
+            {
+                keys |= 512;
+                HoldWeaponUpdate();
+            }
         }
         // The source guard handles native body contact while the same held
         // shield independently follows the host's real parry/counter path.
@@ -279,11 +327,18 @@ internal static unsafe class KirbyInput
                 saved[at++] = Get(array, action);
                 if ((uint)action < (uint)array.length) ((int*)array.bytes)[action] = -1;
             }
+        // The movement sticks go the same way (#185): a stick whose function is
+        // movement is set to none, so getMovementSticks lists no stick in here.
+        var options = dc.Main.Class.ME.options;
+        var sticks = (options.lstickFunction, options.rstickFunction);
         var previous = suppressed;
-        suppressed = new(hero.controller, arrays, saved, previous);
+        suppressed = new(hero.controller, arrays, saved, sticks, previous);
+        if (sticks.lstickFunction == MovementStick) options.lstickFunction = NoStick;
+        if (sticks.rstickFunction == MovementStick) options.rstickFunction = NoStick;
         try { update(); }
         finally
         {
+            (options.lstickFunction, options.rstickFunction) = sticks;
             suppressed = previous; at = 0;
             foreach (var array in arrays)
                 foreach (int action in movementActions)
@@ -316,12 +371,17 @@ internal static unsafe class KirbyInput
                     ((int*)array.bytes)[action] = context.Saved[arrayIndex * movementActions.Length + Array.IndexOf(movementActions, action)];
             }
         }
+        // The sticks are the user's again while the weapon reads its aim.
+        var options = dc.Main.Class.ME.options;
+        var maskedSticks = (options.lstickFunction, options.rstickFunction);
+        (options.lstickFunction, options.rstickFunction) = context.Sticks;
         var priorReader = directionReader;
         directionReader = hero.controller;
         try { readDirections(); }
         finally
         {
             directionReader = priorReader;
+            (options.lstickFunction, options.rstickFunction) = maskedSticks;
             at = 0;
             foreach (var array in context.Arrays)
                 foreach (int action in directionActions)

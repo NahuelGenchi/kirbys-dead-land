@@ -14,6 +14,8 @@ namespace Kirby.Runtime;
 /// host position, the viewport's centre, size and zoom, the host's awake and
 /// cinematic state and the source camera, so the frames where the view is far
 /// from Kirby, and what moved it, can be read from <c>arrival-trace.jsonl</c>.
+/// Each line also has the host head's state (#189): whether the hero has a head,
+/// its mode, whether its eye shows and whether any of its particles are alive.
 /// </summary>
 internal static class LabArrivalProbe
 {
@@ -65,6 +67,7 @@ internal static class LabArrivalProbe
         var viewport = level.viewport;
         var machine = KirbyMod.Instance?.NativeProvider?.Machine;
         double heroX = (hero.cx + hero.xr) * 24, heroY = (hero.cy + hero.yr) * 24;
+        var head = hero.heroHead;
         File.AppendAllText(Path.Combine(run, "arrival-trace.jsonl"), JsonSerializer.Serialize(new
         {
             host = frames++, level = level.uniqId, kirby = KirbyMod.Instance?.ActiveSession is not null,
@@ -73,6 +76,8 @@ internal static class LabArrivalProbe
             offsetX = viewport is null ? (double?)null : heroX - viewport.realX,
             offsetY = viewport is null ? (double?)null : heroY - viewport.realY,
             atCamera,
+            head = head is null ? null : new { head.heroHasHead, mode = head.get_headMode()?.ToString(), eye = head.eye?.visible,
+                particles = head.pool is { } pool && !(pool.busyList_Killable.isEmpty() && pool.busyList_DontKillEarly.isEmpty()) },
             source = machine is null ? null : new { frame = machine.State.Frame, x = machine.State.X, y = machine.State.Y,
                 cameraX = machine.State.CameraX, cameraY = machine.State.CameraY },
         }, TraceOptions) + "\n");
