@@ -922,10 +922,16 @@ Issue #101. The owner wants F (host action 7) for Kirby's stored limited-use
 ability (#102), so Kirby has no health flask. He heals by eating Dead Cells food
 (level food, enemy drops and Cook's food) and at health fountains.
 
-- `HealFlask.isEnabled` already returns false while the host's Captain Chicken
-  pet is active. `KirbyHealing` returns false for a Kirby session the same way,
-  so `Heal.isUsingInputs` ignores F, fountains and flask recharges have no flask
-  to fill, and the HUD rebuild leaves out the flask's slot.
+- A Kirby session takes the hero's `HealFlask` out of its main skills with the
+  host's own `HeroMainSkillsManager.unregisterSkill` and puts it back in its
+  place when the session ends (#186). Until #186 `KirbyHealing` turned it off
+  through `HealFlask.isEnabled`, as the host does while its Captain Chicken pet
+  is active. Either way no healing skill reads F, fountains and flask recharges
+  have no flask to fill, and the HUD rebuild leaves out the flask's slot. A save
+  writes the skill list, so `HeroMainSkillsManager.serialize` puts the flask back
+  for the save alone: the run keeps its flask and its charges. No lab run has
+  written a run save yet, so that handler is not exercised; the `healing` plan
+  checks the rest ([Runtime launch](RUNTIME_LAUNCH.md#f-slot-and-fountain-2026-10-10)).
 - The fountain (`en.inter.Fountain`) is untouched until its cinematic ends:
   `onActivate` still requires missing health (or infection), marks the fountain
   used and plays `cine.HealFountain`. Its `applyEffect` clears infection and calls
