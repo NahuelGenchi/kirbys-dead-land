@@ -2568,6 +2568,7 @@ the all-ability rendering tests as full gameplay acceptance.
   frame. The `healing` plan gave the same lives, fountain heal and F slot as
   `main`, through a level exit, with the flask out of the skills.
 - Not run: a run save during a Kirby session (the `serialize` handler), the
+  owner's launcher.
 
 ## 2026-10-17 — the Collector's unlock check hooked only while it runs (#187)
 
