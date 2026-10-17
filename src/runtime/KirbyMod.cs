@@ -35,6 +35,12 @@ public sealed class KirbyMod(ModInfo info) : ModBase(info), IOnHeroUpdate,
     {
         LabIsolation.Install();
         Instance = this;
+        if (LabPerfProbe.Bare)
+        {
+            LabPerfProbe.Install();
+            Logger.Information("Kirby adapter in the bare lab mode: no gameplay hooks.");
+            return;
+        }
         string path = Info.ModRoot.GetFilePath("config.json");
         if (File.Exists(path))
             config = JsonSerializer.Deserialize<RuntimeConfig>(File.ReadAllText(path))
@@ -139,6 +145,14 @@ public sealed class KirbyMod(ModInfo info) : ModBase(info), IOnHeroUpdate,
         string.Equals(user.heroSkin?.ToString(), config.OutfitId, StringComparison.Ordinal);
 
     private KirbySession? Synchronize(Hero? hero)
+    {
+        var mark = LabPerfProbe.Start();
+        var state = SynchronizeHero(hero);
+        LabPerfProbe.Stop(LabPerfProbe.Section.Sync, mark);
+        return state;
+    }
+
+    private KirbySession? SynchronizeHero(Hero? hero)
     {
         if (provider is null || hero is null || !IsKirby(hero))
         {
@@ -283,6 +297,7 @@ public sealed class KirbyMod(ModInfo info) : ModBase(info), IOnHeroUpdate,
 
     void IOnHeroUpdate.OnHeroUpdate(double dt)
     {
+        if (LabPerfProbe.Bare) return;
         KirbySession? state = Synchronize(Game.Instance.HeroInstance);
         if (state is not null)
             provider!.OnFrame(state, dt);
@@ -292,12 +307,17 @@ public sealed class KirbyMod(ModInfo info) : ModBase(info), IOnHeroUpdate,
 
     void IOnFrameUpdate.OnFrameUpdate(double dt)
     {
-        if (provider is null) return;
+        if (provider is null)
+        {
+            if (LabPerfProbe.Bare) { LabPerfProbe.HostFrame(Game.Instance.HeroInstance); LabPerfProbe.Frame(); }
+            return;
+        }
         NativeProvider?.OnHostFrame(dt);
         var native = NativeProvider;
         var held = native?.Enemies.Held ?? default;
         KirbyEnemyHooks.Relax(held.Mob, held.Other);
         camera?.Update(session?.Hero._level ?? native?.DeathLevel, session is not null || native?.PlayingDeath == true);
+        if (session is null) LabPerfProbe.HostFrame(Game.Instance.HeroInstance);
         LabPerfProbe.Frame();
     }
 }

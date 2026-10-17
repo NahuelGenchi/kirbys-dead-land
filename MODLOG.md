@@ -2412,6 +2412,38 @@ the all-ability rendering tests as full gameplay acceptance.
 - Not run: a forge NPC in a passage, a shield or a Legendary item in the forge,
   `ForgeRefine1`, the owner's launcher.
 
+## 2026-10-16 — inside a Dead Cells frame, against the Beheaded's (#174)
+
+- Dead Cells v35 read the way the ROM was, read-only: `hlboot.dat` (SHA-256
+  `59350cad…`) disassembled with crashlink into a private index (37,448
+  functions), DCCM 35.13.6 read as IL. Disassembly, index and notes stay in
+  `research/dc-re` in the private data root. docs/HOST_INTERNALS.md records
+  the frame loop, the 30 Hz entity loop, level generation and loading, the two
+  collectors, DCCM's hook layer and what each kind of mod call costs.
+- Findings: a hooked host function costs about 2 µs and 920 B a call through
+  DCCM's managed path and leaves a finalizable object, so nearly every .NET
+  collection is a blocking generation-1 one of 6–8 ms; removing a handler
+  leaves the function detoured into .NET for the session; the game runs the
+  workstation collector, not the server one this record claimed.
+- Lab tooling: `KIRBY_LAB_PERF=quiet`, `_HOST`, `_HOOKS`, `_ALLOC`,
+  `KIRBY_LAB_BARE`, `KIRBY_LAB_SEED`, `KIRBY_LAB_REAL_KEYS`, and
+  `launch_runtime.py --gpu`, `--shader-cache` and `--crash-dump`.
+- Live (`repros/perf-174-kirby`, `repros/perf-174-beheaded`, seed 174, one run
+  each): Kirby moving, software drawing, 108.1 fps, 126.5 KB a frame, 108.7
+  hooked calls a frame (`HSprite.draw` 78.9), 47 collections of 7.4 ms; the
+  Beheaded 125.8 fps and 134.6 KB; Dead Cells alone 137.6 fps and 39.3 KB. On
+  the GPU 1,092.9, 1,272.7 and 1,853.4 fps. docs/PERFORMANCE.md has the tables
+  and the fixes ranked: #175, #178, #176, #177.
+- The four fixes together (`measure/all2`, two runs each unless said): moving
+  in software 126.3 → 43.9 KB a frame, 108.6 → 24.7 hooked calls, 9.11 →
+  8.37 ms; in the crowd 250.4 → 68.5 KB, 481.7 → 32.0 calls, 11.69 → 9.77 ms,
+  frames over 20 ms 1.0 → 0.19 a second; on the GPU 0.90 → 0.61 ms moving and
+  1.76 → 0.96 ms wading in the Greenhouse (569 → 1,037 fps).
+- The bridge alone, driven from Python like the runtime drives it: 0.94 ms a
+  step at the median, half of it recompiled ARM code, a sixth timers and the
+  event scheduler, an eighth the SPU. No bridge change: fast memory stays off.
+- Not run: windowed play, level load times, the owner's launcher.
+
 ## 2026-10-16 — no hook on every host sprite draw (#175)
 
 - `KirbyHostVisuals` hooked `HSprite.draw`, the host's draw of every sprite,
