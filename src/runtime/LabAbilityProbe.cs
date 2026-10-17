@@ -523,10 +523,13 @@ internal static class LabAbilityProbe
         foreach (var id in hidden) meta.relockItem(id.AsHaxeString());
         // Every gate first needs Health Flask I, relocked above: only the Kirby
         // run may count it (#101). Random Starter Shield then needs 2 unlocks.
+        // The unlock handler is installed by the first Kirby check alone (#187).
+        bool holdingBefore = KirbyCollector.Holding;
         KirbyCollector.TestUnfiltered = true;
         int hostCount = meta.countUnlockedItems();
         bool hostShieldGate = meta.canInvestOnItem("RandomShield".AsHaxeString());
         bool hostMoneyGate = meta.canInvestOnItem("Money1".AsHaxeString());
+        bool holdingAfterHost = KirbyCollector.Holding;
         KirbyCollector.TestUnfiltered = false;
         int kirbyCount = meta.countUnlockedItems();
         bool kirbyShieldGate = meta.canInvestOnItem("RandomShield".AsHaxeString());
@@ -542,6 +545,9 @@ internal static class LabAbilityProbe
             kirbyShieldGate,
             hostMoneyGate,
             kirbyMoneyGate,
+            holdingBefore,
+            holdingAfterHost,
+            holdingAfterKirby = KirbyCollector.Holding,
         };
         KirbyCollector.TestFiltered = (id, listed) => collectorListed[id] = listed;
         // The panel pauses the level, so the result is written when it has built its list.
@@ -570,6 +576,7 @@ internal static class LabAbilityProbe
             keptListed = kept.Where(id => collectorListed.GetValueOrDefault(id)).ToArray(),
             notTested = hidden.Concat(kept).Where(id => !collectorListed.ContainsKey(id)).ToArray(),
             otherHiddenListed = collectorListed.Where(e => e.Value && KirbyCollector.Hides(e.Key)).Select(e => e.Key).ToArray(),
+            holdingWhenListed = KirbyCollector.Holding,
         }, new JsonSerializerOptions { WriteIndented = true }));
     }
 }

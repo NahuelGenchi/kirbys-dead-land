@@ -172,6 +172,7 @@ public sealed class KirbyMod(ModInfo info) : ModBase(info), IOnHeroUpdate,
             var mark = LabPerfProbe.Start();
             session = new KirbySession(hero, provider);
             KirbyHostVisuals.ClearHead(hero);
+            KirbyHealing.Activate(hero);
             CaptureShield(session);
             try { provider.OnActivated(session); }
             catch (Exception error)
@@ -193,6 +194,7 @@ public sealed class KirbyMod(ModInfo info) : ModBase(info), IOnHeroUpdate,
     {
         if (session is null)
             return;
+        KirbyHealing.Deactivate();
         provider?.OnDeactivated(session);
         session = null;
     }
@@ -319,6 +321,7 @@ public sealed class KirbyMod(ModInfo info) : ModBase(info), IOnHeroUpdate,
         var native = NativeProvider;
         var held = native?.Enemies.Held ?? default;
         KirbyEnemyHooks.Relax(held.Mob, held.Other);
+        KirbyCollector.Relax();
         KirbyInput.RelaxWeaponUpdate(session?.Hero);
         camera?.Update(session?.Hero._level ?? native?.DeathLevel, session is not null || native?.PlayingDeath == true);
         if (session is null) LabPerfProbe.HostFrame(Game.Instance.HeroInstance);

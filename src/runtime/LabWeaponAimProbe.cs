@@ -29,6 +29,9 @@ internal static unsafe class LabWeaponAimProbe
     private static readonly Dictionary<int, ushort> invertedMasks = [];
     private static double? moveStartX, moveStartY;
     private static double movedX, jumpRise;
+    // Movement sticks the host lists for the hero (#185): inside Kirby's update
+    // (most seen), while a weapon reads its aim, and between frames.
+    private static int sticksMasked = -1, sticksAim = -1, sticksBetween = -1;
     private static bool Held => aimStart is uint at && tick - at < 12;
     private static int Binding(ControllerAccess access, int action) => ((int*)access.parent.get_bindings().primary.bytes)[action];
 
@@ -48,6 +51,12 @@ internal static unsafe class LabWeaponAimProbe
         {
             bool inspect = Held && KirbyMod.Instance?.ActiveSession?.Hero.HashlinkPointer == manager.hero.HashlinkPointer;
             if (inspect && Binding(manager.hero.controller, 10) == -1) maskedBefore++;
+            if (inspect)
+            {
+                var hero = manager.hero;
+                sticksMasked = Math.Max(sticksMasked, hero.controller.getMovementSticks(false).length);
+                KirbyInput.WithHostDirections(hero, () => sticksAim = hero.controller.getMovementSticks(false).length);
+            }
             orig(manager);
             if (inspect && Binding(manager.hero.controller, 10) == -1) maskedAfter++;
         };
@@ -162,6 +171,8 @@ internal static unsafe class LabWeaponAimProbe
         if (run is null || session is null || tick == lastReport) return;
         lastReport = tick;
         if (aimStart is not null) restored |= Binding(session.Hero.controller, 10) == upKey;
+        sticksBetween = session.Hero.controller.getMovementSticks(false).length;
+        var options = dc.Main.Class.ME.options;
         var bindings = session.Hero.controller.parent.get_bindings();
         File.WriteAllText(Path.Combine(run, "weapon-aim.json"), JsonSerializer.Serialize(new
         {
@@ -171,6 +182,8 @@ internal static unsafe class LabWeaponAimProbe
             keyboardUpAndJump = new[] { bindings.primary, bindings.secondary, bindings.third }
                 .Select(array => new { jump = ((int*)array.bytes)[0], up = ((int*)array.bytes)[10] }).ToArray(),
             movedX, jumpRise,
+            sticksMasked, sticksAim, sticksBetween,
+            stickFunctions = new { left = options.lstickFunction, right = options.rstickFunction },
             available = KirbyInput.Available(session.Hero),
             inputState = new {
                 session.Hero.awake, session.Hero.controller.manualLock,
@@ -188,6 +201,7 @@ internal static unsafe class LabWeaponAimProbe
                 directionMasks.GetValueOrDefault(0) == 1 && directionMasks.GetValueOrDefault(1) == 512 &&
                 directionMasks.GetValueOrDefault(4) == 2 && directionMasks.GetValueOrDefault(5) == 4 &&
                 directionMasks.GetValueOrDefault(28) == 1024 && movedX > 12 && jumpRise > 5 &&
+                sticksMasked == 0 && sticksBetween > 0 && sticksAim == sticksBetween &&
                 invertedMasks.GetValueOrDefault(10) == (upAlsoJump ? 129 : 128) && invertedMasks.GetValueOrDefault(11) == 16 &&
                 invertedMasks.GetValueOrDefault(12) == 64 && invertedMasks.GetValueOrDefault(13) == 32 &&
                 new[] { 0, 1, 4, 5, 28 }.All(action => invertedMasks.GetValueOrDefault(action) == directionMasks.GetValueOrDefault(action)),

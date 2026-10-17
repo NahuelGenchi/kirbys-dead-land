@@ -34,10 +34,15 @@ internal static unsafe class KirbyInput
     private const double DiscardHold = 0.3;
     private static readonly HeldButton discard = new(DiscardHold);
     private const double AnalogDashTilt = 0.75;
-    private sealed record Suppression(ControllerAccess Access, ArrayBytes_Int[] Arrays, int[] Saved, Suppression? Parent);
+    // Sticks holds the options' left and right stick functions as the scope found them.
+    private sealed record Suppression(ControllerAccess Access, ArrayBytes_Int[] Arrays, int[] Saved, (int Left, int Right) Sticks, Suppression? Parent);
     private static Suppression? suppressed;
+    // The controller whose host weapon reads the real direction bindings now (lab report, #188).
     private static ControllerAccess? directionReader;
-    private static ArrayBytes_Int? noSticks;
+    // A stick's function in the host options: ControllerAccess.getMovementSticks lists
+    // the sticks set to 0, getCameraSticks those set to 1 and OptionsBase.get_padKeys
+    // those set to 2. No host function lists a stick set to -1.
+    private const int MovementStick = 0, NoStick = -1;
     // Action IDs confirmed against this host's Options.configController. 36 is
     // the dedicated dive attack: Kirby's stomp starts the host dive itself.
     private static readonly int[] movementActions = [0, 1, 4, 5, 10, 11, 12, 13, 28, 36];
@@ -57,9 +62,6 @@ internal static unsafe class KirbyInput
     private const int WeaponLinger = 30;
     public static void Install()
     {
-        Hook_ControllerAccess.getMovementSticks += (orig, access, alternate) =>
-            suppressed?.Access.HashlinkPointer == access.HashlinkPointer && directionReader?.HashlinkPointer != access.HashlinkPointer
-                ? noSticks ??= ArrayUtils.CreateInt() : orig(access, alternate);
     }
     /// <summary>Whether the weapon handler is installed now (lab report).</summary>
     internal static bool WeaponUpdateHeld => weaponHook;
@@ -325,11 +327,18 @@ internal static unsafe class KirbyInput
                 saved[at++] = Get(array, action);
                 if ((uint)action < (uint)array.length) ((int*)array.bytes)[action] = -1;
             }
+        // The movement sticks go the same way (#185): a stick whose function is
+        // movement is set to none, so getMovementSticks lists no stick in here.
+        var options = dc.Main.Class.ME.options;
+        var sticks = (options.lstickFunction, options.rstickFunction);
         var previous = suppressed;
-        suppressed = new(hero.controller, arrays, saved, previous);
+        suppressed = new(hero.controller, arrays, saved, sticks, previous);
+        if (sticks.lstickFunction == MovementStick) options.lstickFunction = NoStick;
+        if (sticks.rstickFunction == MovementStick) options.rstickFunction = NoStick;
         try { update(); }
         finally
         {
+            (options.lstickFunction, options.rstickFunction) = sticks;
             suppressed = previous; at = 0;
             foreach (var array in arrays)
                 foreach (int action in movementActions)
@@ -362,12 +371,17 @@ internal static unsafe class KirbyInput
                     ((int*)array.bytes)[action] = context.Saved[arrayIndex * movementActions.Length + Array.IndexOf(movementActions, action)];
             }
         }
+        // The sticks are the user's again while the weapon reads its aim.
+        var options = dc.Main.Class.ME.options;
+        var maskedSticks = (options.lstickFunction, options.rstickFunction);
+        (options.lstickFunction, options.rstickFunction) = context.Sticks;
         var priorReader = directionReader;
         directionReader = hero.controller;
         try { readDirections(); }
         finally
         {
             directionReader = priorReader;
+            (options.lstickFunction, options.rstickFunction) = maskedSticks;
             at = 0;
             foreach (var array in context.Arrays)
                 foreach (int action in directionActions)

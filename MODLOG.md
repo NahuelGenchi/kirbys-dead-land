@@ -2542,6 +2542,47 @@ the all-ability rendering tests as full gameplay acceptance.
 - Not run: GPU drawing, a window with vsync, a first launch after a reboot,
   the owner's launcher.
 
+## 2026-10-17 — the movement sticks through the host's own setting (#185)
+
+- The hook on `ControllerAccess.getMovementSticks` is gone. The masked hero
+  update sets each stick whose function is movement to none and puts the
+  options back after it, and back for the player while a charging weapon
+  reads its aim (`WithHostDirections`).
+- Live (`repros/perf-185-kirby`, seed 174, quiet, software, three `before`
+  runs on `main` 28f4086 and two with the change): 24.9 → 17.6 hooked calls a
+  frame moving, 32.3 → 24.9 in the crowd; 44.6 → 37.5 and 69.5 → 62.0 KB a
+  frame. The `aim` plan saw no movement stick inside the masked update and
+  the player's left stick outside it; its key checks fail on `main` too since
+  #176 (it presses keys through `Key.isDown`).
+- Not run: a real controller stick, the owner's launcher.
+
+## 2026-10-17 — the health flask out of Kirby's skills (#186)
+
+- The hook on `HealFlask.isEnabled` is gone. A Kirby session takes the flask
+  out of the hero's main skills with the host's `unregisterSkill` and puts it
+  back in its place when it ends; a handler on `HeroMainSkillsManager.serialize`
+  writes it into a save made in between.
+- Live (`repros/perf-185-kirby`, seed 174, quiet, software, three `before`
+  runs on `main` 28f4086 and two with the change): 24.9 → 21.6 hooked calls a
+  frame moving, 32.3 → 28.7 in the crowd; 44.6 → 41.8 and 69.5 → 65.6 KB a
+  frame. The `healing` plan gave the same lives, fountain heal and F slot as
+  `main`, through a level exit, with the flask out of the skills.
+- Not run: a run save during a Kirby session (the `serialize` handler), the
+
+## 2026-10-17 — the Collector's unlock check hooked only while it runs (#187)
+
+- `KirbyCollector`'s handler on `ItemMetaManager.hasUnlockedItem` is added by
+  the first `canInvestOnItem` check of a Kirby run and taken off between host
+  frames 30 frames after the last one, with DCCM's detour, instead of staying
+  on for the whole session.
+- Live (`repros/perf-185-kirby`, seed 174, quiet, software, three `before`
+  runs on `main` 28f4086 and two with the change): 24.9 → 22.8 hooked calls a
+  frame moving, 32.3 → 30.2 in the crowd; 44.6 → 42.1 and 69.5 → 66.9 KB a
+  frame. The Collector check gave `main`'s counts, gates and lists, with the
+  handler on only from Kirby's first check.
+- Not seen: the handler coming off after a Collector visit. Not run: the
+  owner's launcher.
+
 ## 2026-10-17 — the weapon update hooked only while the shield is held (#188)
 
 - `KirbyInput`'s handler on `HeroWeaponsManager.updateWeapon`, which lets a
