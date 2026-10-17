@@ -2541,3 +2541,17 @@ the all-ability rendering tests as full gameplay acceptance.
   cross-module options gained 1–3 ms more and were left out.
 - Not run: GPU drawing, a window with vsync, a first launch after a reboot,
   the owner's launcher.
+
+## 2026-10-17 — the movement sticks through the host's own setting (#185)
+
+- The hook on `ControllerAccess.getMovementSticks` is gone. The masked hero
+  update sets each stick whose function is movement to none and puts the
+  options back after it, and back for the player while a charging weapon
+  reads its aim (`WithHostDirections`).
+- Live (`repros/perf-185-kirby`, seed 174, quiet, software, three `before`
+  runs on `main` 28f4086 and two with the change): 24.9 → 17.6 hooked calls a
+  frame moving, 32.3 → 24.9 in the crowd; 44.6 → 37.5 and 69.5 → 62.0 KB a
+  frame. The `aim` plan saw no movement stick inside the masked update and
+  the player's left stick outside it; its key checks fail on `main` too since
+  #176 (it presses keys through `Key.isDown`).
+- Not run: a real controller stick, the owner's launcher.
