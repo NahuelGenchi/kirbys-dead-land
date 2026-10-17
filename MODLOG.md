@@ -2460,3 +2460,21 @@ the all-ability rendering tests as full gameplay acceptance.
   the first moments of play look the same, with nothing of the outfit drawn.
 - Not run: the skin selector's preview, the owner's launcher, a window on the
   GPU.
+
+## 2026-10-16 — DCCM's detour taken off unhooked host functions (#178)
+
+- Removing a DCCM handler leaves the function detoured into .NET for the
+  session (0.77 µs and 56 B a call): 280 calls a frame with no handler in the
+  crowd. Turning DCCM's direct route back on crashed the game after the held
+  enemies were let go in 3 of 4 crowd runs, so that version was dropped.
+- `DccmDetours` undoes the detour (`NativeHooks.HookHandle.Disable`) when
+  `KirbyEnemyHooks.Relax` leaves a function with no handler, writes it again
+  (`Enable`) before the next `Hold`, and remakes the manager's closure over
+  the new trampoline. Reflection; nothing changes if DCCM's fields are
+  missing.
+- Live (`repros/perf-174-kirby`, seed 174, crowd, quiet, software): 250.4 →
+  233.3 KB a frame, 96 → 79 collections a minute, 481.7 → 201.6 hooked calls
+  (280.0 → 0 with no handler), the mean frame 11.69 → 10.82 ms. No crash in
+  the 8 crowd runs with it, each the same fight (66 hits, 2,046 damage).
+- Not run: another mod hooking the same functions, a hold across a level
+  change, the owner's launcher.
