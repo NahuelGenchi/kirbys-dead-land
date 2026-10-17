@@ -30,7 +30,7 @@ Relevant environment variables are used only by the lab helper:
 - `KIRBY_LAB_RESUME_GAME=1`: call the game's normal saved-run launch action once.
 - `KIRBY_LAB_SAVE_AFTER`: request a normal host save after this many original engine frames.
 - `KIRBY_LAB_OUTFIT`: outfit ID assigned before starting that private run.
-- `KIRBY_LAB_INPUT_PLAN`: `movement`, `combat`, `ability`, `visual`, `breakable`, `boss`, `crowd`, `aim`, `repro`, `hazard`, `stars`, `water`, `items`, `scroll`, `tentacle` or `arrival`, for a reproducible offscreen test. `repro` tests normal keyboard/controller bindings and keeps the normal tutorials. `items` is the ability item check (see [ability items](#ability-items-55)).
+- `KIRBY_LAB_INPUT_PLAN`: `movement`, `combat`, `ability`, `visual`, `breakable`, `boss`, `crowd`, `aim`, `shield`, `repro`, `hazard`, `stars`, `water`, `items`, `scroll`, `tentacle` or `arrival`, for a reproducible offscreen test. `repro` tests normal keyboard/controller bindings and keeps the normal tutorials. `items` is the ability item check (see [ability items](#ability-items-55)).
 - `KIRBY_LAB_CROWD_SIZE`: Zombies the `crowd` plan spawns, 1 to 31 (default 31), exposed as `--crowd-size`. Until #151 one Sword swing that hit 24 or more stopped the original. `boss-crowd.json` counts the frames that ended inside a pass since the crowd appeared (`unfinishedSinceSpawn`) and, 300 frames after it appeared, decides `passed`: 24 or more Zombies hit (30 of the 31 are bound at once) and at most 30 such frames. A stopped original ends every frame inside one. A death starts a new run; `passed` and `unfinishedSinceSpawn` keep the crowd's values.
 - `KIRBY_LAB_TEST_ABILITY`: optional source ability ID for the ability probe, exposed as `--probe-ability 2..25`. The probe prepares it through original inhale, supplied swallowed content, and Down before measuring combat. The separate `combat` probe uses a real enemy's random copy result.
 - `KIRBY_LAB_TEST_SCROLLS`: optional `B,T,S` scroll counts for the ability probe, exposed as `--probe-scrolls`. Before measuring, the probe adds that many real `BrutalityUp`, `TacticUp` and `SurvivalUp` items (`InventItem.fromItem`) through the normal inventory and calls the host's `Hero.computeTiers`. `ability-damage.json` then records the tiers, the host and core colorless multipliers, and each copy hit's source HP drop and host damage.
@@ -39,7 +39,7 @@ Relevant environment variables are used only by the lab helper:
 - `KIRBY_LAB_TEST_LEGENDARY=1`: with `--probe-hud`, exposed as `--probe-legendary`. Once the copy's ability item is in a weapon slot, it gives that item the host `Legendary` affix, calls `Hero.hudInitItems`, and appends the slot and affix result to `hud.jsonl`.
 - `KIRBY_LAB_FSLOT_MOUTHFUL=1`: with the `fslot` plan, presses F while base Kirby holds a real Zombie in his mouth, then spits and presses F again (see [F slot with a mouthful](#f-slot-with-a-mouthful-2026-10-14)). Set it in the environment of `launch_runtime.py`.
 - `KIRBY_LAB_COMBAT_ELITE=1`: with the `combat` plan, makes the swallowed Zombie an Elite (Elite skills disabled) and records in `combat.json` whether the copy was empowered and the damage that the second Zombie takes from each hit. Set it in the environment of `launch_runtime.py`.
-- `KIRBY_LAB_ARRIVAL_LEVEL`: the level the `arrival` plan starts a new run in (default `Ossuary`; for example `PrisonStart`). Kirby stands still and `arrival-trace.jsonl` records, every host frame, the hero's host position, the viewport centre, size and zoom, the camera's `vertical` lead and dive state as the host reads them, and the source camera (#126).
+- `KIRBY_LAB_ARRIVAL_LEVEL`: the level the `arrival` plan starts a new run in (default `Ossuary`; for example `PrisonStart`). Kirby stands still and `arrival-trace.jsonl` records, every host frame, the hero's host position, the viewport centre, size and zoom, the camera's `vertical` lead and dive state as the host reads them, and the source camera (#126), and the host head's state: whether the hero has a head, its mode, whether its eye shows and whether any of its particles are alive (#189).
 - `KIRBY_LAB_WATER_LEVEL`: the level the `water` plan starts a new run in (default: the normal start), for example `SewerDepths` or `SwampHeart`. `KIRBY_LAB_WATER_WADE=1` makes the plan wade instead of placing a Zombie (see [Shallow water](#shallow-water-144)). Set both in the environment of `launch_runtime.py`.
 - `KIRBY_LAB_PLAY=1`: keep outfit selection but disable all smoke capture and automatic input.
 - `KIRBY_LAB_PERF=1` (set in the shell that runs `launch_runtime.py`; ignored in play): write `perf.json` in the run folder with the time and managed bytes of each stage of the mod's frame, host frame intervals and collections. `KIRBY_LAB_PERF=quiet`, `KIRBY_LAB_PERF_HOST`, `KIRBY_LAB_PERF_HOOKS`, `KIRBY_LAB_PERF_ALLOC`, `KIRBY_LAB_BARE`, `KIRBY_LAB_SEED` and `KIRBY_LAB_REAL_KEYS` refine it, `--gpu` and `--shader-cache` draw a test on the GPU and keep the driver's shader cache, and `--crash-dump small` or `off` keeps a crashing test from writing a dump as large as the game's memory (#174). See [Performance, Measuring](PERFORMANCE.md#measuring).
@@ -124,6 +124,8 @@ python3 scripts/stage_runtime.py --data-root ~/.local/share/kirby-dead-cells/rep
 python3 scripts/launch_runtime.py --data-root ~/.local/share/kirby-dead-cells/repros/left-click-20261006 \
   --seconds 50 --start-game --outfit KirbySuperStarUltra --input-plan aim
 ```
+
+Since #185 the masked hero update hides the movement sticks by setting each stick whose function in the options is movement to none, and the plan also counts the sticks the host lists for the hero's controller: none inside the masked update, the player's own while a charging weapon reads its aim there and between frames. Run `20261017-025404` (`repros/live-185-kirby`, seed 174) had those counts right (0 in 19 masked weapon updates, then 1 and 1, the left stick), but did not pass: since #176 `KirbyInput` reads the host's key table, and this plan still presses its keys through a hook on `Key.isDown`, so every mapping read 0 and Kirby neither inhaled nor moved. `main` failed the same way in `20261017-025515` (`repros/live-base-aim`). Both ended by the time limit with no fatal log and the real saves unchanged.
 
 Since #176 `KirbyInput` reads the host's key table (`hxd.Key.keyPressed`) directly instead of calling `Key.isDown`, so the plan's hook on `Key.isDown` pressed nothing: on `main` 9706475 (`repros/live-base-aim`, run `20261017-025515`) and with #185 (`repros/live-185-kirby`, `20261017-025404`) every mapping and inversion read 0, the weapon binding read 0 instead of B, the source never inhaled and Kirby neither walked nor jumped. Since #200 the probe writes the key table, as `LabSmokeCapture.HostKey` does for the Beheaded plans: it holds the weapon, walk and jump keys through `HostKey`, and for each mapping read it sets the key's entry for that one `KirbyInput.Read` and puts the old value back. It has no `Key.isDown` hook left. The Dodge check also follows #75 now: a Shift key bound to Dodge must read no guard bit and start the slide (`KirbyInput.SlideButton`), and the profile's first other Dodge key (Ctrl, 17) must read the guard bit 512; the plan's last pass came before #75.
 
@@ -784,6 +786,13 @@ With the fix (runtime SHA-256 `15b0b560908f0627bb0131a3464690f047ed055704ba7f1ea
 
 All three runs reached their time limit without fatal errors, and the real saves were unchanged. Holding the opposite direction while raising the shield was traced but not resolved (see [GAMEPLAY_FIDELITY.md](GAMEPLAY_FIDELITY.md)).
 
+The host reads the held direction for the shield only while it charges, inside the masked hero update, through `KirbyInput`'s handler on `HeroWeaponsManager.updateWeapon`. Since #188 that handler is added only while the shield's binding is down, or the assist mode attacks by itself, and taken off 30 host frames later once no weapon charges. `--input-plan shield` (`LabShieldHoldProbe`) checks it: it equips the starting shield through the inventory, holds its binding through the host's key table for 120 original frames with Left held from the 40th to the 80th, and writes `shield.json` and `shield-events.txt`. It passes when the handler is off before the press, on in every frame polled while the shield is held (the first excepted) and every frame it charges, the host reads a real direction key there, and the handler comes off after the release and stays off for 60 frames. Run `20261017-031430` (`repros/live-188-kirby`, seed 174) passed: 118 frames held and charging with the handler on, 1,074 direction reads, 40 shield turns while Left was held, the handler off 16 original frames after the release. It ended at the time limit with no fatal log and the real saves unchanged.
+
+```sh
+python3 scripts/launch_runtime.py --data-root ~/.local/share/kirby-dead-cells/repros/live-188-kirby \
+  --seconds 50 --start-game --outfit KirbySuperStarUltra --input-plan shield
+```
+
 ## Ability items (#55)
 
 `--input-plan items` (`LabAbilityItemProbe`) checks the
@@ -1201,6 +1210,18 @@ real panel but wrote no file because the panel pauses the level;
 9, same lists), and `20261008-195058`/`195152` matched the final pair on a build
 that differed only in the probe's layout.
 
+Since #187 the `hasUnlockedItem` handler that answers the prerequisite check
+(#101) is added by the first `canInvestOnItem` check of a Kirby run and taken off
+between host frames 30 frames after the last one, and `collector.json` records
+whether it is on. `20261017-030331` (`repros/live-187-kirby`, seed 174): host
+count 0 and Kirby count 14; Random Starter Shield and Gold Reserves closed to the
+host's check and open to Kirby's; 44 entries tested, none of the twelve hidden
+listed and all five kept listed; the handler off before the checks and after the
+host's own, on after Kirby's and while the panel listed. `main` gave the same
+counts, gates and lists (`20261017-030442`, `repros/live-base-collector`). Both
+ended at the time limit with no fatal log and the real saves unchanged. The
+handler coming off was not seen here: the panel stays open to the end of the run.
+
 ## Healing without the flask (2026-10-08)
 
 Issue #101. `--input-plan healing` (`LabHealingProbe`) unlocks Health Flask I
@@ -1355,6 +1376,21 @@ Results (every run ended at its time limit with no fatal log):
 Not run: a fountain placed by the level generator, other stored abilities after a
 level change, Collector or merchant HUD refreshes, and normal play with
 `./play-kirby`.
+
+Since #186 a Kirby session takes the flask out of the hero's skills instead of
+turning it off through `HealFlask.isEnabled`, and the plan also records where
+the flask is: among the skills, or held by the session. `20261017-025728`
+(`repros/live-186-kirby`, seed 174, Sword and exit): the session held the flask
+from activation; the probe's `KirbyHealing.Deactivate` put it back sixth of nine
+skills and `Activate` took it out again; F held for 90 frames started no flask
+(life 15 → 15); the fountain asked 76 and gave 38 (15 → 53, the original the
+same) and was marked used; after the exit to `T_SewerShort` the slot showed Mike
+× 3 and the flask was still out of the skills. `main` on the same plan
+(`20261017-025924`, `repros/live-base-healing`) gave the same lives, heal,
+fountain and slot. Both ended by the time limit with no fatal log and the real
+saves unchanged. Not run: a run save during a Kirby session. The level exit
+wrote only the profile, which holds no skill list, so the `serialize` handler
+that writes the flask into a run save was not exercised.
 
 ## Carnivorous plants (#113)
 

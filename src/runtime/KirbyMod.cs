@@ -69,9 +69,20 @@ public sealed class KirbyMod(ModInfo info) : ModBase(info), IOnHeroUpdate,
             KirbyFSlot.Install();
             camera = new KirbyCamera(config.CameraZoom);
             RegisterProvider(new KirbyNdsProvider(config, Info.ModRoot.GetFilePath(".")));
+            // #193: Game.loadMainLevel flushes the host's atlas cache, on the game
+            // thread, once per level: atlases not fetched since their "used" flags
+            // were last reset are destroyed, the others kept.
+            dc.Hook_AssetsLibManager.flushCache += (orig, manager) =>
+            {
+                if (string.Equals(dc.Main.Class.ME?.user?.heroSkin?.ToString(), config.OutfitId, StringComparison.Ordinal))
+                    NativeProvider?.LevelLoading();
+                orig(manager);
+                LabActivationTrace.Mark("Level atlases flushed", gc: true);
+            };
         }
         dc.Hook_User.newGame += (orig, user, seed, level, custom, scoring, mode) =>
         {
+            LabActivationTrace.Mark("New game", gc: true);
             (provider as KirbyNdsProvider)?.ResetForNewRun();
             orig(user, seed, level, custom, scoring, mode);
         };
@@ -172,6 +183,7 @@ public sealed class KirbyMod(ModInfo info) : ModBase(info), IOnHeroUpdate,
             var mark = LabPerfProbe.Start();
             session = new KirbySession(hero, provider);
             KirbyHostVisuals.ClearHead(hero);
+            KirbyHealing.Activate(hero);
             CaptureShield(session);
             try { provider.OnActivated(session); }
             catch (Exception error)
@@ -193,6 +205,7 @@ public sealed class KirbyMod(ModInfo info) : ModBase(info), IOnHeroUpdate,
     {
         if (session is null)
             return;
+        KirbyHealing.Deactivate();
         provider?.OnDeactivated(session);
         session = null;
     }
@@ -319,6 +332,8 @@ public sealed class KirbyMod(ModInfo info) : ModBase(info), IOnHeroUpdate,
         var native = NativeProvider;
         var held = native?.Enemies.Held ?? default;
         KirbyEnemyHooks.Relax(held.Mob, held.Other);
+        KirbyCollector.Relax();
+        KirbyInput.RelaxWeaponUpdate(session?.Hero);
         camera?.Update(session?.Hero._level ?? native?.DeathLevel, session is not null || native?.PlayingDeath == true);
         if (session is null) LabPerfProbe.HostFrame(Game.Instance.HeroInstance);
         LabPerfProbe.Frame();

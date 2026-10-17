@@ -2542,6 +2542,100 @@ the all-ability rendering tests as full gameplay acceptance.
 - Not run: GPU drawing, a window with vsync, a first launch after a reboot,
   the owner's launcher.
 
+## 2026-10-17 — the movement sticks through the host's own setting (#185)
+
+- The hook on `ControllerAccess.getMovementSticks` is gone. The masked hero
+  update sets each stick whose function is movement to none and puts the
+  options back after it, and back for the player while a charging weapon
+  reads its aim (`WithHostDirections`).
+- Live (`repros/perf-185-kirby`, seed 174, quiet, software, three `before`
+  runs on `main` 28f4086 and two with the change): 24.9 → 17.6 hooked calls a
+  frame moving, 32.3 → 24.9 in the crowd; 44.6 → 37.5 and 69.5 → 62.0 KB a
+  frame. The `aim` plan saw no movement stick inside the masked update and
+  the player's left stick outside it; its key checks fail on `main` too since
+  #176 (it presses keys through `Key.isDown`).
+- Not run: a real controller stick, the owner's launcher.
+
+## 2026-10-17 — the health flask out of Kirby's skills (#186)
+
+- The hook on `HealFlask.isEnabled` is gone. A Kirby session takes the flask
+  out of the hero's main skills with the host's `unregisterSkill` and puts it
+  back in its place when it ends; a handler on `HeroMainSkillsManager.serialize`
+  writes it into a save made in between.
+- Live (`repros/perf-185-kirby`, seed 174, quiet, software, three `before`
+  runs on `main` 28f4086 and two with the change): 24.9 → 21.6 hooked calls a
+  frame moving, 32.3 → 28.7 in the crowd; 44.6 → 41.8 and 69.5 → 65.6 KB a
+  frame. The `healing` plan gave the same lives, fountain heal and F slot as
+  `main`, through a level exit, with the flask out of the skills.
+- Not run: a run save during a Kirby session (the `serialize` handler), the
+
+## 2026-10-17 — the Collector's unlock check hooked only while it runs (#187)
+
+- `KirbyCollector`'s handler on `ItemMetaManager.hasUnlockedItem` is added by
+  the first `canInvestOnItem` check of a Kirby run and taken off between host
+  frames 30 frames after the last one, with DCCM's detour, instead of staying
+  on for the whole session.
+- Live (`repros/perf-185-kirby`, seed 174, quiet, software, three `before`
+  runs on `main` 28f4086 and two with the change): 24.9 → 22.8 hooked calls a
+  frame moving, 32.3 → 30.2 in the crowd; 44.6 → 42.1 and 69.5 → 66.9 KB a
+  frame. The Collector check gave `main`'s counts, gates and lists, with the
+  handler on only from Kirby's first check.
+- Not seen: the handler coming off after a Collector visit. Not run: the
+  owner's launcher.
+
+## 2026-10-17 — the weapon update hooked only while the shield is held (#188)
+
+- `KirbyInput`'s handler on `HeroWeaponsManager.updateWeapon`, which lets a
+  charging weapon read the real directions inside the masked hero update, is
+  added while the retained shield's binding is down or the assist mode attacks
+  by itself, and taken off 30 host frames later once no weapon charges, with
+  DCCM's detour. New `shield` lab plan (`LabShieldHoldProbe`).
+- Live (`repros/perf-185-kirby`, seed 174, quiet, software, three `before`
+  runs on `main` 28f4086 and two with the change): 24.9 → 22.8 hooked calls a
+  frame moving, 32.3 → 30.2 in the crowd; 44.6 → 42.4 and 69.5 → 66.8 KB a
+  frame. The `shield` plan passed: the handler on in every held, charging
+  frame, the host reading the real directions and turning the shield, and off
+  after the release.
+- Not run: the assist mode's automatic attack, the owner's launcher.
+
+## 2026-10-17 — the head effects left to the host's own head flag (#189)
+
+- The hook on `HeroHead.updateHeadFx` is gone. The Kirby outfit has no head,
+  so the host returns before the head's particle emitter; activation now also
+  sets `heroHasHead` false. `Fx.heroHeadPopFinal` is still skipped.
+- Live (`repros/perf-185-kirby`, seed 174, quiet, software, three `before`
+  runs on `main` 28f4086 and two with the change): 24.9 → 23.9 hooked calls a
+  frame moving, 32.3 → 31.1 in the crowd; 44.6 → 43.5 and 69.5 → 68.1 KB a
+  frame. The `arrival` plan, with captures, matched `main`'s animations and
+  frames, with no head flag, eye or head particle on through the arrival and
+  no flame above Kirby.
+- Not run: `PolloPower` during a Kirby session, the owner's launcher.
+
+## 2026-10-17 — the machine and the equipment atlas readied during the level load (#193)
+
+- The arrival's activation frame took 752–792 ms: `OnActivated` 302–331 ms
+  (the ROM's SHA-256 70 ms, opening the machine 214–221 ms, audio 9–10 ms)
+  and the first equipment draw 387–397 ms, nearly all of it the host loading
+  the outfit's equipment atlas (0.37–0.38 s), then 27 ms of texture uploads.
+- The runtime no longer hashes the ROM before opening it; the bridge checks
+  it. A hook on the host's atlas flush, which each level load runs, opens the
+  first machine on a worker thread and gets the equipment atlas so the host
+  keeps it.
+- Live (`repros/perf-193`, seed 174, movement, quiet, software): the
+  activation frame 752–792 → 100–114 ms (nine runs), the first original
+  step's frame and the step itself unchanged. In
+  lifecycle runs the atlas load moved into the level load (1.04–1.14 s
+  there), the rest of the load to the activation was 0.59–0.64 s shorter, and
+  from the flush to Kirby's first draw the new build was 0.12–0.27 s sooner.
+  After a death the next activation no longer makes the atlas's textures
+  again (0.34 s). The arrival captures looked the same, and Kirby's original
+  state matched in all 880 traced frames.
+- The first original step, 12 ms against 1.2 ms later, is the recompiler
+  translating the first frame's code. Moving it would change the original's
+  frames or the core, so it is left.
+- Not run: GPU drawing, a window, the owner's launcher, a first launch after
+  a reboot, the host's `reloadCache`, the machine opened on the game thread.
+
 ## 2026-10-17 — the lab aim plan presses keys KirbyInput reads (#200)
 
 - The `aim` plan had failed on `main` since #176: `LabWeaponAimProbe` pressed
