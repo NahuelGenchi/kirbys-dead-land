@@ -540,6 +540,55 @@ Behaviour, with frame captures ten times a second through the arrival (`KIRBY_LA
 
 Not measured: GPU drawing and play in a window with vsync, where the frame is shorter and the same 15 ms is a larger share of it, and a first launch after a reboot, when the DLLs are read from disk. Not run: the owner's launcher.
 
+## The activation frame (#193)
+
+The first frame of the arrival's rebirth, in which the runtime takes the hero, took 752–792 ms in [the first Kirby frame (#184)](#the-first-kirby-frame-184). The run folder's activation trace (`activation.txt`, which since #193 names each mark's thread and, with `KIRBY_LAB_PERF`, adds HashLink's collections and memory to some marks) splits it. `OnActivated` took 302–331 ms: the ROM's SHA-256 70 ms, opening the machine (`kssu_open`) 214–221 ms and audio 9–10 ms. The first equipment draw took 387–397 ms: 368–383 ms of it was the host asset manager's `get` of the outfit's equipment atlas, which reads its pages into textures (223 MB allocated, two HashLink collections), followed by 27 ms of texture uploads.
+
+Three changes:
+
+- **The ROM's hash.** `kssu_open` checks the ROM's SHA-256 itself, as it has since the bridge's first commit, so the runtime no longer hashes the ROM before opening it. It hashes it only when the bridge refuses to open, to say which of the ROM and the seed state was refused.
+- **The machine.** `Game.loadMainLevel` flushes the host's atlas cache (`AssetsLibManager.flushCache`) once per level, on the game thread. The mod hooks it: when the hero wears the Kirby outfit and the provider has no machine yet, `NdsRuntime.Open` starts on a worker thread, and `OnActivated` takes the machine it opened, waiting for it if it is not ready. Nothing else runs a machine while it opens: the provider has none, and melonDS's current machine is per thread. Opening took 270–329 ms on the worker and ended 5.8–5.9 s before the activation.
+- **The equipment atlas.** The same hook gets the atlas just before the flush, so the manager counts it as used and keeps it ([Rendering](RENDERING.md)).
+
+Lab runs, 2026-10-17, as in #184: isolated profile `repros/perf-193`, a new game from seed 174, the `movement` plan, `KIRBY_LAB_PERF=quiet` with the host phases, software drawing, `performance` power profile, outfit pack `2cbd0a47…`, bridge `bae16c0e…`. Before is the #184 tree as merged (`9706475`, runtime `609d7248…`), after is this change (`34597534…`), swapped in the same lab between games.
+
+| Build | Runs (other programs) | Activation frame | `OnActivated` | First equipment draw | Texture uploads | JIT in it (methods) | Frame of the first original step (the step) |
+| :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+| before | `20261017-015856`, `020837` (0.25, 0.31 cores) | 792.5, 751.9 ms | 331.2, 301.9 ms | 397.1, 387.2 ms | 27.5, 26.9 ms | 45.3, 44.0 ms (195) | 38.5, 41.3 ms (11.9, 12.0 ms) |
+| | `030126`, `030226` (0.70, 0.74) | 763.4, 759.4 ms | 308.2, 302.1 ms | 388.2, 389.9 ms | 27.1, 29.4 ms | 44.5, 45.6 ms (195) | 44.6, 42.3 ms (12.6, 11.8 ms) |
+| after | `20261017-020617` (0.52) | 100.3 ms | 15.5 ms | 15.5 ms | none | 46.7 ms (194) | 40.0 ms (12.0 ms) |
+| | `020116`, `020357`, `025304`, `025622`, `030801`, `030912`, `031124`, `031229` (0.65–1.74) | 100.0–113.9 ms | 15.4–22.9 ms | 15.5–17.1 ms | none | 42.0–46.2 ms (194) | 43.5–51.7 ms (11.9–12.7 ms) |
+
+The activation frame is 0.64–0.69 s shorter. Almost half of what is left is the .NET JIT, the same in both builds; the first equipment draw is now the sprite and its shaders, most of it JIT. Other programs used more than the lab's 0.6-core limit during most of these runs, which are given apart; their activation frames agree with the quiet runs'. One more after run was stopped by the lab's memory watchdog when another session's lab game started beside it (`021056`), and one with 2.93 cores wrote no arrival record (`031330`).
+
+The frame with the first original step, 38.5–44.6 ms before and 40.0–51.7 ms after, had the same JIT (15–21 ms, 135–153 methods) and the same step (11.8–12.7 ms) in both builds. The two slowest, both 51.7 ms, spent 9 ms more in the terrain stage (`030801`) or compiled 152 methods instead of about 138 and drew slower in a run other programs disturbed (`020116`, 1.00 cores). The frame after the activation took 83–90 ms in both builds, 72–73 ms of it the host's drawing; what the host draws there was not traced.
+
+What moved into the level load, from lifecycle runs (`KIRBY_LAB_LIFECYCLE=1`, `KIRBY_LAB_EXIT=T_Courtyard`: the outfit off and on, a level exit to the Courtyard, a death and the new run's first level) with the level load and the new game marked in both builds (before `f0ab3332…`, after `260fcf86…`), alternated. Two more before runs were disturbed by other programs (0.99 and 2.71 cores); their marks are given because they agree with the others.
+
+| Build | Run | New game to the flush | Atlas `get` before the flush | Flush to activation | Activation to Kirby's first draw | From the flush to Kirby's first draw |
+| :--- | :--- | ---: | ---: | ---: | ---: | ---: |
+| before | `20261017-022844`, `024259` | 5.40, 6.73 s | | 6.75, 6.73 s | 0.70, 0.70 s | 7.45, 7.43 s |
+| before (disturbed) | `022050`, `023659` | 5.99, 6.87 s | | 6.77, 6.75 s | 0.72, 0.72 s | 7.49, 7.47 s |
+| after | `20261017-023421`, `024529` | 5.71, 6.87 s | 1.04, 1.07 s | 6.13, 6.14 s | 0.05, 0.05 s | 7.22, 7.26 s |
+| after (timing run) | `020617` | | 1.13 s | 6.13 s | 0.05 s | 7.31 s |
+| final tree | `20261017-031856` | 5.65 s | 1.14 s | 6.13 s | 0.05 s | 7.31 s |
+
+During the load the atlas `get` took 1.04–1.14 s, against 0.37–0.38 s in the activation frame, with the same allocations and the same two HashLink collections; why it is slower there was not traced. The rest of the load to the activation took 6.13–6.14 s in every after run against 6.73–6.77 s in every before run, which was not traced either, so from the flush to Kirby's first draw the after build was 0.12–0.27 s sooner. From the new game the totals are within the spread of the level generation (5.4–6.9 s before the flush).
+
+Later in the lifecycle:
+
+- **Outfit off and on**, in the same level: the activation finds the machine and the atlas, and the atlas `get` takes 0.0–0.1 ms in both builds.
+- **The level exit**: the hero carries over to the Courtyard, so there is no activation, and the flush took 0.1–1.1 ms in both builds.
+- **After the death**, the new run's flush took the same in both builds of each pair (0.21 s in the first, 0.50 s in the second). In the before build the next activation's equipment draw made the atlas's textures again, 341–349 ms in the activation frame; in the after build the atlas had been kept, and that draw took 0.0 ms.
+
+**The first original step** took 11.8–12.7 ms in all these runs, against about 1.2 ms later. It is the recompiler translating all the code the first frame runs, from the seed state; [the bridge](NDS_BRIDGE.md#the-recompiler-153) measures it outside the game. It cannot be moved off the arrival without changing what the original does or the core: running the original ahead of the host before the arrival hands it control would change the original's frames, and loading the seed state again afterwards clears the translated blocks (the first frame after a load took 10.2 ms). It is left as it is.
+
+Behaviour, with frame captures ten times a second through the arrival (`KIRBY_LAB_CAPTURE_ALL=1`; before `20261017-021352`, after `021811`): both builds played `rebirth`, `idle`, `headPopStart`, `headPopLoop` and `headPopEnd` (the before run also caught the `idle` between the head pop and play, which the after run's captures fell either side of). Kirby is hidden in the captures of `headPopStart`'s flash and drawn from its frame 17, the reveal frame the renderer sets: the before run caught him hidden at frame 16 and drawn at 19, the after run hidden at 14 and drawn at 17. The 14 captures taken at the same animation frame in both differ by 0.83 of 255 at the median and at most 3.2, at the head pop's first frame, where the cells' particles differ. Kirby's original state and the host hero's position were the same in all 880 original frames both traced (4167 to 5064), and the plan's two hurtbox queries passed in both.
+
+The final tree differs from the after builds above only in how the lab trace reaches HashLink's figures and in comments (runtime `90dc7363…`). Its one lifecycle run (`20261017-031856`, 0.29 cores) is the last row above: an activation frame of 102.7 ms, and Kirby's health, ability and shield kept through the outfit change and the exit, as the lifecycle checks it.
+
+Not run: GPU drawing, play in a window, the owner's launcher, a first launch after a reboot, a level loaded through the host's `reloadCache`, and the activation that opens the machine on the game thread, which this change keeps for a hero that becomes Kirby with no level loaded in the outfit; no lifecycle run reached it.
+
 ## The health flask (#186)
 
 Kirby has no health flask (#101). `KirbyHealing` turned it off with a hook on `HealFlask.isEnabled`, the test the host already uses while its Captain Chicken pet is active, so F, fountains and flask recharges found no flask. The host asks it 3.3 times a frame, and each call went into the runtime, about 2 µs and 920 bytes ([What #123 changed](#what-123-changed)).

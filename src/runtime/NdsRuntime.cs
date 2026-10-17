@@ -42,20 +42,59 @@ public sealed unsafe class NdsRuntime : IDisposable
             return System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(value);
         }
     }
-    public NdsRuntime(string nativeLibrary, string rom, string state)
+    public NdsRuntime(string nativeLibrary, string rom, string state) : this(Open(nativeLibrary, rom, state)) { }
+    /// <summary>
+    /// Takes over a machine <see cref="Open"/> returned; the calling thread owns it
+    /// from now on.
+    /// </summary>
+    public NdsRuntime(nint opened)
     {
-        using var stream = System.IO.File.OpenRead(rom);
-        if (!string.Equals(Convert.ToHexString(SHA256.HashData(stream)), RomSha256, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidDataException("The ROM does not match Kirby Super Star Ultra USA revision 0.");
-        LabActivationTrace.Mark("ROM hash verified");
-        if (library == 0)
+        if (opened == 0) throw new ArgumentException("No machine was opened.", nameof(opened));
+        handle = opened;
+        // The mod never shows the lower screen, so its picture is not drawn.
+        // The machine and the upper screen are unaffected. This only saves
+        // time: an older bridge without the switch, or a refusal, draws both.
+        if (mainScreenOnly != null) mainScreenOnly(handle, 1);
+        fixed (byte* pointer = SourceBgPalette)
+            Result(Native.ReadGpu(handle, 0x05000000, pointer, (nuint)SourceBgPalette.Length));
+        LabActivationTrace.Mark("Source BG palette read");
+        ResetOrigin();
+    }
+    /// <summary>
+    /// Loads the bridge and opens a machine at the seed state: the part of a new
+    /// machine that does not need the game thread, so it can run on a worker
+    /// while a level loads (#193). No other machine may run while it does: the
+    /// bridge's open sets the core's process-wide switches. Pass the result to
+    /// the constructor on the thread that will own the machine.
+    /// </summary>
+    public static nint Open(string nativeLibrary, string rom, string state)
+    {
+        lock (Loading)
         {
-            library = NativeLibrary.Load(Path.GetFullPath(nativeLibrary));
-            NativeLibrary.SetDllImportResolver(typeof(NdsRuntime).Assembly,
-                (name, _, _) => name == "kssu_bridge" ? library : 0);
+            if (library == 0)
+            {
+                library = NativeLibrary.Load(Path.GetFullPath(nativeLibrary));
+                NativeLibrary.SetDllImportResolver(typeof(NdsRuntime).Assembly,
+                    (name, _, _) => name == "kssu_bridge" ? library : 0);
+                FindExports();
+            }
         }
         if (Native.ProxyCapacity() != 31)
             throw new InvalidOperationException("The native bridge does not match this runtime. Rebuild and stage both components together.");
+        LabActivationTrace.Mark("Native Open begin");
+        nint opened = Native.Open(Path.GetFullPath(rom), Path.GetFullPath(state));
+        LabActivationTrace.Mark("Native Open returned");
+        if (opened != 0) return opened;
+        // The bridge checks the ROM's SHA-256 itself. Hash it here only to say
+        // which of the two files it refused.
+        using (var stream = System.IO.File.OpenRead(rom))
+            if (!string.Equals(Convert.ToHexString(SHA256.HashData(stream)), RomSha256, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("The ROM does not match Kirby Super Star Ultra USA revision 0.");
+        throw new InvalidOperationException("Original-ROM machine could not load its private seed state.");
+    }
+    private static readonly object Loading = new();
+    private static void FindExports()
+    {
         if (movePlayer == null && NativeLibrary.TryGetExport(library, "kssu_move_player", out nint move))
             movePlayer = (delegate* unmanaged[Cdecl]<nint, int, int, int>)move;
         if (moveHelper == null && NativeLibrary.TryGetExport(library, "kssu_move_helper", out nint helperMove) &&
@@ -90,18 +129,6 @@ public sealed unsafe class NdsRuntime : IDisposable
             playerMove = (delegate* unmanaged[Cdecl]<nint, NdsMove*, int>)moveRead;
         if (arm9Clock == null && NativeLibrary.TryGetExport(library, "kssu_arm9_clock", out nint clock))
             arm9Clock = (delegate* unmanaged[Cdecl]<nint, uint, int>)clock;
-        LabActivationTrace.Mark("Native Open begin");
-        handle = Native.Open(Path.GetFullPath(rom), Path.GetFullPath(state));
-        LabActivationTrace.Mark("Native Open returned");
-        if (handle == 0) throw new InvalidOperationException("Original-ROM machine could not load its private seed state.");
-        // The mod never shows the lower screen, so its picture is not drawn.
-        // The machine and the upper screen are unaffected. This only saves
-        // time: an older bridge without the switch, or a refusal, draws both.
-        if (mainScreenOnly != null) mainScreenOnly(handle, 1);
-        fixed (byte* pointer = SourceBgPalette)
-            Result(Native.ReadGpu(handle, 0x05000000, pointer, (nuint)SourceBgPalette.Length));
-        LabActivationTrace.Mark("Source BG palette read");
-        ResetOrigin();
     }
     private static (int X, int Y) ScreenOrigin(in NdsState state) =>
         ((int)Math.Floor(state.X) - state.CameraX, (int)Math.Floor(state.Y) - state.CameraY);

@@ -2610,3 +2610,28 @@ the all-ability rendering tests as full gameplay acceptance.
   frames, with no head flag, eye or head particle on through the arrival and
   no flame above Kirby.
 - Not run: `PolloPower` during a Kirby session, the owner's launcher.
+
+## 2026-10-17 — the machine and the equipment atlas readied during the level load (#193)
+
+- The arrival's activation frame took 752–792 ms: `OnActivated` 302–331 ms
+  (the ROM's SHA-256 70 ms, opening the machine 214–221 ms, audio 9–10 ms)
+  and the first equipment draw 387–397 ms, nearly all of it the host loading
+  the outfit's equipment atlas (0.37–0.38 s), then 27 ms of texture uploads.
+- The runtime no longer hashes the ROM before opening it; the bridge checks
+  it. A hook on the host's atlas flush, which each level load runs, opens the
+  first machine on a worker thread and gets the equipment atlas so the host
+  keeps it.
+- Live (`repros/perf-193`, seed 174, movement, quiet, software): the
+  activation frame 752–792 → 100–114 ms (nine runs), the first original
+  step's frame and the step itself unchanged. In
+  lifecycle runs the atlas load moved into the level load (1.04–1.14 s
+  there), the rest of the load to the activation was 0.59–0.64 s shorter, and
+  from the flush to Kirby's first draw the new build was 0.12–0.27 s sooner.
+  After a death the next activation no longer makes the atlas's textures
+  again (0.34 s). The arrival captures looked the same, and Kirby's original
+  state matched in all 880 traced frames.
+- The first original step, 12 ms against 1.2 ms later, is the recompiler
+  translating the first frame's code. Moving it would change the original's
+  frames or the core, so it is left.
+- Not run: GPU drawing, a window, the owner's launcher, a first launch after
+  a reboot, the host's `reloadCache`, the machine opened on the game thread.
