@@ -125,6 +125,8 @@ python3 scripts/launch_runtime.py --data-root ~/.local/share/kirby-dead-cells/re
   --seconds 50 --start-game --outfit KirbySuperStarUltra --input-plan aim
 ```
 
+Since #185 the masked hero update hides the movement sticks by setting each stick whose function in the options is movement to none, and the plan also counts the sticks the host lists for the hero's controller: none inside the masked update, the player's own while a charging weapon reads its aim there and between frames. Run `20261017-025404` (`repros/live-185-kirby`, seed 174) had those counts right (0 in 19 masked weapon updates, then 1 and 1, the left stick), but did not pass: since #176 `KirbyInput` reads the host's key table, and this plan still presses its keys through a hook on `Key.isDown`, so every mapping read 0 and Kirby neither inhaled nor moved. `main` failed the same way in `20261017-025515` (`repros/live-base-aim`). Both ended by the time limit with no fatal log and the real saves unchanged.
+
 The final `025627` test started from an empty private save directory with no automated input plan. The normal new-game path activated Kirby, kept the hero awake at full 76 health, and advanced the original engine normally. The incompatible host jump/dodge/helper tutorials did not appear; the ordinary `attackM` prompt remained available. The 45-second launch completed without fatal errors or changes to real saves. Both the preceding fixture profile and this fresh-profile smoke save were preserved by directory rename under `lab/checkpoints`; the final `lab/save` directory is empty for the user's New Game. `lab/final-stage.json` records the exact runtime/native/outfit hashes and preserved checkpoint path.
 
 `--start-game --input-plan cook` (`LabCookProbe`) checks Cook food drops. It
@@ -1351,6 +1353,21 @@ Results (every run ended at its time limit with no fatal log):
 Not run: a fountain placed by the level generator, other stored abilities after a
 level change, Collector or merchant HUD refreshes, and normal play with
 `./play-kirby`.
+
+Since #186 a Kirby session takes the flask out of the hero's skills instead of
+turning it off through `HealFlask.isEnabled`, and the plan also records where
+the flask is: among the skills, or held by the session. `20261017-025728`
+(`repros/live-186-kirby`, seed 174, Sword and exit): the session held the flask
+from activation; the probe's `KirbyHealing.Deactivate` put it back sixth of nine
+skills and `Activate` took it out again; F held for 90 frames started no flask
+(life 15 → 15); the fountain asked 76 and gave 38 (15 → 53, the original the
+same) and was marked used; after the exit to `T_SewerShort` the slot showed Mike
+× 3 and the flask was still out of the skills. `main` on the same plan
+(`20261017-025924`, `repros/live-base-healing`) gave the same lives, heal,
+fountain and slot. Both ended by the time limit with no fatal log and the real
+saves unchanged. Not run: a run save during a Kirby session. The level exit
+wrote only the profile, which holds no skill list, so the `serialize` handler
+that writes the flask into a run save was not exercised.
 
 ## Carnivorous plants (#113)
 
