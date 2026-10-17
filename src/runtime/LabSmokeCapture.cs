@@ -94,6 +94,8 @@ internal static class LabSmokeCapture
             LabBossCrowdProbe.Install(run, Environment.GetEnvironmentVariable("KIRBY_LAB_INPUT_PLAN")!);
         if (Environment.GetEnvironmentVariable("KIRBY_LAB_INPUT_PLAN") == "aim")
             LabWeaponAimProbe.Install(run);
+        if (Environment.GetEnvironmentVariable("KIRBY_LAB_INPUT_PLAN") == "shield")
+            LabShieldHoldProbe.Install(run);
         if (Environment.GetEnvironmentVariable("KIRBY_LAB_INPUT_PLAN") == "repro")
             LabReproProbe.Install(run);
         if (Environment.GetEnvironmentVariable("KIRBY_LAB_INPUT_PLAN") == "hazard")
@@ -145,6 +147,7 @@ internal static class LabSmokeCapture
                 LabBreakableProbe.Poll();
                 LabBossCrowdProbe.Poll();
                 LabWeaponAimProbe.Poll();
+                LabShieldHoldProbe.Poll();
                 LabReproProbe.Poll();
                 LabHazardProbe.Poll();
                 LabWaterProbe.Poll();
