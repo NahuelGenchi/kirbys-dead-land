@@ -22,14 +22,17 @@ namespace Kirby.Runtime;
 /// keeps the plans but drops the lab's trace, captures and machine dumps, so
 /// the figures are those of a played frame. <c>KIRBY_LAB_PERF_ALLOC=1</c> adds
 /// the runtime's allocation samples by type, and <c>KIRBY_LAB_PERF_HOOKS=1</c> the
-/// calls of each hooked host function per frame. Normal play pays one static
-/// test per mark and writes nothing.
+/// calls of each hooked host function per frame. From Kirby's first activation
+/// until <see cref="ArrivalPlayed"/> counted frames later, it also writes every
+/// host frame with the time the .NET JIT took on the game thread in it, by
+/// stage and by host phase (<c>perf-arrival.json</c>, #184). Normal play pays
+/// one static test per mark and writes nothing.
 /// </summary>
 internal static unsafe class LabPerfProbe
 {
     internal enum Section
     {
-        Step, Terrain, Prepare, Native, Complete, Render, Background, Read, Decode, Upload, Equipment, Items, Hud, Audio, Lab, Input, Sync, Count,
+        Step, Terrain, Prepare, Native, Complete, Render, Background, Read, Decode, Upload, Equipment, Items, Hud, Audio, Lab, Input, Sync, Activate, Count,
     }
 
     /// <summary>Host functions timed with <c>KIRBY_LAB_PERF_HOST=1</c>; nested ones are inclusive.</summary>
@@ -39,7 +42,8 @@ internal static unsafe class LabPerfProbe
         Loop, Events, Update, Level, LevelPost, Render, Sync, Draw, Present, TextureUpload, Count,
     }
 
-    internal readonly record struct Mark(long Ticks, long Bytes);
+    /// <summary>A stage's start: the clock, the thread's managed bytes and, during the arrival, its JIT time.</summary>
+    internal readonly record struct Mark(long Ticks, long Bytes, long Jit = 0);
 
     internal static bool Enabled { get; private set; }
     /// <summary>The lab skips its own trace, captures and dumps (<c>KIRBY_LAB_PERF=quiet</c>).</summary>
@@ -96,6 +100,27 @@ internal static unsafe class LabPerfProbe
     private static readonly int[] phaseCalls = new int[(int)Phase.Count], phaseDepth = new int[(int)Phase.Count];
     private static readonly long[] framePhase = new long[(int)Phase.Count];
     private static bool hostPhases;
+
+    // The arrival (#184): one row per host frame from the first activation, with
+    // the JIT time of the game thread (in it, in each stage and in each phase)
+    // and the number of methods compiled so far by all threads, which numbers the
+    // lines of a DOTNET_JitStdOutFile summary.
+    private enum Arr
+    {
+        Interval, State, Row, Steps, Lab, Jit, JitMethods, AllJit, AllMethods, Kb, NetGcs, Sections,
+        SectionJit = Sections + (int)Section.Count, Phases = SectionJit + (int)Section.Count,
+        PhaseJit = Phases + (int)Phase.Count, Count = PhaseJit + (int)Phase.Count,
+    }
+    /// <summary>Counted frames the arrival record keeps after the first one (about five seconds).</summary>
+    internal const int ArrivalPlayed = 600;
+    private const int ArrivalCapacity = 6000;
+    private static float[]? arrival;
+    private static string? arrivalPath;
+    private static int arrivalFrames = -1;
+    // Marks read the JIT clock until the arrival record is complete.
+    private static bool tracking;
+    private static long jitAtFrame, allJitAtFrame, methodsAtFrame, allMethodsAtFrame;
+    private static readonly long[] frameJit = new long[(int)Section.Count], framePhaseJit = new long[(int)Phase.Count];
     private static string? renderer;
     private static double firstLoad = -1, maxLoad;
     private static AllocationListener? allocationSamples;
@@ -115,6 +140,12 @@ internal static unsafe class LabPerfProbe
         framesPath = Path.Combine(run, "perf-frames.json");
         Enabled = true;
         lastNetCount = GC.CollectionCount(0);
+        if (!Bare)
+        {
+            arrivalPath = Path.Combine(run, "perf-arrival.json");
+            arrival = new float[ArrivalCapacity * (int)Arr.Count];
+            tracking = true;
+        }
         InstallHashlinkStats();
         gcProbe = Environment.GetEnvironmentVariable("KIRBY_LAB_PERF_GCPROBE") == "1";
         if (Environment.GetEnvironmentVariable("KIRBY_LAB_PERF_HOST") == "1") InstallPhases();
@@ -148,7 +179,8 @@ internal static unsafe class LabPerfProbe
         marks = markCount is null ? 0 : *markCount;
     }
 
-    internal static Mark Start() => Enabled ? new(Stopwatch.GetTimestamp(), GC.GetAllocatedBytesForCurrentThread()) : default;
+    internal static Mark Start() => Enabled
+        ? new(Stopwatch.GetTimestamp(), GC.GetAllocatedBytesForCurrentThread(), tracking ? JitTicks() : 0) : default;
 
     internal static void Stop(Section section, Mark mark)
     {
@@ -158,6 +190,16 @@ internal static unsafe class LabPerfProbe
         frameTicks[(int)section] += elapsed;
         bytes[(int)section] += GC.GetAllocatedBytesForCurrentThread() - mark.Bytes;
         calls[(int)section]++;
+        if (tracking) frameJit[(int)section] += JitTicks() - mark.Jit;
+    }
+
+    // The time the game thread has spent in the JIT, in TimeSpan ticks.
+    private static long JitTicks() => JitInfo.GetCompilationTime(currentThread: true).Ticks;
+
+    /// <summary>Kirby is about to activate: the arrival record starts with this frame (the first activation only).</summary>
+    internal static void Activated()
+    {
+        if (tracking && arrivalFrames < 0) arrivalFrames = 0;
     }
 
     /// <summary>This host frame stepped Kirby normally (not a load, pause, cinematic or death).</summary>
@@ -241,12 +283,21 @@ internal static unsafe class LabPerfProbe
             if (gcProbe && count == 1500) ForceMajors(row);
             count++;
         }
+        bool arrivalDone = tracking && arrivalFrames >= 0 && RecordArrival(now, allocated, netCount, counted);
         wasActive = active; active = false; lastFrame = now; lastBytes = allocated;
         // A capture's frame ends with it; its time lands in the interval of the next frame too.
         wasLabSpike = labSpike; labSpike = false;
         lastNetCount = netCount; hlLastBytes = hlBytes; hlLastMarks = marks;
         frameSteps = 0; frameUploads = 0;
         Array.Clear(frameTicks); Array.Clear(framePhase);
+        Array.Clear(frameJit); Array.Clear(framePhaseJit);
+        if (arrivalDone)
+        {
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            WriteArrival();
+            probeBytes += GC.GetAllocatedBytesForCurrentThread() - before;
+            labSpike = true;
+        }
         // The run is ended by a signal, so the report is rewritten every two seconds.
         if (count > 0 && now - written > 2 * Stopwatch.Frequency)
         {
@@ -257,6 +308,73 @@ internal static unsafe class LabPerfProbe
             // Writing the report is the probe's own work: keep it out of the next interval.
             labSpike = true;
         }
+        // The probe's own reports compile code too; that JIT time stays out of the next frame's record.
+        if (tracking)
+        {
+            jitAtFrame = JitTicks(); allJitAtFrame = JitInfo.GetCompilationTime(false).Ticks;
+            methodsAtFrame = JitInfo.GetCompiledMethodCount(true); allMethodsAtFrame = JitInfo.GetCompiledMethodCount(false);
+        }
+    }
+
+    /// <summary>
+    /// Adds this frame to the arrival record; true when the record is complete
+    /// and tracking stops.
+    /// </summary>
+    private static bool RecordArrival(long now, long allocated, int netCount, bool counted)
+    {
+        long allJit = JitInfo.GetCompilationTime(false).Ticks;
+        double ms = 1000.0 / Stopwatch.Frequency;
+        const float TicksPerMs = 10_000f;
+        var a = arrival!.AsSpan(arrivalFrames++ * (int)Arr.Count, (int)Arr.Count);
+        a[(int)Arr.Interval] = (float)((now - lastFrame) * ms);
+        a[(int)Arr.State] = counted ? 2 : active ? 1 : 0;
+        a[(int)Arr.Row] = counted ? count - 1 : -1;
+        a[(int)Arr.Steps] = frameSteps;
+        a[(int)Arr.Lab] = wasLabSpike || labSpike ? 1 : 0;
+        a[(int)Arr.Jit] = (JitTicks() - jitAtFrame) / TicksPerMs;
+        a[(int)Arr.JitMethods] = JitInfo.GetCompiledMethodCount(true) - methodsAtFrame;
+        a[(int)Arr.AllJit] = (allJit - allJitAtFrame) / TicksPerMs;
+        a[(int)Arr.AllMethods] = JitInfo.GetCompiledMethodCount(false);
+        a[(int)Arr.Kb] = (allocated - lastBytes) / 1024f;
+        a[(int)Arr.NetGcs] = netCount - lastNetCount;
+        for (int i = 0; i < (int)Section.Count; i++)
+        {
+            a[(int)Arr.Sections + i] = (float)(frameTicks[i] * ms);
+            a[(int)Arr.SectionJit + i] = frameJit[i] / TicksPerMs;
+        }
+        for (int i = 0; i < (int)Phase.Count; i++)
+        {
+            a[(int)Arr.Phases + i] = (float)(framePhase[i] * ms);
+            a[(int)Arr.PhaseJit + i] = framePhaseJit[i] / TicksPerMs;
+        }
+        if (!(counted && count > ArrivalPlayed) && arrivalFrames < ArrivalCapacity) return false;
+        tracking = false;
+        return true;
+    }
+
+    private static void WriteArrival()
+    {
+        var columns = new List<string> { "ms", "state", "row", "steps", "lab", "jitMs", "jitMethods", "allJitMs", "allMethods", "kb", "netGcs" };
+        string[] sections = Enum.GetNames<Section>()[..(int)Section.Count], phases = Enum.GetNames<Phase>()[..(int)Phase.Count];
+        columns.AddRange(sections.Select(s => s + "Ms"));
+        columns.AddRange(sections.Select(s => s + "JitMs"));
+        columns.AddRange(phases.Select(p => "phase" + p + "Ms"));
+        columns.AddRange(phases.Select(p => "phase" + p + "JitMs"));
+        using var writer = new StreamWriter(arrivalPath!);
+        // state: 0 no normal step (loading, cinematic), 1 stepped but not yet counted, 2 counted as perf.json's row.
+        writer.Write($"{{\"hostPhases\":{(hostPhases ? "true" : "false")},\"columns\":[{string.Join(',', columns.Select(c => $"\"{c}\""))}],\"rows\":[");
+        for (int i = 0; i < arrivalFrames; i++)
+        {
+            if (i > 0) writer.Write(',');
+            writer.Write('[');
+            for (int c = 0; c < (int)Arr.Count; c++)
+            {
+                if (c > 0) writer.Write(',');
+                writer.Write(arrival![i * (int)Arr.Count + c].ToString("0.###", System.Globalization.CultureInfo.InvariantCulture));
+            }
+            writer.Write(']');
+        }
+        writer.Write("]}");
     }
 
     /// <summary>
@@ -295,7 +413,8 @@ internal static unsafe class LabPerfProbe
 
     private static void Enter(Phase phase, out Mark mark)
     {
-        mark = phaseDepth[(int)phase]++ == 0 ? new(Stopwatch.GetTimestamp(), GC.GetAllocatedBytesForCurrentThread()) : default;
+        mark = phaseDepth[(int)phase]++ == 0
+            ? new(Stopwatch.GetTimestamp(), GC.GetAllocatedBytesForCurrentThread(), tracking ? JitTicks() : 0) : default;
     }
 
     private static void Leave(Phase phase, Mark mark)
@@ -306,6 +425,7 @@ internal static unsafe class LabPerfProbe
         framePhase[(int)phase] += elapsed;
         phaseBytes[(int)phase] += GC.GetAllocatedBytesForCurrentThread() - mark.Bytes;
         phaseCalls[(int)phase]++;
+        if (tracking) framePhaseJit[(int)phase] += JitTicks() - mark.Jit;
     }
 
     private static void Write(long allocated, double hlBytes, double hlAllocs, int marks)

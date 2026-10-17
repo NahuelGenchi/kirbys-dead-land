@@ -168,6 +168,8 @@ public sealed class KirbyMod(ModInfo info) : ModBase(info), IOnHeroUpdate,
         {
             Deactivate();
             if (failedHero == hero.HashlinkPointer) return null;
+            LabPerfProbe.Activated();
+            var mark = LabPerfProbe.Start();
             session = new KirbySession(hero, provider);
             KirbyHostVisuals.ClearHead(hero);
             CaptureShield(session);
@@ -181,6 +183,7 @@ public sealed class KirbyMod(ModInfo info) : ModBase(info), IOnHeroUpdate,
                 try { Deactivate(); } catch (Exception) { session = null; }
                 return null;
             }
+            LabPerfProbe.Stop(LabPerfProbe.Section.Activate, mark);
         }
         CaptureShield(session);
         return session;
