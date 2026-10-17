@@ -2541,3 +2541,17 @@ the all-ability rendering tests as full gameplay acceptance.
   cross-module options gained 1–3 ms more and were left out.
 - Not run: GPU drawing, a window with vsync, a first launch after a reboot,
   the owner's launcher.
+
+## 2026-10-17 — the lab aim plan presses keys KirbyInput reads (#200)
+
+- The `aim` plan had failed on `main` since #176: `LabWeaponAimProbe` pressed
+  its keys through a hook on `Key.isDown`, and `KirbyInput` now reads the
+  host's key table directly, so every pressed key read as nothing.
+- The probe now writes the key table, as `LabSmokeCapture.HostKey` does
+  (new `LabSmokeCapture.HostKeyState` gives a key's entry), and its
+  `Key.isDown` hook is gone. Its Dodge check follows #75: Shift slides with no
+  guard bit, Ctrl guards (512).
+- Live (`repros/aim-200`, seed 174): `20261017-074001` passed every check;
+  `20261017-073710`, before the Dodge change, failed only that one.
+- Not run: the other plans that still hold keys through `Key.isDown` hooks
+  (healing, F slot, combat, cook, repro).

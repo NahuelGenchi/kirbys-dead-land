@@ -319,15 +319,25 @@ internal static class LabSmokeCapture
     internal static unsafe void HostKey(dc.en.Hero hero, int action, bool down)
     {
         var bindings = hero.controller.parent.get_bindings().primary;
-        var keys = dc.hxd.Key.Class.keyPressed;
         int key = (uint)action < (uint)bindings.length ? ((int*)bindings.bytes)[action] : -1;
         if (key < 0) return;
-        // The table grows with the first event of each key; a run without a real key has none.
-        if (key >= keys.length) keys.resize(key + 1);
-        int* state = (int*)keys.bytes + key;
+        int* state = HostKeyState(key);
         int frame = dc.hxd.Timer.Class.frameCount;
         if (down && *state <= 0) *state = frame;
         else if (!down && *state > 0) *state = -frame;
+    }
+
+    /// <summary>
+    /// A key code's entry in the host's key table (<c>hxd.Key.keyPressed</c>),
+    /// which <see cref="KirbyInput"/> reads directly (#176): the frame it went
+    /// down, negative once released.
+    /// </summary>
+    internal static unsafe int* HostKeyState(int key)
+    {
+        var keys = dc.hxd.Key.Class.keyPressed;
+        // The table grows with the first event of each key; a run without a real key has none.
+        if (key >= keys.length) keys.resize(key + 1);
+        return (int*)keys.bytes + key;
     }
 
     /// <summary>The movement plan for the Beheaded: Kirby's timeline (walk right, jump, attack, crouch) in milliseconds.</summary>

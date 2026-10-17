@@ -10,7 +10,8 @@ namespace Kirby.Runtime;
 /// Holds the real binding of the host weapon in slot 0 (left-click by default,
 /// the starting sword) through the production input path in base form. It must
 /// reach the source as DS B, start the original inhale, and never let the host
-/// weapon attack, even while the host reports its button down.
+/// weapon attack, even while the host reports its button down. Keys are
+/// pressed in the host's key table, which <see cref="KirbyInput"/> reads (#176).
 /// </summary>
 internal static unsafe class LabWeaponAimProbe
 {
@@ -24,7 +25,10 @@ internal static unsafe class LabWeaponAimProbe
     private static ushort weaponMask;
     private static bool restored, baseForm;
     private static bool upAlsoJump;
-    private static int mappingKey = -1;
+    // Dodge (action 1): a Shift key slides instead of guarding (#75), any other key guards.
+    private static int dodgeKey = -1, guardKey = -1;
+    private static bool shiftDodge, dodgeSlide;
+    private static ushort guardMask;
     private static readonly Dictionary<int, ushort> directionMasks = [];
     private static readonly Dictionary<int, ushort> invertedMasks = [];
     private static double? moveStartX, moveStartY;
@@ -36,8 +40,6 @@ internal static unsafe class LabWeaponAimProbe
     {
         run = output;
         dc.tool.Hook_Tutorial.tryToStart += (_, _, _) => false;
-        dc.hxd.Hook__Key.isDown += (orig, key) => key >= 0 && key == mappingKey ||
-            Held && key == weaponKey || orig(key);
         dc.hxd.Hook__Key.isPressed += (orig, key) =>
             Held && aimStart is uint at && tick - at < 2 && key == weaponKey || orig(key);
         Hook_HeroWeaponsManager.hasButtonDownForWeapon += (orig, manager, weapon) =>
@@ -100,19 +102,21 @@ internal static unsafe class LabWeaponAimProbe
                 options.invertPlayerMovements = false;
                 foreach (int action in new[] { 0, 1, 4, 5, 10, 11, 12, 13, 28 })
                 {
-                    mappingKey = Binding(hero.controller, action);
-                    directionMasks[action] = KirbyInput.Read(session);
+                    directionMasks[action] = ReadWith(session, Binding(hero.controller, action));
+                    if (action == 1) dodgeSlide = KirbyInput.SlideButton;
                 }
+                dodgeKey = Binding(hero.controller, 1);
+                shiftDodge = dodgeKey >= 0 && (dodgeKey & 0xFF) == 16;
+                guardKey = new[] { bindings.primary, bindings.secondary, bindings.third }
+                    .Select(array => array.length > 1 ? ((int*)array.bytes)[1] : -1)
+                    .FirstOrDefault(key => key >= 0 && (key & 0xFF) != 16, -1);
+                if (guardKey >= 0) guardMask = ReadWith(session, guardKey);
                 options.invertPlayerMovements = true;
                 foreach (int action in new[] { 0, 1, 4, 5, 10, 11, 12, 13, 28 })
-                {
-                    mappingKey = Binding(hero.controller, action);
-                    invertedMasks[action] = KirbyInput.Read(session);
-                }
+                    invertedMasks[action] = ReadWith(session, Binding(hero.controller, action));
             }
             finally
             {
-                mappingKey = -1;
                 KirbyInput.TestOverride = overrideInput;
                 options.invertPlayerMovements = originalInversion;
             }
@@ -122,18 +126,17 @@ internal static unsafe class LabWeaponAimProbe
             {
                 KirbyInput.TestOverride = null;
                 options.invertPlayerMovements = false;
-                mappingKey = weaponKey;
-                weaponMask = KirbyInput.Read(session);
+                weaponMask = ReadWith(session, weaponKey);
             }
             finally
             {
-                mappingKey = -1;
                 KirbyInput.TestOverride = overrideInput;
                 options.invertPlayerMovements = originalInversion;
             }
             aimStart = tick;
         }
         // Production physical input while the weapon key is held.
+        LabSmokeCapture.HostKey(hero, 2, Held);
         if (Held) return null;
         uint elapsed = tick - start.Value;
         if (elapsed >= 260)
@@ -143,17 +146,24 @@ internal static unsafe class LabWeaponAimProbe
             moveStartY ??= hostY;
             movedX = Math.Max(movedX, hostX - moveStartX.Value);
             jumpRise = Math.Max(jumpRise, moveStartY.Value - hostY);
-            mappingKey = elapsed switch
-            {
-                < 320 => Binding(hero.controller, 13),
-                >= 340 and < 350 => Binding(hero.controller, 0),
-                _ => -1,
-            };
+            LabSmokeCapture.HostKey(hero, 13, elapsed < 320);
+            LabSmokeCapture.HostKey(hero, 0, elapsed is >= 340 and < 350);
             // Return null so the production physical-input path supplies the
-            // actual source frames, using only this isolated virtual key.
+            // actual source frames from these keys alone.
             return null;
         }
         return 0;
+    }
+
+    /// <summary>One production read with only this key down, its key-table entry restored after.</summary>
+    private static ushort ReadWith(KirbySession session, int key)
+    {
+        if (key < 0) return KirbyInput.Read(session);
+        int* state = LabSmokeCapture.HostKeyState(key);
+        int before = *state;
+        *state = Math.Max(1, dc.hxd.Timer.Class.frameCount);
+        try { return KirbyInput.Read(session); }
+        finally { *LabSmokeCapture.HostKeyState(key) = before; }
     }
 
     internal static void Poll()
@@ -167,7 +177,7 @@ internal static unsafe class LabWeaponAimProbe
         {
             tick, item = item?.getItemKind().ToString(), upKey, weaponKey, weaponMask, heldInputs, baseForm,
             inhaleFrames, hostAttempts, hostAttacks, maskedBefore, maskedAfter, restored,
-            directionMasks, invertedMasks, upAlsoJump,
+            directionMasks, invertedMasks, upAlsoJump, dodgeKey, dodgeSlide, guardKey, guardMask,
             keyboardUpAndJump = new[] { bindings.primary, bindings.secondary, bindings.third }
                 .Select(array => new { jump = ((int*)array.bytes)[0], up = ((int*)array.bytes)[10] }).ToArray(),
             movedX, jumpRise,
@@ -185,7 +195,8 @@ internal static unsafe class LabWeaponAimProbe
                 maskedBefore > 0 && maskedBefore == maskedAfter && restored &&
                 directionMasks.GetValueOrDefault(10) == (upAlsoJump ? 65 : 64) && directionMasks.GetValueOrDefault(11) == 32 &&
                 directionMasks.GetValueOrDefault(12) == 128 && directionMasks.GetValueOrDefault(13) == 16 &&
-                directionMasks.GetValueOrDefault(0) == 1 && directionMasks.GetValueOrDefault(1) == 512 &&
+                directionMasks.GetValueOrDefault(0) == 1 && directionMasks.GetValueOrDefault(1) == (shiftDodge ? 0 : 512) &&
+                dodgeSlide == shiftDodge && (guardKey < 0 || guardMask == 512) &&
                 directionMasks.GetValueOrDefault(4) == 2 && directionMasks.GetValueOrDefault(5) == 4 &&
                 directionMasks.GetValueOrDefault(28) == 1024 && movedX > 12 && jumpRise > 5 &&
                 invertedMasks.GetValueOrDefault(10) == (upAlsoJump ? 129 : 128) && invertedMasks.GetValueOrDefault(11) == 16 &&
