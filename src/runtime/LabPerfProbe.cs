@@ -342,6 +342,8 @@ internal static unsafe class LabPerfProbe
             a[(int)Arr.Sections + i] = (float)(frameTicks[i] * ms);
             a[(int)Arr.SectionJit + i] = frameJit[i] / TicksPerMs;
         }
+        // The host phases that ended since the last mark. The mark is taken inside the host's
+        // update, so the update in a row is the previous frame's.
         for (int i = 0; i < (int)Phase.Count; i++)
         {
             a[(int)Arr.Phases + i] = (float)(framePhase[i] * ms);
