@@ -75,17 +75,17 @@ public sealed class KirbyMod(ModInfo info) : ModBase(info), IOnHeroUpdate,
             (provider as KirbyNdsProvider)?.ResetForNewRun();
             orig(user, seed, level, custom, scoring, mode);
         };
-        Hook_Hero.preUpdate += (orig, hero) =>
+        Hook_Hero.preUpdate += (orig, hero) => KirbyHurtbox.Physical(hero, () =>
         {
             var state = Synchronize(hero);
             if (state is not null && provider is KirbyNdsProvider native)
                 native.BeforeHostUpdate(state, () => orig(hero));
             else orig(hero);
-        };
+        });
         Hook_Weapon.tryToUse += TryUseWeapon;
         Hook_Inventory.equip += Equip;
         Hook_InventItem.isUsefulFor += IsUsefulFor;
-        Hook_Hero.fixedUpdate += FixedUpdate;
+        Hook_Hero.fixedUpdate += (orig, hero) => KirbyHurtbox.Physical(hero, () => FixedUpdate(orig, hero));
         Hook_Hero.updateMaxLife += (orig, hero) =>
         {
             if (session?.Hero.HashlinkPointer == hero.HashlinkPointer && IsKirby(hero) &&

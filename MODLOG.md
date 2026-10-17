@@ -2493,3 +2493,18 @@ the all-ability rendering tests as full gameplay acceptance.
   milliseconds) and this branch's runs from them in 221 to 227; with the lab's
   input all four fixes matched #174 in every frame.
 - Not run: a controller, the owner's launcher.
+
+## 2026-10-16 — two hurtbox hooks dropped (#177)
+
+- `Hero.postUpdate` and `Entity.spriteUpdate` run from `Level.postUpdate`,
+  after the hurtbox projection has ended, so their `Physical` handlers never
+  found it on. They are gone, and `KirbyMod`'s own handlers on
+  `Hero.preUpdate` and `Hero.fixedUpdate` run their work inside `Physical`
+  instead of a second handler each (same order: the hurtbox handler was added
+  last, so it already ran outermost).
+- Live (`repros/perf-174-kirby`, seed 174, quiet, software, two or three runs
+  each): 108.6 → 103.7 hooked calls a frame moving, 481.7 → 450.9 in the
+  crowd; 126.3 → 120.3 and 250.4 → 217.8 KB a frame. Traces matched the #174
+  build in all 2,912 shared original frames.
+- Not run: the owner's launcher, every hurtbox case of the projection's own
+  record.

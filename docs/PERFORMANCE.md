@@ -407,6 +407,27 @@ With keys, a read went from 73 µs and 13.9 KB to 19 µs and 8 bytes: 28.6 KB le
 
 Behaviour, with traces and frame captures (`KIRBY_LAB_PERF=1`, the `movement` plan): with the lab's input, which is keyed on the original's frames, all four fixes together (`20261016-171529`) matched the #174 build (`170406`) in Kirby's original state and the host hero's position in all 2,930 original frames both runs reached. With keys through the host's key table (`KIRBY_LAB_REAL_KEYS=1`) a press is timed in host milliseconds, so the original frame that first sees it depends on frame timing: two runs of the #174 build (`171952`, `175309`) differed from each other in 331 of 2,968 original frames, and this branch's two runs (`172120`, `175437`) differed from them in 221 to 227, and from each other in none of 2,976. The plan's two hurtbox queries passed in every run.
 
+## The hurtbox hooks (#177)
+
+`KirbyHurtbox` moves the hero's host hurtbox onto Kirby's original body while `Level.update` runs, so the host's hit tests find Kirby where he is drawn, and puts it back when `Level.update` returns. While that projection is on, the hero's own movement, equipment and save data must keep the physical foot, and four handlers did that: on `Hero.preUpdate`, `Hero.fixedUpdate`, `Hero.postUpdate` and `Entity.spriteUpdate`.
+
+Two of them never found the projection on. The host calls every `postUpdate` and `spriteUpdate` from `Level.postUpdate`, after `Level.update` has returned, and `Entity.spriteUpdate` runs for every entity in the level: 3.9 hooked calls a frame with Kirby moving at the start of the Prisoners' Quarters, 32.5 in the `crowd` plan. The other two doubled the mod's own handlers on `Hero.preUpdate` and `Hero.fixedUpdate`, and every handler on a hooked function is paid again on each call: about 2 µs and 920 bytes ([What #123 changed](#what-123-changed)).
+
+Those two hooks are gone, and `Hero.preUpdate` and `Hero.fixedUpdate` keep one handler each, `KirbyMod`'s, which now runs its work inside `KirbyHurtbox.Physical`. DCCM calls the handler added last first, and `KirbyHurtbox.Install` ran after `KirbyMod` added its own, so the projection was already restored around all of the mod's work there; the order is unchanged. Nothing else in the runtime hooks those four functions outside the lab's `LabMovesProbe`.
+
+Lab runs, 2026-10-16: isolated profile `repros/perf-174-kirby`, a new game from seed 174 each time (`KIRBY_LAB_SEED=174`), `KIRBY_LAB_PERF=quiet` with the hook counter (`KIRBY_LAB_PERF_HOOKS=1`), software drawing, `performance` power profile. "Before" is `main` with the lab tooling of #174 (runtime `a2a93f5a…`); "after" adds this branch (`1f069148…`). Two runs each against three `before` runs; the frames over 20 and 33 ms leave out the frames in which the lab wrote its reports.
+
+| Plan | Build | Runs | Host fps | Mean frame | p99 | Managed KB a frame | .NET collections a minute (median pause) | Frames over 20 / 33 ms | Hooked calls a frame |
+| :--- | :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `movement` | before | `20261016-151617`, `153025`, `174336` | 110.1 | 9.11 ms | 16.2 ms | 126.3 | 51 (7.5 ms) | 23 / 3 in 153 s | 108.6 |
+| | after | `20261016-152205`, `152615` | 110.5 | 9.05 ms | 15.2 ms | 120.3 | 49 (7.5 ms) | 15 / 2 in 101 s | 103.7 |
+| `crowd` | before | `20261016-153148`, `155744`, `173139` | 85.6 | 11.69 ms | 22.0 ms | 250.4 | 96 (7.0 ms) | 152 / 18 in 153 s | 481.7 |
+| | after | `20261016-153435`, `154106` | 84.8 | 11.79 ms | 21.1 ms | 217.8 | 93 (5.5 ms) | 81 / 11 in 101 s | 450.9 |
+
+Hooked calls fell by 4.9 a frame moving and 30.8 in the crowd, and the garbage by 6.0 and 32.6 KB a frame. The frame times moved less than the three `before` runs differ from each other (102.1 to 116.4 fps moving). Every `crowd` run played the same fight: 31 proxies at most, 30 targets hit 66 times for 2,046 damage.
+
+Behaviour, with traces and frame captures (`KIRBY_LAB_PERF=1`, the `movement` plan): Kirby's original state (position, speed, ability, health, graphic, flags and facing) and the host hero's position were the same as on the #174 build in all 2,912 original frames both runs reached (`20261016-170406` before, `171401` after), and the plan's two hurtbox queries passed in both. All four fixes together (`171529`) matched in all 2,930. The frames show Kirby drawn whole.
+
 ## Checks run
 
 On the final tree, 2026-10-11:
