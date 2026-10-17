@@ -1049,6 +1049,19 @@ Kirby's position, where the host just placed him. Moved there (+0x78 and +0x80)
 in the same case, the star bounced inside the pocket (y 134 to 158.75) for 120
 frames and its countdown ran from 440 to 333.
 
+Run again on 2026-10-17 on this branch merged with main (the speed work of
+#174 to #193), in a fresh root `repros/merge-173-20261017`: runtime DLL
+`f619a323c26be5e9c884e34d68e76dbb82c99c4b09c1448b0830c348731eb7a3` built at
+`7375986`, outfit pack `2cbd0a47…`, the shared bridge `bae16c0e…`. `level`
+`20261017-200119`: exit to `T_Courtyard` at 4919, level changed at 5031 and the
+star put at Kirby's position in that frame, caught at 5040, copy back with the
+same item at 5108. `hit` `20261017-200444`: the 22nd host hit knocked the copy
+off at 7441 and the same item came back. `elite` `20261017-200809`: the same
+Legendary item came back with its bonus of 1.25. `ability-star.json` passed in
+all three; `ability-items.json` reads `passed: false` in `hit` and `elite`, as
+it did in `015640` and `020016`. All three ended by their time limit with saves
+unchanged and no fatal log lines.
+
 Not run live: making a helper, a star in a mouthful with an enemy or another
 item, and a save while a star is out.
 
@@ -1113,6 +1126,15 @@ KIRBY_LAB_FORGE_NPC=1 KIRBY_LAB_FORGE_LEGENDARY=1 python3 scripts/launch_runtime
 | `20261016-022150` | Legendary, forge NPC | The start level had unlocked exits to `T_SewerShort`, `T_Greenhouse` and `T_Courtyard`; the `T_SewerShort` passage had the Collector, the forge NPC and the `PerkMaster`. The NPC's activation opened the forge. Same results: shield and Sword I-L listed with four choices, the Legendary upgrade refused, the reroll (830 gold) to `Grenade` and `DeathFire` with Legendary kept, the shield to I+ (`CounterAttack`, `ForgeRefined`) for 0 gold, and the same item the copy's after the forge closed. `passed: true` |
 
 Both ended by their time limit with saves unchanged and no fatal log lines.
+
+Run again on 2026-10-17 with the build and root of the dropped-star reruns
+above: `KIRBY_LAB_FORGE_LEGENDARY=1` `20261017-201134` and
+`KIRBY_LAB_FORGE_NPC=1 KIRBY_LAB_FORGE_LEGENDARY=1` `20261017-201408` (a passage
+forge NPC's own activation opened the window), both `passed: true`: the shield
+and Sword I-L listed with four choices, the Legendary upgrade refused, the
+reroll (830 gold) kept it Legendary, the shield went to I+ for 0 gold, and the
+copy kept the same item. Both ended by their time limit with saves unchanged
+and no fatal log lines.
 
 Not run live: the forge NPC's first meeting, a profile with `ForgeRefine1`, a
 level I base item (the host offers no reroll below adjusted level 2), a shield

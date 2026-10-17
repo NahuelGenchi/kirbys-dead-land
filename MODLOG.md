@@ -2435,6 +2435,11 @@ the all-ability rendering tests as full gameplay acceptance.
 - `scripts/check.py` passes (505 core assertions); the bridge case
   `star_level_change` passes on the shared bridge (`--case`, no evidence file
   written). The full bridge suite and the verifiers were not run.
+- 2026-10-17, merged with main (the speed work of #174 to #193): the five
+  cases passed again in `repros/merge-173-20261017` (runs `20261017-200119` to
+  `201408`, runtime `f619a323…`), and a movement run, `201639`, ended by its
+  time limit with no fatal log line. `scripts/check.py` and the bridge case
+  `star_level_change` pass on the merged tree.
 - Not run: making a helper, a star in a mouthful with something else, a save
   while a star is out, the forge NPC's first meeting, `ForgeRefine1`, the
   owner's launcher.
