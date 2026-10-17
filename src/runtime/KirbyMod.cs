@@ -312,7 +312,6 @@ public sealed class KirbyMod(ModInfo info) : ModBase(info), IOnHeroUpdate,
             if (LabPerfProbe.Bare) { LabPerfProbe.HostFrame(Game.Instance.HeroInstance); LabPerfProbe.Frame(); }
             return;
         }
-        KirbyHostVisuals.OnFrame();
         NativeProvider?.OnHostFrame(dt);
         var native = NativeProvider;
         var held = native?.Enemies.Held ?? default;
