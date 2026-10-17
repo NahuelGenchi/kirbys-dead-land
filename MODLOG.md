@@ -2522,3 +2522,22 @@ the all-ability rendering tests as full gameplay acceptance.
   work and within the spread of earlier runs of one build.
 - Not run: a second run of each, the GPU, the Greenhouse, real keys, traces
   with frame captures, the owner's launcher.
+
+## 2026-10-17 — the mod compiled ahead of time (#184)
+
+- The first host frame in which the original steps, at the end of the arrival,
+  took 53.6–54.6 ms: 30.8–31.3 ms of it the .NET JIT compiling 261 methods,
+  12 ms the first original step. The lab's new arrival record
+  (`perf-arrival.json`) times every frame from Kirby's activation to his 600th
+  counted frame, with the JIT in each stage and host phase.
+- The build compiles the packed `Kirby.Core` and `Kirby.Runtime` ahead of time
+  (ReadyToRun) with crossgen2 10.0.12, restored from NuGet;
+  `-p:ModReadyToRun=false` packs the IL alone.
+- Live (`repros/perf-184`, seed 174, movement, quiet, software, two runs
+  each): the first Kirby frame 53.6–54.6 → 38.3–39.3 ms, its JIT 30.8–31.3 →
+  14.7–14.9 ms (261 → 135 methods); played frames, garbage and collections
+  unchanged. The arrival captures looked the same, and Kirby's original state
+  matched the IL build in all 866 shared original frames. Crossgen2's
+  cross-module options gained 1–3 ms more and were left out.
+- Not run: GPU drawing, a window with vsync, a first launch after a reboot,
+  the owner's launcher.
