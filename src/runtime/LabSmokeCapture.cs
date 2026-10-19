@@ -116,6 +116,8 @@ internal static class LabSmokeCapture
             LabScrollProbe.Install(run);
         if (Environment.GetEnvironmentVariable("KIRBY_LAB_INPUT_PLAN") == "tentacle")
             LabTentacleProbe.Install(run);
+        if (Environment.GetEnvironmentVariable("KIRBY_LAB_INPUT_PLAN") == "thorny")
+            LabThornyProbe.Install(run);
         if (Environment.GetEnvironmentVariable("KIRBY_LAB_INPUT_PLAN") == "arrival")
             LabArrivalProbe.Install(run);
         if (Environment.GetEnvironmentVariable("KIRBY_LAB_MOVES_SCAN") == "1" || Environment.GetEnvironmentVariable("KIRBY_LAB_MOVES_SETUP") is not null)
@@ -158,6 +160,7 @@ internal static class LabSmokeCapture
                 LabScrollProbe.Poll();
                 LabForgeProbe.Poll();
                 LabTentacleProbe.Poll();
+                LabThornyProbe.Poll();
                 LabArrivalProbe.Poll();
             }
             var host = ModCore.Modules.Game.Instance.HeroInstance;

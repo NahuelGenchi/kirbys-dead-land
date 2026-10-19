@@ -3,6 +3,7 @@ using dc.tool.atk;
 using Hashlink.Marshaling;
 using Hashlink.Proxy.Values;
 using HaxeProxy.Runtime;
+using Kirby.Core;
 
 namespace Kirby.Runtime;
 
@@ -12,6 +13,18 @@ internal static class KirbyDamage
     private static readonly Dictionary<nint, int> sourceHits = [];
     /// <summary>Copy hits whose damage already includes a crit (#88); the host draws them as crits.</summary>
     private static readonly HashSet<nint> criticalHits = [];
+    /// <summary>The enemy a hit by the original CPU helper is landing on while the host resolves it, else 0 (#206).</summary>
+    private static nint helperTarget;
+    /// <summary>Lab-only observer of each Thorny counter dropped because a helper's hit raised it.</summary>
+    internal static Action<AttackData>? TestDropped;
+    /// <summary>
+    /// A Thorny's spikes raised inside a hit the helper landed on it (#206). The host
+    /// applies that hit as Kirby's, so the Thorny answers Kirby, judging the side from
+    /// his place; the answer is not Kirby's to take. Its only counter-attack among the
+    /// host's enemy hit handlers (applyAttackResult, onDamage, onHit*, onHurt*, onDie).
+    /// </summary>
+    internal static bool IsHelperCounter(dc.Entity? source) =>
+        source is dc.en.mob.SpikedSatyr && HelperDamage.IsCounter(helperTarget, source.HashlinkPointer);
     public static void Install()
     {
         dc.Hook_Entity.applyAttackResult += (orig, entity, attack) =>
@@ -74,8 +87,10 @@ internal static class KirbyDamage
     }
     /// <param name="frozenSafe">Deal the hit as host Frost damage, which leaves a host freeze in place
     /// (Kirby's Ice); any other hit large enough shatters it, as host attacks do.</param>
+    /// <param name="fromHelper">The original CPU helper landed the hit, not Kirby (#206): the target's counter-attack
+    /// at its attacker, which the host takes for Kirby, is dropped (see <see cref="IsHelperCounter"/>).</param>
     /// <returns>True when the host resolved a successful hit (not blocked, parried or missed).</returns>
-    public static bool Hit(Hero hero, dc.Entity mob, int damage, bool frozenSafe = false, bool critical = false)
+    public static bool Hit(Hero hero, dc.Entity mob, int damage, bool frozenSafe = false, bool critical = false, bool fromHelper = false)
     {
         var attack = AttackUtils.Class.createFromHero(hero, damage, null);
         attack.useHeroScaling = false;
@@ -91,8 +106,10 @@ internal static class KirbyDamage
         bool alive = !mob.destroyed && mob.life > 0;
         sourceHits.Add(attack.HashlinkPointer, damage);
         if (critical) criticalHits.Add(attack.HashlinkPointer);
+        nint outer = helperTarget;
+        if (fromHelper) helperTarget = mob.HashlinkPointer;
         try { AttackUtils.Class.hit(attack, mob); }
-        finally { sourceHits.Remove(attack.HashlinkPointer); criticalHits.Remove(attack.HashlinkPointer); }
+        finally { sourceHits.Remove(attack.HashlinkPointer); criticalHits.Remove(attack.HashlinkPointer); helperTarget = outer; }
         if (alive && (mob.destroyed || mob.life <= 0)) KirbyDamageLog.Kill(mob);
         return attack.isSuccess();
     }

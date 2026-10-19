@@ -344,7 +344,9 @@ public sealed class KirbyEnemies
                 bool crit = star == StarKind.None && critical[i];
                 // The helper's hits share this HP drop; its records tell them apart (#128).
                 // A source-lethal hit still kills, so the original death reactions stay in the host tick.
-                double helper = star == StarKind.None && HelperRatio != 1 && stars.HelperStrike(nds, proxy.Entity, mob, ox, oy) ? HelperRatio : 1;
+                // Whatever its scale, a helper hit must not make the target's counter-attack hurt Kirby (#206).
+                bool fromHelper = star == StarKind.None && stars.HelperStrike(nds, proxy.Entity, mob, ox, oy);
+                double helper = fromHelper && HelperRatio != 1 ? HelperRatio : 1;
                 int hostDamage = Math.Max(1, ColorlessDamage.HostDamage(damage, assignedHp[i], mob.life,
                     CopyMultiplier(i, scale, mob, star == StarKind.None) * helper));
                 TestObserver?.Invoke(mob, damage, hostDamage);
@@ -363,7 +365,8 @@ public sealed class KirbyEnemies
                 else
                 {
                     // Only a hit the host resolved (not blocked or parried) crits or freezes.
-                    bool landed = KirbyDamage.Hit(session.Hero, mob, hostDamage, frozenSafe: IceFreeze.Applies(sourceAbility), critical: crit);
+                    bool landed = KirbyDamage.Hit(session.Hero, mob, hostDamage, frozenSafe: IceFreeze.Applies(sourceAbility), critical: crit,
+                        fromHelper: fromHelper);
                     if (landed && crit) criticalLanded = true;
                     if (landed && (mob.destroyed || mob.life <= 0)) session.Rules.Mutations.CopyKill();
                     if (landed && mob is Mob chilled && IceFreeze.Freezes(sourceAbility, damage, !mob.destroyed && mob.life > 0,

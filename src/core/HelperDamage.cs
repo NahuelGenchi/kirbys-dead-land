@@ -5,7 +5,8 @@ namespace Kirby.Core;
 /// not original behavior). The helper's hits arrive as the same source HP drop
 /// as Kirby's, so they are told apart by the original attack records that touch
 /// the enemy and scaled by a separate, lower host-damage-per-original-point
-/// scale than Kirby's copy attacks.
+/// scale than Kirby's copy attacks. Because the host applies those hits as Kirby's,
+/// the helper's hits are also what keeps an enemy's counter-attack from reaching Kirby (#206).
 /// </summary>
 public static class HelperDamage
 {
@@ -31,4 +32,13 @@ public static class HelperDamage
     /// </summary>
     public static bool IsHelperHit(bool helperRecordTouches, bool kirbyRecordTouches) =>
         helperRecordTouches && !kirbyRecordTouches;
+
+    /// <summary>
+    /// A host attack at Kirby is the struck enemy's own counter to a hit the helper
+    /// landed (#206) when it comes from the very enemy that hit is landing on. The
+    /// host applies the helper's hit as Kirby's, so an enemy that answers its
+    /// attacker (the Thorny's spikes) answers Kirby for it. <paramref name="struck"/>
+    /// is the enemy a helper hit is landing on now, 0 when none is.
+    /// </summary>
+    public static bool IsCounter(nint struck, nint source) => struck != 0 && struck == source;
 }

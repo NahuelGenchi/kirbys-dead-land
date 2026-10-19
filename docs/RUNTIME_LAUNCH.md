@@ -1606,3 +1606,42 @@ Separate data root `repros/keys-202` (runtime `Kirby.Runtime.dll` SHA-256 `33ce7
 | `20261017-080542` | `fslot`, 170 s, no seed (a random level, as the 2026-10-09 pass), `--capture-fps 1` | Every phase passed: Crash killed its 123-life Zombie; Mike's three shouts; Cook took over Paint (Paint back on the floor), then fired, was used and its Zombie dropped one host food item; Paint fired; the last Mike was stored and the host save written; F followed by a 20-damage host hit during the switch (76 → 61) still finished the shout (used, 3 → 2) and brought Sword back. |
 
 Every run reached its time limit with no fatal log, real saves unchanged and no crash dump. Not run: a `fslot` resume (`--resume-game`), a controller, a remapped profile, the owner's launcher.
+
+## The Thorny's spikes and the helper (#206)
+
+`--input-plan thorny` (`LabThornyProbe`) starts a new run and, once Kirby is awake and
+180 source frames have passed, makes three trials in a row. Each has its own real
+`SpikedSatyr` (the Thorny), placed 64 px from Kirby on the side he faces, turned away
+from him (a hit on its back) and with its AI held for 60 s, after the other hostile
+enemies within 600 px along the row are removed. After 20 source frames the Thorny is hit for 3
+through `KirbyDamage.Hit`, the path every copy hit takes: trial 1 as Kirby's hit,
+trial 2 marked as the helper's (`fromHelper`), trial 3 as Kirby's again, which shows the
+mark ends with its hit. 90 source frames later the probe reads Kirby's health, and it
+waits until 270 after the hit, past his hurt invulnerability, before the next trial.
+`thorny.json` holds each trial's side, the Thorny's `dir` at the hit, whether the hit
+landed, Kirby's health before and after, the Thorny's life, and `countersDropped` (the
+`KirbyDamage.TestDropped` count). It passes when trials 1 and 3 lose Kirby health with no
+counter dropped, and trial 2 drops exactly one counter and loses him none. The log's
+`Kirby damage:` lines name the source (`host hit ... from SpikedSatyr#uid`, or
+`host hit ignored`).
+
+This exercises the host side of #206: the Thorny's answer, the helper mark and the drop.
+It makes no helper, so the attribution from the original's records (#128) is not run by
+it (that rule has its own source test and bridge tests).
+
+A fresh data root (a bare one fails); `stage_runtime.py` copies the Release build that
+`scripts/check.py` made and refuses an outfit pack from before #175, so use `outfit-build-main`:
+
+```sh
+R=$HOME/.local/share/kirby-dead-cells/repros/thorny-206
+mkdir -p "$R"; for d in research oracle rom dotnet; do ln -s "$HOME/.local/share/kirby-dead-cells/$d" "$R/$d"; done
+python3 scripts/check.py
+python3 scripts/stage_runtime.py --data-root "$R" --original-runtime \
+  --outfit-pack "$HOME/.local/share/kirby-dead-cells/outfit-build-main/res.pak"
+python3 scripts/launch_runtime.py --data-root "$R" --seconds 80 --start-game \
+  --outfit KirbySuperStarUltra --input-plan thorny
+```
+
+| Run | Build | Result |
+| :--- | :--- | :--- |
+| none | | **Not run** at the time of the change: the machine had 2.3 GB of RAM free, and a lab game needs about 6 GB |

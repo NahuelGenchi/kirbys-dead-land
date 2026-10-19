@@ -163,6 +163,8 @@ keep up.
 As in Dead Cells, touching an enemy does not hurt Kirby: only enemy attacks do
 (and the few Dead Cells enemies whose bodies are spiked or electric). Bumping
 into enemies does not hurt them either; inhaling, sliding and copy attacks do.
+A Thorny's spikes answer Kirby's own hits on its back, not the CPU helper's
+(#206, [source test only](docs/GAMEPLAY_FIDELITY.md#the-helper-and-the-thornys-spikes-206-intentional-deviation)).
 
 Nine options in the staged `config.json` tune the adaptation: `CameraZoom`
 (1 keeps the Beheaded's camera; 2 shows about the DS screen's height),

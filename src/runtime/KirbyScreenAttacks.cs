@@ -35,16 +35,18 @@ internal sealed unsafe class KirbyScreenAttacks
             int damage = -(short)hit.Words[2];
             if (!ScreenAttacks.IsScreenWide(hit.Slot, damage, box, state.CameraX, state.CameraY) || !nds.Owns(hit.Owner)) continue;
             present.Add(hit.Address);
-            // Owns also covers the helper's records; its wave is weaker (#128).
-            double ratio = enemies.HelperRatio != 1 && nds.HelperOwns(hit.Owner) ? enemies.HelperRatio : 1;
-            StrikeView(hero, nds, enemies, hit.Address, damage, state, sourceHit, scale, ratio);
+            // Owns also covers the helper's records; its wave is weaker (#128), and
+            // the enemies it strikes do not answer Kirby for it (#206).
+            bool fromHelper = nds.HelperOwns(hit.Owner);
+            double ratio = fromHelper && enemies.HelperRatio != 1 ? enemies.HelperRatio : 1;
+            StrikeView(hero, nds, enemies, hit.Address, damage, state, sourceHit, scale, ratio, fromHelper);
         }
         // A wave's record lasts one frame; a reused address is a new wave.
         strikes.Retain(present);
     }
 
     private void StrikeView(Hero hero, NdsRuntime nds, KirbyEnemies enemies, uint record, int sourceDamage, NdsState state,
-        IReadOnlySet<nint> sourceHit, Func<Entity, double> scale, double ratio)
+        IReadOnlySet<nint> sourceHit, Func<Entity, double> scale, double ratio, bool fromHelper)
     {
         // Viewport.getNormalizeScreenPos: the view is wid × hei level pixels centred on realX, realY.
         if (hero._level.viewport is not { destroyed: false } viewport) return;
@@ -66,7 +68,7 @@ internal sealed unsafe class KirbyScreenAttacks
             int damage = Math.Max(1, ColorlessDamage.HostDamage(sourceDamage,
                 ColorlessDamage.SourceHp(life, multiplier, KirbyEnemies.MaxSourceHp), life, multiplier));
             TestObserver?.Invoke(mob, sourceDamage, damage);
-            KirbyDamage.Hit(hero, mob, damage);
+            KirbyDamage.Hit(hero, mob, damage, fromHelper: fromHelper);
         }
     }
 }
