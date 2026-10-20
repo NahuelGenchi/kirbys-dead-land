@@ -54,6 +54,48 @@ The second recording investigation added further opt-in diagnostics. `KIRBY_LAB_
 
 The third recording investigation added more opt-in diagnostics. `repro` runs also record `host-motion.jsonl` (host position, animation and viewport zoom on every host frame), and drive the normal outfit too, without a source machine, so movement can be compared. `KIRBY_LAB_VISIBILITY=1` writes `visibility.jsonl` with the hero's visibility, sprite alpha, hero light and the body bitmap's alpha on every host frame. `KIRBY_LAB_MOB_SCALING=1` writes `mob-scaling.json` with every mob's life, elite flag, `trueLifeTier` and the host tier scale. `KIRBY_LAB_ZOOM_SCHEDULE`, for example `1:1.5u,10:2u`, sets the host viewport zoom once at each repro time (`u` also updates its size). `KIRBY_LAB_TOGGLES`, for example `30:nolight,34:none,38:nohead,46:blendnone`, switches the hero light, host head parts or the body bitmap's blend for A/B captures. `KIRBY_LAB_DUMP_PHASES` also accepts `@<lab ms>`. The render tree dump includes the scene lighting parameters and layer membership. The body-over-terrain investigation (#116) added `KIRBY_LAB_GHOSTS`, either `layers` (one copy of Kirby's body bitmap in every render layer, left to right below his feet, with `layer-census.json` listing each layer's visible children and the `DP_*` constants in `repro-events.jsonl`) or a list of `dx:dy:alpha|none[:layers above his]` copies at host-pixel offsets, and `KIRBY_LAB_TELEPORT=from:until:dx:dy`, which holds the hero at that host-pixel offset from where he was at `from` seconds (repro time) until `until`, for example inside a solid mass. The ability probe is run with `--probe-ability` source IDs: 18 Sword, 19 Hammer, 20 Parasol.
 
+## Clean install from a release archive (#210)
+
+On 2026-10-20 the release archive was installed with nothing from the owner's data
+root: `scripts/package_release.py` (192 files, sha256 `dd9b55fb…575958ca`), unpacked
+under `repros/clean-install-20261020/`, then
+
+```sh
+HOME=<that folder>/home CARGO_HOME=~/.cargo RUSTUP_HOME=~/.rustup \
+  python3 -I scripts/install.py --rom "<ROM>" --game "<Steam Dead Cells>" --toolkit <Universal Modder>
+```
+
+The fresh `HOME` gives an empty `~/.local/share/kirby-dead-cells/` with no symlinks;
+only the Rust toolchain and its crate cache were shared, as a player's own would be.
+Every step ran and the script exited 0 in about 2.5 minutes, with 3.1 GB written:
+the .NET SDK and DCCM downloads and the runtime build (0 errors), a fresh clone and
+build of melon-rs/melonDS, the seed state, the bridge, the ROM decode, the icons,
+the outfit pack and the staged lab.
+
+- The bootstrap's last state is a new seed (`8c24ec71…07f6f051`), not the owner's
+  `37166a99…`, as `docs/ORACLE_RESULTS.md` predicts for a fresh bootstrap. The 24
+  ability icons captured from it equal the owner's byte for byte, so the bridge
+  starts and plays each ability the same way from both seeds.
+- The outfit pack equals the owner's build of main (`outfit-build-main`) byte for byte.
+- The bridge binary differs from the shared one (build paths); its source is the same.
+- Found and fixed: `tests/test_release_package.py` held a literal private-key
+  header, so main's own archive failed its lint. The test now builds it from parts,
+  and a new test lints the working tree, so this is caught before a commit.
+
+Live check (2026-10-20 19:43, 8.2 GB free at start): with `~/.steam` linked into the
+fresh `HOME` for Steam IPC, `launch_runtime.py --seconds 72 --start-game --outfit
+KirbySuperStarUltra --input-plan movement` from the unpacked archive. Report:
+`exit_code -15` with `expected_timeout true`, `save_isolation_installed true`,
+`source_saves_unchanged true`, no fatal log. The machine opened on the recompiler
+from the new seed; the source ran frames 4167 to 6601, Kirby moved 195 host px
+(x 1356 to 1551.5) and jumped (32 trace rows with vertical speed) at 76/76 health,
+and the captured frames show him in the Prisoners' Quarters with the Kirby HUD.
+
+Not covered: a machine without Rust, crates or Python packages already installed
+(Cargo downloaded only the crates missing from the shared cache, and `pip install -r
+requirements.txt` was not exercised), and
+a distribution other than this Ubuntu-based one.
+
 ## Linux dependency repair
 
 The released `fmt.hdll` references `tjInitDecompress` without declaring a TurboJPEG dependency. On this machine this crashed when the menu's JPEG news image loaded. The launcher downloads a pinned Ubuntu `libturbojpeg0` package, extracts it beneath the private data root, and preloads its library. No system package is installed.

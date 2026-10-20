@@ -2764,3 +2764,20 @@ the all-ability rendering tests as full gameplay acceptance.
 - Source: `python3 -m unittest tests.test_release_package -v` (6 tests) passes.
   `install.py` was only run up to its ROM check; a full install on a clean data
   root is #210. Live: none.
+
+## 2026-10-20 — install and launch from the release archive on a clean data root (#210)
+
+- The archive from `scripts/package_release.py` was unpacked and installed with a
+  fresh `HOME` (empty data root, no symlinks into the owner's), only the Rust
+  toolchain and crate cache shared: `install.py` ran every step and exited 0 in
+  about 2.5 minutes (3.1 GB). The new bootstrap seed differs from the owner's, but
+  its 24 captured ability icons equal the owner's and the outfit pack equals the
+  owner's main build byte for byte.
+- One isolated live run from that install (`--input-plan movement`, 72 s): normal
+  timeout, saves isolated and unchanged, Kirby moved and jumped at 76/76 in the
+  Prisoners' Quarters. Details in `docs/RUNTIME_LAUNCH.md`.
+- Found and fixed: the lint test file held a literal private-key header, so main's
+  own archive failed its lint. It is now built from parts, and a new test lints the
+  working tree before a commit.
+- Source: `python3 -m unittest discover -s tests -p 'test_*.py'`. Not covered: a
+  machine without Rust or the Python packages, other distributions.

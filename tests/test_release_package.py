@@ -1,10 +1,11 @@
 """Release lint regressions; synthetic file contents only."""
 from pathlib import Path
+import subprocess
 import sys
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
-from package_release import lint, tracked_files
+from package_release import EXCLUDED, PROJECT, lint, tracked_files
 
 
 class ReleaseLintTests(unittest.TestCase):
@@ -30,7 +31,7 @@ class ReleaseLintTests(unittest.TestCase):
 
     def test_key_like_strings_fail(self):
         for secret in (b'ghp_' + b'a' * 36, b'token = "sk-' + b'b' * 40 + b'"',
-                       b'AKIA' + b'C' * 16, b'-----BEGIN OPENSSH PRIVATE KEY-----',
+                       b'AKIA' + b'C' * 16, b'-----BEGIN OPENSSH ' + b'PRIVATE KEY-----',
                        b'FAL_KEY=01234567-89ab-cdef-0123-456789abcdef:' + b'0' * 32):
             with self.subTest(secret=secret[:12]):
                 self.assertEqual(len(lint({'scripts/config.py': secret})), 1)
@@ -40,6 +41,15 @@ class ReleaseLintTests(unittest.TestCase):
         self.assertIn('LICENSE', files)
         self.assertNotIn('AGENTS.md', files)
         self.assertFalse(any(name.startswith('.github/') for name in files))
+        self.assertEqual(lint(files), [])
+
+    def test_working_tree_is_releasable(self):
+        # What the next commit would release, including new files, so a problem
+        # is caught before the commit (#210: this file once held a key header).
+        names = subprocess.check_output(['git', '-C', str(PROJECT), 'ls-files', '-co', '--exclude-standard'],
+                                        text=True).splitlines()
+        files = {name: (PROJECT / name).read_bytes() for name in names if (PROJECT / name).is_file()
+                 and not any(name == item or name.startswith(item) for item in EXCLUDED)}
         self.assertEqual(lint(files), [])
 
 
