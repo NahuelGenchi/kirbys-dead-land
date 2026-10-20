@@ -2701,3 +2701,32 @@ the all-ability rendering tests as full gameplay acceptance.
   Zombie most likely stood past where Kirby's walk stops, so Cook came back
   unused and the last phase timed out.
 - Not run: `cook`, a `fslot` resume, a controller, the owner's launcher.
+
+## 2026-10-19 — the CPU helper's hits no longer spike Kirby through a Thorny (#206)
+
+- Owner report: the helper attacks a Thorny (`SpikedSatyr`, the hedgehog) when the
+  player did not ask it to, and when its hit lands on the back Kirby takes the
+  spike damage. His own hits on the back hurting him stays.
+- Cause, from the game's bytecode (not seen live): `SpikedSatyr.applyAttackResult`
+  answers a hero attack from behind with `AttackUtils.hit(createFromMob(self,
+  spikes power), attack.source)`; every copy hit, the helper's too, reaches the host
+  enemy as a hero attack, so the answer was aimed at Kirby, with the side judged
+  from his place.
+- `KirbyDamage.Hit` takes `fromHelper` and marks the struck enemy while the host
+  resolves the hit; `KirbyNdsProvider.ReceiveHostAttack` drops an attack from that
+  Thorny (`HelperDamage.IsCounter`, `KirbyDamage.IsHelperCounter`) with a `host hit
+  ignored` log line. `KirbyEnemies` and `KirbyScreenAttacks` pass the mark for the
+  hits the #128 rule attributes to the helper, which is now evaluated whatever
+  `HelperCopyDamageScale` is.
+- New lab plan `thorny` (`LabThornyProbe`): a real Thorny hit on its back as Kirby,
+  as the helper and as Kirby again.
+- Source: `python3 scripts/check.py` passes (506 core assertions, runtime and every
+  test project build). Live (2026-10-20, build 8046114, isolated root `thorny-206`,
+  `--input-plan thorny`): `thorny.json` `passed: true`. Kirby's hit cost him 9 health
+  (76 -> 67) with no counter dropped; the helper-marked hit dropped exactly one
+  counter and cost him none; Kirby's hit again cost 9 (67 -> 58). Unverified: a real
+  helper's hit against a Thorny (the probe marks the hit itself; the #128 attribution
+  has its own tests).
+- Not covered: the helper's star hits, the Wheelie rider, a bridge without
+  `kssu_helper_owns`, the helper's AI choosing to fight a Thorny, other host
+  retaliation. See `docs/GAMEPLAY_FIDELITY.md`.

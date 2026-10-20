@@ -36,6 +36,7 @@ in [NDS_BRIDGE.md](NDS_BRIDGE.md). The original bootstrap experiment remains in
 | Facing | The host hero's direction follows the original facing (bit 31 of player+0x6C) every source frame, so host shields block the way Kirby faces |
 | Incoming damage | Host shield/parry resolves first; remaining damage, converted to the same fraction of Kirby's 76 HP as of the host's current maximum, enters the next original collision tick, preserving original guard, recoil and invulnerability |
 | Touching enemies | As in Dead Cells, touching an enemy hurts neither Kirby nor the enemy: the original body-contact damage is excluded for every paired enemy, while Kirby's inhale, slide and copy attacks still hit, and the host's own touch attacks (spiked or electric enemies) still reach him as incoming damage. `OriginalTouchDamage: true` restores the original rule (7 of 76 HP to Kirby, and weak enemies destroyed by the bump) |
+| The helper and a Thorny | The host takes the CPU helper's hits as Kirby's, so the spikes a Thorny (`SpikedSatyr`, the hedgehog) answers a hit on its back with would hurt Kirby for the helper. A hit attributed to the helper (the #128 rule) never makes a Thorny's spikes reach him; his own hits are still answered (see [The helper and the Thorny's spikes](#the-helper-and-the-thornys-spikes-206-intentional-deviation)) |
 | Outgoing damage | Paired original enemies hold the host life in original units: host life ÷ (`CopyDamageScale` 2.625 × the host's per-tier life scale; the CPU helper's hits use `HelperCopyDamageScale` 1.75, see [Damage balance](#damage-balance-128-intentional-deviation)). Original HP deltas are multiplied back, so both games agree on the lethal hit; the result is then scaled like Dead Cells colorless gear (see below), and the deliberate Elite Sword bonus below multiplies it again; no other host hero multiplier alters copy attacks |
 | Player health | Original full health is 76. Host and source health are synchronized, including host healing and original food |
 | Saves | A versioned, ROM-checked native machine snapshot and physical shield/enemy bindings travel with the private host save slot |
@@ -1196,6 +1197,55 @@ Kirby's damage drops by 25% and the helper's by 50%, both against the earlier
   enemy in the running game, the Wheelie rider (whose attacks may be owned by
   the helper, so would take the helper's scale), and an older bridge without
   the export (the helper then keeps Kirby's scale) are unverified.
+
+### The helper and the Thorny's spikes (#206, intentional deviation)
+
+Owner report 2026-10-19: the original CPU helper attacks a Thorny (`en.mob.SpikedSatyr`,
+the hedgehog) when the player did not ask it to, and when its hit lands on the Thorny's
+back Kirby takes the spike damage. That Kirby's own hits on the back hurt him is Dead
+Cells' rule and stays.
+
+- **Cause.** Read from the game's bytecode (`en.mob.SpikedSatyr.applyAttackResult`,
+  `hlboot.dat` read-only); not seen in a live run. The Thorny answers an attack whose
+  source is a `Hero`, that carries none of a few excluded attack tags and that does not
+  come from the side it faces, with `AttackUtils.hit(createFromMob(self, "spikes" power),
+  attack.source)`. Every copy hit reaches a host enemy as a hero attack through
+  `KirbyDamage.Hit`, whether Kirby or the helper caused the source HP drop, so the Thorny
+  took Kirby for the attacker, judged the side from Kirby's place (not the helper's), and
+  its answer reached `KirbyNdsProvider.ReceiveHostAttack` like any host hit. Among the
+  enemy hit handlers scanned (`applyAttackResult`, `onDamage`, `onHit*`, `onHurt*`,
+  `onDie` of `en.*` and `tool.*`), the Thorny's is the only one that creates an attack at
+  its attacker; the other two that call `AttackUtils.hit` are the hero's own `onDamage`
+  and `EtheralDoor.onDie`.
+- **Rule.** A hit attributed to the helper is marked when `KirbyDamage.Hit` applies it: a
+  paired enemy's source HP drop under the
+  [#128](#damage-balance-128-intentional-deviation) rule (a damaging record of the helper
+  touches the enemy and none of Kirby's does), or a screen-wide wave the helper owns.
+  While the host resolves that hit, an attack at Kirby from the struck Thorny is dropped
+  in `ReceiveHostAttack` (`HelperDamage.IsCounter`, `KirbyDamage.IsHelperCounter`): no host
+  damage, no original hurt, and a `Kirby damage: host hit ignored` line in the log. The
+  mark ends with the hit, so Kirby's own hits are answered as before. The attribution now
+  runs whatever `HelperCopyDamageScale` is; it only ran when that scale differed from
+  Kirby's.
+- **Not changed.** Whether the helper's AI fights a Thorny at all (the ROM decides, as for
+  any proxy); a hit of a star the helper spits (the star's owner is not told apart); the
+  Wheelie rider's hits (the helper owns them, so they count as the helper's, as in #128);
+  an older bridge without `kssu_helper_owns` (the helper's hits then count as Kirby's); the
+  Thorny's turn-back to a hit from the front, which a helper's hit still starts (read from
+  the bytecode), so a later hit of Kirby's on that back is answered; other host
+  retaliation, such as death explosions.
+- **Evidence.** Source: `HelperDamage.IsCounter` in `tests/Program.cs`;
+  `python3 scripts/check.py` builds the rule, the runtime and the lab probe. Live:
+  `--input-plan thorny` (`LabThornyProbe`, see [docs/RUNTIME_LAUNCH.md](RUNTIME_LAUNCH.md#the-thornys-spikes-and-the-helper-206))
+  hits a real Thorny's back through `KirbyDamage.Hit`, as Kirby, as the helper and as
+  Kirby again. It does not create a helper, so the attribution from the original's records
+  (#128) is not exercised by it. **Run 2026-10-20** (build 8046114, isolated data root,
+  offscreen): `thorny.json` `passed: true`. Trial 1 (Kirby's hit) took Kirby 76 -> 67 with
+  no counter dropped; trial 2 (marked as the helper's) dropped exactly one counter and left
+  him at 67; trial 3 (Kirby's again) took him 67 -> 58 with none dropped. The log shows
+  `host hit ignored ... counter to the helper's hit from SpikedSatyr#...` for trial 2 only.
+  Not shown by that run: a real helper's hit (the #128 attribution is covered by its own
+  tests) or the helper choosing to fight a Thorny.
 
 ### The original on the recompiler (#153, intentional deviation)
 

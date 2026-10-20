@@ -369,6 +369,15 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         if (applyingNativeDamage || nds is null || attack.finalDmg <= 0 || !attack.isSuccess())
         { original(); return; }
         if (session.Hero.life <= 0) { attack.inflictedDmg = 0; return; }
+        // The helper's hit on a Thorny is applied as Kirby's, so its spikes answer Kirby (#206).
+        // They are not his to take: the helper chose the fight, and the host judged the side from his place.
+        if (KirbyDamage.IsHelperCounter(attack.source))
+        {
+            KirbyDamage.TestDropped?.Invoke(attack);
+            KirbyDamageLog.HelperCounter(session.Hero, attack);
+            attack.inflictedDmg = 0;
+            return;
+        }
         // The host has already resolved its shield/parry path. Remaining hits
         // enter the next original DS collision tick, retaining source guard,
         // recoil, copy loss and invulnerability without advancing extra frames.

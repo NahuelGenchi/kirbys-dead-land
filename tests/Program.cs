@@ -256,6 +256,8 @@ Check(HelperDamage.Ratio(2.625, 0) == 1 && HelperDamage.Ratio(2.625, -1) == 1 &&
 Check(HelperDamage.IsHelperHit(true, false) && !HelperDamage.IsHelperHit(true, true) &&
       !HelperDamage.IsHelperHit(false, true) && !HelperDamage.IsHelperHit(false, false),
     "A hit is the helper's only when no record of Kirby's touches the enemy");
+Check(HelperDamage.IsCounter(7, 7) && !HelperDamage.IsCounter(7, 8) && !HelperDamage.IsCounter(0, 0) && !HelperDamage.IsCounter(0, 7),
+    "An attack at Kirby answers the helper's hit only when it comes from the enemy that hit is landing on (#206)");
 Check(ColorlessDamage.HostDamage(18, 46, 120, 2.625) == 47 && ColorlessDamage.HostDamage(18, 46, 120, 1.75) == 31,
     "One Sword hit deals 47 for Kirby and 31 for the helper against 120 life");
 Check(ColorlessDamage.HostDamage(18, 11, 27, 1.75) == 31, "A source-lethal helper hit still kills, as the original defeat is shared");

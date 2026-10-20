@@ -79,6 +79,13 @@ internal static unsafe class KirbyDamageLog
             $"hurtbox={System.Text.Json.JsonSerializer.Serialize(KirbyHurtbox.Diagnostics)}; {SinceKill(hero)}; via {Path()}"));
     }
 
+    /// <summary>A Thorny's spikes raised by a hit the helper landed on it; they never reach Kirby (#206).</summary>
+    internal static void HelperCounter(Hero hero, AttackData attack)
+    {
+        Write(() => string.Create(CultureInfo.InvariantCulture,
+            $"host hit ignored t={clock.ElapsedMilliseconds} dmg={attack.finalDmg}: counter to the helper's hit from {Describe(attack.source, hero)}"));
+    }
+
     /// <summary>The original lowered Kirby's health. Names the original hit boxes touching him.</summary>
     internal static void SourceHit(Hero hero, NdsRuntime nds, KirbyEnemies enemies, int before, int after, dc.Entity? queued) =>
         Write(() => DescribeSourceHit(hero, nds, enemies, before, after, queued));
