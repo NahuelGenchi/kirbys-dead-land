@@ -2,7 +2,7 @@
 
 *Kirby Super Star Ultra in Dead Cells.*
 
-[Issues](https://github.com/NahuelGenchi/kirbys-dead-land/issues) · [Milestones](https://github.com/NahuelGenchi/kirbys-dead-land/milestones) · [Pull requests](https://github.com/NahuelGenchi/kirbys-dead-land/pulls) · [Contributing](CONTRIBUTING.md) · [Agent instructions](AGENTS.md)
+[Issues](https://github.com/NahuelGenchi/kirbys-dead-land/issues) · [Milestones](https://github.com/NahuelGenchi/kirbys-dead-land/milestones) · [Pull requests](https://github.com/NahuelGenchi/kirbys-dead-land/pulls) · [Contributing](CONTRIBUTING.md) · [Agent instructions](AGENTS.md) · [License](LICENSE)
 
 A new Linux character mod built with [Universal Modder](https://github.com/rehan-remade/universal-modder),
 using the supplied Kirby Super Star Ultra USA ROM as the running gameplay engine.
@@ -420,3 +420,12 @@ Evil Empire. Framework: Dead Cells Core Modding. ROM observation research:
 [melon-kssu](https://github.com/benhall-7/melon-kssu). Built with Codex and Universal
 Modder. Converter and adapter source are separate from the user's copyrighted
 ROM and game assets; generated local packs are not redistributable releases.
+
+## License
+
+Kirby's Dead Land is free software under the GNU General Public License, version 3
+or any later version ([`LICENSE`](LICENSE)), the license of the melonDS emulator it
+embeds. No ROM, Dead Cells file or generated asset pack is included; bring your own
+Kirby Super Star Ultra USA ROM and Steam install of Dead Cells.
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) lists every dependency, its
+license and pinned version, and the source obligations for a built bridge.

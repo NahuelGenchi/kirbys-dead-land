@@ -2730,3 +2730,16 @@ the all-ability rendering tests as full gameplay acceptance.
 - Not covered: the helper's star hits, the Wheelie rider, a bridge without
   `kssu_helper_owns`, the helper's AI choosing to fight a Thorny, other host
   retaliation. See `docs/GAMEPLAY_FIDELITY.md`.
+
+## 2026-10-20 — the project license and third-party notices (#208)
+
+- License: GPL-3.0-or-later, the license of the embedded melonDS (melon-rs is GPL-3.0),
+  so the patched bridge can be shared under one license. `LICENSE` is the verbatim GPLv3
+  text (sha256 `8ceb4b9e…5eb65b903`).
+- `THIRD_PARTY_NOTICES.md` lists each dependency setup downloads or builds, with its
+  pinned revision and license (melonDS, melon-rs, DCCM 35.13.6 and MDK 1.0.1, .NET SDK
+  10.0.401, chrono, sha2, Pillow), states that no ROM or Dead Cells file is included,
+  and records the GPL source obligation for anyone who distributes a built bridge.
+  melon-kssu declares no license; only addresses and offsets are cited from it.
+- README: a License section and header link.
+- Source: none run (docs only). Live: none.
