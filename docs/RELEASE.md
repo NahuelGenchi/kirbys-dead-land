@@ -39,6 +39,32 @@ melonDS patches. Release archives attach no built bridge; anyone who distributes
 one must offer the corresponding source (see the
 [notices](../THIRD_PARTY_NOTICES.md#modified-gpl-source)).
 
+## Going public
+
+Checked on 2026-10-20 (#216) before the repository was made public: a credential
+scan of all 354 commits (main, every branch still on GitHub and every pull
+request's `refs/pull/*/head`, 1544 file versions), commit and tag messages, all 215
+issues and pull requests with their comments, edit histories and reviews, and the
+release notes found no key, token, password, private key or credential file. The
+only matches are the synthetic strings in `tests/test_release_package.py`. The
+repository has no Actions secrets, webhooks or deploy keys. Owner-specific
+absolute paths were replaced with `~` or `$HOME`. Five early commits carry the
+owner's email address, which their older public repositories already show; the
+history was not rewritten.
+
+The project-tracking workflow is safe to run on forks' pull requests: it uses
+`pull_request_target` with issue and pull request write access only, checks out no
+code and reads issue and pull request text as data, never as a command.
+
+After switching the visibility (**Settings → General → Danger Zone → Change
+visibility**), turn on in **Settings → Advanced Security**: private vulnerability
+reporting (used by [`SECURITY.md`](../SECURITY.md)), Dependabot alerts, secret
+scanning and push protection. Then add a branch ruleset for `main` in **Settings →
+Rules → Rulesets** that requires a pull request and blocks force pushes and
+deletion (see [work tracking](TRACKING.md#enforcement-boundary)). Public
+repositories run standard Actions runners at no cost, so the tracking workflow,
+stopped by billing on the private repository, runs again.
+
 ## v0.1.0 (2026-10-20, pre-release)
 
 The first release, tagged `v0.1.0` and published as a GitHub pre-release on the
@@ -55,7 +81,3 @@ private repository, with `kirbys-dead-land-0.1.0.tar.gz` and its `.sha256` attac
   host interaction is not established. Known limits and deliberate deviations are in
   [Gameplay fidelity](GAMEPLAY_FIDELITY.md) and
   [Compatibility and limits](../README.md#compatibility-and-limits).
-
-The repository stays private for now: its history holds a personal email address
-and older commit attribution lines that the owner decides about before it is made
-public.

@@ -43,9 +43,9 @@ from the jump result.
 
 Private run directories:
 
-- `/home/rayzza/.local/share/kirby-dead-cells/oracle/motion-c`
-- `/home/rayzza/.local/share/kirby-dead-cells/oracle/motion-d`
-- Starting state: `/home/rayzza/.local/share/kirby-dead-cells/oracle/ready2/000.state`
+- `~/.local/share/kirby-dead-cells/oracle/motion-c`
+- `~/.local/share/kirby-dead-cells/oracle/motion-d`
+- Starting state: `~/.local/share/kirby-dead-cells/oracle/ready2/000.state`
 
 | Item | SHA256 |
 |---|---|
@@ -75,9 +75,9 @@ packages. Pillow is used only to convert captured screens to PNG.
 ```bash
 python3 tools/oracle_build.py
 python3 tools/oracle_run.py \
-  --rom '/home/rayzza/Documents/ROMS/Nintendo DS/Kirby Super Star Ultra (USA).nds' \
+  --rom "$HOME/Documents/ROMS/Nintendo DS/Kirby Super Star Ultra (USA).nds" \
   --plan tools/oracle_bootstrap.json \
-  --output /home/rayzza/.local/share/kirby-dead-cells/oracle/reproduction-boot
+  --output ~/.local/share/kirby-dead-cells/oracle/reproduction-boot
 ```
 
 The bootstrap plan records the actual original menu path and waits used to reach
