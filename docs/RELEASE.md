@@ -38,3 +38,24 @@ The archive is the complete source of this project, including the melon-rs and
 melonDS patches. Release archives attach no built bridge; anyone who distributes
 one must offer the corresponding source (see the
 [notices](../THIRD_PARTY_NOTICES.md#modified-gpl-source)).
+
+## v0.1.0 (2026-10-20, pre-release)
+
+The first release, tagged `v0.1.0` and published as a GitHub pre-release on the
+private repository, with `kirbys-dead-land-0.1.0.tar.gz` and its `.sha256` attached.
+
+- Linux x64 only. Needs Steam Dead Cells (tested with v35, build 23762174) and the
+  player's own Kirby Super Star Ultra USA revision 0 ROM (SHA-256
+  `b2573313a582c8dfaf2d93834a670c1ca8f389e5daa744e2dbe1a4ca903f3027`).
+- Verified install: the archive installed from an empty data root and launched
+  once into a playable Kirby run (#210, see
+  [Runtime launch](RUNTIME_LAUNCH.md#clean-install-from-a-release-archive-210)).
+- Gameplay verified live is listed under
+  [Verified behavior](../README.md#verified-behavior); complete parity for every
+  host interaction is not established. Known limits and deliberate deviations are in
+  [Gameplay fidelity](GAMEPLAY_FIDELITY.md) and
+  [Compatibility and limits](../README.md#compatibility-and-limits).
+
+The repository stays private for now: its history holds a personal email address
+and older commit attribution lines that the owner decides about before it is made
+public.

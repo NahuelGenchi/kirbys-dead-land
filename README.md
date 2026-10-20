@@ -2,7 +2,7 @@
 
 *Kirby Super Star Ultra in Dead Cells.*
 
-[Issues](https://github.com/NahuelGenchi/kirbys-dead-land/issues) · [Milestones](https://github.com/NahuelGenchi/kirbys-dead-land/milestones) · [Pull requests](https://github.com/NahuelGenchi/kirbys-dead-land/pulls) · [Contributing](CONTRIBUTING.md) · [Agent instructions](AGENTS.md) · [License](LICENSE)
+[Releases](https://github.com/NahuelGenchi/kirbys-dead-land/releases) · [Issues](https://github.com/NahuelGenchi/kirbys-dead-land/issues) · [Milestones](https://github.com/NahuelGenchi/kirbys-dead-land/milestones) · [Pull requests](https://github.com/NahuelGenchi/kirbys-dead-land/pulls) · [Contributing](CONTRIBUTING.md) · [Agent instructions](AGENTS.md) · [License](LICENSE)
 
 A new Linux character mod built with [Universal Modder](https://github.com/rehan-remade/universal-modder),
 using the supplied Kirby Super Star Ultra USA ROM as the running gameplay engine.

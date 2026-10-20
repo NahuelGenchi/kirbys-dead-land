@@ -1,8 +1,8 @@
 {
   "id": "kirby-super-star-ultra-dead-cells",
   "name": "Kirby's Dead Land",
-  "version": "0.1.0-dev",
-  "status": "development",
+  "version": "0.1.0",
+  "status": "pre-release",
   "source_game": "Kirby Super Star Ultra (USA)",
   "host_game": "Dead Cells",
   "host_steam_app_id": 588650,
