@@ -113,6 +113,37 @@ preserved; generated assets and native dependencies remain in the private data r
   [HUD ability slot](docs/GAMEPLAY_FIDELITY.md#hud-ability-slot). The pause
   screen's equipment card for that slot shows the ability too.
 
+## Install
+
+Releases are source archives: they contain no ROM, no Dead Cells file and no
+binary, and setup builds everything on your machine beneath
+`~/.local/share/kirby-dead-cells/`. You need:
+
+- Linux x64 with Steam running and Dead Cells installed from Steam (tested with v35,
+  build 23762174).
+- Your own Kirby Super Star Ultra USA revision 0 ROM (SHA-256
+  `b2573313a582c8dfaf2d93834a670c1ca8f389e5daa744e2dbe1a4ca903f3027`).
+- Python 3.12+ with Pillow and NumPy (`pip install -r requirements.txt`),
+  Git, Rust (`cargo`), CMake, a C++ compiler, bubblewrap (`bwrap`) and `dpkg-deb`.
+- A [Universal Modder](https://github.com/rehan-remade/universal-modder) checkout
+  (default `~/Games/mods/universal-modder`); the launcher uses its `um backup` to
+  back up your real saves before every launch.
+
+Then, from the unpacked folder:
+
+```sh
+python3 scripts/install.py --rom "/path/to/Kirby Super Star Ultra (USA).nds"
+./play-kirby
+```
+
+`install.py` checks the prerequisites and the ROM hash, then downloads the pinned
+.NET SDK and DCCM, builds the mod, the pinned melon-rs/melonDS emulator and the
+bridge, plays the original menus once to make the seed state, decodes Kirby's
+graphics and ability icons from the ROM, builds the outfit pack and stages the
+private lab. Pass `--game` or `--toolkit` for other locations. Steps already done
+are skipped. The first install downloads the .NET SDK, DCCM and the emulator
+sources, and compiles them, so it takes a while.
+
 ## Play
 
 The local build is staged and ready. Keep Steam running, then run from this folder:
@@ -393,7 +424,7 @@ See the detailed fidelity report for measured coverage and these boundaries.
 
 Details: [ROM format](docs/ROM_FORMAT.md), [ROM internals](docs/ROM_INTERNALS.md), [host internals](docs/HOST_INTERNALS.md), [renderer](docs/RENDERING.md),
 [runtime launch](docs/RUNTIME_LAUNCH.md), [gameplay fidelity](docs/GAMEPLAY_FIDELITY.md), [performance](docs/PERFORMANCE.md),
-[tutorial integration](docs/TUTORIALS.md), [work tracking](docs/TRACKING.md), and [work journal](MODLOG.md). Older research notes describe the initial foundation;
+[tutorial integration](docs/TUTORIALS.md), [releases](docs/RELEASE.md), [work tracking](docs/TRACKING.md), and [work journal](MODLOG.md). Older research notes describe the initial foundation;
 the dated journal records subsequent implementation.
 
 ## Roadmap and tracking
