@@ -146,7 +146,7 @@ class PixelDecodingTests(unittest.TestCase):
             self.assertEqual(image.getpixel((157, 15)), (0, 0, 255, 255))
 
 
-ROM = Path(os.environ.get("KSSU_ROM", "/home/rayzza/Documents/ROMS/Nintendo DS/Kirby Super Star Ultra (USA).nds"))
+ROM = Path(os.environ.get("KSSU_ROM", Path.home() / "Documents/ROMS/Nintendo DS/Kirby Super Star Ultra (USA).nds"))
 
 
 @unittest.skipUnless(ROM.is_file(), "private user ROM not available; synthetic tests still run")

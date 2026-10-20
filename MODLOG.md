@@ -12,14 +12,14 @@ New, independent mod requested 2026-10-03 (America/Argentina/Buenos_Aires).
 
 ## Recon and boundaries
 
-- Universal Modder local checkout: `/home/rayzza/Games/mods/universal-modder`.
+- Universal Modder local checkout: `~/Games/mods/universal-modder`.
 - Read and followed mod-any-game, game-recon, mashup-mods, reverse-engineering workflows.
 - `um kb search 'Dead Cells'`: no field note in the toolkit KB. Existing Sonic project has separate useful local findings.
 - `um scan 'Dead Cells'`: Steam app 588650, no anti-cheat or loader detected. Scanner's unknown-native label is incomplete: installation uses HashLink `hlboot.dat`.
-- Installed host: `/home/rayzza/.local/share/Steam/steamapps/common/Dead Cells`, Linux Steam build 23762174, v35.
+- Installed host: `~/.local/share/Steam/steamapps/common/Dead Cells`, Linux Steam build 23762174, v35.
 - Existing Sonic/Knuckles asset mod is already present. Do not overwrite its archive, source, or saves.
-- User ROM: `/home/rayzza/Documents/ROMS/Nintendo DS/Kirby Super Star Ultra (USA).nds`, 128 MiB.
-- Private working data, dependencies and decoded ROM assets: `/home/rayzza/.local/share/kirby-dead-cells/` (outside source project).
+- User ROM: `~/Documents/ROMS/Nintendo DS/Kirby Super Star Ultra (USA).nds`, 128 MiB.
+- Private working data, dependencies and decoded ROM assets: `~/.local/share/kirby-dead-cells/` (outside source project).
 - No installed-game mutation, save restoration, input automation, publication, or loader installation performed.
 
 ## Chosen route under verification
@@ -46,7 +46,7 @@ Status: development, not installed or playable yet.
 - Repaired long-effect clipping by deriving diagnostic cell and composition bounds.
 - Host converter: `tools/build_assets.py`, guarded generated-output ownership,
   fresh staging, and lossless palette encoding. It builds pose atlases, not an outfit.
-- Final private pack: `/home/rayzza/.local/share/kirby-dead-cells/assets-final/res.pak`.
+- Final private pack: `~/.local/share/kirby-dead-cells/assets-final/res.pak`.
   SHA256 `1bc2d0b700e85167e3d905854f6c0c320b933622cb3ce0f47ce5e9df8ddd39bf`.
 - Packed 36,894 complete individual/left-facing/composed poses; 4,814 incomplete
   or empty entries omitted with explicit reasons. These counts include helpers
@@ -91,7 +91,7 @@ Status: development, not installed or playable yet.
 
 ## Reproducible verification
 
-`python3 scripts/check.py --assets /home/rayzza/.local/share/kirby-dead-cells/assets-final`
+`python3 scripts/check.py --assets ~/.local/share/kirby-dead-cells/assets-final`
 passed all offline checks: 15 decoder tests, 6 RAM-parser tests, 26 rule assertions,
 clean runtime compilation, exhaustive atlas checks, and official-reader PAK checks.
 `um kb check FIELD_NOTE.md` passed. `um publish check` found no failures, only local
@@ -2791,3 +2791,15 @@ the all-ability rendering tests as full gameplay acceptance.
   private in any commit (2341 paths; only the synthetic key header from before #210),
   but five commits carry a personal email and older commits carry attribution lines,
   which only a history rewrite would remove. Left to the owner.
+
+## 2026-10-20 — the repository prepared for public visibility (#216)
+
+- Credential scan of the whole history including every pull request ref and branch
+  on GitHub, all issues, pull requests, comments, edit histories and releases: no
+  credential found (details in `docs/RELEASE.md#going-public`). No history rewrite.
+- Owner-specific absolute paths in docs, the MODLOG and the `tests/test_rom_decode.py`
+  ROM default replaced with `~`, `$HOME` or `Path.home()`.
+- `SECURITY.md` (private reporting, what never to post), a README link, and the
+  going-public checklist in `docs/RELEASE.md`. The 22 merged pull request branches
+  still on GitHub were deleted.
+- Source: `python3 -m unittest discover -s tests -p 'test_*.py'` passes. Live: none.

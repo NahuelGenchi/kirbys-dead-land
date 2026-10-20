@@ -460,3 +460,4 @@ embeds. No ROM, Dead Cells file or generated asset pack is included; bring your 
 Kirby Super Star Ultra USA ROM and Steam install of Dead Cells.
 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) lists every dependency, its
 license and pinned version, and the source obligations for a built bridge.
+Report security problems privately as described in [`SECURITY.md`](SECURITY.md).

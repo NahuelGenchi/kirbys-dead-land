@@ -9,7 +9,7 @@ Inspected on 2026-10-03. The new mod is **not yet a playable Kirby port**. The e
 
 ## Installed host
 
-- Owned Steam Linux installation: `/home/rayzza/.local/share/Steam/steamapps/common/Dead Cells`.
+- Owned Steam Linux installation: `~/.local/share/Steam/steamapps/common/Dead Cells`.
 - Steam app ID: 588650; installed build ID: **23762174**.
 - Native executable: ELF64 x86-64 PIE, unstripped. GNU build ID: `bfc9155c89db6bc9148ceac463e3f7ea0203dca9`.
 - Executable SHA-256: `d4e2a6e26851f0cefe46975e999d6e5d43edea64bf05fb3d0461c16f145bf5e6`.
@@ -29,7 +29,7 @@ The real `core/mdk/ref/GameProxy.dll` was inspected using Mono.Cecil, and the ru
 
 The NuGet dependency `DeadCellsCoreModding.MDK` version 1.0.1 is an MSBuild bridge. It requires the installed release MDK through `DCCM_MDK_ROOT`; installing only that NuGet package is insufficient. The upstream MDK shell installer edits shell configuration and global NuGet sources, so this project uses command-local environment variables instead.
 
-Compiler: official .NET SDK **10.0.401**, installed under `/home/rayzza/.local/share/kirby-dead-cells/dotnet`. SDK archive SHA-512 is pinned in `scripts/setup_runtime.py`, from [Microsoft release metadata](https://builds.dotnet.microsoft.com/dotnet/release-metadata/10.0/releases.json). Since #184 the build also restores `Microsoft.NETCore.App.Crossgen2.linux-x64` from NuGet at the runtime version the SDK carries (10.0.12, about 38 MB) and compiles the packed `Kirby.Core` and `Kirby.Runtime` ahead of time with it (`src/runtime/Kirby.Runtime.csproj`; [the first Kirby frame](PERFORMANCE.md#the-first-kirby-frame-184)).
+Compiler: official .NET SDK **10.0.401**, installed under `~/.local/share/kirby-dead-cells/dotnet`. SDK archive SHA-512 is pinned in `scripts/setup_runtime.py`, from [Microsoft release metadata](https://builds.dotnet.microsoft.com/dotnet/release-metadata/10.0/releases.json). Since #184 the build also restores `Microsoft.NETCore.App.Crossgen2.linux-x64` from NuGet at the runtime version the SDK carries (10.0.12, about 38 MB) and compiles the packed `Kirby.Core` and `Kirby.Runtime` ahead of time with it (`src/runtime/Kirby.Runtime.csproj`; [the first Kirby frame](PERFORMANCE.md#the-first-kirby-frame-184)).
 
 ## Concrete host API
 
@@ -104,11 +104,11 @@ python3 scripts/stage_runtime.py
 
 Paths:
 
-- Source project: `/home/rayzza/Games/mods/kirby-super-star-ultra-dead-cells`.
+- Source project: `~/Games/mods/kirby-super-star-ultra-dead-cells`.
 - Build output: `src/runtime/bin/Release/net10.0/output/KirbySuperStarUltra/`.
-- SDK and dependencies: `/home/rayzza/.local/share/kirby-dead-cells/`.
-- Isolated development lab: `/home/rayzza/.local/share/kirby-dead-cells/lab`.
-- Staged adapter: `/home/rayzza/.local/share/kirby-dead-cells/lab/coremod/mods/KirbySuperStarUltra`.
+- SDK and dependencies: `~/.local/share/kirby-dead-cells/`.
+- Isolated development lab: `~/.local/share/kirby-dead-cells/lab`.
+- Staged adapter: `~/.local/share/kirby-dead-cells/lab/coremod/mods/KirbySuperStarUltra`.
 
 The setup script pins release URLs and archive hashes, uses local environment variables, and never installs into the game. The staging script copies the runtime into the lab, excludes the optional Goldberg emulator, explicitly sets `EnableGoldberg=false`, and links game files as inputs. It creates no links to real saves. **Neither script starts the game.** The lab's `save/` is only the loader's default mod-data location; isolation of all original-game Steam/cloud writes has not been proven and must be checked before the first game launch. Do not assume the directory alone proves save isolation.
 
@@ -133,10 +133,10 @@ Primary upstream references: [source](https://github.com/dead-cells-core-modding
 Run after regenerating an asset pack:
 
 ```bash
-DCCM_MDK_ROOT=/home/rayzza/.local/share/kirby-dead-cells/research/dccm-35.13.6/core/mdk \
-  /home/rayzza/.local/share/kirby-dead-cells/dotnet/dotnet run \
+DCCM_MDK_ROOT=$HOME/.local/share/kirby-dead-cells/research/dccm-35.13.6/core/mdk \
+  ~/.local/share/kirby-dead-cells/dotnet/dotnet run \
   --project tests/pak/Kirby.Pak.Verify.csproj -c Release -- \
-  /home/rayzza/.local/share/kirby-dead-cells/assets-final/build-manifest.json
+  ~/.local/share/kirby-dead-cells/assets-final/build-manifest.json
 ```
 
 An optional second positional argument selects a PAK other than `res.pak` alongside the manifest. Nonzero exit indicates missing/unexpected/duplicate entries, payload or archive hash mismatch, header checksum mismatch, or parser errors.

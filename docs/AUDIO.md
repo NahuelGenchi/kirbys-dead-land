@@ -16,7 +16,7 @@ Verification uses an isolated flat source map so original stage enemies do not c
 dotnet build tests/audio/Kirby.Audio.Tests.csproj -c Release
 SDL_AUDIODRIVER=dummy dotnet tests/audio/bin/Release/net10.0/Kirby.Audio.Tests.dll \
   ~/.local/share/kirby-dead-cells/oracle/vendor/melon-rs/target/release/libkssu_bridge.so \
-  "/home/rayzza/Documents/ROMS/Nintendo DS/Kirby Super Star Ultra (USA).nds" \
+  "$HOME/Documents/ROMS/Nintendo DS/Kirby Super Star Ultra (USA).nds" \
   ~/.local/share/kirby-dead-cells/oracle/ready2/000.state
 ```
 
