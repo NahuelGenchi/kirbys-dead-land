@@ -2781,3 +2781,13 @@ the all-ability rendering tests as full gameplay acceptance.
   working tree before a commit.
 - Source: `python3 -m unittest discover -s tests -p 'test_*.py'`. Not covered: a
   machine without Rust or the Python packages, other distributions.
+
+## 2026-10-20 — v0.1.0, the first GitHub pre-release (#211)
+
+- `mod.json` is version `0.1.0`, status `pre-release`; release notes in
+  `docs/RELEASE.md`. After this merges, `v0.1.0` is tagged on main and published as
+  a GitHub pre-release with the archive from `scripts/package_release.py --ref v0.1.0`.
+- The repository stays private: a history scan with the release lint found nothing
+  private in any commit (2341 paths; only the synthetic key header from before #210),
+  but five commits carry a personal email and older commits carry attribution lines,
+  which only a history rewrite would remove. Left to the owner.
