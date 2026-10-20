@@ -1239,7 +1239,13 @@ Cells' rule and stays.
   `--input-plan thorny` (`LabThornyProbe`, see [docs/RUNTIME_LAUNCH.md](RUNTIME_LAUNCH.md#the-thornys-spikes-and-the-helper-206))
   hits a real Thorny's back through `KirbyDamage.Hit`, as Kirby, as the helper and as
   Kirby again. It does not create a helper, so the attribution from the original's records
-  (#128) is not exercised by it. **Not run yet** (see the section).
+  (#128) is not exercised by it. **Run 2026-10-20** (build 8046114, isolated data root,
+  offscreen): `thorny.json` `passed: true`. Trial 1 (Kirby's hit) took Kirby 76 -> 67 with
+  no counter dropped; trial 2 (marked as the helper's) dropped exactly one counter and left
+  him at 67; trial 3 (Kirby's again) took him 67 -> 58 with none dropped. The log shows
+  `host hit ignored ... counter to the helper's hit from SpikedSatyr#...` for trial 2 only.
+  Not shown by that run: a real helper's hit (the #128 attribution is covered by its own
+  tests) or the helper choosing to fight a Thorny.
 
 ### The original on the recompiler (#153, intentional deviation)
 

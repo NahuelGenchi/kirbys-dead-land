@@ -1644,4 +1644,4 @@ python3 scripts/launch_runtime.py --data-root "$R" --seconds 80 --start-game \
 
 | Run | Build | Result |
 | :--- | :--- | :--- |
-| none | | **Not run** at the time of the change: the machine had 2.3 GB of RAM free, and a lab game needs about 6 GB |
+| 2026-10-20, `repros/thorny-206`, `--seconds 80` | 8046114 | `thorny.json` `passed: true`, exit -15 (expected). Kirby 76 -> 67 on his hit, no counter dropped; helper-marked hit: 1 counter dropped, Kirby stayed at 67; Kirby again 67 -> 58, none dropped. About 7.8 GB of RAM was available, 5.9 GB free after |

@@ -2721,10 +2721,12 @@ the all-ability rendering tests as full gameplay acceptance.
 - New lab plan `thorny` (`LabThornyProbe`): a real Thorny hit on its back as Kirby,
   as the helper and as Kirby again.
 - Source: `python3 scripts/check.py` passes (506 core assertions, runtime and every
-  test project build). **Live: not run**; the plan was written and built, but the
-  machine had 2.3 GB of RAM free and a lab game needs about 6 GB. Unverified:
-  everything in the running game, including the helper's attribution against a
-  Thorny.
+  test project build). Live (2026-10-20, build 8046114, isolated root `thorny-206`,
+  `--input-plan thorny`): `thorny.json` `passed: true`. Kirby's hit cost him 9 health
+  (76 -> 67) with no counter dropped; the helper-marked hit dropped exactly one
+  counter and cost him none; Kirby's hit again cost 9 (67 -> 58). Unverified: a real
+  helper's hit against a Thorny (the probe marks the hit itself; the #128 attribution
+  has its own tests).
 - Not covered: the helper's star hits, the Wheelie rider, a bridge without
   `kssu_helper_owns`, the helper's AI choosing to fight a Thorny, other host
   retaliation. See `docs/GAMEPLAY_FIDELITY.md`.
