@@ -29,11 +29,16 @@ with or endorsed by Nintendo, HAL Laboratory, Motion Twin or Evil Empire.
 | .NET SDK | 10.0.401 | MIT | <https://github.com/dotnet/sdk> | Builds the runtime |
 | chrono (Rust crate) | 0.4.45 | MIT OR Apache-2.0 | <https://github.com/chronotope/chrono> | NDS bridge |
 | sha2 (Rust crate) | 0.10.9 | MIT OR Apache-2.0 | <https://github.com/RustCrypto/hashes> | NDS bridge |
+| serde_json (Rust crate) | 1.0.151 | MIT OR Apache-2.0 | <https://github.com/serde-rs/json> | Oracle runner |
+| libjpeg-turbo (`libturbojpeg0`) | Ubuntu 1:2.1.5-4ubuntu4 | BSD-3-Clause and IJG | <https://libjpeg-turbo.org> | Preloaded for DCCM's `fmt.hdll` |
+| NumPy (Python) | >=1.26 | BSD-3-Clause | <https://github.com/numpy/numpy> | Asset tools |
+| Universal Modder | player's checkout | MIT | <https://github.com/rehan-remade/universal-modder> | Save backups before launch |
 | Pillow (Python) | >=12.1,<13 | MIT-CMU | <https://github.com/python-pillow/Pillow> | Asset tools |
 
 Revisions are pinned in `tools/oracle_build.py`, `tools/nds_build.py`,
-`scripts/setup_runtime.py` and `requirements.txt`, and setup checks each download's
-hash.
+`scripts/setup_runtime.py`, `scripts/launch_runtime.py` and `requirements.txt`, and
+setup checks each download's hash. Cargo resolves the crates' own dependencies at
+build time; no `Cargo.lock` is pinned.
 
 ## Modified GPL source
 

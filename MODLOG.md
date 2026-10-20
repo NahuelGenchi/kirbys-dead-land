@@ -2743,3 +2743,24 @@ the all-ability rendering tests as full gameplay acceptance.
   melon-kssu declares no license; only addresses and offsets are cited from it.
 - README: a License section and header link.
 - Source: none run (docs only). Live: none.
+
+## 2026-10-20 — a release archive and installer for new players (#209)
+
+- `scripts/package_release.py` builds `dist/kirbys-dead-land-<version>.tar.gz` (and
+  `.sha256`) from a commit's tracked files, without the repository workflow files.
+  Its release lint refuses ROM, game, binary, save, state, media and dump suffixes,
+  private data folders, files over 1 MiB or with NUL bytes, and key-like strings.
+  The first run flagged the `#flask-and-fountains…` anchor as an `sk-` key; the
+  pattern now needs a word start. On main (`66765c5`): 188 files, lint clean.
+- `scripts/install.py --rom …` chains the existing setup for a new player: checks
+  prerequisites and the ROM hash, then `setup_runtime.py --build`, `oracle_build.py`,
+  the seed state from `tools/oracle_bootstrap.json` (its last state copied to
+  `oracle/ready2/000.state`), `nds_build.py`, `extract_kirby.py`,
+  `capture_ability_icons.py`, `build_outfit.py` and `stage_runtime.py`.
+  `tools/nds_probe.py` now reads the ROM path from `KSSU_ROM` when set, so the icon
+  capture finds a ROM outside the owner's folder.
+- README Install section, `docs/RELEASE.md`, NumPy in `requirements.txt`, and the
+  notices gain serde_json, libjpeg-turbo, NumPy and Universal Modder.
+- Source: `python3 -m unittest tests.test_release_package -v` (6 tests) passes.
+  `install.py` was only run up to its ROM check; a full install on a clean data
+  root is #210. Live: none.
