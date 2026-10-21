@@ -2961,3 +2961,10 @@ the all-ability rendering tests as full gameplay acceptance.
   opened with main's build (`d6e7c44`) in a separate data root: the owner reported
   that the door breaks and Kirby goes on. The real save was not changed. Not
   checked: whether the unspent cells are lost in the next level.
+
+## 2026-10-21 — v0.2.1 for the Collector's door (#236)
+
+- Version 0.2.1 in `mod.json`, the runtime adapter and the launcher (with its
+  lockfile entry and notices), so v0.2.0 players get the Collector door fix (#233).
+- The tag, the release workflow's build, the download checks and the published
+  notes follow this change.

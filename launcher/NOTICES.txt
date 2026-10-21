@@ -1,4 +1,4 @@
-Kirby's Dead Land launcher 0.2.0
+Kirby's Dead Land launcher 0.2.1
 
 Kirby's Dead Land is free software: you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the Free
@@ -195,7 +195,7 @@ SOFTWARE.
 
 RUST CRATES
 
-Built into the launcher, from Cargo.lock 7423c2ce2647fecd.
+Built into the launcher, from Cargo.lock 829413fb77a443b3.
 
 ab_glyph 0.2.32 - Apache-2.0 (offered: Apache-2.0)
     Copyright the ab_glyph authors: Alex Butler
