@@ -218,6 +218,21 @@ names.
   stuck v0.2.0 save opened with main's build (see
   [GAMEPLAY_FIDELITY.md](GAMEPLAY_FIDELITY.md#the-collectors-door-takes-hits-again-233)).
 - v0.2.0 launchers that look for a new version see this one as newer.
+- Built by the release workflow from the `v0.2.1` tag on `b01ec50` (run
+  39628515140, success), which attached the files to a draft. The downloaded files
+  matched their checksums; the AppImage's `--check` named bundle
+  `0.2.1+b01ec505ba666f98c04ef51655ea222efdb07473`.
+- Update from 0.2.0, on copies of the owner's 0.2.0 launcher folder and settings
+  (`KIRBY_DATA_ROOT`, `XDG_CONFIG_HOME`): `--autopilot` kept the helpers, game and
+  sprite steps, re-ran the outfit and staging steps (about 5 s) and recorded the
+  0.2.1 bundle. With `--smoke-play 72` the movement check reached a live Kirby hero
+  (15,692 frames, no fatal log, real saves unchanged). Without it, normal Play
+  opened the game, which was closed at its menu: the Kirby save was byte-identical
+  before and after, and the real saves unchanged.
+- Published 2026-10-21 as a regular release, shown as Latest, with notes for
+  players: the fix, how to update from 0.2.0, and what was tested. The download
+  button reuses the v0.2.0 picture; the v0.2.0 screenshots show "0.2.0", so the
+  notes link to the v0.2.0 notes for the step-by-step guide instead.
 
 ## v0.2.0 (2026-10-21)
 

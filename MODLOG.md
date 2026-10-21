@@ -2968,3 +2968,11 @@ the all-ability rendering tests as full gameplay acceptance.
   lockfile entry and notices), so v0.2.0 players get the Collector door fix (#233).
 - The tag, the release workflow's build, the download checks and the published
   notes follow this change.
+
+## 2026-10-21 — v0.2.1 published (#236)
+
+- The release workflow built v0.2.1 from the tag (run 39628515140); the downloads
+  matched their checksums. On a copy of the owner's 0.2.0 launcher folder the new
+  launcher updated in about 5 s, ran Kirby, and left the Kirby save unchanged.
+- Published as Latest with notes for players (the fix, updating, what was tested).
+  Not tested: the Steam Deck and 0.2.1 on other distributions.
