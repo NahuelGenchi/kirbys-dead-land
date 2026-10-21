@@ -24,8 +24,8 @@ player's own files.
   `add-to-menu.sh` adds a menu entry for that folder.
 
 Each has a `.sha256` beside it. Both carry the GPL `LICENSE`, `NOTICES.txt` and
-`NOTICES-emulator.txt` (together, the text of Settings › Licenses). Until v0.2.0 is out, the launcher is built
-from source (see [Building](#building-and-checking)).
+`NOTICES-emulator.txt` (together, the text of Settings › Licenses). Until v0.2.0
+is out, the launcher is built from source (see [Building](#building-and-checking)).
 
 ## For players
 
