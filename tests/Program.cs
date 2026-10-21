@@ -559,6 +559,13 @@ Check(HostStrikes.Slide(KirbyActions.Slide, -704) && !HostStrikes.Slide(KirbyAct
 Check(HostStrikes.Grab(HostStrikes.Suplex, SpeedMatch.Carry, -1766) && !HostStrikes.Grab(HostStrikes.Suplex, SpeedMatch.Carry, 300) &&
       !HostStrikes.Grab(HostStrikes.Suplex, KirbyActions.Dash, 528) && !HostStrikes.Grab(18, SpeedMatch.Carry, 1766),
     "Only Suplex's fast grab lunge bursts doors");
+Check(HostStrikes.DoorTakesHits(keyDoor: false, locked: true, breakable: true),
+    "The Collector's locked, breakable door takes Kirby's hits");
+Check(HostStrikes.DoorTakesHits(false, locked: false, breakable: true) && HostStrikes.DoorTakesHits(false, locked: false, breakable: false),
+    "Unlocked doors take Kirby's hits");
+Check(!HostStrikes.DoorTakesHits(false, locked: true, breakable: false) && !HostStrikes.DoorTakesHits(keyDoor: true, false, true) &&
+      !HostStrikes.DoorTakesHits(keyDoor: true, true, true),
+    "Key doors and locked doors that cannot break take no hit");
 var plantLaunch = new BumpLaunch();
 Check(!plantLaunch.Active && plantLaunch.Ascent(100) == 0, "No ascent without a bump");
 var plantSteps = BumpLaunch.Steps(1.5 * 24).ToArray();

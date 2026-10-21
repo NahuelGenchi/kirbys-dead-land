@@ -2942,3 +2942,15 @@ the all-ability rendering tests as full gameplay acceptance.
 - Source: `cargo test` in `launcher/`, the Python tests and `scripts/check.py`
   (results in the PR). Not run: a person clicking, the game on another
   distribution or a Steam Deck.
+
+## 2026-10-21 — the Collector's door breaks again (#233)
+
+- Owner report: on a new v0.2.0 save Kirby reached the Collector with cells and
+  nothing to buy, and could not break the exit door, so he was trapped.
+- Cause, from the game's own code: the door is locked **and** breakable, and the
+  host only refuses hits on locked doors that cannot break; the #110 rule refused
+  every locked door. Kirby now refuses only what the host refuses
+  (`HostStrikes.DoorTakesHits`).
+- Live: Sword broke the Collector's door in two hits while Kirby held 20 cells;
+  the control with the #110 rule never hit it. Not run: other transition levels,
+  other copy abilities, the next level and what happens to the cells there.
