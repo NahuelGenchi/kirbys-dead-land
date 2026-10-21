@@ -219,6 +219,21 @@ licenses.
 - Checked before tagging: a [clean setup](LAUNCHER.md#clean-setup-223) from the
   packaged launcher on this machine, and the packages'
   [checks on other distributions](LAUNCHER.md#other-distributions-223).
+- Built by the release workflow from the `v0.2.0` tag (run 39544728624, success),
+  which made the draft and attached the five files. The bridge in that AppImage
+  has the same SHA-256 as a local build of the same commit
+  (`3c7562e9e2628d21a85c86d6bd3071f7a735ec663364ab12a9f55f19155efd3b`).
+- Checked before publishing: the draft's files were downloaded, matched their
+  `.sha256` files and held no personal data or credentials; the downloaded
+  AppImage, with new data and config folders, took the offered ROM, ran setup in
+  69 s, and its 72-second movement check reached `dc.pr.Game` with a live hero in
+  the Kirby outfit (14,560 frames), saves backed up and unchanged, no fatal log.
+- The notes' pictures are in `.github/release/v0.2.0/`, made by
+  `.github/release/make_media.py` from `--screenshot --scale 2` with stand-in art:
+  a banner, a download button and one picture per step. They hold no game art;
+  pictures from the game itself (Kirby, his abilities, Dead Cells) stay out of
+  the repository and the release. The notes link the pictures at the commit that
+  added them, so later changes cannot alter a published release.
 
 ## v0.1.0 (2026-10-20, pre-release)
 

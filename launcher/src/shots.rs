@@ -148,13 +148,15 @@ fn reset(app: &AppWindow) {
     app.set_checks_blocked(false);
 }
 
-pub fn run(out: &Path, art_root: Option<PathBuf>) -> Result<(), String> {
+/// `scale` is the pixel density: 2.0 draws the 1040×680 window as 2080×1360 pixels.
+pub fn run(out: &Path, art_root: Option<PathBuf>, scale: f32) -> Result<(), String> {
     std::fs::create_dir_all(out).map_err(|e| e.to_string())?;
     let window = MinimalSoftwareWindow::new(RepaintBufferType::NewBuffer);
     slint::platform::set_platform(Box::new(Offscreen { window: window.clone() })).map_err(|e| e.to_string())?;
     let app = AppWindow::new().map_err(|e| e.to_string())?;
     crate::connect_art(&app);
-    let (w, h) = (1040u32, 680u32);
+    window.dispatch_event(slint::platform::WindowEvent::ScaleFactorChanged { scale_factor: scale });
+    let (w, h) = ((1040.0 * scale).round() as u32, (680.0 * scale).round() as u32);
     window.set_size(slint::PhysicalSize::new(w, h));
     app.show().map_err(|e| e.to_string())?;
     app.set_version("0.2.0".into());

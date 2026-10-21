@@ -2926,3 +2926,19 @@ the all-ability rendering tests as full gameplay acceptance.
 - Not run: a person clicking, the file chooser, the game on another distribution
   or a Steam Deck. The tag, the release and a check of the published download
   follow this change.
+
+## 2026-10-21 — v0.2.0 published (#223)
+
+- The release workflow built v0.2.0 from the tag (run 39544728624) and made the
+  draft. The downloaded files matched their checksums and held no personal data;
+  the downloaded AppImage set up a new folder in 69 s and its movement check
+  reached a live Kirby hero (14,560 frames), saves backed up and unchanged.
+- The release notes were rewritten for players, with pictures from the launcher:
+  `--screenshot --scale 2` (new) renders the screens at twice the density and
+  `.github/release/make_media.py` frames them into a banner, a download button and
+  one picture per step, all with stand-in art (no game art).
+- Published as a regular release, shown as Latest, once this change merged (the
+  notes link the pictures at its merge commit).
+- Source: `cargo test` in `launcher/`, the Python tests and `scripts/check.py`
+  (results in the PR). Not run: a person clicking, the game on another
+  distribution or a Steam Deck.
