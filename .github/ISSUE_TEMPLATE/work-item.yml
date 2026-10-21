@@ -30,6 +30,7 @@ body:
         - M1 — Playable mod
         - M2 — Gameplay coverage
         - M3 — Release
+        - M4 — Player launcher
       default: 1
     validations:
       required: true

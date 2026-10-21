@@ -21,6 +21,7 @@ Track all meaningful work: features, bugs, enhancements, docs, research, release
 | M1 | M1 — Playable mod | Kirby playable in Dead Cells with original-ROM gameplay, plus play-test defects and fixes |
 | M2 | M2 — Gameplay coverage | Measured parity across host enemies, hazards, items, bosses, and biomes |
 | M3 | M3 — Release | Packaging and publishing without ROM, game files, or generated asset packs |
+| M4 | M4 — Player launcher | A single launcher for players: prebuilt downloads, checks for Steam, Dead Cells and the player's ROM, one-time setup and a Play button |
 
 The first issue is #1 (M0). Later milestones may be created deliberately; assign them directly in GitHub.
 
