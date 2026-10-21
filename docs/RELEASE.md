@@ -41,15 +41,19 @@ commit passes.
 
 | File | Layout |
 | :--- | :--- |
-| `KirbysDeadLand-<version>-x86_64.AppImage` | `AppRun`, the desktop entry and icon at the top; `usr/bin/kirbys-dead-land`; the bundle at `usr/share/kirbys-dead-land`, found through `$APPDIR`; `LICENSE` and `NOTICES.txt` in `usr/share/doc/kirbys-dead-land/` |
-| `KirbysDeadLand-<version>-x86_64.tar.gz` | One folder, `KirbysDeadLand-<version>-x86_64/`: `kirbys-dead-land`, the bundle at `share/kirbys-dead-land` beside it, `LICENSE`, `NOTICES.txt`, `README.txt`, the desktop entry, the icon and `add-to-menu.sh` |
+| `KirbysDeadLand-<version>-x86_64.AppImage` | `AppRun`, the desktop entry and icon at the top; `usr/bin/kirbys-dead-land`; the bundle at `usr/share/kirbys-dead-land`, found through `$APPDIR`; `LICENSE`, `NOTICES.txt` and `NOTICES-emulator.txt` in `usr/share/doc/kirbys-dead-land/` |
+| `KirbysDeadLand-<version>-x86_64.tar.gz` | One folder, `KirbysDeadLand-<version>-x86_64/`: `kirbys-dead-land`, the bundle at `share/kirbys-dead-land` beside it, `LICENSE`, `NOTICES.txt`, `NOTICES-emulator.txt`, `README.txt`, the desktop entry, the icon and `add-to-menu.sh` |
 
 The bundle is `scripts/build_bundle.py`'s ([Player
 launcher](LAUNCHER.md#building-and-checking)): the tracked scripts and tools, the
 ReadyToRun runtime adapter, the bridge and the oracle runner. `NOTICES.txt` is
-`launcher/NOTICES.txt` (licenses, and the release tag as the source). It does not
-yet list the crates built into the bridge and the runner or the libraries melonDS
-bundles, so no package is published before #228. The icon is drawn by the
+`launcher/NOTICES.txt` (the launcher's crates, fonts and icons, the downloaded
+helpers, and the release tag as the source); `NOTICES-emulator.txt` is
+`packaging/NOTICES-emulator.txt` (melonDS, melon-rs, the libraries melonDS bundles
+and every crate in the pinned bridge and runner lockfiles). The package lint fails
+when either is missing, and the launcher shows both in Settings › Licenses. Run
+`python3 tools/emulator_notices.py` after changing a pinned lockfile or the
+melonDS or melon-rs revision; a test fails until it is. The icon is drawn by the
 launcher's own code (`--write-icon`), not taken from the ROM.
 
 ```sh
@@ -170,8 +174,8 @@ desktop without FUSE.
 The archive is the complete source of this project, including the melon-rs and
 melonDS patches. Source archives attach no built bridge. The player packages do,
 so each release that carries them also carries the source archive of the same
-commit, and each package holds `LICENSE` and `NOTICES.txt`, which names the
-release tag as the source (see the
+commit, and each package holds `LICENSE`, `NOTICES.txt` and
+`NOTICES-emulator.txt`, which name the release tag as the source (see the
 [notices](../THIRD_PARTY_NOTICES.md#modified-gpl-source)).
 
 ## Going public

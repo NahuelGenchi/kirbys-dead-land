@@ -2885,3 +2885,24 @@ the all-ability rendering tests as full gameplay acceptance.
   `dc.pr.Game`, live hero, Kirby outfit, real saves unchanged, no fatal log. Not run:
   the workflow on GitHub (Actions stopped by billing), a tag build. Before publishing,
   the bridge's and runner's crate notices are needed (#228).
+
+## 2026-10-21 — notices for the packaged bridge and runner (#228)
+
+- `tools/emulator_notices.py` writes `packaging/NOTICES-emulator.txt`: melonDS and
+  melon-rs at the pinned revisions, the libraries melonDS compiles in (teakra, FatFs,
+  FreeBIOS, xxHash, tiny-AES-c, SHA-1, blip_buf, Dolphin's x64 emitter, glad) with
+  their license texts read from the melonDS tree, and the 241 crates resolved from
+  `packaging/bridge.Cargo.lock` and `packaging/runner.Cargo.lock` (normal
+  dependencies for x86_64 Linux, through `cargo metadata --offline`), with copyright
+  lines and license texts, including MPL-2.0 (symphonia) and the egui fonts' OFL and
+  Ubuntu Font licenses. It refuses a melonDS tree that compiles a third-party folder
+  it does not cover. The manifests come from the same `bridge_manifest` and
+  `runner_manifest` functions the builds use.
+- Both packages ship it as `NOTICES-emulator.txt` beside `NOTICES.txt`;
+  `lint_package` takes the license and notices as required files. The launcher shows
+  it after its own notices in Settings › Licenses.
+- Source: `python3 -m unittest discover -s tests -p 'test_*.py'` (56 passed; a changed
+  lockfile fails the new notices test), `cargo test` in `launcher/` (29 passed),
+  `python3 scripts/check.py` passed; `tools/launcher_notices.py` regenerates the
+  launcher notices with only the new pointer line changed. Not run: a package build
+  or a live game check (neither program changed).

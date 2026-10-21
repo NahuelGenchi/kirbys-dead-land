@@ -2,7 +2,7 @@
 """Build the original-ROM bridge against pinned private oracle dependencies."""
 import hashlib,json,os,subprocess
 from pathlib import Path
-from oracle_build import ROOT,WRAPPER,CORE,BRIDGE,REPAIRS,git_output
+from oracle_build import ROOT,WRAPPER,CORE,BRIDGE,REPAIRS,bridge_manifest,git_output
 from nds_vendor import GPU_EDITS,check_gpu_patch
 from nds_graphics_patch import GRAPHICS_WRAPPER_FILES,GRAPHICS_CORE_FILES,check_graphics_patch
 from nds_call_patch import CALL_CORE_FILES,check_call_patch
@@ -29,7 +29,7 @@ def main():
     check_gpu_patch(vendor,WRAPPER,apply=True)
     crate=ROOT/'bridge';crate.mkdir(exist_ok=True)
     source=Path(__file__).resolve().parents[1]/'src/nds/lib.rs'
-    (crate/'Cargo.toml').write_text('[package]\nname="kssu-bridge"\nversion="0.1.0"\nedition="2021"\n[lib]\ncrate-type=["cdylib"]\npath='+json.dumps(str(source))+'\n[dependencies]\nmelon-rs={path="../vendor/melon-rs",default-features=false}\nchrono="=0.4.45"\nsha2="=0.10.9"\n')
+    (crate/'Cargo.toml').write_text(bridge_manifest(source))
     subprocess.run(['cargo','build','--release','--manifest-path',str(crate/'Cargo.toml')],env=dict(os.environ,CARGO_TARGET_DIR=str(vendor/'target')),check=True)
     binary=vendor/'target/release/libkssu_bridge.so'
     provenance={'melon_rs':WRAPPER,'melon_ds':CORE,'source_sha256':hashlib.sha256(source.read_bytes()).hexdigest(),'binary_sha256':hashlib.sha256(binary.read_bytes()).hexdigest(),'cargo_lock_sha256':hashlib.sha256((crate/'Cargo.lock').read_bytes()).hexdigest(),'binary':str(binary)}

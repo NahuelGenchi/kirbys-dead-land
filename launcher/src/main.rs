@@ -21,7 +21,8 @@ use std::rc::Rc;
 
 slint::include_modules!();
 
-pub const NOTICES: &str = include_str!("../NOTICES.txt");
+/// Settings › Licenses: the launcher's notices, then the bridge's and the runner's.
+pub const NOTICES: &str = concat!(include_str!("../NOTICES.txt"), "\n\n\n", include_str!("../../packaging/NOTICES-emulator.txt"));
 
 thread_local! {
     pub static ART: Rc<Painter> = Rc::new(Painter::new());
@@ -133,5 +134,6 @@ mod tests {
         let digest = sha2::Sha256::digest(include_bytes!("../Cargo.lock"));
         let lock: String = digest.iter().map(|b| format!("{b:02x}")).collect();
         assert!(crate::NOTICES.contains(&format!("from Cargo.lock {}.", &lock[..16])), "Cargo.lock changed: run tools/launcher_notices.py");
+        assert!(crate::NOTICES.contains("notices for the emulator programs"));
     }
 }
