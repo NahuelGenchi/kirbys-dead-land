@@ -4,6 +4,7 @@
 The archive holds tracked files only, read from the commit with git, never the
 working tree. The release lint fails on ROMs, game files, binaries, saves, states,
 recordings, generated packs, private data folders and key-like strings.
+`lint_package` applies the same lint to a player package's file list.
 """
 import argparse
 import hashlib
@@ -29,6 +30,8 @@ FORBIDDEN_FOLDERS = {
     'outfit-build', 'ability-icons', 'captures', 'smoke-runs', 'play-runs', 'dist', 'build', 'bin', 'obj',
 }
 MAX_BYTES = 1024 * 1024
+# A player package's largest program, the launcher, is far below this; a ROM is 128 MiB.
+MAX_PROGRAM_BYTES = 64 * 1024 * 1024
 # The open-licensed fonts the launcher draws with (launcher/NOTICES.txt), pinned
 # by hash so that no other binary file passes.
 ALLOWED_BINARIES = {
@@ -59,6 +62,28 @@ def lint(files: dict[str, bytes]) -> list[str]:
             problems.append(f'{name}: binary content')
         elif any(pattern.search(data) for pattern in SECRETS):
             problems.append(f'{name}: contains a key-like string')
+    return problems
+
+
+def lint_package(files: dict[str, bytes], built: dict[str, bytes], private: list[bytes]) -> list[str]:
+    """Return one problem per file that must not be in a player package (scripts/build_packages.py).
+
+    `built` names the files the build made (the programs, the runtime's settings and
+    the icon), each with the bytes it must start with; every other file must pass the
+    release lint. No file may name one of the `private` folders of the build machine.
+    """
+    problems = [f'{name}: missing' for name in sorted(set(built) - set(files))]
+    for name, data in sorted(files.items()):
+        if name not in built:
+            problems.extend(lint({name: data}))
+        elif not data.startswith(built[name]):
+            problems.append(f'{name}: not the program or settings file expected here')
+        elif len(data) > MAX_PROGRAM_BYTES:
+            problems.append(f'{name}: {len(data)} bytes, over the {MAX_PROGRAM_BYTES} byte limit for programs')
+        elif any(pattern.search(data) for pattern in SECRETS):
+            problems.append(f'{name}: contains a key-like string')
+        if any(folder in data for folder in private):
+            problems.append(f'{name}: names a folder of the build machine')
     return problems
 
 

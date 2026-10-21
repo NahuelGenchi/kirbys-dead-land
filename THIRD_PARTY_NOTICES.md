@@ -37,8 +37,9 @@ with or endorsed by Nintendo, HAL Laboratory, Motion Twin or Evil Empire.
 
 Revisions are pinned in `tools/oracle_build.py`, `tools/nds_build.py`,
 `scripts/setup_runtime.py`, `scripts/launch_runtime.py` and `requirements.txt`, and
-setup checks each download's hash. For the bridge and the runner, Cargo resolves
-the crates' own dependencies at build time; no `Cargo.lock` is pinned for them.
+setup checks each download's hash. For the bridge and the runner built by a
+source install, Cargo resolves the crates' own dependencies at build time; the
+player packages build both with the `Cargo.lock` files pinned in `packaging/`.
 
 ## Player launcher
 
@@ -74,8 +75,10 @@ and anything distributed with it are covered by the GPL.
 Source archives contain no binaries. Anyone who distributes a built bridge
 (`libkssu_bridge.so`) must also offer its complete corresponding source: this
 project's source at the same commit, plus melon-rs and melonDS at the revisions
-above. Launcher packages (#222) ship the bridge and the oracle runner, so each
-names its source tag in `launcher/NOTICES.txt`; `scripts/build_bundle.py` refuses
+above. The player packages ([releases](docs/RELEASE.md#player-packages)) ship the
+bridge and the oracle runner, so each holds `LICENSE` and `launcher/NOTICES.txt`,
+which names the release tag as the source, and the release that carries them also
+carries the source archive of the same commit. `scripts/build_bundle.py` refuses
 programs that were built on a personal machine unless the bundle is marked as a
 private test.
 

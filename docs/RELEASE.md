@@ -4,7 +4,9 @@
 
 A release is a source archive built from one commit. It holds no ROM, Dead Cells
 file, binary, save, state, recording or generated pack; players build everything
-with `scripts/install.py` (see [Install](../README.md#install)).
+with `scripts/install.py` (see [Install](../README.md#install)). From v0.2.0 a
+release also carries the [player packages](#player-packages): the launcher with
+programs built from the same commit, still without any ROM, game or Kirby art.
 
 ## Building the archive
 
@@ -32,11 +34,142 @@ Before writing anything it runs the release lint, which fails on:
 `tests/test_release_package.py` covers each rule and checks that the current
 commit passes.
 
+## Player packages
+
+`scripts/build_packages.py` makes the two downloads described in
+[Player launcher](LAUNCHER.md#download), each with a `.sha256`:
+
+| File | Layout |
+| :--- | :--- |
+| `KirbysDeadLand-<version>-x86_64.AppImage` | `AppRun`, the desktop entry and icon at the top; `usr/bin/kirbys-dead-land`; the bundle at `usr/share/kirbys-dead-land`, found through `$APPDIR`; `LICENSE` and `NOTICES.txt` in `usr/share/doc/kirbys-dead-land/` |
+| `KirbysDeadLand-<version>-x86_64.tar.gz` | One folder, `KirbysDeadLand-<version>-x86_64/`: `kirbys-dead-land`, the bundle at `share/kirbys-dead-land` beside it, `LICENSE`, `NOTICES.txt`, `README.txt`, the desktop entry, the icon and `add-to-menu.sh` |
+
+The bundle is `scripts/build_bundle.py`'s ([Player
+launcher](LAUNCHER.md#building-and-checking)): the tracked scripts and tools, the
+ReadyToRun runtime adapter, the bridge and the oracle runner. `NOTICES.txt` is
+`launcher/NOTICES.txt` (licenses, and the release tag as the source). It does not
+yet list the crates built into the bridge and the runner or the libraries melonDS
+bundles, so no package is published before #228. The icon is drawn by the
+launcher's own code (`--write-icon`), not taken from the ROM.
+
+```sh
+python3 scripts/build_packages.py --output dist [--tag v0.2.0]
+```
+
+The script:
+
+1. Builds every program from the working tree in a data root of its own
+   (`--build-root`, default `release-build` in the data root), so the lab's bridge is
+   never replaced: `scripts/setup_runtime.py --build --rebuild`,
+   `tools/oracle_build.py` and `tools/nds_build.py` with the `Cargo.lock` files in
+   `packaging/` (the dependency versions the lab's bridge and runner were built
+   with; the build stops if Cargo changes them), and `cargo build --release
+   --locked` for the launcher.
+2. Maps the build machine's folders out of every path the compilers embed: the
+   home folder to `/build/home`, the build root to `/build/data` and the checkout to
+   `/build/kirbys-dead-land`, through `--remap-path-prefix` in `RUSTFLAGS`,
+   `-ffile-prefix-map` in `CFLAGS` and `CXXFLAGS`, and MSBuild's `PathMap`. So
+   `build_bundle.py` accepts the programs without `--private`, on any machine.
+3. Lays out each package and runs the package lint (`lint_package` in
+   `scripts/package_release.py`): the files the build made (launcher, bridge,
+   runner, the two runtime DLLs and their two settings files, the icon) are
+   accepted only at their own paths, must start with the right bytes (ELF, `MZ`,
+   PNG, `{`) and stay under 64 MiB; every other file must pass the release lint
+   above; no file may name the build machine's home folder, build root or checkout,
+   or hold a key-like string.
+4. Writes the `.tar.gz` (file times the commit time, owner root) and the AppImage:
+   the AppImage type 2 runtime (`type2-runtime` release 20251108, pinned by SHA-256)
+   followed by a zstd squashfs image of the AppDir, which is what `appimagetool`
+   writes, made with `mksquashfs` and `SOURCE_DATE_EPOCH`.
+5. Reads each package back (the tar members, and the squashfs image with
+   `unsquashfs` at the runtime's length) and stops unless it holds exactly the files
+   that passed the lint. Then it runs each package's launcher with `--check` in an
+   empty home folder, which must print `Mod files: <folder> (<version>+<commit>)`
+   for its own bundle. Without FUSE the AppImage runs with
+   `APPIMAGE_EXTRACT_AND_RUN=1`.
+
+`--tag` is for releases: the tag, `mod.json` and the launcher's `Cargo.toml` must
+name one version, the tag must name the checked-out commit, and the tree must be
+unchanged. `--skip-build` packages what an earlier run built.
+
+Run directly, the script needs Python 3.11 or later, Rust, CMake, a C++ compiler,
+pkg-config, the ALSA and fontconfig headers and squashfs-tools, and the programs need the glibc of
+the machine that built them. Releases use the workflow below instead.
+
+### Release workflow
+
+`.github/workflows/release.yml` runs when a `v*` tag is pushed, or by hand: with an
+existing tag it builds that tag and attaches the files to its release; without one
+it only builds the chosen branch and keeps the files as a workflow artifact.
+
+- **Build** (read-only token): an `ubuntu:22.04` container pinned by digest on an
+  `ubuntu-24.04` runner, so the programs need only glibc 2.35 and the libstdc++ of
+  Ubuntu 22.04. `scripts/release_tools.sh` installs Ubuntu's compilers, CMake,
+  ALSA and fontconfig headers, ICU, OpenSSL and squashfs-tools, Python 3.14.8
+  (python-build-standalone 20261009, the launcher's own pin) and rustup 1.29.1, both
+  checked by SHA-256, and Rust 1.99.0. The .NET SDK 10.0.401, DCCM, melon-rs and
+  melonDS are pinned by the build scripts. Then `build_packages.py --tag` and
+  `package_release.py`, and the two packages, the source archive and the `.sha256`
+  files are uploaded as the `packages` artifact.
+- **Attach** (the only job that can write): `gh release upload --clobber` to the
+  tag's release, or to a new draft pre-release when the tag has none yet; its notes
+  are written by hand.
+
+Actions are pinned by commit, the checkout keeps no credentials, and the tag
+reaches shell commands only through environment variables.
+
+`scripts/release_container.sh [vX.Y.Z]` runs the same steps on this machine, in
+the same container image, from the committed `HEAD` (or the tag), and copies the
+packages, the source archive and their `.sha256` files to `dist/`. It needs
+Docker; `RELEASE_DOCKER_ARGS` passes extra `docker run` options such as
+`--memory 4g`. A test checks that it and the workflow use one image and the same
+build commands.
+
+### Verification (#222)
+
+2026-10-20, this machine (Ubuntu 26.04, Docker 29.1.3): `scripts/release_container.sh`
+on this branch, which runs the workflow's build steps in its container.
+
+- The container (limited to 3.5 GB and 8 CPUs, `CARGO_BUILD_JOBS=6`) built the
+  runtime, the runner and the bridge (the pinned `Cargo.lock` files unchanged) and the
+  launcher. `build_bundle.py` accepted every program without `--private`. Both
+  packages passed the lint and were read back, and each launcher's `--check` named its
+  own bundle (the AppImage through `APPIMAGE_EXTRACT_AND_RUN`: the container has no
+  FUSE).
+- AppImage 15.2 MB and `.tar.gz` 15.3 MB, 55 files each. No file names a home, build
+  or checkout folder; the compilers' paths read `/build/home`, `/build/data` and
+  `/build/kirbys-dead-land`. The launcher needs glibc 2.35 and fontconfig; the bridge
+  and the runner need glibc 2.34 and GCC 11's libstdc++ (`GLIBCXX_3.4.29`). The
+  bridge exports the same 252 symbols as the lab's, built from the same
+  `src/nds/lib.rs`, with the recompiler.
+- On the host, the AppImage started through FUSE and `--check` in an empty home found
+  `/tmp/.mount_…/usr/share/kirbys-dead-land`; the unpacked `.tar.gz` found its
+  `share/kirbys-dead-land`.
+- Live, offscreen: the AppImage's `--autopilot` with `--smoke-play 72`, in a new data
+  root and config folder. Checks, setup from the found ROM (1 min 16 s), home with
+  Kirby and the 24 icons, then Play. The game loaded the packaged bridge (same SHA-256
+  as in the AppImage): `dc.pr.Game`, live hero, Kirby outfit, original ROM provider,
+  recompiler, 14,577 frames, normal timeout, save isolation installed, real saves
+  unchanged, no fatal log; the last frame shows Kirby in the starting cell. The
+  autopilot exited 0.
+
+Two problems turned up and are fixed here. melonDS turns on GCC link-time
+optimization when CMake supports it, as Ubuntu 22.04's does; that leaves bytecode
+objects Rust's linker cannot read, so `packaging/melonds.cmake` keeps it off, as in
+the lab's builds. The launcher also needs the fontconfig headers to build.
+
+Not run: the workflow on GitHub (Actions is stopped by billing on this repository),
+the attach job, a tag build (`mod.json` says 0.1.0 and the launcher 0.2.0 until #223
+sets the version), the packaged programs on a system older than this one, and a
+desktop without FUSE.
+
 ## GPL
 
 The archive is the complete source of this project, including the melon-rs and
-melonDS patches. Release archives attach no built bridge; anyone who distributes
-one must offer the corresponding source (see the
+melonDS patches. Source archives attach no built bridge. The player packages do,
+so each release that carries them also carries the source archive of the same
+commit, and each package holds `LICENSE` and `NOTICES.txt`, which names the
+release tag as the source (see the
 [notices](../THIRD_PARTY_NOTICES.md#modified-gpl-source)).
 
 ## Going public
