@@ -21,8 +21,9 @@ import struct
 import zlib
 
 from PIL import Image
+from data_root import data_root
 
-DEFAULT_DATA = Path.home() / '.local/share/kirby-dead-cells'
+DEFAULT_DATA = data_root()
 PAGE = 1024
 FIELDS = ('index', 'x', 'y', 'w', 'h', 'ox', 'oy', 'ow', 'oh')
 BUILDER = 'kirby-rom-pose-assets-v1'

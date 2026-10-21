@@ -371,7 +371,8 @@ limited-use ability; Kirby has no health flask (#101).
 
 The local project uses Python 3.12+, Pillow, NumPy, the pinned .NET 10 SDK, DCCM 35.13.6,
 and the pinned melon-rs/melonDS sources. The setup tools download dependencies
-beneath `~/.local/share/kirby-dead-cells/`, not into system directories.
+beneath `~/.local/share/kirby-dead-cells/`, not into system directories. Set
+`KIRBY_DATA_ROOT` to use another data root for every script and tool.
 
 ```sh
 python3 scripts/setup_runtime.py --build

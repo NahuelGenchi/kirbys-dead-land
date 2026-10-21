@@ -25,8 +25,9 @@ import numpy as np
 from PIL import Image
 
 from build_assets import atlas_bytes, read_atlas, write_pak
+from data_root import data_root
 
-ROOT = Path.home() / '.local/share/kirby-dead-cells'
+ROOT = data_root()
 MODEL = 'kirbySuperStarUltra'
 # The skin preview's own page; the in-game page stays blank (#175).
 PREVIEW_PAGE = MODEL + 'Preview0.png'
