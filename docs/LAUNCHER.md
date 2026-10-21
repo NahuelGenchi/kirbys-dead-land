@@ -1,6 +1,6 @@
 # Player launcher
 
-[Back to README](../README.md) · Issue #221 · Milestone M4
+[Back to README](../README.md) · Issues #221, #222 · Milestone M4
 
 The launcher is a desktop program for players who do not use a terminal. Each
 time it opens it checks Steam, Dead Cells, the player's own Kirby Super Star Ultra
@@ -8,8 +8,24 @@ ROM and the sandbox helper. The first time, it sets up the mod from those files.
 After that, a Play button starts Dead Cells with Kirby. Source: `launcher/` (Rust
 and [Slint](https://slint.dev), software rendering, no GPU needed for the window).
 
-Prebuilt downloads are #222; until then the launcher is built from source (see
-[Building](#building-and-checking)).
+## Download
+
+Releases from v0.2.0 carry two downloads of the launcher with everything it
+installs, built by the release workflow ([Player packages](RELEASE.md#player-packages)).
+Neither holds a ROM, a game file or any Kirby art: setup makes those from the
+player's own files.
+
+- **`KirbysDeadLand-<version>-x86_64.AppImage`**: one file. Allow it to run as a
+  program (in the file's Properties, or `chmod +x`), then double-click it. It needs
+  `fusermount3` or `fusermount`, which desktop systems have; without them, run it
+  with `--appimage-extract-and-run` or use the other download.
+- **`KirbysDeadLand-<version>-x86_64.tar.gz`**: unpack it anywhere and double-click
+  `kirbys-dead-land` in the folder, keeping the `share` folder beside it.
+  `add-to-menu.sh` adds a menu entry for that folder.
+
+Each has a `.sha256` beside it. Both carry the GPL `LICENSE` and `NOTICES.txt`
+(the same text as Settings › Licenses). Until v0.2.0 is out, the launcher is built
+from source (see [Building](#building-and-checking)).
 
 ## For players
 
@@ -135,8 +151,12 @@ personal machine name its home folder in their debug paths, so the script refuse
 them unless `--private` marks the bundle as a local test. The launcher finds the
 bundle through `--bundle`, `KIRBYS_DEAD_LAND_BUNDLE`, an AppImage's
 `usr/share/kirbys-dead-land`, or `share/kirbys-dead-land` beside the program.
+`scripts/build_packages.py` builds every part with the build machine's folders
+mapped out of their paths and makes both downloads ([Player
+packages](RELEASE.md#player-packages)).
 
-Other options: `--check` prints the checks and exits (0 when ready to play);
+Other options: `--check` prints the checks and the bundle it found (`Mod files:
+<folder> (<version>+<commit>)`), then exits (0 when ready to play);
 `--screenshot DIR` renders every screen to PNG files with a fixed clock, with
 stand-in art unless `--art-from DATA_ROOT` names a finished setup (those images
 hold ROM art and stay private); `--write-icon FILE` writes the icon. For checks
@@ -189,10 +209,15 @@ beforehand.
   outfit (15,067 frames), original ROM provider enabled, save isolation installed,
   real saves unchanged, no fatal log; the autopilot exited 0.
 - Each screen was also rendered with `--screenshot` and reviewed (#221).
+- Packaged launcher (#222): the AppImage built in the release container ran the same
+  autopilot with `--smoke-play 72` on a new data root: setup 1 min 16 s, then the
+  movement check with the packaged bridge reached `dc.pr.Game` with a live hero and
+  the Kirby outfit (14,577 frames), real saves unchanged, no fatal log. Details in
+  [Releases](RELEASE.md#verification-222).
 
 Not run: a person clicking through the window (the autopilot calls the same
 handlers as the buttons, not pointer events), normal `--play` from the launcher
 with real input and sound, Flatpak or Snap Steam (detected, not tested), other
 distributions, a machine without the developer tools, a Steam that was not running
-(the start and wait path), a game in a second Steam library, and a packaged
-launcher (#222). A clean-machine test is #223.
+(the start and wait path), and a game in a second Steam library. A clean-machine
+test is #223.

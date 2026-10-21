@@ -851,6 +851,9 @@ pub fn print_checks(bundle: Option<PathBuf>) -> bool {
     if let Some(GameStatus::Ready(game)) = &state.found.game {
         println!("Dead Cells: {} ({})", game.dir.display(), game.steam.kind.label());
     }
+    if let Some(bundle) = &state.bundle {
+        println!("Mod files: {} ({})", bundle.root.display(), bundle.id());
+    }
     println!("Data root: {}", state.root.display());
     println!("Setup: {}", if Controller::setup_ready(&state) { "done" } else { "needed" });
     ready

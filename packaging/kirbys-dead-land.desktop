@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Kirby's Dead Land
+Comment=Play as Kirby in Dead Cells
+Exec=kirbys-dead-land
+Icon=kirbys-dead-land
+Terminal=false
+Categories=Game;

@@ -2863,3 +2863,25 @@ the all-ability rendering tests as full gameplay acceptance.
   check through the launcher: `dc.pr.Game`, live hero, Kirby outfit, original ROM
   provider, save isolation installed, real saves unchanged, no fatal log. Not run: a person clicking, normal windowed play from
   the launcher, Flatpak or Snap Steam, other distributions, a packaged launcher.
+## 2026-10-20 — player packages (#222)
+
+- `scripts/build_packages.py` builds the runtime, the bridge, the oracle runner and
+  the launcher with the build machine's folders mapped out of every embedded path,
+  so `build_bundle.py` takes them without `--private`, and writes
+  `KirbysDeadLand-<version>-x86_64.AppImage` (bundle at `usr/share/kirbys-dead-land`)
+  and `.tar.gz` (bundle beside the launcher), each with `LICENSE`, `NOTICES.txt` and a
+  `.sha256`. Each package is linted (`lint_package`), read back and started with
+  `--check`, which now prints the bundle it found.
+- `.github/workflows/release.yml`: on a `v*` tag, builds in a pinned `ubuntu:22.04`
+  container (`scripts/release_tools.sh`: Python 3.14.8, Rust 1.99.0) and attaches the
+  packages and the source archive to the tag's release. `scripts/release_container.sh`
+  runs the same steps locally with Docker. `packaging/` holds the desktop entry,
+  `AppRun`, the tarball's readme and menu script, the bridge's and runner's pinned
+  `Cargo.lock` files and a CMake file that keeps melonDS's LTO off.
+- Source: `python3 -m unittest tests.test_player_packages tests.test_release_package
+  tests.test_launcher_bundle` passes. Build: the container run made both packages
+  (15 MB each, glibc 2.35 at most). Live (offscreen, a new data root): the AppImage's
+  autopilot ran setup and the 72-second movement check with the packaged bridge:
+  `dc.pr.Game`, live hero, Kirby outfit, real saves unchanged, no fatal log. Not run:
+  the workflow on GitHub (Actions stopped by billing), a tag build. Before publishing,
+  the bridge's and runner's crate notices are needed (#228).

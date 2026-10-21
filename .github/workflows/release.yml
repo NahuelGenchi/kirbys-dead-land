@@ -1,0 +1,85 @@
+name: Release packages
+
+# Builds the player packages (docs/RELEASE.md) and the source archive from a
+# version tag and attaches them to that tag's release. Run by hand without a tag,
+# it builds the chosen branch and keeps the files as a workflow artifact only.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to build and attach to its release (leave empty to only build the chosen branch)
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  packages:
+    name: Build the packages
+    runs-on: ubuntu-24.04
+    # Ubuntu 22.04's glibc 2.35 and libstdc++ let the programs run on older systems too.
+    container: ubuntu:22.04@sha256:0a9887931b0e38af2e3487ed39e29436b0535c4f3f52e57745baaf79d1898956
+    timeout-minutes: 90
+    env:
+      TAG: ${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
+    steps:
+      - name: Install git for the checkout
+        run: apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ca-certificates git
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.TAG }}
+          persist-credentials: false
+
+      - name: Install the pinned build tools
+        run: bash scripts/release_tools.sh
+
+      - name: Build the AppImage and the .tar.gz
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          python3 scripts/build_packages.py --output dist ${TAG:+--tag "$TAG"}
+
+      - name: Build the source archive
+        run: python3 scripts/package_release.py --ref HEAD --output dist
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: packages
+          path: |
+            dist/*.AppImage
+            dist/*.tar.gz
+            dist/*.sha256
+          if-no-files-found: error
+
+  release:
+    name: Attach to the release
+    needs: packages
+    if: github.event_name == 'push' || inputs.tag != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: packages
+          path: dist
+
+      - name: Upload the files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
+        run: |
+          # A tag without a release gets a draft pre-release; its notes are written by hand.
+          if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --draft --prerelease \
+              --title "Kirby's Dead Land ${TAG#v}" --notes 'Packages built by the release workflow. Notes to follow.'
+          fi
+          gh release upload "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --clobber

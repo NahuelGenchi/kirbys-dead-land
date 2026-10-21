@@ -1,0 +1,5 @@
+#!/bin/sh
+# The AppImage starts here. The launcher finds its bundle at $APPDIR/usr/share/kirbys-dead-land.
+APPDIR=${APPDIR:-$(dirname "$(readlink -f "$0")")}
+export APPDIR
+exec "$APPDIR/usr/bin/kirbys-dead-land" "$@"
