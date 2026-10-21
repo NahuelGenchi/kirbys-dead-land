@@ -32,7 +32,6 @@ with or endorsed by Nintendo, HAL Laboratory, Motion Twin or Evil Empire.
 | serde_json (Rust crate) | 1.0.151 | MIT OR Apache-2.0 | <https://github.com/serde-rs/json> | Oracle runner |
 | libjpeg-turbo (`libturbojpeg0`) | Ubuntu 1:2.1.5-4ubuntu4 | BSD-3-Clause and IJG | <https://libjpeg-turbo.org> | Preloaded for DCCM's `fmt.hdll` |
 | NumPy (Python) | >=1.26 | BSD-3-Clause | <https://github.com/numpy/numpy> | Asset tools |
-| Universal Modder | player's checkout | MIT | <https://github.com/rehan-remade/universal-modder> | Save backups before launch |
 | Pillow (Python) | >=12.1,<13 | MIT-CMU | <https://github.com/python-pillow/Pillow> | Asset tools |
 
 Revisions are pinned in `tools/oracle_build.py`, `tools/nds_build.py`,

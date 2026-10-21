@@ -20,7 +20,7 @@ and DCCM equipment/damage/save integration.
 | Final input | All nine real binding masks, inverted directions and physical-reader movement/jump passed; base-form left-click on the starting sword runs the original inhale with no host attack (#39) |
 | Local delivery | Final build staged; fresh-profile launch passed,20s real gameplay captured, test saves archived and play profile empty |
 
-Each launch backs up original saves through Universal Modder, mounts installed
+Each launch backs up original saves (a verified archive in the data root), mounts installed
 files read-only and redirects file/Cloud saves to the private profile. Test input
 is internal to the isolated process. Normal play uses `./play-kirby`; no loader is
 installed into Steam's game directory. Nothing is published automatically.

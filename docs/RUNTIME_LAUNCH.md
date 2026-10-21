@@ -28,7 +28,7 @@ setup, stage, check and launch scripts still overrides it for those scripts.
 
 A separate working directory is insufficient: this build's `tool.File` reads and writes Steam Cloud. The opt-in `LabIsolation` helper is installed before game initialization and redirects all four `tool.File` operations (`exists`, `getBytes`, `saveBytes`, `delete`) to the private `lab/save` directory. It also redirects the path used by local backups, disables the game's Cloud storage operations for this process, and prevents the in-game Cloud toggle from altering Steam settings. Steam authentication and ownership calls are not changed by this helper; Goldberg remains disabled and is omitted from staging.
 
-The launcher additionally starts the game inside bubblewrap with a read-only host filesystem, a writable private lab, and a fresh `/tmp`. It retains Steam IPC needed by the owned installation. The launcher runs universal-modder save backups before every launch and compares SHA-256 inventories of the real local and Steam saves afterward. `save-isolation.ready` is recreated for each run; a stale marker cannot count as successful initialization.
+The launcher additionally starts the game inside bubblewrap with a read-only host filesystem, a writable private lab, and a fresh `/tmp`. It retains Steam IPC needed by the owned installation. Before every launch the launcher writes a verified backup of the real saves (`scripts/save_backup.py`, #220) and compares SHA-256 inventories of the real local and Steam saves afterward. `save-isolation.ready` is recreated for each run; a stale marker cannot count as successful initialization.
 
 Relevant environment variables are used only by the lab helper:
 
@@ -70,7 +70,7 @@ under `repros/clean-install-20261020/`, then
 
 ```sh
 HOME=<that folder>/home CARGO_HOME=~/.cargo RUSTUP_HOME=~/.rustup \
-  python3 -I scripts/install.py --rom "<ROM>" --game "<Steam Dead Cells>" --toolkit <Universal Modder>
+  python3 -I scripts/install.py --rom "<ROM>" --game "<Steam Dead Cells>"
 ```
 
 The fresh `HOME` gives an empty `~/.local/share/kirby-dead-cells/` with no symlinks;
