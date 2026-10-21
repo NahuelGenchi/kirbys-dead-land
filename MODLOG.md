@@ -2803,3 +2803,12 @@ the all-ability rendering tests as full gameplay acceptance.
   going-public checklist in `docs/RELEASE.md`. The 22 merged pull request branches
   still on GitHub were deleted.
 - Source: `python3 -m unittest discover -s tests -p 'test_*.py'` passes. Live: none.
+
+## 2026-10-20 — M4, the player launcher milestone (#218)
+
+- New milestone M4 — Player launcher (issues #218-#223): prebuilt downloads, a
+  desktop launcher with checks for Steam, Dead Cells and the player's ROM, one-time
+  setup and a Play button. Listed in `docs/TRACKING.md`, the README roadmap, the work
+  item form and the tracking workflow, which now also reads `Milestone: M4` lines.
+- Source: the workflow and form YAML parse, and the workflow's script passes
+  `node --check`. Live: none.

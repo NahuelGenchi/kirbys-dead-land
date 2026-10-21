@@ -435,6 +435,7 @@ the dated journal records subsequent implementation.
 | **M1 · Playable mod** | Kirby playable in Dead Cells with original-ROM gameplay; play-test bugs and fixes |
 | **M2 · Gameplay coverage** | Measured parity across host enemies, hazards, items, bosses and biomes |
 | **M3 · Release** | Packaging and publishing without ROM, game files or generated packs |
+| **M4 · Player launcher** | One launcher for players: prebuilt downloads, checks for Steam, Dead Cells and their ROM, one-time setup and a Play button |
 
 Every change, whether a feature, bug fix, enhancement, document or repository
 operation, starts with an issue assigned to a milestone and is delivered through a

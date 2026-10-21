@@ -65,7 +65,8 @@ jobs:
             M0: ['M0 — Project foundation', 'Repository import, documentation, agent instructions, and traceable issue-to-PR delivery.'],
             M1: ['M1 — Playable mod', 'Kirby playable in Dead Cells with original-ROM gameplay, plus play-test defects and their fixes.'],
             M2: ['M2 — Gameplay coverage', 'Measured parity across host enemies, hazards, items, bosses, and biomes.'],
-            M3: ['M3 — Release', 'Packaging and publishing without ROM, game files, or generated asset packs.']
+            M3: ['M3 — Release', 'Packaging and publishing without ROM, game files, or generated asset packs.'],
+            M4: ['M4 — Player launcher', 'A single launcher for players: prebuilt downloads, checks for Steam, Dead Cells and the player\'s ROM, one-time setup and a Play button.']
           };
           const existingMilestones = await list('/milestones?state=all');
           const milestones = {};
@@ -99,7 +100,7 @@ jobs:
             const path = `/issues/${item.number}`;
             const body = item.body ?? '';
             const labels = new Set(item.labels.map(label => label.name));
-            const milestoneKey = body.match(/(?:^Milestone:\s*|^### Milestone\s*\n\s*)(M[0-3])\b/im)?.[1];
+            const milestoneKey = body.match(/(?:^Milestone:\s*|^### Milestone\s*\n\s*)(M[0-4])\b/im)?.[1];
             let desired = item.milestone ?? milestones[milestoneKey ?? 'M1'];
             let incomplete = false;
             if (item.pull_request) {
