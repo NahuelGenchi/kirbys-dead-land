@@ -5,7 +5,7 @@ import sys
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
-from package_release import EXCLUDED, PROJECT, lint, tracked_files
+from package_release import ALLOWED_BINARIES, EXCLUDED, PROJECT, lint, tracked_files
 
 
 class ReleaseLintTests(unittest.TestCase):
@@ -28,6 +28,13 @@ class ReleaseLintTests(unittest.TestCase):
     def test_binary_and_large_files_fail(self):
         self.assertEqual(len(lint({'tools/blob.py': b'a\0b'})), 1)
         self.assertEqual(len(lint({'docs/huge.md': b'a' * (1024 * 1024 + 1)})), 1)
+
+    def test_only_the_pinned_launcher_fonts_are_allowed_binaries(self):
+        for name in ALLOWED_BINARIES:
+            with self.subTest(name=name):
+                self.assertEqual(lint({name: (PROJECT / name).read_bytes()}), [])
+                self.assertEqual(len(lint({name: b'\0changed font'})), 1)
+        self.assertEqual(len(lint({'launcher/ui/fonts/Other.ttf': b'\0font'})), 1)
 
     def test_key_like_strings_fail(self):
         for secret in (b'ghp_' + b'a' * 36, b'token = "sk-' + b'b' * 40 + b'"',

@@ -1,0 +1,287 @@
+import "fonts/Fredoka.ttf";
+import "fonts/Nunito.ttf";
+import { Theme, Art, Tone } from "theme.slint";
+import { Drawn, Icons, Icon, Sparkle, IconButton, LinkButton } from "widgets.slint";
+import { ChecksScreen, SetupScreen, HomeScreen, CheckItem, StepItem, Ability, PlayState, SetupState } from "screens.slint";
+import { SettingsSheet, Question, Licenses, Toast } from "overlays.slint";
+
+export { Theme, Art, Tone, CheckItem, StepItem, Ability, PlayState, SetupState }
+
+export enum Screen { checks, setup, home }
+
+export component AppWindow inherits Window {
+    title: "Kirby's Dead Land";
+    icon: root.app-icon;
+    preferred-width: 1040px;
+    preferred-height: 680px;
+    min-width: 980px;
+    min-height: 660px;
+    background: #0b0d2a;
+    default-font-family: Theme.body;
+    default-font-size: 15px;
+
+    in property <string> version;
+    in property <image> app-icon;
+    in-out property <Screen> screen: Screen.checks;
+    in property <bool> animate-art: true;
+
+    // Checks
+    in property <[CheckItem]> checks;
+    in property <bool> checks-ready;
+    in property <bool> checks-blocked;
+    in property <bool> checking;
+    in property <bool> setup-done;
+    callback check-action(string, string);
+    callback checks-next();
+    callback recheck();
+
+    // Setup
+    in property <[StepItem]> steps;
+    in property <int> current-step: -1;
+    in property <float> setup-progress;
+    in property <SetupState> setup-state;
+    in property <string> setup-remaining;
+    in property <string> setup-error;
+    in property <string> setup-log;
+    in-out property <bool> setup-details;
+    callback setup-cancel();
+    callback setup-retry();
+    callback setup-back();
+    callback copy-log();
+
+    // Home
+    in property <image> kirby;
+    in property <image> kirby-happy;
+    in property <bool> has-kirby;
+    in property <[Ability]> abilities;
+    in property <PlayState> play-state;
+    in property <string> game-detail;
+    in property <string> home-notice;
+    callback play();
+    callback stop-game();
+
+    // Update banner
+    in property <string> update-version;
+    callback open-release();
+
+    // Settings
+    in-out property <bool> settings-open;
+    in property <string> rom-name;
+    in property <string> rom-detail;
+    in property <string> game-path;
+    in property <string> data-detail;
+    in property <string> update-detail;
+    in property <string> update-action;
+    in property <bool> update-busy;
+    in-out property <bool> auto-update: true;
+    callback settings-action(string);
+    callback auto-update-changed(bool);
+
+    // Licenses
+    in-out property <bool> licenses-open;
+    in property <string> licenses;
+
+    // A question with two answers
+    in-out property <string> question-id;
+    in property <string> question-title;
+    in property <string> question-body;
+    in property <string> question-confirm;
+    in property <string> question-cancel;
+    in property <bool> question-warning;
+    callback answer(string, bool);
+
+    // A short confirmation such as "Copied"
+    in-out property <string> toast;
+    in-out property <bool> toast-shown;
+
+    public function show-toast(text: string) {
+        root.toast = text;
+        root.toast-shown = true;
+        toast-timer.running = false;
+        toast-timer.running = true;
+    }
+
+    // The clipboard is reached through a text field the player never sees.
+    public function copy-text(text: string) {
+        clipboard.text = text;
+        clipboard.select-all();
+        clipboard.copy();
+        root.show-toast("Copied");
+    }
+
+    toast-timer := Timer {
+        interval: 2200ms;
+        running: false;
+        triggered => {
+            root.toast-shown = false;
+            self.running = false;
+        }
+    }
+
+    clipboard := TextInput {
+        x: -100px;
+        width: 10px;
+        height: 10px;
+        opacity: 0;
+        read-only: true;
+    }
+
+    Drawn {
+        width: 100%;
+        height: 100%;
+        source: Art.sky(self.width, self.height);
+    }
+
+    header := HorizontalLayout {
+        y: 0;
+        height: 76px;
+        padding-left: 40px;
+        padding-right: 30px;
+        spacing: 12px;
+        VerticalLayout {
+            alignment: center;
+            Sparkle { width: 28px; height: 28px; animated: false; }
+        }
+        Text {
+            text: "Kirby's Dead Land";
+            font-family: Theme.display;
+            font-weight: 600;
+            font-size: 21px;
+            color: Theme.ink;
+            vertical-alignment: center;
+        }
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                height: 22px;
+                width: version-text.preferred-width + 16px;
+                border-radius: 11px;
+                background: #ffffff10;
+                border-width: 1px;
+                border-color: Theme.line;
+                version-text := Text { text: root.version; font-size: 12px; font-weight: 700; color: Theme.ink-faint; }
+            }
+        }
+        Rectangle { horizontal-stretch: 1; }
+        if root.update-version != "": VerticalLayout {
+            alignment: center;
+            Rectangle {
+                height: 34px;
+                width: update-layout.preferred-width;
+                border-radius: 17px;
+                background: #ffcc4d1c;
+                border-width: 1px;
+                border-color: #ffcc4d55;
+                update-layout := HorizontalLayout {
+                    padding-left: 12px;
+                    padding-right: 14px;
+                    spacing: 8px;
+                    VerticalLayout { alignment: center; Icon { source: Icons.sparkles; color: Theme.gold; width: 16px; height: 16px; } }
+                    Text { text: "Version " + root.update-version + " is out"; color: Theme.ink; font-size: 13.5px; font-weight: 700; vertical-alignment: center; }
+                    LinkButton { text: "See what's new"; color: Theme.gold; font-size: 13.5px; clicked => { root.open-release(); } }
+                }
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            IconButton { icon: Icons.settings; label: "Settings"; clicked => { root.settings-open = true; } }
+        }
+    }
+
+    Rectangle {
+        y: header.height;
+        height: root.height - header.height;
+        if root.screen == Screen.checks: ChecksScreen {
+            width: 100%;
+            height: 100%;
+            checks: root.checks;
+            ready: root.checks-ready;
+            blocked: root.checks-blocked;
+            checking: root.checking;
+            setup-done: root.setup-done;
+            act(id, which) => { root.check-action(id, which); }
+            copy-text(text) => { root.copy-text(text); }
+            next => { root.checks-next(); }
+            recheck => { root.recheck(); }
+        }
+        if root.screen == Screen.setup: SetupScreen {
+            width: 100%;
+            height: 100%;
+            steps: root.steps;
+            current: root.current-step;
+            progress: root.setup-progress;
+            state: root.setup-state;
+            remaining: root.setup-remaining;
+            error: root.setup-error;
+            log: root.setup-log;
+            details <=> root.setup-details;
+            cancel => { root.setup-cancel(); }
+            retry => { root.setup-retry(); }
+            back => { root.setup-back(); }
+            copy-log => { root.copy-log(); }
+        }
+        if root.screen == Screen.home: HomeScreen {
+            width: 100%;
+            height: 100%;
+            kirby: root.kirby;
+            kirby-happy: root.kirby-happy;
+            has-kirby: root.has-kirby;
+            abilities: root.abilities;
+            play-state: root.play-state;
+            game-detail: root.game-detail;
+            notice: root.home-notice;
+            animate-art: root.animate-art && root.play-state != PlayState.running;
+            play => { root.play(); }
+            stop => { root.stop-game(); }
+        }
+    }
+
+    SettingsSheet {
+            width: 100%;
+            height: 100%;
+        open: root.settings-open;
+        version: root.version;
+        rom-name: root.rom-name;
+        rom-detail: root.rom-detail;
+        game-detail: root.game-detail;
+        game-path: root.game-path;
+        data-detail: root.data-detail;
+        update-detail: root.update-detail;
+        update-action: root.update-action;
+        update-busy: root.update-busy;
+        setup-running: root.screen == Screen.setup && root.setup-state == SetupState.running;
+        setup-done: root.setup-done;
+        auto-update <=> root.auto-update;
+        close => { root.settings-open = false; }
+        act(which) => { root.settings-action(which); }
+        auto-update-changed(value) => { root.auto-update-changed(value); }
+    }
+
+    if root.licenses-open: Licenses {
+            width: 100%;
+            height: 100%;
+        text: root.licenses;
+        close => { root.licenses-open = false; }
+    }
+
+    if root.question-id != "": Question {
+            width: 100%;
+            height: 100%;
+        title: root.question-title;
+        body: root.question-body;
+        confirm: root.question-confirm;
+        cancel: root.question-cancel;
+        warning: root.question-warning;
+        answer(yes) => {
+            root.answer(root.question-id, yes);
+        }
+    }
+
+    Toast {
+        x: (root.width - self.width) / 2;
+        // Above the ability strip on the home screen.
+        y: root.height - (root.screen == Screen.home ? 136px : 76px);
+        text: root.toast;
+        shown: root.toast-shown;
+    }
+}

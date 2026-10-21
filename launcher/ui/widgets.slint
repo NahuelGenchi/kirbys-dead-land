@@ -1,0 +1,471 @@
+// Buttons, badges and the other small pieces the screens are built from.
+import { Theme, Art, Tone } from "theme.slint";
+
+export global Icons {
+    out property <image> check: @image-url("icons/check.svg");
+    out property <image> x: @image-url("icons/x.svg");
+    out property <image> warn: @image-url("icons/triangle-alert.svg");
+    out property <image> alert: @image-url("icons/circle-alert.svg");
+    out property <image> settings: @image-url("icons/settings.svg");
+    out property <image> folder: @image-url("icons/folder-open.svg");
+    out property <image> refresh: @image-url("icons/refresh-cw.svg");
+    out property <image> play: @image-url("icons/play.svg");
+    out property <image> external: @image-url("icons/external-link.svg");
+    out property <image> copy: @image-url("icons/copy.svg");
+    out property <image> chevron-right: @image-url("icons/chevron-right.svg");
+    out property <image> chevron-left: @image-url("icons/chevron-left.svg");
+    out property <image> download: @image-url("icons/download.svg");
+    out property <image> file-search: @image-url("icons/file-search.svg");
+    out property <image> shield: @image-url("icons/shield-check.svg");
+    out property <image> info: @image-url("icons/info.svg");
+    out property <image> gamepad: @image-url("icons/gamepad-2.svg");
+    out property <image> sparkles: @image-url("icons/sparkles.svg");
+    out property <image> drive: @image-url("icons/hard-drive.svg");
+    out property <image> log: @image-url("icons/scroll-text.svg");
+    out property <image> wrench: @image-url("icons/wrench.svg");
+    out property <image> update: @image-url("icons/circle-arrow-up.svg");
+    out property <image> terminal: @image-url("icons/terminal.svg");
+    out property <image> clock: @image-url("icons/clock.svg");
+    out property <image> stop: @image-url("icons/square.svg");
+    out property <image> save: @image-url("icons/save.svg");
+    out property <image> package: @image-url("icons/package.svg");
+    out property <image> search: @image-url("icons/search.svg");
+    out property <image> heart: @image-url("icons/heart.svg");
+}
+
+// An image drawn by src/art.rs at the size it is shown; it asks for no size itself.
+export component Drawn inherits Image {
+    preferred-width: 0px;
+    preferred-height: 0px;
+}
+
+// A gold four-point sparkle; `twinkle` sets how far it fades between beats.
+export component Sparkle {
+    in property <color> color: Theme.gold;
+    in property <duration> period: 2600ms;
+    in property <duration> phase: 0ms;
+    in property <float> twinkle: 0.7;
+    in property <bool> animated: true;
+    Path {
+        width: 100%;
+        height: 100%;
+        viewbox-width: 100;
+        viewbox-height: 100;
+        commands: "M 50 0 C 54 34 66 46 100 50 C 66 54 54 66 50 100 C 46 66 34 54 0 50 C 34 46 46 34 50 0 Z";
+        fill: root.color;
+        opacity: root.animated ? 1 - root.twinkle * (0.5 + 0.5 * sin(((animation-tick() + root.phase) / root.period) * 360deg)) : 1;
+    }
+}
+
+export component Spinner {
+    in property <color> color: Theme.pink;
+    in property <length> size: 18px;
+    in property <length> thickness: 2.5px;
+    width: root.size;
+    height: root.size;
+    Drawn {
+        width: 100%;
+        height: 100%;
+        source: Art.arc(root.size, root.thickness, mod(animation-tick() / 1ms, 1000) * 0.36deg, root.color);
+    }
+}
+
+export component Icon inherits Image {
+    in property <color> color: Theme.ink;
+    colorize: root.color;
+    width: 20px;
+    height: 20px;
+}
+
+export component FocusRing inherits Rectangle {
+    in property <bool> shown;
+    in property <length> radius;
+    in property <length> around-width;
+    in property <length> around-height;
+    x: -4px;
+    y: -4px;
+    width: root.around-width + 8px;
+    height: root.around-height + 8px;
+    border-radius: root.radius + 4px;
+    border-width: root.shown ? 2px : 0px;
+    border-color: Theme.gold;
+}
+
+// The pink call to action. `glow` adds the soft light around it.
+export component PrimaryButton {
+    in property <string> text;
+    in property <image> icon;
+    in property <bool> has-icon: false;
+    in property <bool> enabled: true;
+    in property <bool> busy: false;
+    in property <bool> glow: true;
+    // Off while the button only shows a state, such as "Playing".
+    in property <bool> interactive: true;
+    in property <length> font-size: 17px;
+    in property <color> from: Theme.pink;
+    in property <color> to: Theme.peach;
+    out property <bool> hovered: touch.has-hover;
+    callback clicked;
+    height: 50px;
+    min-width: content.min-width;
+    forward-focus: focus;
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-enabled: root.enabled;
+    accessible-action-default => { if root.enabled && !root.busy { root.clicked(); } }
+
+    if root.glow: Drawn {
+        x: -22px;
+        y: -16px;
+        width: root.width + 44px;
+        height: root.height + 44px;
+        source: Art.glow(root.width, root.height, root.height / 2, 22px, root.from);
+        opacity: !root.enabled ? 0 : touch.has-hover && root.interactive ? 0.95 : 0.55;
+        animate opacity { duration: 200ms; }
+    }
+    Drawn {
+        width: 100%;
+        height: 100%;
+        source: root.enabled ? Art.pill(root.width, root.height, root.height / 2, root.from, root.to) : Art.pill(root.width, root.height, root.height / 2, #3d3f78, #3d3f78);
+    }
+    Rectangle {
+        border-radius: root.height / 2;
+        background: !root.interactive ? transparent : touch.pressed ? #0000002e : touch.has-hover ? #ffffff1c : transparent;
+        animate background { duration: 140ms; }
+    }
+    content := HorizontalLayout {
+        alignment: center;
+        spacing: 10px;
+        padding-left: 24px;
+        padding-right: 24px;
+        if root.busy: VerticalLayout {
+            alignment: center;
+            Spinner { color: white; size: 18px; }
+        }
+        if root.has-icon && !root.busy: VerticalLayout {
+            alignment: center;
+            Icon { source: root.icon; color: white; width: root.font-size + 2px; height: root.font-size + 2px; }
+        }
+        Text {
+            text: root.text;
+            font-family: Theme.display;
+            font-weight: 600;
+            font-size: root.font-size;
+            letter-spacing: 0.3px;
+            color: root.enabled ? white : #ffffff70;
+            vertical-alignment: center;
+        }
+    }
+    touch := TouchArea {
+        enabled: root.enabled && !root.busy && root.interactive;
+        mouse-cursor: root.enabled && !root.busy && root.interactive ? pointer : default;
+        clicked => { root.clicked(); }
+    }
+    focus := FocusScope {
+        enabled: root.enabled && root.interactive;
+        key-pressed(event) => {
+            if event.text == Key.Return || event.text == " " {
+                if root.enabled && !root.busy { root.clicked(); }
+                return accept;
+            }
+            reject
+        }
+    }
+    FocusRing { shown: focus.has-focus; radius: root.height / 2; around-width: root.width; around-height: root.height; }
+}
+
+// A quieter button: a glassy outline that lights up on hover.
+export component SecondaryButton {
+    in property <string> text;
+    in property <image> icon;
+    in property <bool> has-icon: false;
+    in property <bool> enabled: true;
+    in property <bool> busy: false;
+    in property <length> font-size: 14.5px;
+    in property <color> accent: Theme.ink;
+    callback clicked;
+    height: 38px;
+    min-width: content.min-width;
+    forward-focus: focus;
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-enabled: root.enabled;
+    accessible-action-default => { if root.enabled { root.clicked(); } }
+
+    Rectangle {
+        border-radius: root.height / 2;
+        background: touch.pressed ? #ffffff10 : touch.has-hover ? #ffffff1f : #ffffff0d;
+        border-width: 1px;
+        border-color: touch.has-hover ? Theme.line-strong : Theme.line;
+        animate background { duration: 140ms; }
+    }
+    content := HorizontalLayout {
+        alignment: center;
+        spacing: 8px;
+        padding-left: 16px;
+        padding-right: 16px;
+        if root.busy: VerticalLayout {
+            alignment: center;
+            Spinner { color: root.accent; size: 15px; thickness: 2px; }
+        }
+        if root.has-icon && !root.busy: VerticalLayout {
+            alignment: center;
+            Icon { source: root.icon; color: root.accent; width: 16px; height: 16px; }
+        }
+        Text {
+            text: root.text;
+            font-family: Theme.display;
+            font-weight: 500;
+            font-size: root.font-size;
+            color: root.enabled ? root.accent : Theme.ink-faint;
+            vertical-alignment: center;
+        }
+    }
+    touch := TouchArea {
+        enabled: root.enabled && !root.busy;
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+    focus := FocusScope {
+        enabled: root.enabled;
+        key-pressed(event) => {
+            if event.text == Key.Return || event.text == " " {
+                if root.enabled { root.clicked(); }
+                return accept;
+            }
+            reject
+        }
+    }
+    FocusRing { shown: focus.has-focus; radius: root.height / 2; around-width: root.width; around-height: root.height; }
+}
+
+// Text that acts as a link.
+export component LinkButton {
+    in property <string> text;
+    in property <image> icon;
+    in property <bool> has-icon: false;
+    in property <color> color: Theme.pink-soft;
+    in property <length> font-size: 14px;
+    callback clicked;
+    min-width: content.min-width;
+    min-height: 24px;
+    forward-focus: focus;
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-action-default => { root.clicked(); }
+    content := HorizontalLayout {
+        spacing: 6px;
+        alignment: start;
+        if root.has-icon: VerticalLayout {
+            alignment: center;
+            Icon { source: root.icon; color: root.color; width: root.font-size + 1px; height: root.font-size + 1px; }
+        }
+        VerticalLayout {
+            alignment: center;
+            label := Text {
+                text: root.text;
+                color: touch.has-hover ? Theme.ink : root.color;
+                font-size: root.font-size;
+                font-weight: 700;
+            }
+            Rectangle {
+                height: 1px;
+                background: touch.has-hover ? Theme.ink : transparent;
+            }
+        }
+    }
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+    focus := FocusScope {
+        key-pressed(event) => {
+            if event.text == Key.Return || event.text == " " { root.clicked(); return accept; }
+            reject
+        }
+    }
+    FocusRing { shown: focus.has-focus; radius: 6px; around-width: root.width; around-height: root.height; }
+}
+
+export component IconButton {
+    in property <image> icon;
+    in property <string> label;
+    in property <length> size: 40px;
+    in property <color> color: Theme.ink-dim;
+    callback clicked;
+    width: root.size;
+    height: root.size;
+    forward-focus: focus;
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-action-default => { root.clicked(); }
+    Rectangle {
+        border-radius: root.size / 2;
+        background: touch.pressed ? #ffffff14 : touch.has-hover ? #ffffff1f : transparent;
+        animate background { duration: 140ms; }
+    }
+    Icon {
+        source: root.icon;
+        color: touch.has-hover ? Theme.ink : root.color;
+        width: root.size * 0.5;
+        height: root.size * 0.5;
+    }
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+    focus := FocusScope {
+        key-pressed(event) => {
+            if event.text == Key.Return || event.text == " " { root.clicked(); return accept; }
+            reject
+        }
+    }
+    FocusRing { shown: focus.has-focus; radius: root.size / 2; around-width: root.width; around-height: root.height; }
+}
+
+// A glass card with a soft shadow.
+export component Card {
+    in property <length> radius: 22px;
+    in property <color> background: Theme.surface;
+    in property <bool> shadow: true;
+    if root.shadow: Drawn {
+        x: -34px;
+        y: -22px;
+        width: root.width + 68px;
+        height: root.height + 68px;
+        source: Art.glow(root.width, root.height, root.radius, 34px, #04051ab0);
+    }
+    Rectangle {
+        border-radius: root.radius;
+        background: root.background;
+        border-width: 1px;
+        border-color: Theme.line;
+    }
+    @children
+}
+
+// A round status mark: a number, a spinner, a check, a warning or a cross.
+export component Badge {
+    in property <Tone> tone;
+    in property <string> label;
+    in property <length> size: 36px;
+    width: root.size;
+    height: root.size;
+    accessible-role: image;
+    accessible-label: root.tone == Tone.ok ? "Done" : root.tone == Tone.warn ? "Warning" : root.tone == Tone.error ? "Problem" : root.tone == Tone.busy ? "Working" : "Waiting";
+    Rectangle {
+        border-radius: root.size / 2;
+        background: root.tone == Tone.pending ? #ffffff0a : Theme.tone-color(root.tone).with-alpha(0.15);
+        border-width: 1.5px;
+        border-color: root.tone == Tone.pending ? Theme.line-strong : Theme.tone-color(root.tone).with-alpha(0.55);
+    }
+    if root.tone == Tone.ok: Icon { source: Icons.check; color: Theme.mint; width: root.size * 0.5; height: root.size * 0.5; }
+    if root.tone == Tone.warn: Icon { source: Icons.warn; color: Theme.amber; width: root.size * 0.48; height: root.size * 0.48; }
+    if root.tone == Tone.error: Icon { source: Icons.x; color: Theme.red; width: root.size * 0.5; height: root.size * 0.5; }
+    if root.tone == Tone.busy: Spinner { size: root.size * 0.56; thickness: root.size / 14; color: Theme.pink; }
+    if root.tone == Tone.pending: Text {
+        text: root.label;
+        color: Theme.ink-faint;
+        font-family: Theme.display;
+        font-weight: 600;
+        font-size: root.size * 0.4;
+    }
+}
+
+export component Chip {
+    in property <string> text;
+    in property <image> icon;
+    in property <color> color: Theme.mint;
+    height: 30px;
+    min-width: layout.min-width;
+    Rectangle {
+        border-radius: self.height / 2;
+        background: #ffffff0d;
+        border-width: 1px;
+        border-color: Theme.line;
+    }
+    layout := HorizontalLayout {
+        padding-left: 11px;
+        padding-right: 13px;
+        spacing: 7px;
+        VerticalLayout {
+            alignment: center;
+            Icon { source: root.icon; color: root.color; width: 15px; height: 15px; }
+        }
+        Text {
+            text: root.text;
+            color: Theme.ink-dim;
+            font-size: 13px;
+            font-weight: 700;
+            vertical-alignment: center;
+        }
+    }
+}
+
+export component ProgressBar {
+    in property <float> progress;
+    height: 8px;
+    Rectangle {
+        border-radius: root.height / 2;
+        background: #ffffff14;
+    }
+    if root.progress > 0: Drawn {
+        x: 0;
+        width: max(root.height, root.width * min(1, root.progress));
+        height: 100%;
+        source: Art.pill(self.width, self.height, root.height / 2, Theme.gold, Theme.pink);
+    }
+}
+
+// A dark box holding a command or a path, with a copy button.
+export component CommandBox {
+    in property <string> text;
+    callback copy;
+    height: 38px;
+    Rectangle {
+        border-radius: 10px;
+        background: Theme.well;
+        border-width: 1px;
+        border-color: Theme.line;
+    }
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 4px;
+        spacing: 6px;
+        Text {
+            text: root.text;
+            font-family: Theme.mono;
+            font-size: 13px;
+            color: Theme.gold;
+            vertical-alignment: center;
+            overflow: elide;
+            horizontal-stretch: 1;
+        }
+        VerticalLayout {
+            alignment: center;
+            IconButton { icon: Icons.copy; label: "Copy the command"; size: 30px; clicked => { root.copy(); } }
+        }
+    }
+}
+
+export component Eyebrow inherits Text {
+    font-family: Theme.display;
+    font-weight: 600;
+    font-size: 13px;
+    letter-spacing: 2.4px;
+    color: Theme.pink-soft;
+}
+
+export component Title inherits Text {
+    font-family: Theme.display;
+    font-weight: 600;
+    font-size: 40px;
+    color: Theme.ink;
+    wrap: word-wrap;
+}
+
+export component Body inherits Text {
+    font-size: 15.5px;
+    color: Theme.ink-dim;
+    wrap: word-wrap;
+}

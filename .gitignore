@@ -12,3 +12,6 @@ obj/
 *.so
 *.hdll
 .venv/
+
+# Rust build output (the launcher)
+target/

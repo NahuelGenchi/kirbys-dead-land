@@ -10,6 +10,8 @@ python3 scripts/launch_runtime.py --seconds 50 --start-game \
   --outfit KirbySuperStarUltra --input-plan movement
 ```
 
+`--prepare` only fetches and unpacks the private TurboJPEG library (below) and exits; the [player launcher](LAUNCHER.md) runs it during setup. `--steam-root` names the Steam installation whose `userdata` holds the cloud saves to back up, for a game installed in a second Steam library; by default it is the library that holds the game.
+
 For normal keyboard/controller play from a desktop terminal, run `python3 scripts/launch_runtime.py --play`. Choose New Game in the game menu to start as Kirby. This mode uses real input and audio, has no time limit, and records no framebuffer or emulator trace. It retains the same private save directory. `--play` cannot be combined with automated input or automatic new-game options. Windowed interactive use is available but has not been exercised by the offscreen integration tests.
 
 The launcher changes only the private lab profile. It never installs the loader into the Steam game directory or sends desktop keyboard or mouse input. A bounded smoke process is terminated by its exact subprocess handle; bubblewrap's PID namespace cleans up that launch's children.
@@ -106,7 +108,7 @@ a distribution other than this Ubuntu-based one.
 
 ## Linux dependency repair
 
-The released `fmt.hdll` references `tjInitDecompress` without declaring a TurboJPEG dependency. On this machine this crashed when the menu's JPEG news image loaded. The launcher downloads a pinned Ubuntu `libturbojpeg0` package, extracts it beneath the private data root, and preloads its library. No system package is installed.
+The released `fmt.hdll` references `tjInitDecompress` without declaring a TurboJPEG dependency. On this machine this crashed when the menu's JPEG news image loaded. The launcher downloads a pinned Ubuntu `libturbojpeg0` package, extracts it beneath the private data root, and preloads its library. No system package is installed. Without `dpkg-deb`, the script unpacks the package itself (an `ar` archive holding a zstd `data.tar`, which Python reads from 3.14).
 
 - Package: `libturbojpeg0` 1:2.1.5-4ubuntu4, amd64.
 - SHA-256: `ea835d7bb9800202058b79118ff27528b48a27a528c46f3a9bff435bbb5f0ed8`.

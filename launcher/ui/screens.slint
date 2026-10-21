@@ -1,0 +1,589 @@
+// The three main screens: checks, setup and home.
+import { Theme, Art, Tone } from "theme.slint";
+import { Drawn, Icons, Icon, Sparkle, Spinner, PrimaryButton, SecondaryButton, LinkButton, IconButton, Card, Badge, Chip, ProgressBar, CommandBox, Eyebrow, Title, Body } from "widgets.slint";
+
+export struct CheckItem {
+    id: string,
+    number: int,
+    title: string,
+    detail: string,
+    tone: Tone,
+    action: string,
+    secondary: string,
+    command: string,
+}
+
+export struct StepItem {
+    title: string,
+    detail: string,
+    tone: Tone,
+    elapsed: string,
+}
+
+export struct Ability {
+    name: string,
+    icon: image,
+}
+
+export enum PlayState { idle, starting-steam, launching, running, stopping }
+export enum SetupState { running, failed, cancelled }
+
+component CheckRow {
+    in property <CheckItem> item;
+    in property <bool> last;
+    callback act(/* primary, secondary or copy */ string);
+    min-height: 82px;
+    HorizontalLayout {
+        padding-left: 22px;
+        padding-right: 20px;
+        padding-top: 16px;
+        padding-bottom: 16px;
+        spacing: 16px;
+        VerticalLayout {
+            alignment: center;
+            Badge { tone: root.item.tone; label: root.item.number; }
+        }
+        VerticalLayout {
+            alignment: center;
+            spacing: 4px;
+            horizontal-stretch: 1;
+            Text {
+                text: root.item.title;
+                font-family: Theme.display;
+                font-weight: 600;
+                font-size: 17px;
+                color: Theme.ink;
+            }
+            Text {
+                text: root.item.detail;
+                wrap: word-wrap;
+                font-size: 14px;
+                color: root.item.tone == Tone.error ? Theme.red-soft : root.item.tone == Tone.warn ? #ffd79a : Theme.ink-dim;
+            }
+            if root.item.command != "": CommandBox {
+                text: root.item.command;
+                copy => { root.act("copy"); }
+            }
+        }
+        if root.item.secondary != "": VerticalLayout {
+            alignment: center;
+            LinkButton { text: root.item.secondary; clicked => { root.act("secondary"); } }
+        }
+        if root.item.action != "": VerticalLayout {
+            alignment: center;
+            SecondaryButton { text: root.item.action; clicked => { root.act("primary"); } }
+        }
+    }
+    if !root.last: Rectangle {
+        x: 22px;
+        y: parent.height - 1px;
+        width: parent.width - 44px;
+        height: 1px;
+        background: Theme.line;
+    }
+}
+
+export component ChecksScreen {
+    in property <[CheckItem]> checks;
+    in property <bool> ready;
+    // Something is marked as a problem, not only waiting for the player's choice.
+    in property <bool> blocked;
+    in property <bool> checking;
+    in property <bool> setup-done;
+    callback act(/* check id */ string, /* primary or secondary */ string);
+    callback copy-text(string);
+    callback next();
+    callback recheck();
+
+    HorizontalLayout {
+        padding-left: 56px;
+        padding-right: 48px;
+        padding-top: 18px;
+        padding-bottom: 40px;
+        spacing: 48px;
+        VerticalLayout {
+            width: 318px;
+            spacing: 14px;
+            alignment: start;
+            padding-top: 26px;
+            Eyebrow { text: root.setup-done ? "WELCOME BACK" : "WELCOME"; }
+            Title { text: root.setup-done ? "A quick check before you play" : "Let's get Kirby ready"; }
+            Body {
+                text: "Kirby's Dead Land plays Kirby from your own copy of Kirby Super Star Ultra, inside Dead Cells from your Steam library.";
+            }
+            Body {
+                text: "These are checked each time you open the launcher, so it always uses the games you own.";
+                color: Theme.ink-faint;
+                font-size: 14.5px;
+            }
+            Rectangle { height: 6px; }
+            HorizontalLayout {
+                spacing: 10px;
+                VerticalLayout {
+                    alignment: start;
+                    padding-top: 1px;
+                    Icon { source: Icons.shield; color: Theme.mint; width: 18px; height: 18px; }
+                }
+                Text {
+                    text: "Your Steam games and saves are never changed. Your saves are backed up before every game.";
+                    wrap: word-wrap;
+                    font-size: 13.5px;
+                    color: Theme.ink-faint;
+                    horizontal-stretch: 1;
+                }
+            }
+        }
+        VerticalLayout {
+            horizontal-stretch: 1;
+            spacing: 20px;
+            alignment: start;
+            Card {
+                VerticalLayout {
+                    padding-top: 6px;
+                    padding-bottom: 6px;
+                    for item[index] in root.checks: CheckRow {
+                        item: item;
+                        last: index == root.checks.length - 1;
+                        act(which) => {
+                            if which == "copy" {
+                                root.copy-text(item.command);
+                            } else {
+                                root.act(item.id, which);
+                            }
+                        }
+                    }
+                }
+            }
+            HorizontalLayout {
+                spacing: 16px;
+                VerticalLayout {
+                    alignment: center;
+                    horizontal-stretch: 1;
+                    if root.checking: HorizontalLayout {
+                        spacing: 10px;
+                        alignment: start;
+                        VerticalLayout { alignment: center; Spinner { size: 16px; thickness: 2px; } }
+                        Text { text: "Checking…"; color: Theme.ink-faint; font-size: 14px; vertical-alignment: center; }
+                    }
+                    if !root.checking && !root.ready: Text {
+                        text: root.blocked ? "Fix the items marked above, then check again." : "Confirm your Kirby game above to continue.";
+                        color: Theme.ink-faint;
+                        font-size: 14px;
+                        wrap: word-wrap;
+                    }
+                    if !root.checking && root.ready: Text {
+                        text: root.setup-done ? "Everything is in place." : "All set. Setup takes a few minutes, once.";
+                        color: Theme.ink-dim;
+                        font-size: 14px;
+                        wrap: word-wrap;
+                    }
+                }
+                if !root.ready && !root.checking && root.blocked: VerticalLayout {
+                    alignment: center;
+                    SecondaryButton {
+                        text: "Check again";
+                        icon: Icons.refresh;
+                        has-icon: true;
+                        clicked => { root.recheck(); }
+                    }
+                }
+                PrimaryButton {
+                    text: root.setup-done ? "Continue" : "Set up Kirby";
+                    icon: Icons.chevron-right;
+                    has-icon: true;
+                    enabled: root.ready && !root.checking;
+                    glow: root.ready && !root.checking;
+                    width: 196px;
+                    clicked => { root.next(); }
+                }
+            }
+        }
+    }
+}
+
+component StepRow {
+    in property <StepItem> item;
+    in property <int> number;
+    in property <bool> current;
+    height: 50px;
+    if root.current: Rectangle {
+        x: 8px;
+        width: parent.width - 16px;
+        border-radius: 14px;
+        background: #ffffff0f;
+    }
+    if root.current: Rectangle {
+        x: 8px;
+        y: 13px;
+        width: 3px;
+        height: parent.height - 26px;
+        border-radius: 1.5px;
+        background: Theme.pink;
+    }
+    HorizontalLayout {
+        padding-left: 22px;
+        padding-right: 22px;
+        spacing: 14px;
+        VerticalLayout {
+            alignment: center;
+            Badge { tone: root.item.tone; label: root.number; size: 28px; }
+        }
+        VerticalLayout {
+            alignment: center;
+            spacing: 1px;
+            horizontal-stretch: 1;
+            Text {
+                text: root.item.title;
+                font-family: Theme.display;
+                font-weight: root.current ? 600 : 500;
+                font-size: 15.5px;
+                color: root.item.tone == Tone.pending ? Theme.ink-dim : Theme.ink;
+                overflow: elide;
+            }
+            if root.item.detail != "": Text {
+                text: root.item.detail;
+                font-size: 12.5px;
+                color: root.item.tone == Tone.error ? Theme.red-soft : Theme.ink-faint;
+                overflow: elide;
+            }
+        }
+        Text {
+            text: root.item.elapsed;
+            font-size: 12.5px;
+            color: Theme.ink-faint;
+            vertical-alignment: center;
+        }
+    }
+}
+
+export component SetupScreen {
+    in property <[StepItem]> steps;
+    in property <float> progress;
+    in property <SetupState> state;
+    in property <string> remaining;
+    in property <string> error;
+    in property <string> log;
+    in-out property <bool> details;
+    callback cancel();
+    callback retry();
+    callback back();
+    callback copy-log();
+    callback open-log();
+    in property <int> current: -1;
+
+    HorizontalLayout {
+        padding-left: 56px;
+        padding-right: 48px;
+        padding-top: 18px;
+        padding-bottom: 40px;
+        spacing: 48px;
+        VerticalLayout {
+            width: 318px;
+            spacing: 14px;
+            alignment: start;
+            padding-top: 26px;
+            Eyebrow { text: "ONE-TIME SETUP"; }
+            Title {
+                text: root.state == SetupState.failed ? "Setup stopped" : root.state == SetupState.cancelled ? "Setup paused" : "Building your Kirby";
+            }
+            Body {
+                text: root.state == SetupState.failed ? "Nothing was lost. Fix the problem described, then try again: finished steps are kept." : root.state == SetupState.cancelled ? "Finished steps are kept. Continue whenever you like." : "Everything is made from your own game files and stays on this computer.";
+            }
+            Rectangle {
+                height: 236px;
+                ring := Drawn {
+                    x: 22px;
+                    y: 22px;
+                    width: 196px;
+                    height: 196px;
+                    source: Art.ring(self.width, 14px, root.progress, Theme.gold, Theme.pink, #ffffff14);
+                }
+                VerticalLayout {
+                    x: ring.x;
+                    y: ring.y;
+                    width: ring.width;
+                    height: ring.height;
+                    alignment: center;
+                    spacing: 0px;
+                    Text {
+                        text: floor(root.progress * 100) + "%";
+                        font-family: Theme.display;
+                        font-weight: 600;
+                        font-size: 46px;
+                        color: Theme.ink;
+                        horizontal-alignment: center;
+                    }
+                    Text {
+                        text: root.state == SetupState.running ? root.remaining : root.state == SetupState.failed ? "stopped" : "paused";
+                        font-size: 13.5px;
+                        color: root.state == SetupState.failed ? Theme.red-soft : Theme.ink-faint;
+                        horizontal-alignment: center;
+                    }
+                }
+            }
+        }
+        VerticalLayout {
+            horizontal-stretch: 1;
+            spacing: 20px;
+            alignment: start;
+            Card {
+                height: 372px;
+                if !root.details: VerticalLayout {
+                    padding-top: 10px;
+                    padding-bottom: 10px;
+                    for step[index] in root.steps: StepRow {
+                        item: step;
+                        number: index + 1;
+                        current: index == root.current;
+                    }
+                }
+                if root.details: Rectangle {
+                    x: 10px;
+                    y: 10px;
+                    width: parent.width - 20px;
+                    height: parent.height - 20px;
+                    border-radius: 14px;
+                    background: Theme.well;
+                    clip: true;
+                    log-view := Flickable {
+                        x: 14px;
+                        y: 12px;
+                        width: parent.width - 28px;
+                        height: parent.height - 24px;
+                        content-height: log-text.preferred-height;
+                        content-y: min(0px, self.height - self.content-height);
+                        log-text := Text {
+                            width: parent.width;
+                            text: root.log;
+                            font-family: Theme.mono;
+                            font-size: 12px;
+                            color: #d8d4ff;
+                            wrap: word-wrap;
+                        }
+                    }
+                }
+            }
+            if root.state == SetupState.failed: Rectangle {
+                border-radius: 14px;
+                background: #ff6b8117;
+                border-width: 1px;
+                border-color: #ff6b8155;
+                min-height: error-layout.min-height;
+                error-layout := HorizontalLayout {
+                    padding: 14px;
+                    spacing: 12px;
+                    VerticalLayout {
+                        alignment: start;
+                        Icon { source: Icons.alert; color: Theme.red; width: 20px; height: 20px; }
+                    }
+                    Text {
+                        text: root.error;
+                        wrap: word-wrap;
+                        color: Theme.ink;
+                        font-size: 14px;
+                        horizontal-stretch: 1;
+                    }
+                }
+            }
+            HorizontalLayout {
+                spacing: 12px;
+                LinkButton {
+                    text: root.details ? "Show the steps" : "Show details";
+                    icon: Icons.terminal;
+                    has-icon: true;
+                    color: Theme.ink-dim;
+                    clicked => { root.details = !root.details; }
+                }
+                if root.details: LinkButton {
+                    text: "Copy";
+                    icon: Icons.copy;
+                    has-icon: true;
+                    color: Theme.ink-dim;
+                    clicked => { root.copy-log(); }
+                }
+                Rectangle { horizontal-stretch: 1; }
+                if root.state == SetupState.running: VerticalLayout {
+                    alignment: center;
+                    SecondaryButton { text: "Cancel"; clicked => { root.cancel(); } }
+                }
+                if root.state != SetupState.running: VerticalLayout {
+                    alignment: center;
+                    SecondaryButton { text: "Back to checks"; icon: Icons.chevron-left; has-icon: true; clicked => { root.back(); } }
+                }
+                if root.state != SetupState.running: PrimaryButton {
+                    text: root.state == SetupState.failed ? "Try again" : "Continue setup";
+                    icon: Icons.refresh;
+                    has-icon: true;
+                    width: 176px;
+                    clicked => { root.retry(); }
+                }
+            }
+        }
+    }
+}
+
+export component HomeScreen {
+    in property <image> kirby;
+    in property <image> kirby-happy;
+    in property <bool> has-kirby;
+    in property <[Ability]> abilities;
+    in property <PlayState> play-state;
+    in property <string> game-detail;
+    in property <string> notice;
+    in property <bool> animate-art: true;
+    callback play();
+    callback stop();
+    out property <bool> button-hovered: play-button.hovered;
+
+    property <bool> busy: root.play-state == PlayState.starting-steam || root.play-state == PlayState.launching || root.play-state == PlayState.stopping;
+    property <bool> playing: root.play-state == PlayState.running;
+    property <length> bob: root.animate-art ? 7px * sin((animation-tick() / 2800ms) * 360deg) : 0px;
+
+    // Kirby's stage on the left.
+    stage := Rectangle {
+        x: 40px;
+        y: 0px;
+        width: 420px;
+        height: root.height - 108px;
+        Rectangle {
+            width: 380px;
+            height: 380px;
+            background: @radial-gradient(circle, #ff6fb544 0%, #ff6fb514 45%, #ff6fb500 70%);
+        }
+        kirby-shadow := Rectangle {
+            visible: root.has-kirby;
+            y: kirby-image.y + kirby-image.height - 30px - root.bob / 2;
+            width: 118px - root.bob * 2;
+            height: 16px;
+            border-radius: 8px;
+            background: #05061a;
+            opacity: 0.5 + root.bob / 50px;
+        }
+        kirby-image := Image {
+            visible: root.has-kirby;
+            width: self.source.width * 6px;
+            height: self.source.height * 6px;
+            y: parent.height / 2 - self.height / 2 + root.bob - 6px;
+            source: play-button.hovered || root.playing ? root.kirby-happy : root.kirby;
+            image-rendering: pixelated;
+            accessible-role: image;
+            accessible-label: "Kirby";
+        }
+        if !root.has-kirby: Sparkle {
+            width: 170px;
+            height: 170px;
+            y: parent.height / 2 - 85px + root.bob;
+            animated: false;
+        }
+        Sparkle { x: 62px; y: 92px; width: 26px; height: 26px; phase: 400ms; animated: root.animate-art; }
+        Sparkle { x: 318px; y: 140px; width: 18px; height: 18px; phase: 1300ms; color: Theme.pink-soft; animated: root.animate-art; }
+        Sparkle { x: 340px; y: 330px; width: 22px; height: 22px; phase: 2100ms; animated: root.animate-art; }
+        Sparkle { x: 84px; y: 352px; width: 14px; height: 14px; phase: 900ms; color: #ffffff; animated: root.animate-art; }
+    }
+
+    VerticalLayout {
+        x: 500px;
+        y: 0px;
+        width: root.width - 500px - 56px;
+        height: root.height - 108px;
+        alignment: center;
+        spacing: 14px;
+        Eyebrow { text: root.playing ? "NOW PLAYING" : "READY"; }
+        Title {
+            text: root.playing ? "Kirby is out exploring" : "Ready to play";
+            font-size: 44px;
+        }
+        Body {
+            text: root.playing ? "Have fun! Close Dead Cells to come back here." : "Inhale enemies, copy their powers and fight your way through the island as Kirby.";
+        }
+        Rectangle { height: 14px; }
+        HorizontalLayout {
+            alignment: start;
+            spacing: 18px;
+            play-button := PrimaryButton {
+                width: 230px;
+                height: 66px;
+                font-size: 23px;
+                text: root.play-state == PlayState.starting-steam ? "Starting Steam" : root.play-state == PlayState.launching ? "Opening" : root.play-state == PlayState.stopping ? "Closing" : root.playing ? "Playing" : "Play";
+                icon: Icons.play;
+                has-icon: !root.playing;
+                busy: root.busy;
+                interactive: !root.playing && !root.busy;
+                from: root.playing ? Theme.mint : Theme.pink;
+                to: root.playing ? #3fc9d6 : Theme.peach;
+                clicked => { root.play(); }
+            }
+            if root.playing: VerticalLayout {
+                alignment: center;
+                SecondaryButton { text: "Close the game"; icon: Icons.stop; has-icon: true; clicked => { root.stop(); } }
+            }
+        }
+        Rectangle { height: 6px; }
+        HorizontalLayout {
+            alignment: start;
+            spacing: 8px;
+            Chip { text: root.game-detail; icon: Icons.check; }
+            Chip { text: "ROM verified"; icon: Icons.check; }
+            Chip { text: "Saves backed up"; icon: Icons.shield; }
+        }
+        if root.notice != "": HorizontalLayout {
+            spacing: 8px;
+            VerticalLayout { alignment: start; padding-top: 2px; Icon { source: Icons.info; color: Theme.amber; width: 16px; height: 16px; } }
+            Text { text: root.notice; color: #ffd79a; font-size: 13.5px; wrap: word-wrap; horizontal-stretch: 1; }
+        }
+    }
+
+    // The 24 copy abilities, decoded from the player's ROM.
+    if root.abilities.length > 0: Rectangle {
+        x: 40px;
+        y: root.height - 96px;
+        width: root.width - 80px;
+        height: 64px;
+        border-radius: 20px;
+        background: #0d0f33e6;
+        border-width: 1px;
+        border-color: Theme.line;
+        HorizontalLayout {
+            padding-left: 22px;
+            padding-right: 18px;
+            spacing: 14px;
+            VerticalLayout {
+                alignment: center;
+                spacing: 0px;
+                Text { text: "24 copy"; font-family: Theme.display; font-weight: 600; font-size: 14px; color: Theme.ink; }
+                Text { text: "abilities"; font-family: Theme.display; font-weight: 600; font-size: 14px; color: Theme.ink; }
+            }
+            Rectangle { width: 1px; background: Theme.line; }
+            HorizontalLayout {
+                alignment: space-between;
+                horizontal-stretch: 1;
+                for ability in root.abilities: VerticalLayout {
+                    alignment: center;
+                    Rectangle {
+                        width: 30px;
+                        height: 30px;
+                        Image {
+                            width: 30px;
+                            height: 30px;
+                            source: ability.icon;
+                            image-rendering: pixelated;
+                            accessible-role: image;
+                            accessible-label: ability.name;
+                        }
+                        hover := TouchArea { }
+                        if hover.has-hover: Rectangle {
+                            y: -36px;
+                            width: tip.preferred-width + 18px;
+                            height: 26px;
+                            border-radius: 8px;
+                            background: Theme.surface-raised;
+                            border-width: 1px;
+                            border-color: Theme.line-strong;
+                            tip := Text { text: ability.name; color: Theme.ink; font-size: 12.5px; font-weight: 700; }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
