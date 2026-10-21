@@ -528,11 +528,13 @@ public sealed class KirbyEnemies
     private static bool Eligible(Entity entity) => !Refuses(entity) &&
         (entity is Mob or Door or BreakableProp or ExplosiveBarrel or PileOfGold or GoldNugget or HiddenBlock || entity.isBreakableByHero());
     /// <summary>
-    /// A key door (LockedDoor, with CardLockedDoor and MariaDoor) takes no hit, so
-    /// it is never a target. Paired, the helper's AI saw it as an enemy and
-    /// attacked it without end (#110).
+    /// A door that takes no hit is never a target: a key door (LockedDoor, with
+    /// CardLockedDoor and MariaDoor), or a locked door that is not breakable. Paired,
+    /// the helper's AI saw it as an enemy and attacked it without end (#110). A locked,
+    /// breakable door, such as the Collector's exit, takes hits and stays a target (#233).
     /// </summary>
-    private static bool Refuses(Entity entity) => entity is dc.en.inter.door.LockedDoor or Door { locked: true };
+    private static bool Refuses(Entity entity) => entity is Door door &&
+        !HostStrikes.DoorTakesHits(door is dc.en.inter.door.LockedDoor, door.locked, door._breakable);
     private static (double X, double Y) Distance(Entity entity, double heroX, double heroY) =>
         (Math.Max(0, Math.Abs((entity.cx + entity.xr) * 24 - heroX) - entity.radius),
          Math.Max(0, Math.Abs((entity.cy + entity.yr) * 24 - entity.hei / 2 - (heroY - 14.5)) - (entity.hei + 29) / 2));

@@ -1743,7 +1743,8 @@ no hit, so the helper never stopped.
 
 A `LockedDoor` (with `CardLockedDoor` and `MariaDoor`, its subclasses) and any
 `Door` whose host `locked` flag is set are no longer paired, and one that becomes
-locked while paired is released. Breakable doors pair as before, so Kirby's copy
+locked while paired is released. Since #233 a locked door that is also breakable
+stays paired (see below). Breakable doors pair as before, so Kirby's copy
 attacks and Suplex's lunge still burst them. The other special doors (timed, boss,
 money, triggered) are unchanged.
 
@@ -1751,6 +1752,32 @@ Cause found by reading the host classes (`GameProxy`: `LockedDoor : Door`,
 `CardLockedDoor : LockedDoor`) and the pairing code; not reproduced. **No live
 game check was run**, so that this recording's door is a `LockedDoor`, and that
 the helper then leaves it alone, are unverified.
+
+#### The Collector's door takes hits again (#233)
+
+Owner report 2026-10-21 (v0.2.0, new save, Black Bridge): at the Collector, with
+24 cells and nothing buyable, the exit door stayed shut and Kirby could not break
+it, so he was trapped. The host's exit there is a `TriggeredDoor`: its constructor
+always sets `locked`, and in the Collector's room it also makes the door breakable
+with 2 life. `CollectorPanelNpc.setDoor` keeps it closed while the hero holds
+cells, so the host's way out is to break it and give up the unspent cells.
+`Door.applyAttackResult` (`Door.hx:310`) turns a hit away only from a door that is
+locked **and** not breakable. The #110 rule refused every locked door, this one
+included. Read from the installed game's `hlboot.dat` (read-only).
+
+`KirbyEnemies` now refuses what the host refuses: a `LockedDoor` (and its
+subclasses), or a door that is locked and not breakable
+(`HostStrikes.DoorTakesHits` in `src/core/`). Locked, breakable doors pair again.
+
+Evidence: core tests pin the rule. Live in `repros/collector-door-233b` (see
+[RUNTIME_LAUNCH.md](RUNTIME_LAUNCH.md#collector-door-233)): Kirby, holding 20
+cells, copied Sword in `T_Courtyard` and broke the Collector's own
+`TriggeredDoor` in two hits (life 2 → 0, door open); with the #110 rule put back
+the same attack never hit it. Not run: the door at other transition levels,
+other copy abilities, the slide or Suplex's lunge into it, walking on to the next
+level, and what happens to the 20 cells there (they were still held right after
+the break). The helper now also attacks the Collector's door, which breaks it, as
+the player's own hit would.
 
 ### Shift slides (#75)
 

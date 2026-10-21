@@ -415,6 +415,31 @@ KIRBY_LAB_BREAKABLE_TARGET=gold python3 scripts/launch_runtime.py \
 Each run reached its time limit without fatal errors, and real saves were unchanged.
 `GoldNugget` and copy forms other than Sword were not run.
 
+## Collector door (#233)
+
+`KIRBY_LAB_BREAKABLE_TARGET=collector` makes the `breakable` plan start the run in
+`T_Courtyard` (the hook the Collector probe uses), give Kirby 20 cells, place him
+beside the Collector's own exit (the nearest locked, breakable, unbroken
+`TriggeredDoor`), copy Sword and tap attack. `breakable.json` records the door's
+life, `broken`, `locked`, `_breakable`, `_closed` and the hero's cells. Outfit
+pack `outfit-build-main/res.pak`; bridge unchanged; fixed runtime DLL
+`67f3325ad22c9c7d4d1d4bb172197b95d8801819a83b9beffa29883db3dda703`.
+
+```sh
+KIRBY_LAB_BREAKABLE_TARGET=collector python3 scripts/launch_runtime.py \
+  --data-root ~/.local/share/kirby-dead-cells/repros/collector-door-233b \
+  --seconds 70 --start-game --outfit KirbySuperStarUltra --input-plan breakable --capture-fps 5
+```
+
+| Run | Build | Result |
+| :--- | :--- | :--- |
+| `collector-door-233b/20261021-120112` | #233 | Hits on source frames 4354 and 4490, 1 life each, life 2 → 0; door broken and open (`closed` false), `locked` and `_breakable` true; 20 cells before and after; `passed: true`. Frame `009826` shows Kirby beside the closed door, `010058` the open doorway and 20 cells on the HUD |
+| `collector-door-233-control/20261021-120300` | control: #110 `Refuses` restored (DLL `3c626ad1…`) | Same door and attack: no hit, life 2, closed; `passed: false` |
+| `collector-door-233/20261021-115738` | #233, one attack press | One hit, life 2 → 1 (the probe then tapped until the door broke) |
+| `collector-door-233/20261021-115921` | #233 | Not a result: the run's first game restarted in the start level (log: source hit `76->0`) before the probe acted, so Kirby never reached `T_Courtyard`; the cause was not looked into |
+
+Each run ended at its time limit without a fatal log, and real saves were unchanged.
+
 ## Secret walls (#84)
 
 `KIRBY_LAB_BREAKABLE_TARGET=hidden` makes the `breakable` plan spawn a real

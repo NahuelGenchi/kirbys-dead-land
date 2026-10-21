@@ -1,5 +1,7 @@
 using System.Text.Json;
 using dc.en.inter;
+using ModCore.Utilities;
+using LevelInfo = Hashlink.Virtuals.virtual_baseLootLevel_biome_bonusTripleScrollAfterBC_cellBonus_dlc_doubleUps_eliteRoomChance_eliteWanderChance_flagsProps_group_icon_id_index_loreDescriptions_mapDepth_minGold_mobDensity_mobs_name_nextLevels_parallax_props_quarterUpsBC3_quarterUpsBC4_specificLoots_specificSubBiome_transitionTo_tripleUps_worldDepth_;
 
 namespace Kirby.Runtime;
 
@@ -8,6 +10,9 @@ namespace Kirby.Runtime;
 /// KIRBY_LAB_BREAKABLE_TARGET=gold a real host PileOfGold, or with
 /// KIRBY_LAB_BREAKABLE_TARGET=hidden a real HiddenBlock ("Scratch the wall"),
 /// spawned beside Kirby; hidden-base presses attack in base form instead.
+/// KIRBY_LAB_BREAKABLE_TARGET=collector starts in the first transition level and
+/// attacks the Collector's own exit door (a locked, breakable TriggeredDoor) while
+/// Kirby holds unspent cells (#233).
 /// </summary>
 internal static class LabBreakableProbe
 {
@@ -15,17 +20,24 @@ internal static class LabBreakableProbe
     private static readonly bool Gold = targetKind == "gold";
     private static readonly bool BaseForm = targetKind == "hidden-base";
     private static readonly bool Hidden = targetKind is "hidden" or "hidden-base";
+    private static readonly bool Collector = targetKind == "collector";
+    private const int CollectorCells = 20;
     private static string? run;
     private static uint? setupStart, start;
     private static bool fed;
     private static dc.Entity? target;
     private static int initialLife, damage, goldDrops, activations;
+    private static int? cellsBefore;
     private static uint lastFrame;
 
     public static void Install(string output)
     {
         run = output;
         dc.tool.Hook_Tutorial.tryToStart += (_, _, _) => false;
+        if (Collector)
+            dc.Hook_User.newGame += (orig, user, seed, level, custom, scoring, gameMode) =>
+                orig(user, seed, ((HaxeProxy.Runtime.HaxeProxyBase)dc.Data.Class.level.resolve("T_Courtyard".AsHaxeString(), false))
+                    .ToVirtual<LevelInfo>(), custom, scoring, gameMode);
         Hook_Door.onDamage += (orig, door, attack) => { orig(door, attack); Damaged(door, attack); };
         Hook_PileOfGold.onDamage += (orig, pile, attack) => { orig(pile, attack); Damaged(pile, attack); };
         Hook_HiddenBlock.onDamage += (orig, block, attack) => { orig(block, attack); Damaged(block, attack); };
@@ -85,9 +97,16 @@ internal static class LabBreakableProbe
             }
             else target = Enumerable.Range(0, hero._level.entities.length)
                 .Select(i => hero._level.entities.getDyn(i)).OfType<Door>()
-                .Where(d => !d.destroyed && d.life > 0 && d._breakable && !d.locked && !d.broken)
+                .Where(d => !d.destroyed && d.life > 0 && d._breakable && d.locked == Collector && !d.broken &&
+                    (!Collector || d is dc.en.inter.door.TriggeredDoor))
                 .OrderBy(d => Math.Abs(d.cx - hero.cx) + Math.Abs(d.cy - hero.cy)).FirstOrDefault();
             if (target is null) return 0;
+            if (Collector)
+            {
+                // Unspent cells keep the Collector's door closed, as in the owner's run.
+                if (hero.cells < CollectorCells) hero.addCells(CollectorCells - hero.cells, HaxeProxy.Runtime.Ref<bool>.In(false));
+                cellsBefore = hero.cells;
+            }
             initialLife = target.life;
             hero.setPosPixel((target.cx + target.xr) * 24 - 28, (target.cy + target.yr) * 24);
             if (hero.yr == 0) { hero.cy--; hero.yr = 1; }
@@ -102,8 +121,8 @@ internal static class LabBreakableProbe
         // animation releases control. Let it finish before pressing attack.
         if (elapsed is >= 100 and < 115) return 16;
         if (elapsed is >= 120 and < 250) return 2;
-        // The pile or wall takes one life per hit: keep tapping attack until it breaks.
-        if ((Gold || Hidden) && elapsed is >= 250 and < 1000) return (ushort)((elapsed / 8) % 2 == 0 ? 2 : 0);
+        // The pile, wall or Collector's door (2 life) takes one life per hit: keep tapping attack until it breaks.
+        if ((Gold || Hidden || Collector) && elapsed is >= 250 and < 1000) return (ushort)((elapsed / 8) % 2 == 0 ? 2 : 0);
         return 0;
     }
 
@@ -140,6 +159,8 @@ internal static class LabBreakableProbe
             target = target?.GetType().FullName, targetUid = target?.__uid,
             initialLife, life = target?.life, destroyed = target?.destroyed,
             broken = (target as Door)?.broken, damage, goldDrops, activations, drops,
+            locked = (target as Door)?.locked, breakable = (target as Door)?._breakable,
+            closed = (target as Door)?._closed, cellsBefore, cells = session.Hero.cells,
             // A secret wall passes only when the copy hit activates it and its reward lies beside it.
             passed = BaseForm ? target is not null && activations == 0 && target.life == initialLife && damage == 0 :
                 Hidden ? activations > 0 && drops.Length > 0 :
