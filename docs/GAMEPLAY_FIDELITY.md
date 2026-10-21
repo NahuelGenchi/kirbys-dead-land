@@ -1773,11 +1773,17 @@ Evidence: core tests pin the rule. Live in `repros/collector-door-233b` (see
 [RUNTIME_LAUNCH.md](RUNTIME_LAUNCH.md#collector-door-233)): Kirby, holding 20
 cells, copied Sword in `T_Courtyard` and broke the Collector's own
 `TriggeredDoor` in two hits (life 2 → 0, door open); with the #110 rule put back
-the same attack never hit it. Not run: the door at other transition levels,
-other copy abilities, the slide or Suplex's lunge into it, walking on to the next
-level, and what happens to the 20 cells there (they were still held right after
-the break). The helper now also attacks the Collector's door, which breaks it, as
-the player's own hit would.
+the same attack never hit it. The helper now also attacks the Collector's door,
+which breaks it, as the player's own hit would.
+
+Owner check, 2026-10-21: a copy of the owner's stuck v0.2.0 save (the Collector
+after Black Bridge, 24 cells) opened with main's build (`d6e7c44`) in
+`repros/collector-door-owner-save` (`--play`). The owner reported that the door
+breaks and Kirby goes on. The log shows a `TriggeredDoor` kill one second after the
+run resumed, later door kills under new entity IDs (a new level), and a normal exit.
+The owner's real save was copied, not changed. Not checked: other copy abilities,
+the slide or Suplex's lunge into the door, and whether the unspent cells are lost
+in the next level.
 
 ### Shift slides (#75)
 

@@ -2954,3 +2954,10 @@ the all-ability rendering tests as full gameplay acceptance.
 - Live: Sword broke the Collector's door in two hits while Kirby held 20 cells;
   the control with the #110 rule never hit it. Not run: other transition levels,
   other copy abilities, the next level and what happens to the cells there.
+
+## 2026-10-21 — the owner confirms the Collector's door (#233)
+
+- A copy of the owner's stuck v0.2.0 save at the Collector after Black Bridge,
+  opened with main's build (`d6e7c44`) in a separate data root: the owner reported
+  that the door breaks and Kirby goes on. The real save was not changed. Not
+  checked: whether the unspent cells are lost in the next level.
