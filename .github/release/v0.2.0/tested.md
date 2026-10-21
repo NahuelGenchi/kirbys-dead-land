@@ -1,0 +1,3 @@
+- **Ubuntu 26.04**: download, checks, setup and a short test run as Kirby, all from the launcher.
+- **Fedora 44, Arch Linux and Debian 13**: the launcher's checks and screens.
+- **Not tested yet:** the Steam Deck and other PCs. If you try it, tell us how it went!

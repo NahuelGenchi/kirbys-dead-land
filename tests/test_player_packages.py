@@ -1,5 +1,6 @@
 """The player packages' layout, lint and archives (scripts/build_packages.py); synthetic files only."""
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -174,6 +175,44 @@ class ReleaseWorkflowTests(unittest.TestCase):
         # Every action runs at a pinned commit.
         for use in re.findall(r'uses: (\S+)', workflow):
             self.assertRegex(use, r'@[0-9a-f]{40}$')
+
+
+class ReleaseNotesTests(unittest.TestCase):
+    """Every release page is notes.md filled in with that version's parts and pictures."""
+
+    @classmethod
+    def setUpClass(cls):
+        spec = importlib.util.spec_from_file_location('release_notes', PROJECT / '.github/release/notes.py')
+        cls.notes = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.notes)
+
+    def test_this_version_has_its_notes_and_pictures(self):
+        version = json.loads((PROJECT / 'mod.json').read_text())['version']
+        self.assertEqual(self.notes.missing(f'v{version}'), [])
+
+    def test_every_page_is_complete(self):
+        for folder in sorted((PROJECT / '.github/release').glob('v*')):
+            tag = folder.name
+            with self.subTest(tag=tag):
+                page = self.notes.render(tag, 'abc123', 'owner/repo', 15_309_304)
+                self.assertNotRegex(page, r'\$[a-z]|<!--')
+                for name in self.notes.PICTURES:
+                    self.assertIn(f'https://raw.githubusercontent.com/owner/repo/abc123/.github/release/{tag}/{name}', page)
+                self.assertIn(f'https://github.com/owner/repo/releases/download/{tag}/KirbysDeadLand-{tag[1:]}-x86_64.AppImage', page)
+                self.assertIn('One file, about 15 MB', page)
+                for heading in ('What you need', 'From download to Kirby in 4 steps', 'Your saves are safe', 'What was tested'):
+                    self.assertIn(heading, page)
+                # The first launcher release had nothing to update from.
+                self.assertEqual('Already playing an older version?' in page, tag != 'v0.2.0')
+
+    def test_missing_parts_stop_the_notes(self):
+        with self.assertRaises(SystemExit):
+            self.notes.render('v99.0.0', 'abc123', 'owner/repo')
+
+    def test_the_workflow_writes_the_notes(self):
+        workflow = (PROJECT / '.github/workflows/release.yml').read_text()
+        self.assertIn('python3 .github/release/notes.py "$TAG"', workflow)
+        self.assertIn('--notes-file notes/notes.md', workflow)
 
 
 class MenuEntryTests(unittest.TestCase):

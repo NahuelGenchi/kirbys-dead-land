@@ -1,0 +1,4 @@
+- **The fix**: checked in the game, both with an automatic test at the Collector and with a real 0.2.0 run that was stuck in front of the door. The door breaks and Kirby goes on.
+- **Updating from 0.2.0** on Ubuntu 26.04: the new launcher found the existing setup, Kirby and saves, updated in about 5 seconds and started the game. The Kirby save was unchanged.
+- **A first setup** was tested with 0.2.0 (download, checks, setup and a short test run as Kirby on Ubuntu 26.04, and the launcher's checks on Fedora 44, Arch Linux and Debian 13). 0.2.1 does not change the setup.
+- **Not tested yet:** the Steam Deck and other PCs. If you try it, tell us how it went!
