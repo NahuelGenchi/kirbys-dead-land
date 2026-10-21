@@ -128,7 +128,9 @@ build commands.
 ### Verification (#222)
 
 2026-10-20, this machine (Ubuntu 26.04, Docker 29.1.3): `scripts/release_container.sh`
-on this branch, which runs the workflow's build steps in its container.
+on this branch, which runs the workflow's build steps in its container. On 2026-10-21
+it was repeated on the branch's code commit (`9b35427`) in a new container: the whole
+build took 3 min 17 s, and the checksum and host `--check` results below held again.
 
 - The container (limited to 3.5 GB and 8 CPUs, `CARGO_BUILD_JOBS=6`) built the
   runtime, the runner and the bridge (the pinned `Cargo.lock` files unchanged) and the
