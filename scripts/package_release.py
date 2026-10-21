@@ -29,6 +29,12 @@ FORBIDDEN_FOLDERS = {
     'outfit-build', 'ability-icons', 'captures', 'smoke-runs', 'play-runs', 'dist', 'build', 'bin', 'obj',
 }
 MAX_BYTES = 1024 * 1024
+# The open-licensed fonts the launcher draws with (launcher/NOTICES.txt), pinned
+# by hash so that no other binary file passes.
+ALLOWED_BINARIES = {
+    'launcher/ui/fonts/Fredoka.ttf': '2ba02e68b152868aef9ba28e24b3648c7d457fe6f25c761f2c2c53fb61a73fc8',
+    'launcher/ui/fonts/Nunito.ttf': 'bb55a5ca5c2042335b3991af27c4d0705d0ef41cac6164ac737fd8f2a1e85207',
+}
 SECRETS = [re.compile(pattern) for pattern in (
     rb'gh[pousr]_[A-Za-z0-9]{36}', rb'github_pat_[A-Za-z0-9_]{40,}', rb'(?<![A-Za-z0-9_-])sk-[A-Za-z0-9_-]{32,}',
     rb'AKIA[0-9A-Z]{16}', rb'xox[abprs]-[A-Za-z0-9-]{10,}', rb'-----BEGIN [A-Z ]*PRIVATE KEY-----',
@@ -41,6 +47,8 @@ def lint(files: dict[str, bytes]) -> list[str]:
     problems = []
     for name, data in sorted(files.items()):
         path = PurePosixPath(name)
+        if ALLOWED_BINARIES.get(name) == hashlib.sha256(data).hexdigest():
+            continue
         if path.suffix.lower() in FORBIDDEN_SUFFIXES:
             problems.append(f'{name}: {path.suffix} files are not released')
         elif FORBIDDEN_FOLDERS.intersection(part.lower() for part in path.parts[:-1]):

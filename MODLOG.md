@@ -2835,3 +2835,31 @@ the all-ability rendering tests as full gameplay acceptance.
   mismatch); the whole suite passes. Live (2026-10-20 22:01, the #210 clean-install
   root, `--input-plan movement`, 60 s): both real save folders backed up and verified
   (2 and 15 files), normal timeout, save isolation installed, real saves unchanged.
+## 2026-10-20 — the player launcher (#221)
+
+- `launcher/`: a desktop program in Rust and Slint (software rendering) with three
+  screens. Checks: Steam (native, Flatpak or Snap), Dead Cells from the Steam
+  libraries and its app manifest, the player's ROM (offered when found in the usual
+  folders, or chosen; verified by size and SHA-256, with a plain message for each
+  kind of wrong file), and bubblewrap (with the install command for the
+  distribution). Setup: seven steps with progress, time left, Cancel, the log, and
+  a retry that resumes. Home: Play (starting Steam when needed), Close the game, and
+  the 24 copy-ability icons from the player's ROM. Settings: change the ROM, saves,
+  backups, game log, repair, data folder, update check and licenses.
+- Setup downloads pinned DCCM, the .NET runtime, Python, Pillow, NumPy and
+  TurboJPEG (hashes checked), installs the bundled mod files and runs the mod's own
+  scripts with `KIRBY_DATA_ROOT` set to `~/.local/share/kirbys-dead-land/`.
+- `scripts/build_bundle.py` assembles the files the launcher installs and refuses
+  programs that name the build machine's home folder unless `--private`.
+  `launch_runtime.py` gains `--prepare`, `--steam-root` and a `.deb` unpacker for
+  systems without `dpkg-deb`. `tools/launcher_notices.py` writes
+  `launcher/NOTICES.txt`. The release lint accepts the two launcher fonts, pinned by
+  hash; `target/` is ignored.
+- Source: `cargo test` in `launcher/` (29 tests) and the Python suite, including
+  `tests/test_launcher_bundle.py` and the font exception, pass.
+- Live (offscreen, a fresh launcher data root, details in `docs/LAUNCHER.md`): the
+  launcher's autopilot used the found ROM and ran setup (1 min 34 s; 1 min 22 s
+  in the final run on a second new root), then Play ran the 72-second movement
+  check through the launcher: `dc.pr.Game`, live hero, Kirby outfit, original ROM
+  provider, save isolation installed, real saves unchanged, no fatal log. Not run: a person clicking, normal windowed play from
+  the launcher, Flatpak or Snap Steam, other distributions, a packaged launcher.

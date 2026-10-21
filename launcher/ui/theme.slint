@@ -1,0 +1,50 @@
+// Colors, type and the generated artwork shared by every screen.
+
+export enum Tone { pending, busy, ok, warn, error }
+
+export global Theme {
+    out property <color> ink: #f7f4ff;
+    out property <color> ink-dim: #c6c2ea;
+    out property <color> ink-faint: #9490c4;
+    out property <color> surface: #1d1f52d9;
+    out property <color> surface-solid: #1c1e4e;
+    out property <color> surface-raised: #2a2d6a;
+    out property <color> well: #0f1133b3;
+    out property <color> line: #ffffff17;
+    out property <color> line-strong: #ffffff2e;
+    out property <color> pink: #ff6fb5;
+    out property <color> pink-soft: #ffa3cf;
+    out property <color> peach: #ff9a6b;
+    out property <color> gold: #ffcc4d;
+    out property <color> mint: #5fe3a1;
+    out property <color> amber: #ffb547;
+    out property <color> red: #ff6b81;
+    out property <color> red-soft: #ffa0ae;
+    out property <color> shadow: #05061a;
+    out property <string> display: "Fredoka";
+    out property <string> body: "Nunito";
+    in-out property <string> mono: "DejaVu Sans Mono";
+
+    public pure function tone-color(tone: Tone) -> color {
+        if tone == Tone.ok { return mint; }
+        if tone == Tone.warn { return amber; }
+        if tone == Tone.error { return red; }
+        if tone == Tone.busy { return pink; }
+        return ink-faint;
+    }
+}
+
+// The software renderer draws no shadows, rotations or rounded gradients, so the
+// launcher draws them as images (src/art.rs). Sizes are logical pixels.
+export global Art {
+    // A soft glow around a rounded rectangle; the image is `blur` larger on every side.
+    pure callback glow(/* width */ length, /* height */ length, /* radius */ length, /* blur */ length, color) -> image;
+    // A rounded rectangle with a left-to-right gradient and a soft top shine.
+    pure callback pill(/* width */ length, /* height */ length, /* radius */ length, color, color) -> image;
+    // A progress ring: the track, then the arc from 12 o'clock with round ends.
+    pure callback ring(/* size */ length, /* thickness */ length, /* progress */ float, color, color, /* track */ color) -> image;
+    // One spinner frame: an arc starting at `start`.
+    pure callback arc(/* size */ length, /* thickness */ length, /* start */ angle, color) -> image;
+    // The night sky behind the window, with the castle on the horizon.
+    pure callback sky(length, length) -> image;
+}

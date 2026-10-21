@@ -4,11 +4,13 @@ from __future__ import annotations
 import argparse
 import hashlib
 import fcntl
+import io
 import json
 import os
 from pathlib import Path
 import shutil
 import subprocess
+import tarfile
 import time
 from save_backup import back_up
 from setup_runtime import DEFAULT_ROOT, download_checked, environment
@@ -26,12 +28,31 @@ def turbojpeg_library(root: Path) -> Path:
     archive = root / 'research/libturbojpeg0_2.1.5-4ubuntu4_amd64.deb'
     archive.parent.mkdir(parents=True, exist_ok=True)
     download_checked(TURBOJPEG_URL, archive, 'sha256', TURBOJPEG_SHA256)
-    if not shutil.which('dpkg-deb'):
-        raise SystemExit('dpkg-deb is required to unpack the private TurboJPEG dependency.')
-    subprocess.run(['dpkg-deb', '--extract', str(archive), str(root / 'research/turbojpeg')], check=True)
+    if shutil.which('dpkg-deb'):
+        subprocess.run(['dpkg-deb', '--extract', str(archive), str(root / 'research/turbojpeg')], check=True)
+    else:
+        extract_deb(archive, root / 'research/turbojpeg')
     if not library.is_file():
         raise SystemExit('Pinned TurboJPEG archive did not contain the expected library.')
     return library
+
+
+def extract_deb(archive: Path, destination: Path) -> None:
+    """Unpack a Debian package's files as dpkg-deb --extract does, on systems without dpkg."""
+    data = archive.read_bytes()
+    if data[:8] != b'!<arch>\n':
+        raise SystemExit(f'{archive.name} is not a Debian package.')
+    position = 8
+    while position + 60 <= len(data):
+        name = data[position:position + 16].decode().strip().rstrip('/')
+        size = int(data[position + 48:position + 58])
+        if name.startswith('data.tar'):
+            # Recent Ubuntu packages use zstd, which tarfile reads from Python 3.14.
+            with tarfile.open(fileobj=io.BytesIO(data[position + 60:position + 60 + size])) as files:
+                files.extractall(destination, filter='data')
+            return
+        position += 60 + size + (size & 1)
+    raise SystemExit(f'{archive.name} has no data archive.')
 
 
 def snapshot(paths: list[Path]) -> dict[str, str]:
@@ -50,6 +71,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--data-root', type=Path, default=DEFAULT_ROOT)
     parser.add_argument('--play', action='store_true', help='Open the game for normal play, with isolated saves and no time limit.')
+    parser.add_argument('--prepare', action='store_true', help='Only fetch and unpack the private TurboJPEG library a launch needs, then exit.')
+    parser.add_argument('--steam-root', type=Path, help='The Steam installation whose userdata holds the cloud saves to back up (default: the one holding the game).')
     parser.add_argument('--input-plan', choices=['movement', 'combat', 'ability', 'cook', 'healing', 'fslot', 'visual', 'breakable', 'boss', 'crowd', 'aim', 'shield', 'repro', 'hazard', 'stars', 'screen', 'water', 'items', 'rewards', 'forge', 'scroll', 'tentacle', 'thorny', 'arrival'], help='Run an isolated input test (repro tests normal keyboard/controller bindings).')
     parser.add_argument('--probe-ability', type=int, choices=range(2, 26), metavar='2..25', help='Prepare this original ability through inhale/feed/swallow before the ability or screen probe.')
     parser.add_argument('--probe-scrolls', metavar='B,T,S', help='Give the ability probe this many Brutality, Tactics and Survival scrolls before measuring damage.')
@@ -122,6 +145,9 @@ def main() -> None:
         parser.error('--seconds must be in 1..300')
     root = args.data_root.resolve()
     root.mkdir(parents=True, exist_ok=True)
+    if args.prepare:
+        print(f'TurboJPEG ready: {turbojpeg_library(root)}')
+        return
     runtime_lock = (root / 'lab.runtime.lock').open('a')
     try:
         fcntl.flock(runtime_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -151,7 +177,8 @@ def main() -> None:
         raise SystemExit('bubblewrap is required to protect installed files during the isolated launch.')
     # Every launch is preceded by a snapshot of local and Steam saves.
     saves = [game / 'save']
-    steam = game.parents[2]
+    # A game in a second Steam library keeps its cloud saves in the main Steam folder.
+    steam = args.steam_root.expanduser().resolve() if args.steam_root else game.parents[2]
     saves += sorted((steam / 'userdata').glob('*/588650'))
     backup = back_up(saves, root)
     print(f'Saves backed up to {backup}', flush=True)

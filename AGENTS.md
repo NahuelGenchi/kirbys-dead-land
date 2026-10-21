@@ -13,6 +13,7 @@ Never describe something as working or complete unless a recorded check establis
 | `src/core/` | Platform-independent rules (`KirbyRules.cs`) |
 | `src/runtime/` | DCCM adapter: input, enemies, damage, hurtboxes, saves, rendering, audio and `Lab*` live probes |
 | `src/nds/` | Rust bridge to the pinned melon-rs/melonDS, plus its patch |
+| `launcher/` | Player launcher (Rust and Slint): checks, one-time setup, Play (`docs/LAUNCHER.md`) |
 | `scripts/` | Runtime setup, staging, launch and `check.py` |
 | `tools/` | ROM extraction, outfit build, oracle and verification scripts |
 | `tests/` | .NET and Python source tests |

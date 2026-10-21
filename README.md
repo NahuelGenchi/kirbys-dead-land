@@ -115,6 +115,12 @@ preserved; generated assets and native dependencies remain in the private data r
 
 ## Install
 
+A desktop launcher for players is on its way (M4): it checks Steam, Dead Cells
+and your ROM, sets everything up in about two minutes, and then has a Play button.
+Prebuilt downloads come with #222; until then it can be built from source, as the
+[launcher guide](docs/LAUNCHER.md) explains. The source install below stays
+available.
+
 Releases are source archives: they contain no ROM, no Dead Cells file and no
 binary, and setup builds everything on your machine beneath
 `~/.local/share/kirby-dead-cells/`. You need:
@@ -421,7 +427,7 @@ Every host enemy, hazard, item and boss phase has not been individually tested.
 See the detailed fidelity report for measured coverage and these boundaries.
 
 Details: [ROM format](docs/ROM_FORMAT.md), [ROM internals](docs/ROM_INTERNALS.md), [host internals](docs/HOST_INTERNALS.md), [renderer](docs/RENDERING.md),
-[runtime launch](docs/RUNTIME_LAUNCH.md), [gameplay fidelity](docs/GAMEPLAY_FIDELITY.md), [performance](docs/PERFORMANCE.md),
+[runtime launch](docs/RUNTIME_LAUNCH.md), [player launcher](docs/LAUNCHER.md), [gameplay fidelity](docs/GAMEPLAY_FIDELITY.md), [performance](docs/PERFORMANCE.md),
 [tutorial integration](docs/TUTORIALS.md), [releases](docs/RELEASE.md), [work tracking](docs/TRACKING.md), and [work journal](MODLOG.md). Older research notes describe the initial foundation;
 the dated journal records subsequent implementation.
 
