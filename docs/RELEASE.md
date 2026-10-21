@@ -204,6 +204,21 @@ deletion (see [work tracking](TRACKING.md#enforcement-boundary)). Public
 repositories run standard Actions runners at no cost, so the tracking workflow,
 stopped by billing on the private repository, runs again.
 
+## v0.2.1 (2026-10-21)
+
+A fix release for one bug (#236): in v0.2.0 Kirby could not break the Collector's
+exit door, so a player holding unspent cells with nothing to buy was trapped in the
+transition level (#233, fixed by PR #234). Same files as v0.2.0, with 0.2.1 in their
+names.
+
+- One version, 0.2.1, in `mod.json`, the runtime adapter's project and the launcher
+  (`Cargo.toml`, its `Cargo.lock` entry and `launcher/NOTICES.txt`).
+- The fix was checked live before tagging: the probe and control runs in
+  [RUNTIME_LAUNCH.md](RUNTIME_LAUNCH.md#collector-door-233), and the owner's own
+  stuck v0.2.0 save opened with main's build (see
+  [GAMEPLAY_FIDELITY.md](GAMEPLAY_FIDELITY.md#the-collectors-door-takes-hits-again-233)).
+- v0.2.0 launchers that look for a new version see this one as newer.
+
 ## v0.2.0 (2026-10-21)
 
 The first release with the player launcher, published as a regular release (shown
