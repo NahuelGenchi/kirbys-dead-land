@@ -16,8 +16,9 @@ from nds_graphics_patch import GRAPHICS_WRAPPER_FILES, GRAPHICS_CORE_FILES, chec
 from nds_call_patch import CALL_CORE_FILES, check_call_patch
 from nds_step_patch import STEP_CORE_FILES, check_step_patch
 from nds_jit_patch import JIT_WRAPPER_FILES, JIT_CORE_FILES, check_jit_patch
+from data_root import data_root
 
-ROOT = Path.home() / ".local/share/kirby-dead-cells/oracle"
+ROOT = data_root() / "oracle"
 WRAPPER = "51f25edaf3b2df63f91d049eff8c38fb289150eb"
 CORE = "82fdbc78483f43b310e920e21acc47787cb43564"
 BRIDGE = "src/melon/cpp/Platform.cpp"

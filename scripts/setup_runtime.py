@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tarfile
 import urllib.request
 import zipfile
@@ -18,7 +19,10 @@ DCCM_SHA256 = 'c57b1fca88e688d228fe5e0aa2b3b4789117f7ff9b092af5c9fd5ada1d3c14a2'
 SDK_VERSION = '10.0.401'
 SDK_URL = f'https://builds.dotnet.microsoft.com/dotnet/Sdk/{SDK_VERSION}/dotnet-sdk-{SDK_VERSION}-linux-x64.tar.gz'
 SDK_SHA512 = '51c8b999af9e8dd9998c9edc5944e19a90788862068acd38694e098889054ce8c23d4f0c5cccfa16bf187d044562359e5ee69a9f8ad0bbe913ba90311fbce25b'
-DEFAULT_ROOT = Path.home() / '.local/share/kirby-dead-cells'
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
+from data_root import data_root
+
+DEFAULT_ROOT = data_root()
 
 
 def download_checked(url: str, path: Path, algorithm: str, digest: str) -> None:

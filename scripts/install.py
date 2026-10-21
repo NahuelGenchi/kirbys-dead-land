@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Set up Kirby's Dead Land from source with the player's own ROM and Dead Cells.
 
-Runs the setup steps in order beneath ~/.local/share/kirby-dead-cells/, skipping
+Runs the setup steps in order beneath the data root (~/.local/share/kirby-dead-cells/
+unless KIRBY_DATA_ROOT names another), skipping
 those already done: the pinned .NET SDK and DCCM with the runtime build, the
 pinned melon-rs/melonDS oracle and bridge, the seed state from the original
 menus, the ROM extraction and ability icons, the outfit pack, and the private
@@ -20,9 +21,10 @@ import time
 
 PROJECT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT / 'tools'))
+from data_root import data_root
 from oracle_snapshot import ROM_SHA256
 
-ROOT = Path.home() / '.local/share/kirby-dead-cells'
+ROOT = data_root()
 GAME = Path.home() / '.local/share/Steam/steamapps/common/Dead Cells'
 TOOLKIT = Path.home() / 'Games/mods/universal-modder'
 COMMANDS = ['git', 'cargo', 'cmake', 'bwrap', 'dpkg-deb']

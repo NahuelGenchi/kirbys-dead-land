@@ -3,7 +3,8 @@
 import ctypes as C
 import os
 from pathlib import Path
-ROOT=Path.home()/'.local/share/kirby-dead-cells'
+from data_root import data_root
+ROOT=data_root()
 ROM=Path(os.environ.get('KSSU_ROM',Path.home()/'Documents/ROMS/Nintendo DS/Kirby Super Star Ultra (USA).nds'))
 class State(C.Structure):
     _fields_=[('frame',C.c_uint32),('player',C.c_uint32),('x_raw',C.c_int32),('y_raw',C.c_int32),('vx_raw',C.c_int16),('vy_raw',C.c_int16),('camera_x',C.c_int16),('camera_y',C.c_int16),('ability',C.c_uint8),('kind',C.c_uint8),('flags',C.c_uint8),('facing_raw',C.c_uint8),('graphic',C.c_uint32),('animation',C.c_uint32),('state_words',C.c_uint32*16)]

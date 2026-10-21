@@ -11,8 +11,9 @@ import json
 import struct
 from pathlib import Path
 from PIL import Image, ImageDraw
+from data_root import data_root
 
-DEFAULT_OUT = Path.home() / '.local/share/kirby-dead-cells/rom'
+DEFAULT_OUT = data_root() / 'rom'
 SIZES = (((8,8),(16,16),(32,32),(64,64)),
          ((16,8),(32,8),(32,16),(64,32)),
          ((8,16),(8,32),(16,32),(32,64)))

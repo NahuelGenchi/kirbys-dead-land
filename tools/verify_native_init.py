@@ -14,8 +14,9 @@ from pathlib import Path
 import subprocess
 import sys
 import time
+from data_root import data_root
 
-ROOT = Path.home() / ".local/share/kirby-dead-cells"
+ROOT = data_root()
 
 
 def main():

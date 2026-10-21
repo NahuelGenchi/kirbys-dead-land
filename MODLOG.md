@@ -2812,3 +2812,12 @@ the all-ability rendering tests as full gameplay acceptance.
   item form and the tracking workflow, which now also reads `Milestone: M4` lines.
 - Source: the workflow and form YAML parse, and the workflow's script passes
   `node --check`. Live: none.
+## 2026-10-20 — one environment variable for the data root (#219)
+
+- `tools/data_root.py`: `KIRBY_DATA_ROOT` moves the private data root for every
+  script and tool (setup, install, stage, launch, check, oracle build and runs, the
+  bridge probe and verifiers, ROM extraction, icons, outfit). Unset, the root is
+  `~/.local/share/kirby-dead-cells/` as before. The player launcher (#221) will use
+  its own root through it.
+- Source: `tests/test_data_root.py` checks each module's root with and without the
+  variable; `python3 -m unittest discover -s tests -p 'test_*.py'` passes. Live: none.

@@ -16,6 +16,14 @@ The launcher changes only the private lab profile. It never installs the loader 
 
 Staging and launching share an exclusive lab lock. A second launch or an attempt to replace the runtime while the game is running exits before changing the lab.
 
+## Data root
+
+Every script and tool writes beneath one private data root,
+`~/.local/share/kirby-dead-cells/` by default. `KIRBY_DATA_ROOT` moves all of it
+(`tools/data_root.py`, #219): the downloads, the oracle and bridge build, the seed
+state, the ROM extraction, icons and outfit, and the lab. `--data-root` on the
+setup, stage, check and launch scripts still overrides it for those scripts.
+
 ## Save isolation
 
 A separate working directory is insufficient: this build's `tool.File` reads and writes Steam Cloud. The opt-in `LabIsolation` helper is installed before game initialization and redirects all four `tool.File` operations (`exists`, `getBytes`, `saveBytes`, `delete`) to the private `lab/save` directory. It also redirects the path used by local backups, disables the game's Cloud storage operations for this process, and prevents the in-game Cloud toggle from altering Steam settings. Steam authentication and ownership calls are not changed by this helper; Goldberg remains disabled and is omitted from staging.

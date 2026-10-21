@@ -12,8 +12,9 @@ import subprocess
 
 from PIL import Image
 from oracle_snapshot import ROM_SHA256
+from data_root import data_root
 
-ROOT = Path.home() / ".local/share/kirby-dead-cells/oracle"
+ROOT = data_root() / "oracle"
 
 
 def digest(path):
