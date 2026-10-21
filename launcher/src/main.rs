@@ -67,7 +67,7 @@ fn value(args: &[String], flag: &str) -> Option<String> {
 
 const USAGE: &str = "Usage: kirbys-dead-land [--bundle DIR]
        kirbys-dead-land --check [--bundle DIR]
-       kirbys-dead-land --screenshot DIR [--art-from DATA_ROOT]
+       kirbys-dead-land --screenshot DIR [--art-from DATA_ROOT] [--scale 1-4]
        kirbys-dead-land --write-icon FILE.png
        kirbys-dead-land --version";
 
@@ -94,7 +94,15 @@ fn main() {
         return;
     }
     if let Some(out) = value(&args, "--screenshot") {
-        if let Err(error) = shots::run(&PathBuf::from(out), value(&args, "--art-from").map(PathBuf::from)) {
+        let scale = match value(&args, "--scale").map(|s| s.parse::<f32>()) {
+            None => 1.0,
+            Some(Ok(scale)) if (1.0..=4.0).contains(&scale) => scale,
+            Some(_) => {
+                eprintln!("--scale takes a number from 1 to 4");
+                std::process::exit(2);
+            }
+        };
+        if let Err(error) = shots::run(&PathBuf::from(out), value(&args, "--art-from").map(PathBuf::from), scale) {
             eprintln!("{error}");
             std::process::exit(1);
         }

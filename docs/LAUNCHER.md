@@ -165,7 +165,8 @@ Other options: `--check` prints the checks and the bundle it found (`Mod files:
 <folder> (<version>+<commit>)`), then exits (0 when ready to play);
 `--screenshot DIR` renders every screen to PNG files with a fixed clock, with
 stand-in art unless `--art-from DATA_ROOT` names a finished setup (those images
-hold ROM art and stay private); `--write-icon FILE` writes the icon. For checks
+hold ROM art and stay private), and `--scale 2` draws them at twice the pixel
+density for sharp pictures; `--write-icon FILE` writes the icon. For checks
 only, `--autopilot DIR` presses what a player would in the real window (use the
 found ROM, set up, play), saves a window snapshot at each change, stops at any
 question, and exits 0 once the game has run and closed. `--smoke-play SECONDS`
