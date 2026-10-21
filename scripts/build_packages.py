@@ -53,6 +53,10 @@ APPIMAGE_RUNTIME = 'https://github.com/AppImage/type2-runtime/releases/download/
 APPIMAGE_RUNTIME_SHA256 = '2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d'
 # The dependency versions the lab's bridge and runner were verified with.
 LOCKS = {'bridge': PACKAGING / 'bridge.Cargo.lock', 'runner': PACKAGING / 'runner.Cargo.lock'}
+# The license and notices every package carries: the launcher's (tools/launcher_notices.py)
+# and the bridge's and runner's (tools/emulator_notices.py).
+NOTICES = {'LICENSE': PROJECT / 'LICENSE', 'NOTICES.txt': PROJECT / 'launcher/NOTICES.txt',
+           'NOTICES-emulator.txt': PACKAGING / 'NOTICES-emulator.txt'}
 ELF, MZ, PNG, JSON = b'\x7fELF', b'MZ', b'\x89PNG\r\n\x1a\n', b'{'
 
 
@@ -98,10 +102,15 @@ def build(env: dict[str, str], build_root: Path) -> None:
     run(['cargo', 'build', '--release', '--locked'], env, cwd=PROJECT / 'launcher')
 
 
+def notice_paths(kind: str) -> list[str]:
+    """Where a package keeps the license and notices."""
+    return [f'usr/share/doc/{APP}/{name}' if kind == 'appimage' else name for name in NOTICES]
+
+
 def layout(kind: str, bundle: Path, launcher: bytes, icon: bytes) -> tuple[dict[str, tuple[bytes, int]], dict[str, bytes]]:
     """A package's files as {path: (data, mode)}, and the ones the build made, each
     with the bytes it starts with."""
-    notices = {'LICENSE': (PROJECT / 'LICENSE').read_bytes(), 'NOTICES.txt': (PROJECT / 'launcher/NOTICES.txt').read_bytes()}
+    notices = {name: path.read_bytes() for name, path in NOTICES.items()}
     desktop = (PACKAGING / f'{APP}.desktop').read_bytes()
     if kind == 'appimage':
         share = f'usr/share/{APP}/'
@@ -267,7 +276,7 @@ def main() -> None:
     report = {'version': version, 'bundle': bundle_id, 'packages': {}}
     for kind, path in (('appimage', output / f'{stem}.AppImage'), ('tar', output / f'{stem}.tar.gz')):
         files, built = layout(kind, work / 'bundle', launcher.read_bytes(), (work / f'{APP}.png').read_bytes())
-        problems = lint_package({name: data for name, (data, _) in files.items()}, built, private)
+        problems = lint_package({name: data for name, (data, _) in files.items()}, built, private, notice_paths(kind))
         if problems:
             raise SystemExit(f'Package lint failed for {path.name}:\n' + '\n'.join(f'- {problem}' for problem in problems))
         if kind == 'appimage':

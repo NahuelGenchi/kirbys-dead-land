@@ -12,4 +12,5 @@ Ultra (USA) game file, and the bubblewrap package. The launcher checks each one
 and says what to do. Guide: https://github.com/NahuelGenchi/kirbys-dead-land/blob/main/docs/LAUNCHER.md
 
 The launcher is free software under the GNU GPL version 3 (LICENSE). NOTICES.txt
-lists the other software inside it and where to get the source code.
+and NOTICES-emulator.txt list the other software inside it and where to get the
+source code.

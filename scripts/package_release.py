@@ -7,6 +7,7 @@ recordings, generated packs, private data folders and key-like strings.
 `lint_package` applies the same lint to a player package's file list.
 """
 import argparse
+from collections.abc import Iterable
 import hashlib
 import io
 import json
@@ -65,14 +66,16 @@ def lint(files: dict[str, bytes]) -> list[str]:
     return problems
 
 
-def lint_package(files: dict[str, bytes], built: dict[str, bytes], private: list[bytes]) -> list[str]:
+def lint_package(files: dict[str, bytes], built: dict[str, bytes], private: list[bytes],
+                 required: Iterable[str] = ()) -> list[str]:
     """Return one problem per file that must not be in a player package (scripts/build_packages.py).
 
     `built` names the files the build made (the programs, the runtime's settings and
     the icon), each with the bytes it must start with; every other file must pass the
-    release lint. No file may name one of the `private` folders of the build machine.
+    release lint. `required` names other files that must be there, such as the license
+    and notices. No file may name one of the `private` folders of the build machine.
     """
-    problems = [f'{name}: missing' for name in sorted(set(built) - set(files))]
+    problems = [f'{name}: missing' for name in sorted((set(built) | set(required)) - set(files))]
     for name, data in sorted(files.items()):
         if name not in built:
             problems.extend(lint({name: data}))

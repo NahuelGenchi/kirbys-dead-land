@@ -1,4 +1,5 @@
 """The player packages' layout, lint and archives (scripts/build_packages.py); synthetic files only."""
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -12,7 +13,9 @@ import unittest
 PROJECT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT / 'scripts'))
 from build_bundle import RUNTIME, project_files
-from build_packages import APP, build_environment, layout, read_appimage, read_tar, write_appimage, write_tar
+from build_packages import APP, LOCKS, NOTICES, build_environment, layout, notice_paths, read_appimage, read_tar, \
+    write_appimage, write_tar
+from oracle_build import CORE, WRAPPER
 from package_release import lint_package
 
 HOME = os.fsencode(Path.home()) + b'/'
@@ -53,17 +56,17 @@ class PackageLayoutTests(unittest.TestCase):
         self.assertIn(f'usr/share/{APP}/bundle.json', files)
         self.assertEqual(files[f'usr/share/{APP}/bin/kssu-oracle-runner'][1], 0o755)
         self.assertIn(b'$APPDIR/usr/bin/kirbys-dead-land', files['AppRun'][0])
-        for name in ('LICENSE', 'NOTICES.txt'):
-            self.assertEqual(files[f'usr/share/doc/{APP}/{name}'][0], (PROJECT / ('launcher/' if name == 'NOTICES.txt' else '') / name).read_bytes())
-        self.assertEqual(lint_package({name: data for name, (data, _) in files.items()}, built, [HOME]), [])
+        for name, source in NOTICES.items():
+            self.assertEqual(files[f'usr/share/doc/{APP}/{name}'][0], source.read_bytes())
+        self.assertEqual(lint_package({name: data for name, (data, _) in files.items()}, built, [HOME], notice_paths('appimage')), [])
 
     def test_tar_keeps_the_bundle_beside_the_launcher(self):
         files, built = self.package('tar')
         self.assertEqual(files[APP][1], 0o755)
         self.assertIn(f'share/{APP}/project/scripts/launch_runtime.py', files)
-        for name in ('LICENSE', 'NOTICES.txt', 'README.txt', 'add-to-menu.sh', f'{APP}.desktop', f'{APP}.png'):
+        for name in ('LICENSE', 'NOTICES.txt', 'NOTICES-emulator.txt', 'README.txt', 'add-to-menu.sh', f'{APP}.desktop', f'{APP}.png'):
             self.assertIn(name, files)
-        self.assertEqual(lint_package({name: data for name, (data, _) in files.items()}, built, [HOME]), [])
+        self.assertEqual(lint_package({name: data for name, (data, _) in files.items()}, built, [HOME], notice_paths('tar')), [])
 
     def test_lint_refuses_private_and_unexpected_files(self):
         files, built = self.package('tar')
@@ -83,7 +86,9 @@ class PackageLayoutTests(unittest.TestCase):
                 self.assertTrue(lint_package({**data, **change}, built, [HOME]))
         missing = dict(data)
         del missing[f'share/{APP}/bin/kssu-oracle-runner']
-        self.assertEqual(lint_package(missing, built, [HOME]), [f'share/{APP}/bin/kssu-oracle-runner: missing'])
+        del missing['NOTICES-emulator.txt']
+        self.assertEqual(lint_package(missing, built, [HOME], notice_paths('tar')),
+                         ['NOTICES-emulator.txt: missing', f'share/{APP}/bin/kssu-oracle-runner: missing'])
 
     def test_bundle_links_are_refused(self):
         (self.bundle / 'project/link').symlink_to('/etc/hostname')
@@ -107,6 +112,18 @@ class PackageLayoutTests(unittest.TestCase):
         self.assertTrue(image.read_bytes().startswith(runtime))
         self.assertTrue(os.access(image, os.X_OK))
         self.assertEqual(read_appimage(image, len(runtime), self.folder), files)
+
+
+class NoticesTests(unittest.TestCase):
+    def test_emulator_notices_cover_the_pinned_crates_and_revisions(self):
+        notices = NOTICES['NOTICES-emulator.txt'].read_text()
+        for name, lock in LOCKS.items():
+            with self.subTest(program=name):
+                digest = hashlib.sha256(lock.read_bytes()).hexdigest()
+                self.assertTrue(f'from packaging/{name}.Cargo.lock {digest[:16]}' in notices,
+                                f'{lock.name} changed: run tools/emulator_notices.py')
+        self.assertTrue(f'melonDS {CORE} ' in notices and f'melon-rs {WRAPPER} ' in notices,
+                        'The pinned melonDS or melon-rs revision changed: run tools/emulator_notices.py')
 
 
 class BundledFilesTests(unittest.TestCase):

@@ -26,7 +26,9 @@ libkssu_bridge.so and kssu-oracle-runner are built from melonDS
 (GPL-3.0, https://github.com/benhall-7/melon-rs) with this project's patches.
 Their complete corresponding source is this project's source at the release
 tag, which names the exact melonDS and melon-rs revisions and patches in
-THIRD_PARTY_NOTICES.md, tools/oracle_build.py and tools/nds_build.py.
+THIRD_PARTY_NOTICES.md, tools/oracle_build.py and tools/nds_build.py. The
+libraries and Rust crates built into them are listed in NOTICES-emulator.txt,
+shipped beside this file and shown after it in the launcher's Licenses.
 
 The Kirby runtime adapter (Kirby.Runtime.dll, Kirby.Core.dll) is this project's
 own code, GPL-3.0-or-later.

@@ -34,6 +34,21 @@ def run(*args, cwd=None):
     subprocess.run(list(args), cwd=cwd, check=True)
 
 
+def runner_manifest(source, melon_rs="../vendor/melon-rs"):
+    """The oracle runner's Cargo.toml; tools/emulator_notices.py reads its crates."""
+    return ('[package]\nname="kssu-oracle-runner"\nversion="0.1.0"\nedition="2021"\n'
+            '[[bin]]\nname="kssu-oracle-runner"\npath=' + json.dumps(str(source)) + '\n'
+            '[dependencies]\nmelon-rs={path=' + json.dumps(str(melon_rs)) + ',default-features=false}\n'
+            'chrono="=0.4.45"\nserde_json="=1.0.151"\n')
+
+
+def bridge_manifest(source, melon_rs="../vendor/melon-rs"):
+    """The bridge's Cargo.toml (tools/nds_build.py); tools/emulator_notices.py reads its crates."""
+    return ('[package]\nname="kssu-bridge"\nversion="0.1.0"\nedition="2021"\n[lib]\ncrate-type=["cdylib"]\n'
+            'path=' + json.dumps(str(source)) + '\n[dependencies]\n'
+            'melon-rs={path=' + json.dumps(str(melon_rs)) + ',default-features=false}\nchrono="=0.4.45"\nsha2="=0.10.9"\n')
+
+
 def git_output(folder, *args):
     return subprocess.check_output(["git", "-C", str(folder), *args], text=True).strip()
 
@@ -77,11 +92,7 @@ def main():
     crate = ROOT / "runner"
     crate.mkdir(exist_ok=True)
     source_path = Path(__file__).with_name("oracle_runner.rs").resolve()
-    manifest = ('[package]\nname="kssu-oracle-runner"\nversion="0.1.0"\nedition="2021"\n'
-                '[[bin]]\nname="kssu-oracle-runner"\npath=' + json.dumps(str(source_path)) + '\n'
-                '[dependencies]\nmelon-rs={path="../vendor/melon-rs",default-features=false}\n'
-                'chrono="=0.4.45"\nserde_json="=1.0.151"\n')
-    (crate / "Cargo.toml").write_text(manifest)
+    (crate / "Cargo.toml").write_text(runner_manifest(source_path))
     env = dict(os.environ, CARGO_TARGET_DIR=str(vendor / "target"))
     subprocess.run(["cargo", "build", "--release", "--manifest-path", str(crate / "Cargo.toml")],
                    cwd=ROOT, env=env, check=True)
