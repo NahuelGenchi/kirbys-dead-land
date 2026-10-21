@@ -2906,3 +2906,23 @@ the all-ability rendering tests as full gameplay acceptance.
   `python3 scripts/check.py` passed; `tools/launcher_notices.py` regenerates the
   launcher notices with only the new pointer line changed. Not run: a package build
   or a live game check (neither program changed).
+
+## 2026-10-21 — clean setup, other distributions and v0.2.0 (#223)
+
+- One version, 0.2.0, in `mod.json` (status `release`), the runtime adapter's
+  project and the launcher, with a test that keeps them equal. The README's Install
+  section starts from the launcher download; the source install stays below it.
+- Build: `scripts/release_container.sh` on `808016b` made both 0.2.0 packages
+  (57 files each), linted, read back and `--check`ed.
+- Live (offscreen, this machine, new data and config folders): the AppImage's
+  autopilot took the offered ROM, ran setup in 69 s and the 72-second movement
+  check reached `dc.pr.Game` with a live hero in the Kirby outfit, with the packaged
+  bridge, saves backed up and unchanged, no fatal log; exit 0.
+- Containers (Fedora 44, Arch, Debian 13): both packages need `libfontconfig.so.1`
+  and, for the window, at least one font; with them, the checks and all 14
+  screens work and name each distribution's bubblewrap command. Recorded in
+  `docs/LAUNCHER.md#other-distributions-223`, not fixed (every desktop and Steam
+  bring both).
+- Not run: a person clicking, the file chooser, the game on another distribution
+  or a Steam Deck. The tag, the release and a check of the published download
+  follow this change.

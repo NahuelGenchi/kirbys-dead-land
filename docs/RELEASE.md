@@ -204,6 +204,22 @@ deletion (see [work tracking](TRACKING.md#enforcement-boundary)). Public
 repositories run standard Actions runners at no cost, so the tracking workflow,
 stopped by billing on the private repository, runs again.
 
+## v0.2.0 (2026-10-21)
+
+The first release with the player launcher, published as a regular release (shown
+as Latest) with `KirbysDeadLand-0.2.0-x86_64.AppImage`,
+`KirbysDeadLand-0.2.0-x86_64.tar.gz`, `kirbys-dead-land-0.2.0.tar.gz` and their
+`.sha256` files. Its notes are written for players: what they need, the steps from
+download to Play, what happens to their saves, what was tested, and the files and
+licenses.
+
+- One version, 0.2.0, in `mod.json` (status `release`), the runtime adapter's
+  project and the launcher; `tests/test_player_packages.py` keeps them equal, and
+  `build_packages.py --tag` refuses a tag that names another.
+- Checked before tagging: a [clean setup](LAUNCHER.md#clean-setup-223) from the
+  packaged launcher on this machine, and the packages'
+  [checks on other distributions](LAUNCHER.md#other-distributions-223).
+
 ## v0.1.0 (2026-10-20, pre-release)
 
 The first release, tagged `v0.1.0` and published as a GitHub pre-release on the

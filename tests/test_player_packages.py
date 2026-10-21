@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import tomllib
 import unittest
 
 PROJECT = Path(__file__).resolve().parents[1]
@@ -153,6 +154,13 @@ class BuildEnvironmentTests(unittest.TestCase):
 
 
 class ReleaseWorkflowTests(unittest.TestCase):
+    def test_one_version_for_the_mod_the_runtime_and_the_launcher(self):
+        # build_packages.py --tag refuses a tag unless these agree.
+        mod = json.loads((PROJECT / 'mod.json').read_text())['version']
+        launcher = tomllib.loads((PROJECT / 'launcher/Cargo.toml').read_text())['package']['version']
+        runtime = re.search(r'<Version>([^<]+)</Version>', (PROJECT / 'src/runtime/Kirby.Runtime.csproj').read_text()).group(1)
+        self.assertEqual({mod, launcher, runtime}, {mod})
+
     def test_local_container_matches_the_workflow(self):
         workflow = (PROJECT / '.github/workflows/release.yml').read_text()
         local = (PROJECT / 'scripts/release_container.sh').read_text()

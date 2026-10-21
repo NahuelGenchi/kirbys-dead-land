@@ -115,14 +115,23 @@ preserved; generated assets and native dependencies remain in the private data r
 
 ## Install
 
-A desktop launcher for players is on its way (M4): it checks Steam, Dead Cells
-and your ROM, sets everything up in about two minutes, and then has a Play button.
-Prebuilt downloads come with #222; until then it can be built from source, as the
-[launcher guide](docs/LAUNCHER.md) explains. The source install below stays
-available.
+Download the launcher from the
+[latest release](https://github.com/NahuelGenchi/kirbys-dead-land/releases/latest):
 
-Releases are source archives: they contain no ROM, no Dead Cells file and no
-binary, and setup builds everything on your machine beneath
+- `KirbysDeadLand-<version>-x86_64.AppImage`: one file. Allow it to run as a
+  program (in its Properties), then double-click it.
+- or `KirbysDeadLand-<version>-x86_64.tar.gz`: unpack it and double-click
+  `kirbys-dead-land` in the folder.
+
+The launcher checks Steam, Dead Cells, your own Kirby Super Star Ultra (USA) game
+file and the bubblewrap package, and says what to do about anything missing. The
+first time, it sets everything up in about two minutes; after that, press Play.
+The [launcher guide](docs/LAUNCHER.md) explains each step.
+
+### From source
+
+Each release also has a source archive: it contains no ROM, no Dead Cells file and
+no binary, and setup builds everything on your machine beneath
 `~/.local/share/kirby-dead-cells/`. You need:
 
 - Linux x64 with Steam running and Dead Cells installed from Steam (tested with v35,
@@ -149,7 +158,8 @@ sources, and compiles them, so it takes a while.
 
 ## Play
 
-The local build is staged and ready. Keep Steam running, then run from this folder:
+With the launcher, press Play. For a source install, keep Steam running, then run
+from this folder:
 
 ```sh
 ./play-kirby

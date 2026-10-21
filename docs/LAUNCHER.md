@@ -1,6 +1,6 @@
 # Player launcher
 
-[Back to README](../README.md) · Issues #221, #222 · Milestone M4
+[Back to README](../README.md) · Issues #221, #222, #223 · Milestone M4
 
 The launcher is a desktop program for players who do not use a terminal. Each
 time it opens it checks Steam, Dead Cells, the player's own Kirby Super Star Ultra
@@ -11,9 +11,10 @@ and [Slint](https://slint.dev), software rendering, no GPU needed for the window
 ## Download
 
 Releases from v0.2.0 carry two downloads of the launcher with everything it
-installs, built by the release workflow ([Player packages](RELEASE.md#player-packages)).
-Neither holds a ROM, a game file or any Kirby art: setup makes those from the
-player's own files.
+installs, built by the release workflow ([Player packages](RELEASE.md#player-packages));
+the [latest release](https://github.com/NahuelGenchi/kirbys-dead-land/releases/latest)
+has them. Neither holds a ROM, a game file or any Kirby art: setup makes those
+from the player's own files.
 
 - **`KirbysDeadLand-<version>-x86_64.AppImage`**: one file. Allow it to run as a
   program (in the file's Properties, or `chmod +x`), then double-click it. It needs
@@ -24,8 +25,13 @@ player's own files.
   `add-to-menu.sh` adds a menu entry for that folder.
 
 Each has a `.sha256` beside it. Both carry the GPL `LICENSE`, `NOTICES.txt` and
-`NOTICES-emulator.txt` (together, the text of Settings › Licenses). Until v0.2.0
-is out, the launcher is built from source (see [Building](#building-and-checking)).
+`NOTICES-emulator.txt` (together, the text of Settings › Licenses).
+
+Both are built on Ubuntu 22.04, so they need a 64-bit Linux with glibc 2.35 or
+later, plus the fontconfig library and at least one installed font, which every
+desktop has and Steam needs anyway. Without fontconfig the launcher
+does not start; with fontconfig but no font at all (a bare Arch install), Slint's
+font lookup stops it before the window opens (see [Verification](#other-distributions-223)).
 
 ## For players
 
@@ -218,9 +224,61 @@ beforehand.
   the Kirby outfit (14,577 frames), real saves unchanged, no fatal log. Details in
   [Releases](RELEASE.md#verification-222).
 
+### Clean setup (#223)
+
+2026-10-21, this machine (Ubuntu 26.04, native Steam running, Dead Cells build
+23762174, 6.0 GiB free), with `KirbysDeadLand-0.2.0-x86_64.AppImage` built by
+`scripts/release_container.sh` from `808016b` (bundle `0.2.0+808016b`), started
+through FUSE with a data folder (`KIRBY_DATA_ROOT`) and a config folder
+(`XDG_CONFIG_HOME`) that did not exist, and `--autopilot <dir> --smoke-play 72`:
+
+- Checks: Steam, Dead Cells and the sandbox ready at once; the ROM in Documents
+  offered, *Use this file* pressed, verified.
+- *Set up Kirby*: all seven steps in 69 s (downloads 0:05, start 0:13, sprites
+  0:23, abilities 0:23, outfit 0:03), 970 MB on disk afterwards; the home screen
+  showed Kirby, *Ready to play* and the 24 ability icons.
+- Play: the 72-second movement check reached `dc.pr.Game` with a live hero in the
+  `KirbySuperStarUltra` outfit (14,976 frames), original ROM provider enabled,
+  recompiler, normal timeout, saves backed up first, save isolation installed, real
+  saves unchanged, no fatal log. The game loaded the packaged bridge (the same
+  SHA-256 as in the AppImage). The launcher went back to idle and the autopilot
+  exited 0 after 146 s in all.
+
+The window snapshots hold the player's ROM art and stay private. Not covered here:
+choosing the ROM in the file chooser (the autopilot takes the offered file; the
+chooser is the desktop's own portal dialog) and downloading the package from the
+release page, which is checked when the release is published.
+
+### Other distributions (#223)
+
+2026-10-21, Docker on this machine (no display, no FUSE: the AppImage ran with
+`APPIMAGE_EXTRACT_AND_RUN=1`), the same 0.2.0 packages, an empty home folder:
+`--check` from both packages, `--screenshot` (all 14 screens rendered without a
+display) and `ldd` on the launcher, the bridge and the runner.
+
+| Image | glibc | As shipped | With fontconfig |
+| :--- | :--- | :--- | :--- |
+| `fedora:latest` (Fedora 44) | 2.43 | launcher does not start: `libfontconfig.so.1` missing | checks and screenshots work |
+| `archlinux:latest` | 2.44 | same | checks work; screenshots stop in Slint's font lookup (`fontique` `NoMatch`): Arch's `fontconfig` package brings no font; with `ttf-dejavu`, all 14 screens |
+| `debian:stable` (Debian 13) | 2.41 | same | checks and screenshots work |
+
+- With fontconfig, each check said Steam was missing, Dead Cells needs Steam, the
+  ROM is to be chosen, and bubblewrap is to be installed with that distribution's
+  command (`sudo dnf install bubblewrap`, `sudo pacman -S bubblewrap`, `sudo apt
+  install bubblewrap`), and found its own bundle. With bubblewrap installed, the row
+  said the system blocks its sandbox (Docker blocks user namespaces), as described
+  under [Bubblewrap](#bubblewrap).
+- The bridge and the runner found every library they need in all three images;
+  `libfontconfig.so.1` is the only library any package program lacked.
+- Recorded rather than fixed: fontconfig and at least one font are on every
+  desktop, and Steam itself needs them (Arch's `steam` package depends on a font).
+  A system with neither has no desktop to show the launcher on. Images pinned by
+  digest: Fedora `sha256:43b29f65…5d80`, Arch `sha256:e43f1fd8…a8f4`, Debian
+  `sha256:defb09e1…8bd8`.
+
 Not run: a person clicking through the window (the autopilot calls the same
 handlers as the buttons, not pointer events), normal `--play` from the launcher
-with real input and sound, Flatpak or Snap Steam (detected, not tested), other
-distributions, a machine without the developer tools, a Steam that was not running
-(the start and wait path), and a game in a second Steam library. A clean-machine
-test is #223.
+with real input and sound, Flatpak or Snap Steam (detected, not tested), the game
+on another distribution or a Steam Deck (only the checks ran there, in
+containers), a Steam that was not running (the start and wait path), and a game in
+a second Steam library.
