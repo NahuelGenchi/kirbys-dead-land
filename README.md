@@ -125,9 +125,6 @@ binary, and setup builds everything on your machine beneath
   `b2573313a582c8dfaf2d93834a670c1ca8f389e5daa744e2dbe1a4ca903f3027`).
 - Python 3.12+ with Pillow and NumPy (`pip install -r requirements.txt`),
   Git, Rust (`cargo`), CMake, a C++ compiler, bubblewrap (`bwrap`) and `dpkg-deb`.
-- A [Universal Modder](https://github.com/rehan-remade/universal-modder) checkout
-  (default `~/Games/mods/universal-modder`); the launcher uses its `um backup` to
-  back up your real saves before every launch.
 
 Then, from the unpacked folder:
 
@@ -140,7 +137,7 @@ python3 scripts/install.py --rom "/path/to/Kirby Super Star Ultra (USA).nds"
 .NET SDK and DCCM, builds the mod, the pinned melon-rs/melonDS emulator and the
 bridge, plays the original menus once to make the seed state, decodes Kirby's
 graphics and ability icons from the ROM, builds the outfit pack and stages the
-private lab. Pass `--game` or `--toolkit` for other locations. Steps already done
+private lab. Pass `--game` for another Dead Cells location. Steps already done
 are skipped. The first install downloads the .NET SDK, DCCM and the emulator
 sources, and compiles them, so it takes a while.
 

@@ -2821,3 +2821,17 @@ the all-ability rendering tests as full gameplay acceptance.
   its own root through it.
 - Source: `tests/test_data_root.py` checks each module's root with and without the
   variable; `python3 -m unittest discover -s tests -p 'test_*.py'` passes. Live: none.
+## 2026-10-20 — real saves backed up without Universal Modder (#220)
+
+- `scripts/save_backup.py`: before every launch, each existing real save folder (the
+  game's `save/` and Steam's `userdata/*/588650`) is written to
+  `<data root>/save-backups/<time>/` as a `.tar.gz` with a manifest of every file's
+  SHA-256. Each archive is read back and compared with the folder; a mismatch stops
+  the launch and removes the partial set. The newest ten sets are kept.
+- `launch_runtime.py` no longer takes `--toolkit` or needs `um`; `install.py`, the
+  README, the notices, `docs/RUNTIME_LAUNCH.md` and `MODDING_PLAN.md` drop Universal
+  Modder.
+- Source: `tests/test_save_backup.py` (synthetic folders: contents, pruning, a
+  mismatch); the whole suite passes. Live (2026-10-20 22:01, the #210 clean-install
+  root, `--input-plan movement`, 60 s): both real save folders backed up and verified
+  (2 and 15 files), normal timeout, save isolation installed, real saves unchanged.

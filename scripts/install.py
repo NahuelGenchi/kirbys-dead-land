@@ -26,11 +26,10 @@ from oracle_snapshot import ROM_SHA256
 
 ROOT = data_root()
 GAME = Path.home() / '.local/share/Steam/steamapps/common/Dead Cells'
-TOOLKIT = Path.home() / 'Games/mods/universal-modder'
 COMMANDS = ['git', 'cargo', 'cmake', 'bwrap', 'dpkg-deb']
 
 
-def missing_prerequisites(game: Path, toolkit: Path) -> list[str]:
+def missing_prerequisites(game: Path) -> list[str]:
     problems = []
     if sys.version_info < (3, 12):
         problems.append('Python 3.12 or newer')
@@ -40,8 +39,6 @@ def missing_prerequisites(game: Path, toolkit: Path) -> list[str]:
     problems += [f'Python module `{name}`' for name in ('PIL', 'numpy') if not importlib.util.find_spec(name)]
     if not (game / 'hlboot.dat').is_file() or not (game / 'res.pak').is_file():
         problems.append(f'Steam Dead Cells (hlboot.dat and res.pak) in {game}')
-    if not (toolkit / 'bin/um').is_file():
-        problems.append(f'Universal Modder (bin/um, used for save backups) in {toolkit}')
     return problems
 
 
@@ -59,10 +56,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--rom', type=Path, required=True, help='Kirby Super Star Ultra (USA) revision 0 ROM.')
     parser.add_argument('--game', type=Path, default=GAME, help='Steam Dead Cells installation (read only).')
-    parser.add_argument('--toolkit', type=Path, default=TOOLKIT, help='Universal Modder checkout.')
     args = parser.parse_args()
-    rom, game, toolkit = (path.expanduser().resolve() for path in (args.rom, args.game, args.toolkit))
-    problems = missing_prerequisites(game, toolkit)
+    rom, game = (path.expanduser().resolve() for path in (args.rom, args.game))
+    problems = missing_prerequisites(game)
     if problems:
         raise SystemExit('Missing prerequisites:\n' + '\n'.join(f'- {problem}' for problem in problems))
     if not rom.is_file() or rom_digest(rom) != ROM_SHA256:
@@ -94,8 +90,7 @@ def main() -> None:
     run('Outfit: Kirby outfit pack', python, 'tools/build_outfit.py', '--game-pak', game / 'res.pak', env=env)
     run('Lab: stage the private profile', python, 'scripts/stage_runtime.py', '--original-runtime',
         '--game', game, '--rom', rom, '--outfit-pack', ROOT / 'outfit-build/res.pak', env=env)
-    print('\nInstalled. Keep Steam running, then play with:\n'
-          f'  ./play-kirby{"" if toolkit == TOOLKIT.resolve() else f" --toolkit {toolkit}"}')
+    print('\nInstalled. Keep Steam running, then play with:\n  ./play-kirby')
 
 
 if __name__ == '__main__':
