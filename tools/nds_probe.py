@@ -4,6 +4,7 @@ import ctypes as C
 import os
 from pathlib import Path
 from data_root import data_root
+from oracle_build import bridge_binary
 ROOT=data_root()
 ROM=Path(os.environ.get('KSSU_ROM',Path.home()/'Documents/ROMS/Nintendo DS/Kirby Super Star Ultra (USA).nds'))
 class State(C.Structure):
@@ -13,7 +14,8 @@ class Hit(C.Structure):
     _fields_=[('address',C.c_uint32),('owner',C.c_uint32),('slot',C.c_uint32),('bounds',C.c_int16*4),('definition',C.c_uint32),('words',C.c_uint16*14)]
 class Bridge:
     def __init__(self,state=ROOT/'oracle/ready2/000.state'):
-        self.lib=C.CDLL(str(ROOT/'oracle/vendor/melon-rs/target/release/libkssu_bridge.so'))
+        # The library tools/nds_build.py builds for this system (#242).
+        self.lib=C.CDLL(str(bridge_binary(ROOT/'oracle/vendor/melon-rs')))
         l=self.lib;l.kssu_open.argtypes=[C.c_char_p,C.c_char_p];l.kssu_open.restype=C.c_void_p
         l.kssu_close.argtypes=[C.c_void_p];l.kssu_step.argtypes=[C.c_void_p,C.c_uint16,C.c_uint32]
         l.kssu_state.argtypes=[C.c_void_p,C.POINTER(State)]

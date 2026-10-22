@@ -2611,3 +2611,6 @@ unsafe fn restore_hook(words: Option<[u32; HOOK_WORDS]>) {
     kssu_hook_saved.copy_from_slice(&w[7..]);
 }
 
+// Kept last so the Linux build, which leaves it out, keeps its line numbers.
+#[cfg(windows)]
+mod melon_windows;

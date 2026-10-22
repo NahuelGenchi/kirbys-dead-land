@@ -13,6 +13,22 @@ Run `python3 tools/oracle_build.py`, then `python3 tools/nds_build.py`. The latt
 - Built library: `oracle/vendor/melon-rs/target/release/libkssu_bridge.so`.
 - Provenance: `oracle/bridge-provenance.json`.
 
+### Windows build (#242)
+
+`--target windows` on both scripts cross-builds the same sources on Linux with MinGW-w64 (`g++-mingw-w64-x86-64-posix` and `rustup target add x86_64-pc-windows-gnu`): `oracle/vendor/melon-rs/target/x86_64-pc-windows-gnu/release/kssu_bridge.dll` and `kssu-oracle-runner.exe`, recorded in `oracle/bridge-provenance-windows.json` and `oracle/build-provenance-windows.json`. The Linux build, its files and its provenance are as before. `tools/nds_probe.py` and `tools/oracle_run.py` load the build for the system they run on. Four settings differ from Linux, set in `tools/oracle_build.py` and `packaging/melonds-windows.cmake`:
+
+- **POSIX threads.** melonDS uses `std::thread` and `std::mutex`, which MinGW's default (win32 thread model) GCC 13 lacks, so the `-posix` compilers build it.
+- **Five empty callbacks.** melonDS 82fdbc78 declares `Platform::WriteGBASave`, `Addon_KeyDown`, `Addon_RumbleStart`, `Addon_RumbleStop` and `Addon_MotionQuery`, which the pinned melon-rs shim does not define. Only the GBA add-on code calls them and nothing reaches it; the Linux linker drops that code with its references, while MinGW's linker reports them first. `src/nds/melon_windows.rs` defines them for Windows only, as functions that do nothing; `lib.rs` and `oracle_runner.rs` include it on their last lines, so the Linux build's line numbers do not move. The DLL exports them beside its 46 `kssu_*` functions.
+- **No data sections.** With `-fdata-sections`, MinGW's GCC writes zero-filled globals into the file, which made each program 160 MB with melonDS's 128 MiB JIT buffer. `-fno-data-sections` keeps it uninitialized, as on Linux.
+- **Static runtimes.** GCC's, C++'s and the thread library's runtimes are linked in, so the DLL and EXE import only Windows' own libraries (`kernel32`, `user32`, `msvcrt`, `ws2_32` and others), about 30 MB each.
+
+Checked on 2026-10-21 with both builds made by the scripts in a private root (`repros/windows-242`), the Windows programs run under Wine 11 (Proton Experimental) with the Windows Python 3.14.8 from python-build-standalone. This is Wine evidence; nothing has run on Windows 11 yet.
+
+- **Runner.** `tools/oracle_bootstrap.json` (4,166 frames from power-on): `trace.jsonl`, all 52 screenshots and all 26 RAM dumps are byte-identical between the Linux runner and the Windows one. Each of the 26 save states differs only in the same 24 bytes of the `GP3D` section: the padding byte after the 8-bit command of the queued 3D commands (`CmdFIFOEntry`, 20 in `CmdFIFO` and 4 in `CmdPIPE`), 126 on Linux and 0 on Windows. It is uninitialized memory that melonDS never reads. Each build then loaded the other's last state and played the same 430 frames of walking, jumping and inhaling: the four traces, screenshots and RAM dumps are identical.
+- **Bridge.** `tools/nds_tests.py`: all 95 cases pass on Linux and on Windows, and every case's result is the same on both.
+- **Linux unchanged.** The Linux bridge built from this source and from `main` are byte-identical. The Linux runners differ only in the symbol table (LLVM's module suffix on local symbol names); every loaded section is identical.
+- **Not done yet** (#241): the runtime loading the DLL, staging it, the launcher, packaging (the Windows notices must also cover the linked MinGW-w64 runtimes), and any check on Windows 11.
+
 The initial state places base Kirby in Green Greens at source center `(43,153.5)`. Its tile map has100 columns and9 rows of24-pixel blocks. Static source RAM facts were checked with the supplied ROM, source traces and disassembly. The external research repositories identified candidate layouts; they were not treated as authoritative gameplay specifications.
 
 ## C ABI

@@ -2994,3 +2994,21 @@ the all-ability rendering tests as full gameplay acceptance.
   (results in the PR). Not run: the changed workflow (it runs at the next tag) and
   any live game check (no game code changed).
 
+
+## 2026-10-21 — the bridge and oracle runner for Windows (#242)
+
+- Start of the Windows 11 port (#241, milestone M5): the launcher and the mod on
+  Windows from the same source as Linux.
+- `tools/oracle_build.py --target windows` and `tools/nds_build.py --target windows`
+  cross-build `kssu-oracle-runner.exe` and `kssu_bridge.dll` on Linux with
+  MinGW-w64, from the same pinned melon-rs, melonDS and patches. The Linux build is
+  unchanged. Four Windows-only settings (POSIX threads, five empty melonDS
+  callbacks in `src/nds/melon_windows.rs`, no data sections, static runtimes) are
+  explained in `docs/NDS_BRIDGE.md`. `nds_probe.py` and `oracle_run.py` load the
+  build for the system they run on.
+- Under Wine (Proton Experimental) the Windows runner matches the Linux one frame
+  for frame over the 4,166-frame bootstrap plan, each loads the other's states, and
+  all 95 bridge cases pass on both with the same results. The Linux bridge is
+  byte-identical to `main`'s.
+- Source: `python3 scripts/check.py` passed (70 Python tests). Not run: anything on
+  Windows 11, and a live game check (no game code runs differently on Linux).
