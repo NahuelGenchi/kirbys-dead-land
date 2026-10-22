@@ -3069,3 +3069,25 @@ the all-ability rendering tests as full gameplay acceptance.
   stepped 2,256 original frames into it with no audio error, and the game mapped
   only DCCM's SDL3. Not run: anything on Windows 11.
 
+
+## 2026-10-22 — the launcher on Windows (#250)
+
+- Fifth piece of the Windows 11 port (#241). The launcher builds for Windows from
+  the same source, cross-compiled with MinGW-w64 into a GUI program that needs only
+  Windows' own DLLs. `launcher/src/windows.rs` holds the Windows calls: Steam from
+  the registry and the process list, free memory, the shell, the drive's
+  permissions (the sandbox check) and job objects for setup's scripts. Setup
+  installs the Windows builds of the same helpers, each pinned by hash;
+  `scripts/build_bundle.py --target windows` makes the Windows bundle.
+- Play runs the same `launch_runtime.py --play`. On Windows, Close writes `stop` to
+  the script's input, which it handles as Ctrl+C. When Windows refuses the
+  low-integrity sandbox, the launcher asks before playing with normal rights (the
+  #241 fallback). `--autopilot` gained `--yes ID` and `--close-after SECONDS`.
+- `tools/launcher_notices.py` now lists the crates of both builds (19 more crate
+  versions, two under the Boost license). The launcher's helper pin test had failed
+  since #246 put the system's name in the DCCM address; it reads both now.
+- Under Wine with a stand-in Steam and game: the 36 launcher tests, `--check`,
+  setup in 88 s, the sandbox question, Play with normal rights up to DCCM loading
+  Kirby, and Close ending the game with the saves checked. On Linux, the launcher
+  from the same tree set up a new data folder and ran the 72-second movement check
+  in game (saves unchanged). Not run: anything on Windows 11.

@@ -1,6 +1,9 @@
 //! Kirby's Dead Land launcher: checks the player's games, sets the mod up once
 //! from their own files, and starts it.
 
+// A window, with no console of its own, on Windows (#250).
+#![cfg_attr(windows, windows_subsystem = "windows")]
+
 mod art;
 mod autopilot;
 mod config;
@@ -13,6 +16,8 @@ mod shots;
 mod steam;
 mod system;
 mod update;
+#[cfg(windows)]
+mod windows;
 
 use art::Painter;
 use slint::ComponentHandle;
@@ -73,6 +78,12 @@ const USAGE: &str = "Usage: kirbys-dead-land [--bundle DIR]
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    // A player starts it without options; anything else came from a terminal,
+    // which should see what it prints.
+    #[cfg(windows)]
+    if !args.is_empty() {
+        windows::attach_parent_console();
+    }
     if args.iter().any(|a| a == "--help" || a == "-h") {
         println!("{USAGE}");
         return;
@@ -113,6 +124,10 @@ fn main() {
         // Hidden: Play runs a bounded offscreen game with automated input, for checks.
         smoke_seconds: value(&args, "--smoke-play").and_then(|s| s.parse().ok()),
     };
+    if cfg!(windows) && options.smoke_seconds.is_some() {
+        eprintln!("--smoke-play runs on Linux only: offscreen tests run there (#246)");
+        std::process::exit(2);
+    }
     let app = match AppWindow::new() {
         Ok(app) => app,
         Err(error) => {
@@ -123,7 +138,12 @@ fn main() {
     connect_art(&app);
     let controller = controller::Controller::new(&app, options);
     // Hidden, for checks: drive the window as a player would and save snapshots.
-    let autopilot = value(&args, "--autopilot").map(|dir| autopilot::start(&app, PathBuf::from(dir)));
+    // `--yes ID` agrees to that one question, and `--close-after SECONDS` presses
+    // Close once the game has run that long.
+    let autopilot = value(&args, "--autopilot").map(|dir| {
+        let choices = autopilot::Choices { yes: value(&args, "--yes"), close_after: value(&args, "--close-after").and_then(|s| s.parse().ok()) };
+        autopilot::start(&app, PathBuf::from(dir), choices)
+    });
     controller.start();
     if let Err(error) = app.run() {
         eprintln!("{error}");

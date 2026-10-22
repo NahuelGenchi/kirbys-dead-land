@@ -1,7 +1,8 @@
 //! Hidden `--autopilot DIR`, for checks: in the real window, it presses what a
 //! player would (use the ROM the launcher found, set up, play), saves a snapshot
 //! of the window at each change, and closes the launcher once the game closes.
-//! It stops at any question or failure instead of answering for the player.
+//! It stops at any question or failure instead of answering for the player,
+//! unless it was told to agree to that question.
 
 use crate::{AppWindow, PlayState, Screen, SetupState, Tone};
 use slint::{ComponentHandle, Model, Timer, TimerMode};
@@ -9,6 +10,14 @@ use std::cell::{Cell, RefCell};
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
+
+/// What the check lets the autopilot do beyond pressing the main buttons.
+pub struct Choices {
+    /// The id of the one question it agrees to, once.
+    pub yes: Option<String>,
+    /// Press Close once the game has run this many seconds.
+    pub close_after: Option<u64>,
+}
 
 pub struct Autopilot {
     _timer: Timer,
@@ -26,11 +35,12 @@ fn describe(app: &AppWindow) -> String {
     }
 }
 
-pub fn start(app: &AppWindow, dir: PathBuf) -> Autopilot {
+pub fn start(app: &AppWindow, dir: PathBuf, choices: Choices) -> Autopilot {
     let _ = std::fs::create_dir_all(&dir);
     let code = Rc::new(Cell::new(1));
     let (started, last, shots) = (Instant::now(), RefCell::new(String::new()), Cell::new(0));
     let (used_rom, pressed_next, played, running) = (Cell::new(false), Cell::new(false), Cell::new(false), Cell::new(false));
+    let (agreed, running_since, closed) = (Cell::new(false), Cell::new(None::<Instant>), Cell::new(false));
     let weak = app.as_weak();
     let result = code.clone();
     let timer = Timer::default();
@@ -56,8 +66,14 @@ pub fn start(app: &AppWindow, dir: PathBuf) -> Autopilot {
             *last.borrow_mut() = now;
         }
         if !app.get_question_id().is_empty() {
-            say(&format!("question \"{}\": {}", app.get_question_title(), app.get_question_body()));
+            let id = app.get_question_id().to_string();
+            say(&format!("question {id} \"{}\": {}", app.get_question_title(), app.get_question_body()));
             snapshot("question");
+            if choices.yes.as_deref() == Some(id.as_str()) && !agreed.replace(true) {
+                say(&format!("pressing \"{}\"", app.get_question_confirm()));
+                app.invoke_answer(id.into(), true);
+                return;
+            }
             return stop(2);
         }
         if app.get_checking() {
@@ -98,7 +114,15 @@ pub fn start(app: &AppWindow, dir: PathBuf) -> Autopilot {
                     say(if running.get() { "the game closed" } else { "the game never opened" });
                     stop(if running.get() { 0 } else { 2 });
                 }
-                PlayState::Running => running.set(true),
+                PlayState::Running => {
+                    running.set(true);
+                    let since = running_since.get().unwrap_or_else(Instant::now);
+                    running_since.set(Some(since));
+                    if choices.close_after.is_some_and(|seconds| since.elapsed() >= Duration::from_secs(seconds)) && !closed.replace(true) {
+                        say("pressing Close");
+                        app.invoke_stop_game();
+                    }
+                }
                 _ => {}
             },
         }

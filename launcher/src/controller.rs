@@ -18,6 +18,8 @@ const ABILITIES: [&str; 24] = ["Cutter", "Mirror", "Beam", "Fighter", "Suplex", 
 const ROM_TITLE: &str = "Your Kirby Super Star Ultra";
 const MEMORY_WANTED: u64 = 6 * 1024 * 1024 * 1024;
 const HELP: &str = "https://github.com/NahuelGenchi/kirbys-dead-land/blob/main/docs/LAUNCHER.md";
+/// The fourth check: bubblewrap on Linux, the low-integrity sandbox on Windows.
+const SANDBOX_TITLE: &str = if cfg!(windows) { "Sandbox" } else { "Sandbox helper" };
 
 pub struct Options {
     pub bundle: Option<PathBuf>,
@@ -48,8 +50,10 @@ struct State {
     setup: Option<Control>,
     setup_steps: Vec<StepItem>,
     log: VecDeque<String>,
-    game_pid: Option<u32>,
+    game: Option<play::Running>,
     last_game_log: Option<PathBuf>,
+    /// Windows: the player agreed to play with normal rights this session (#250).
+    normal_integrity: bool,
     update: Option<update::Release>,
     smoke_seconds: Option<u32>,
     first_check: bool,
@@ -108,7 +112,7 @@ fn rows(state: &State) -> (Vec<CheckItem>, bool) {
         rows.push(row);
     }
     if !found.checked {
-        for (id, number, title) in [("steam", 1, "Steam"), ("game", 2, "Dead Cells"), ("rom", 3, ROM_TITLE), ("bwrap", 4, "Sandbox helper")] {
+        for (id, number, title) in [("steam", 1, "Steam"), ("game", 2, "Dead Cells"), ("rom", 3, ROM_TITLE), ("bwrap", 4, SANDBOX_TITLE)] {
             rows.push(item(id, number, title, "Checking…", Tone::Busy));
         }
         return (rows, false);
@@ -201,11 +205,36 @@ fn rows(state: &State) -> (Vec<CheckItem>, bool) {
     };
     ready &= rom.tone == Tone::Ok;
     rows.push(rom);
+    rows.push(sandbox_row(&found.sandbox, &mut ready));
+    (rows, ready)
+}
 
-    let sandbox = match &found.sandbox {
+/// On Windows a sandbox problem only warns: Play then asks before using the
+/// player's normal rights, the fallback the owner chose in #241.
+#[cfg(windows)]
+fn sandbox_row(sandbox: &Option<Sandbox>, ready: &mut bool) -> CheckItem {
+    match sandbox {
+        Some(Sandbox::Ready) => item("bwrap", 4, SANDBOX_TITLE, "The game runs with low rights, so it can write only in the mod's folder", Tone::Ok),
+        Some(problem) => {
+            let why = match problem {
+                Sandbox::Blocked(why) => why.as_str(),
+                _ => "it isn't available",
+            };
+            item("bwrap", 4, SANDBOX_TITLE, format!("Windows can't keep the game to the mod's folder: {why}. Play will ask before using your normal rights."), Tone::Warn)
+        }
+        None => {
+            *ready = false;
+            item("bwrap", 4, SANDBOX_TITLE, "Checking…", Tone::Busy)
+        }
+    }
+}
+
+#[cfg(unix)]
+fn sandbox_row(sandbox: &Option<Sandbox>, ready: &mut bool) -> CheckItem {
+    match sandbox {
         Some(Sandbox::Ready) => item("bwrap", 4, "Sandbox helper", "bubblewrap keeps your games read-only while you play", Tone::Ok),
         Some(Sandbox::Missing) => {
-            ready = false;
+            *ready = false;
             match system::install_command(&system::distribution(), "bubblewrap") {
                 Some(command) => {
                     let mut row = item("bwrap", 4, "Sandbox helper", "Install bubblewrap once with this command, then check again:", Tone::Error);
@@ -216,18 +245,16 @@ fn rows(state: &State) -> (Vec<CheckItem>, bool) {
             }
         }
         Some(Sandbox::Blocked(why)) => {
-            ready = false;
+            *ready = false;
             let mut row = item("bwrap", 4, "Sandbox helper", format!("bubblewrap is installed, but your system blocks its sandbox: {why}."), Tone::Error);
             row.action = "How to fix".into();
             row
         }
         None => {
-            ready = false;
+            *ready = false;
             item("bwrap", 4, "Sandbox helper", "Checking…", Tone::Busy)
         }
-    };
-    rows.push(sandbox);
-    (rows, ready)
+    }
 }
 
 impl Controller {
@@ -246,8 +273,9 @@ impl Controller {
             setup: None,
             setup_steps: Vec::new(),
             log: VecDeque::new(),
-            game_pid: None,
+            game: None,
             last_game_log: None,
+            normal_integrity: false,
             update: None,
             smoke_seconds: options.smoke_seconds,
             first_check: true,
@@ -345,10 +373,13 @@ impl Controller {
             let home = paths::home();
             let steams = steam::installations(&home);
             let game = Some(steam::find_game(&steams));
-            let rom = me.state.lock().unwrap().config.rom.clone();
+            let (rom, root) = {
+                let state = me.state.lock().unwrap();
+                (state.config.rom.clone(), state.root.clone())
+            };
             let verdict = rom.as_deref().map(rom::verify);
             let suggestion = if verdict.as_ref().is_some_and(Verdict::ok) { None } else { rom::find_candidate(&home) };
-            let sandbox = Some(system::sandbox());
+            let sandbox = Some(system::sandbox(&root));
             {
                 let mut state = me.state.lock().unwrap();
                 state.found = Found { checked: true, steams, game, verdict, suggestion, sandbox };
@@ -657,13 +688,13 @@ impl Controller {
         }
         let state = self.state.lock().unwrap();
         let Some(GameStatus::Ready(game)) = state.found.game.clone() else { return };
-        let (root, smoke) = (state.root.clone(), state.smoke_seconds);
+        let (root, smoke, normal_integrity) = (state.root.clone(), state.smoke_seconds, state.normal_integrity);
         drop(state);
         app.set_play_state(if steam::running() { PlayState::Launching } else { PlayState::StartingSteam });
         let me = self.clone();
         std::thread::spawn(move || {
             if !steam::running() {
-                if steam::start(game.steam.kind).is_err() || !wait_for_steam(Duration::from_secs(90)) {
+                if steam::start(&game.steam).is_err() || !wait_for_steam(Duration::from_secs(90)) {
                     me.with_app(|app, c| {
                         app.set_play_state(PlayState::Idle);
                         c.ask("steam", "Steam didn't open", "Open Steam yourself and sign in, then press Play again.", "OK", "", false);
@@ -682,11 +713,12 @@ impl Controller {
                 steam_root: &game.steam.root,
                 log: &log,
                 smoke_seconds: smoke,
+                normal_integrity,
             };
             let events = me.clone();
             let started = play::start(launch, move |event| events.play_event(event));
             match started {
-                Ok(pid) => me.state.lock().unwrap().game_pid = Some(pid),
+                Ok(running) => me.state.lock().unwrap().game = Some(running),
                 Err(error) => me.with_app(move |app, c| {
                     app.set_play_state(PlayState::Idle);
                     c.ask("crash", "The game couldn't start", &format!("{error}. Try Repair setup in Settings."), "OK", "", true);
@@ -700,16 +732,29 @@ impl Controller {
             play::Event::Opening => self.with_app(|app, _| app.set_play_state(PlayState::Running)),
             play::Event::RuntimeLog(path) => self.state.lock().unwrap().last_game_log = Some(path),
             play::Event::Exited { success, last_lines } => {
-                {
+                let normal_integrity = {
                     let mut state = self.state.lock().unwrap();
-                    state.game_pid = None;
+                    state.game = None;
                     state.log = last_lines.iter().cloned().collect();
-                }
+                    state.normal_integrity
+                };
                 let reason = play::explain(&last_lines);
+                let sandbox_refused = !normal_integrity && play::sandbox_refused(&last_lines);
                 self.with_app(move |app, c| {
                     let was_stopping = app.get_play_state() == PlayState::Stopping;
                     app.set_play_state(PlayState::Idle);
-                    if !success && !was_stopping {
+                    // In the same step as Idle, so nothing sees the game ended without its question.
+                    if sandbox_refused {
+                        question(
+                            app,
+                            "sandbox",
+                            "Windows refused the sandbox",
+                            "The game runs with low rights so it can write only in the mod's folder, and Windows refused to set that up. You can play with your normal rights instead: your saves are still backed up first and checked afterwards.",
+                            "Play anyway",
+                            "Not now",
+                            true,
+                        );
+                    } else if !success && !was_stopping {
                         c.ask("crash", "The game closed with a problem", &reason, "Open the log", "Close", true);
                     }
                 });
@@ -718,8 +763,8 @@ impl Controller {
     }
 
     fn stop_game(&self) {
-        if let Some(pid) = self.state.lock().unwrap().game_pid {
-            play::stop(pid);
+        if let Some(game) = self.state.lock().unwrap().game.as_mut() {
+            game.stop();
             self.with_app(|app, _| app.set_play_state(PlayState::Stopping));
         }
     }
@@ -787,25 +832,32 @@ impl Controller {
 
     fn ask(&self, id: &str, title: &str, body: &str, confirm: &str, cancel: &str, warning: bool) {
         let (id, title, body, confirm, cancel) = (id.to_string(), title.to_string(), body.to_string(), confirm.to_string(), cancel.to_string());
-        self.with_app(move |app, _| {
-            app.set_question_title(title.into());
-            app.set_question_body(body.into());
-            app.set_question_confirm(confirm.into());
-            app.set_question_cancel(cancel.into());
-            app.set_question_warning(warning);
-            app.set_question_id(id.into());
-        });
+        self.with_app(move |app, _| question(app, &id, &title, &body, &confirm, &cancel, warning));
     }
 
     fn answer(&self, id: &str, yes: bool) {
         self.with_app(|app, _| app.set_question_id(SharedString::new()));
         match (id, yes) {
             ("memory", true) => self.play(true),
+            ("sandbox", true) => {
+                self.state.lock().unwrap().normal_integrity = true;
+                self.play(true);
+            }
             ("repair", true) => self.start_setup(true),
             ("crash", true) => self.settings_action("open-log"),
             _ => {}
         }
     }
+}
+
+/// Shows a question in the window at once.
+fn question(app: &AppWindow, id: &str, title: &str, body: &str, confirm: &str, cancel: &str, warning: bool) {
+    app.set_question_title(title.into());
+    app.set_question_body(body.into());
+    app.set_question_confirm(confirm.into());
+    app.set_question_cancel(cancel.into());
+    app.set_question_warning(warning);
+    app.set_question_id(id.into());
 }
 
 /// `--check`: the same checks as the window, printed. Returns whether play is possible.
@@ -821,7 +873,7 @@ pub fn print_checks(bundle: Option<PathBuf>) -> bool {
     let state = State {
         record: SetupRecord::load(&root),
         bundle: paths::find_bundle(bundle),
-        found: Found { checked: true, steams, game, verdict, suggestion, sandbox: Some(system::sandbox()) },
+        found: Found { checked: true, steams, game, verdict, suggestion, sandbox: Some(system::sandbox(&root)) },
         root,
         config_dir,
         config,
@@ -829,8 +881,9 @@ pub fn print_checks(bundle: Option<PathBuf>) -> bool {
         setup: None,
         setup_steps: Vec::new(),
         log: VecDeque::new(),
-        game_pid: None,
+        game: None,
         last_game_log: None,
+        normal_integrity: false,
         update: None,
         smoke_seconds: None,
         first_check: true,
@@ -897,8 +950,9 @@ mod tests {
             setup: None,
             setup_steps: Vec::new(),
             log: VecDeque::new(),
-            game_pid: None,
+            game: None,
             last_game_log: None,
+            normal_integrity: false,
             update: None,
             smoke_seconds: None,
             first_check: true,
@@ -948,10 +1002,11 @@ mod tests {
         assert!(!ready);
         assert!(rows.iter().find(|r| r.id == "rom").unwrap().detail.contains("European version"));
         s.rejected = None;
-        s.found.sandbox = Some(Sandbox::Missing);
+        s.found.sandbox = Some(Sandbox::Blocked("it was refused".into()));
         let (rows, ready) = super::rows(&s);
-        assert!(!ready);
-        assert_eq!(tone(&rows, "bwrap"), Tone::Error);
+        // On Windows a sandbox problem only warns, and Play asks first.
+        assert_eq!(ready, cfg!(windows));
+        assert_eq!(tone(&rows, "bwrap"), if cfg!(windows) { Tone::Warn } else { Tone::Error });
         s.found.sandbox = Some(Sandbox::Ready);
         s.found.steams.clear();
         s.found.game = Some(GameStatus::Missing);

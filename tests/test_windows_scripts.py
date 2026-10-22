@@ -159,6 +159,15 @@ class LaunchTests(unittest.TestCase):
         self.assertIn("('DeadCellsModding.exe' if WINDOWS else 'DeadCellsModding')", LAUNCH)
         self.assertIn('(mod / TARGETS[HOST][1]).is_file()', LAUNCH)
 
+    def test_the_launcher_stops_a_windows_game_through_the_input(self):
+        self.assertIn("if WINDOWS and args.play and sys.stdin is not None:\n            threading.Thread(target=stop_on_request, daemon=True).start()", LAUNCH)
+        self.assertIn('not (WINDOWS and stopped)', LAUNCH)
+        import launch_runtime
+        with mock.patch.object(launch_runtime.sys, 'stdin', ['hello\n', 'stop\n', 'more\n']), \
+                mock.patch.object(launch_runtime._thread, 'interrupt_main') as interrupt:
+            launch_runtime.stop_on_request()
+        interrupt.assert_called_once_with()
+
     def test_normal_integrity_is_refused_on_linux(self):
         result = subprocess.run([sys.executable, str(PROJECT / 'scripts/launch_runtime.py'), '--play', '--normal-integrity'],
                                 capture_output=True, text=True)
