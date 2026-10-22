@@ -278,6 +278,29 @@ it, until a Windows 11 check (#241) shows it works; then it is published as Late
   pictures and the two parts are in `.github/release/v0.3.0/`. The page says the
   Windows download has not run on Windows 11.
 
+Release record (2026-10-22): PR #255 merged as `4c6b894`; the annotated tag
+`v0.3.0` on it ran the release workflow (run 39856233490): both package legs and
+the attach job passed and made a draft pre-release with the rendered notes and
+eight files (the AppImage, the Linux folder, the Windows `.zip`, the source and
+their checksums; the `.zip` is 29,190,967 bytes, 58 files).
+
+- All four checksums matched after downloading the draft. The `.zip`'s only
+  `/home` strings are the build container's `/build/home/.cargo` paths, and its
+  only e-mail addresses are third-party authors in the license lists.
+- Linux, the released AppImage on a new data root (`KIRBY_DATA_ROOT` and
+  `XDG_CONFIG_HOME` under the private repros folder, `--autopilot --smoke-play
+  72`): checks passed, the seven setup steps took 74 s, Play ran Kirby's session
+  (`Kirby audio: SDL3 playback stream open.` in `play.log`) and the game closed
+  after 72 s; exit 0. The 17 backed-up normal save files matched the live ones by
+  hash afterwards.
+- Windows, the released `.zip` under Wine (the #250 prefix with stand-ins for
+  Steam and Dead Cells): `--version` reported 0.3.0, and `--check` passed all four
+  checks and found its own bundle (`0.3.0+4c6b894…`). Setup and Play under Wine
+  were run on the #254 container build of the same packaging, not on this file.
+- Published as a pre-release with `make_latest=false`; `releases/latest` stayed
+  v0.2.1. The page showed all seven pictures.
+- Not run: anything on Windows 11 (#241), the Steam Deck.
+
 ## v0.2.1 (2026-10-21)
 
 A fix release for one bug (#236): in v0.2.0 Kirby could not break the Collector's

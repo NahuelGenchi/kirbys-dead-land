@@ -3128,4 +3128,8 @@ the all-ability rendering tests as full gameplay acceptance.
 - Source: the Python tests, `cargo test` in `launcher/` and `scripts/check.py`
   (results in the PR). The tag, the workflow run and the download checks follow
   this change and are recorded in `docs/RELEASE.md`.
+- Published 2026-10-22 as a pre-release from tag `v0.3.0` (`4c6b894`); Latest
+  stays v0.2.1. The released AppImage passed a new-folder setup and a 72 s run
+  as Kirby with SDL3 audio; the released Windows `.zip` passed `--check` under
+  Wine. Details in `docs/RELEASE.md`.
 
