@@ -3,7 +3,6 @@
 from __future__ import annotations
 import argparse
 import hashlib
-import fcntl
 import io
 import json
 import os
@@ -14,6 +13,13 @@ import tarfile
 import time
 from save_backup import back_up
 from setup_runtime import DEFAULT_ROOT, download_checked, environment
+from lab_lock import hold
+from oracle_build import HOST, TARGETS
+from steam_paths import steam_root
+
+WINDOWS = os.name == 'nt'
+if WINDOWS:
+    from low_integrity import WindowsProcess, label_low
 
 
 TURBOJPEG_URL = 'https://archive.ubuntu.com/ubuntu/pool/universe/libj/libjpeg-turbo/libturbojpeg0_2.1.5-4ubuntu4_amd64.deb'
@@ -94,7 +100,12 @@ def main() -> None:
     parser.add_argument('--gpu', action='store_true', help='Draw the offscreen test on the GPU instead of in software.')
     parser.add_argument('--shader-cache', action='store_true', help='Keep the GL driver\'s shader cache in the lab\'s cache folder for this test, as later runs would.')
     parser.add_argument('--crash-dump', choices=['heap', 'small', 'off'], default='heap', help='What a crashing offscreen test writes: a dump with the heap (about the size of the game\'s memory), a small one with the threads\' stacks, or none.')
+    parser.add_argument('--normal-integrity', action='store_true', help='Windows: start the game with your normal rights instead of low integrity; only the save backup and check then protect your files.')
     args = parser.parse_args()
+    if WINDOWS and not (args.play or args.prepare):
+        parser.error('on Windows, only --play and --prepare are available; offscreen tests run on Linux (#246)')
+    if args.normal_integrity and not WINDOWS:
+        parser.error('--normal-integrity applies to Windows; Linux runs the game in bubblewrap')
     if args.play and (args.input_plan or args.start_game or args.resume_game or args.save_after or args.seconds is not None or args.capture_fps):
         parser.error('--play cannot be combined with automated input, --start-game, or --seconds')
     if args.gdb and args.play:
@@ -138,7 +149,7 @@ def main() -> None:
             parser.error('--probe-scrolls needs three counts in 0..30, such as 4,0,2')
     if args.save_after is not None and args.save_after < 1:
         parser.error('--save-after must be positive')
-    if args.play and not (os.environ.get('DISPLAY') or os.environ.get('WAYLAND_DISPLAY')):
+    if args.play and not WINDOWS and not (os.environ.get('DISPLAY') or os.environ.get('WAYLAND_DISPLAY')):
         parser.error('--play needs a desktop display; run this command from your desktop terminal')
     args.seconds = 45 if args.seconds is None else args.seconds
     if not 1 <= args.seconds <= 300:
@@ -146,25 +157,32 @@ def main() -> None:
     root = args.data_root.resolve()
     root.mkdir(parents=True, exist_ok=True)
     if args.prepare:
-        print(f'TurboJPEG ready: {turbojpeg_library(root)}')
+        # Only the Linux loader lacks a library; the Windows release carries its own.
+        print('Nothing to prepare on Windows.' if WINDOWS else f'TurboJPEG ready: {turbojpeg_library(root)}')
         return
-    runtime_lock = (root / 'lab.runtime.lock').open('a')
-    try:
-        fcntl.flock(runtime_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError:
+    runtime_lock = hold(root / 'lab.runtime.lock')
+    if runtime_lock is None:
         raise SystemExit('The private lab is already running or being staged.')
     lab = root / 'lab'
-    game = (lab / 'hlboot.dat').resolve().parent
+    if WINDOWS:
+        # The Windows lab holds hard links or copies; staging records where they came from.
+        record = lab / 'game-files.json'
+        if not record.is_file():
+            raise SystemExit('Run setup_runtime.py --build and stage_runtime.py first.')
+        game = Path(json.loads(record.read_text())['game'])
+    else:
+        game = (lab / 'hlboot.dat').resolve().parent
     if lab == game or game in lab.parents or lab in game.parents:
         raise SystemExit('Lab and installed game must be disjoint.')
-    loader = lab / 'coremod/core/host/startup/DeadCellsModding'
+    loader = lab / 'coremod/core/host/startup' / ('DeadCellsModding.exe' if WINDOWS else 'DeadCellsModding')
     runtime = lab / 'coremod/mods/KirbySuperStarUltra/Kirby.Runtime.dll'
     if not loader.is_file() or not runtime.is_file():
         raise SystemExit('Run setup_runtime.py --build and stage_runtime.py first.')
     if args.play:
         mod = runtime.parent
         settings = json.loads((mod / 'config.json').read_text())
-        if not settings.get('EnableOriginalRuntime') or not (mod / 'outfit.pak').is_file() or not (mod / 'libkssu_bridge.so').is_file():
+        # The bridge as tools/nds_build.py names it for this system.
+        if not settings.get('EnableOriginalRuntime') or not (mod / 'outfit.pak').is_file() or not (mod / TARGETS[HOST][1]).is_file():
             raise SystemExit('Stage the original runtime and generated outfit pack before using --play.')
     config_path = lab / 'coremod/config/modcore.json'
     config = json.loads(config_path.read_text())
@@ -173,12 +191,13 @@ def main() -> None:
     # This flag records the popup as already acknowledged in this private lab.
     config['DCCMWarningPopup'] = True
     config_path.write_text(json.dumps(config, indent=2) + '\n')
-    if not shutil.which('bwrap'):
+    if not WINDOWS and not shutil.which('bwrap'):
         raise SystemExit('bubblewrap is required to protect installed files during the isolated launch.')
     # Every launch is preceded by a snapshot of local and Steam saves.
     saves = [game / 'save']
-    # A game in a second Steam library keeps its cloud saves in the main Steam folder.
-    steam = args.steam_root.expanduser().resolve() if args.steam_root else game.parents[2]
+    # A game in a second Steam library keeps its cloud saves in the main Steam folder,
+    # which Windows records in the registry.
+    steam = args.steam_root.expanduser().resolve() if args.steam_root else steam_root() if WINDOWS else game.parents[2]
     saves += sorted((steam / 'userdata').glob('*/588650'))
     backup = back_up(saves, root)
     print(f'Saves backed up to {backup}', flush=True)
@@ -207,16 +226,21 @@ def main() -> None:
         'DCCM_OverridePath_SAVE_ROOT': str(lab / 'save'),
         'KIRBY_LAB_SAVE_ROOT': str(lab / 'save'),
         'KIRBY_LAB_RUN_ROOT': str(run),
-        'MESA_SHADER_CACHE_DISABLE': '1',
-        'XDG_CACHE_HOME': str(lab / 'cache'),
-        'XDG_CONFIG_HOME': str(lab / 'config'),
-        'XDG_DATA_HOME': str(lab / 'data'),
-        'TMPDIR': str(lab / 'tmp'),
         'DOTNET_BUNDLE_EXTRACT_BASE_DIR': str(lab / 'tmp/dotnet-bundle'),
-        'LD_LIBRARY_PATH': str(lab / 'coremod/core/native/linux-x64'),
         'SteamAppId': '588650',
         'SteamGameId': '588650',
     })
+    if WINDOWS:
+        env.update({'TEMP': str(lab / 'tmp'), 'TMP': str(lab / 'tmp')})
+    else:
+        env.update({
+            'MESA_SHADER_CACHE_DISABLE': '1',
+            'XDG_CACHE_HOME': str(lab / 'cache'),
+            'XDG_CONFIG_HOME': str(lab / 'config'),
+            'XDG_DATA_HOME': str(lab / 'data'),
+            'TMPDIR': str(lab / 'tmp'),
+            'LD_LIBRARY_PATH': str(lab / 'coremod/core/native/linux-x64'),
+        })
     if args.play:
         env['KIRBY_LAB_PLAY'] = '1'
         env['KIRBY_LAB_OUTFIT'] = args.outfit or 'KirbySuperStarUltra'
@@ -246,7 +270,8 @@ def main() -> None:
             # SDL's offscreen driver takes the first EGL device that starts: the
             # GPU once its render node is visible and software drawing is not forced.
             env.pop('LIBGL_ALWAYS_SOFTWARE')
-    env['LD_PRELOAD'] = str(turbojpeg_library(root))
+    if not WINDOWS:
+        env['LD_PRELOAD'] = str(turbojpeg_library(root))
     if args.input_plan:
         env['KIRBY_LAB_INPUT_PLAN'] = args.input_plan
     if args.probe_ability is not None:
@@ -284,18 +309,31 @@ def main() -> None:
     if not args.play:
         for key in ['DISPLAY', 'WAYLAND_DISPLAY', 'XAUTHORITY']:
             env.pop(key, None)
-    command = ['bwrap', '--die-with-parent', '--unshare-pid', '--ro-bind', '/', '/',
-               '--dev-bind' if args.play else '--dev', '/dev']
-    if args.play:
-        command += ['/dev']
-    elif args.gpu and Path('/dev/dri').is_dir():
-        command += ['--dev-bind', '/dev/dri', '/dev/dri']
-    command += ['--proc', '/proc', '--tmpfs', '/tmp']
-    if args.play and Path('/tmp/.X11-unix').exists():
-        command += ['--ro-bind', '/tmp/.X11-unix', '/tmp/.X11-unix']
-    if Path('/tmp/steam').exists():
-        command += ['--ro-bind', '/tmp/steam', '/tmp/steam']
-    command += ['--bind', str(lab), str(lab), '--chdir', str(lab), '--']
+    if WINDOWS:
+        command = []
+        if args.normal_integrity:
+            print('Starting the game with your normal rights (--normal-integrity): only the save backup '
+                  'and the before/after save check protect your files.', flush=True)
+        else:
+            # Everything in the lab, the run folder included, may now be written at low integrity.
+            try:
+                label_low(lab)
+            except OSError as error:
+                raise SystemExit(f'Windows refused to label the lab low integrity ({error}). '
+                                 'With --normal-integrity the game runs with only the save backup and check.')
+    else:
+        command = ['bwrap', '--die-with-parent', '--unshare-pid', '--ro-bind', '/', '/',
+                   '--dev-bind' if args.play else '--dev', '/dev']
+        if args.play:
+            command += ['/dev']
+        elif args.gpu and Path('/dev/dri').is_dir():
+            command += ['--dev-bind', '/dev/dri', '/dev/dri']
+        command += ['--proc', '/proc', '--tmpfs', '/tmp']
+        if args.play and Path('/tmp/.X11-unix').exists():
+            command += ['--ro-bind', '/tmp/.X11-unix', '/tmp/.X11-unix']
+        if Path('/tmp/steam').exists():
+            command += ['--ro-bind', '/tmp/steam', '/tmp/steam']
+        command += ['--bind', str(lab), str(lab), '--chdir', str(lab), '--']
     if args.gdb:
         command += ['gdb', '--batch', '--return-child-result', '-ex', 'set pagination off',
                     '-ex', 'set startup-with-shell off', '-ex', 'set follow-fork-mode parent',
@@ -306,7 +344,14 @@ def main() -> None:
         print('Opening Kirby in Dead Cells. Saves are private to this mod. Choose New Game to begin.', flush=True)
         print(f'Runtime log: {run / "stdout.log"}', flush=True)
     with (run / 'stdout.log').open('wb') as output:
-        process = subprocess.Popen(command, env=env, stdout=output, stderr=subprocess.STDOUT)
+        if WINDOWS:
+            try:
+                process = WindowsProcess(command, env, lab, output, low=not args.normal_integrity)
+            except OSError as error:
+                raise SystemExit(f'Windows refused to start the game ({error}).'
+                                 + ('' if args.normal_integrity else ' With --normal-integrity it starts with your normal rights.'))
+        else:
+            process = subprocess.Popen(command, env=env, stdout=output, stderr=subprocess.STDOUT)
         deadline = time.monotonic() + args.seconds
         try:
             while process.poll() is None and (args.play or time.monotonic() < deadline):
@@ -338,6 +383,7 @@ def main() -> None:
                 print(f'Skipped incomplete capture {ppm.name}')
             ppm.unlink()
     report = {'run': str(run), 'exit_code': process.returncode,
+              'sandbox': ('none' if args.normal_integrity else 'low integrity') if WINDOWS else 'bubblewrap',
               'save_isolation_installed': (lab / 'save-isolation.ready').is_file(),
               'source_saves_unchanged': before == after,
               'offscreen': not args.play, 'gpu': args.gpu, 'shader_cache': args.shader_cache, 'duration_limit_seconds': None if args.play else args.seconds,

@@ -120,6 +120,8 @@ The adapter's source is the same on Linux and Windows. What differs is the names
 - **Performance probe.** `KIRBY_LAB_PERF` reads `/proc`, HashLink's `libhl.so` and Linux thread IDs. On other systems it only writes `perf.json` with an `unsupported` note.
 - **ReadyToRun.** `-p:ModReadyToRunOS=windows` compiles the packed `Kirby.Core` and `Kirby.Runtime` for Windows on Linux. It references the Windows framework of the same runtime version (`Microsoft.NETCore.App.Runtime.win-x64` 10.0.12, restored from NuGet only for that build). The default is the build machine's system, so the Linux build compiles as before. Images go to `obj/Release/net10.0/r2r/<system>/`.
 
+Since #246 the runtime also builds with the Windows SDK: on a Windows build machine the build runs `crossgen2.exe`. That build passed under Wine ([Windows scripts](RUNTIME_LAUNCH.md#windows-246)).
+
 Checked on 2026-10-21. This is Linux and Wine evidence; nothing has run on Windows 11 yet.
 
 - `python3 scripts/check.py` passes on Linux (78 Python tests, including `tests/test_windows_runtime.py`, plus every C# build).

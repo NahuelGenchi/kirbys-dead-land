@@ -55,7 +55,8 @@ class BundleTests(unittest.TestCase):
         for needed in ('scripts/launch_runtime.py', 'scripts/stage_runtime.py', 'scripts/save_backup.py',
                        'scripts/setup_runtime.py', 'tools/oracle_run.py', 'tools/oracle_bootstrap.json',
                        'tools/extract_kirby.py', 'tools/capture_ability_icons.py', 'tools/build_outfit.py',
-                       'tools/data_root.py', 'mod.json', 'LICENSE', 'THIRD_PARTY_NOTICES.md'):
+                       'tools/data_root.py', 'tools/lab_lock.py', 'tools/steam_paths.py', 'scripts/low_integrity.py',
+                       'mod.json', 'LICENSE', 'THIRD_PARTY_NOTICES.md'):
             with self.subTest(file=needed):
                 self.assertIn(needed, names)
         self.assertFalse(any(name.startswith(('docs/', 'src/', 'launcher/', 'tests/')) for name in names))
