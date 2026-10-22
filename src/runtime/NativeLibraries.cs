@@ -9,11 +9,11 @@ namespace Kirby.Runtime;
 /// (#244). P/Invokes name a library by one of the short names below, and one
 /// resolver for the assembly maps it to this system's file: the bridge, which
 /// <see cref="NdsRuntime.Open"/> loads from the mod's folder, and the game's own
-/// SDL2 and OpenGL, already loaded in its process.
+/// SDL3 and OpenGL, already loaded in its process.
 /// </summary>
 internal static class NativeLibraries
 {
-    public const string Bridge = "kssu_bridge", Sdl = "SDL2", OpenGl = "GL";
+    public const string Bridge = "kssu_bridge", Sdl = "SDL3", OpenGl = "GL";
 
     /// <summary>The bridge's file in the mod's folder, as tools/nds_build.py names it for this system.</summary>
     public static string BridgeFile => OperatingSystem.IsWindows() ? "kssu_bridge.dll" : "libkssu_bridge.so";
@@ -24,7 +24,8 @@ internal static class NativeLibraries
     /// <summary>This system's file for a short name, or null for a name the runtime does not map.</summary>
     internal static string? File(string name, bool windows) => name switch
     {
-        Sdl => windows ? "SDL2.dll" : "libSDL2-2.0.so.0",
+        // DCCM ships SDL3 alone on both systems, in core/native (#248).
+        Sdl => windows ? "SDL3.dll" : "libSDL3.so.0",
         OpenGl => windows ? "opengl32.dll" : "libGL.so.1",
         _ => null,
     };

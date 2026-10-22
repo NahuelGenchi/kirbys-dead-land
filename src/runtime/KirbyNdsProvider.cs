@@ -233,6 +233,8 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         firstRender = true;
         LabActivationTrace.Mark("Audio begin");
         audio = new NdsAudio(nds);
+        // Gameplay continues without sound; the reason is otherwise invisible (#248).
+        Log?.Invoke(audio.DeviceError is { } audioError ? "Kirby audio unavailable: " + audioError : "Kirby audio: SDL3 playback stream open.");
         LabActivationTrace.Mark("Audio complete");
         pacer.Reset(); dash.Reset(); slideKey.Reset(); rollZones.Reset(); hostLanding.Reset(); slideHold.Reset(); CancelStomp(); previousAbility = nds.State.Ability; window = null;
         motionActions.Reset(); copyPresses.Reset(); helperMatch.Reset();

@@ -116,7 +116,7 @@ The setup script pins release URLs and archive hashes, uses local environment va
 
 The adapter's source is the same on Linux and Windows. What differs is the names of the native libraries and the system the packed DLLs are compiled for.
 
-- **Library names.** `src/runtime/NativeLibraries.cs` registers one import resolver for the assembly when it loads. P/Invokes use three short names. `kssu_bridge` is the bridge that `NdsRuntime.Open` loaded from the mod's folder: `libkssu_bridge.so` or `kssu_bridge.dll`, the files `tools/nds_build.py` builds for each system. `SDL2` is `libSDL2-2.0.so.0` or `SDL2.dll`, and `GL` is `libGL.so.1` or `opengl32.dll`, the game's own copies. Before this change the resolver was set inside `NdsRuntime.Open`, and SDL and OpenGL were named by their Linux files.
+- **Library names.** `src/runtime/NativeLibraries.cs` registers one import resolver for the assembly when it loads. P/Invokes use three short names. `kssu_bridge` is the bridge that `NdsRuntime.Open` loaded from the mod's folder: `libkssu_bridge.so` or `kssu_bridge.dll`, the files `tools/nds_build.py` builds for each system. `SDL3` is `libSDL3.so.0` or `SDL3.dll` (SDL2 until #248), and `GL` is `libGL.so.1` or `opengl32.dll`, the game's own copies. Before this change the resolver was set inside `NdsRuntime.Open`, and SDL and OpenGL were named by their Linux files.
 - **Performance probe.** `KIRBY_LAB_PERF` reads `/proc`, HashLink's `libhl.so` and Linux thread IDs. On other systems it only writes `perf.json` with an `unsupported` note.
 - **ReadyToRun.** `-p:ModReadyToRunOS=windows` compiles the packed `Kirby.Core` and `Kirby.Runtime` for Windows on Linux. It references the Windows framework of the same runtime version (`Microsoft.NETCore.App.Runtime.win-x64` 10.0.12, restored from NuGet only for that build). The default is the build machine's system, so the Linux build compiles as before. Images go to `obj/Release/net10.0/r2r/<system>/`.
 
@@ -128,7 +128,25 @@ Checked on 2026-10-21. This is Linux and Wine evidence; nothing has run on Windo
 - `tests/nds` against the Linux bridge, the ROM and `oracle/ready2/000.state` passes: ABI sizes, seed, walking, facing, RAM bounds, 3 live hits.
 - The same `tests/nds` source, published for `win-x64` (self-contained .NET 10.0.12), passes under Wine (Proton Experimental) against the #242 `kssu_bridge.dll` with the same result. Under Wine it needs `DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1`, because Wine's ICU lacks a function .NET calls, and Wine's own `mscoree`, which loads .NET images.
 - The packed DLLs are Linux x64 images (PE machine `0xFD1D`) by default and Windows x64 images (`0x8664`) with `-p:ModReadyToRunOS=windows`. The Linux compiler arguments are the same as before apart from the output folder. Whether the Windows runtime uses the precompiled code was not measured.
-- **Not checked:** the SDL2 and OpenGL file names against the Windows game, which was not inspected. Whether the Windows game's process has SDL2 loaded is also unchecked; without it, audio reports the error and stays silent, as on Linux. Also unchecked: DCCM on Windows, staging, the launcher, anything on Windows 11, and a live game check.
+- **Not checked:** the OpenGL file name against the Windows game, which was not inspected. Also unchecked: DCCM on Windows, staging, the launcher, anything on Windows 11, and a live game check.
+
+### SDL3 audio (#248)
+
+DCCM 35.13.6 ships SDL3 alone on both systems, so Kirby's sound effects now use SDL3 and the `SDL3` name. Read-only inspection of the pinned archives:
+
+| Package (SHA-256) | SDL file | SDL version | `sdl.hdll` links | SDL2 |
+| :--- | :--- | :--- | :--- | :--- |
+| `linux-x64.zip` (`c57b1fca…14a2`) | `core/native/linux-x64/libSDL3.so.0` | 3.4.2 | `libSDL3.so.0` | none |
+| `win-x64.zip` (`9ceb86e7…31ba`) | `core/native/win-x64/SDL3.dll` | 3.4.16 | `SDL3.dll` | none |
+
+Both packages also carry `core/host/SDL3-CS.dll`. `SDL3.dll` exports every function `NdsAudio` binds. The installed Linux game folder still has its own `libSDL2-2.0.so.0`, but DCCM's game process does not load it: the lab's `LD_LIBRARY_PATH` holds only DCCM's native folder, and in the live run below the game mapped DCCM's `libSDL3.so.0` and `sdl.hdll` and no SDL2. Before #248 the SDL2 binding could only find a system SDL2 on Linux, and nothing on Windows.
+
+Checked on 2026-10-21 (details in [AUDIO.md](AUDIO.md#sdl3-on-both-systems-248)):
+
+- `python3 scripts/check.py` passes (102 Python tests, 6 new in `tests/test_sdl_audio.py`).
+- `tests/audio` passes on DCCM's Linux `libSDL3.so.0`, and, built for `win-x64`, under Wine with DCCM's `SDL3.dll`. The SDL2 build of the same test fails under Wine with `Unable to load DLL 'SDL2'`, the silent-audio case this fixes.
+- One isolated Linux live run with Kirby active: [SDL3 audio (#248)](RUNTIME_LAUNCH.md#sdl3-audio-248).
+- **Not checked:** Windows 11, and whether the Windows game's process loads DCCM's `SDL3.dll` from `core/native/win-x64` (expected, since its `sdl.hdll` imports it).
 
 The upstream loader intentionally disables achievement unlocks (`Game` and `SteamPlatformModule` hooks). Do not promise that achievements remain enabled. This differs from the existing Sonic archive-only approach. The upstream runtime also intercepts platform functions; no ownership-check changes were authored here, and no Steam emulator was enabled or launched. The separately documented Nintendo DS oracle uses FreeBIOS in a standalone process.
 

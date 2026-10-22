@@ -3050,3 +3050,22 @@ the all-ability rendering tests as full gameplay acceptance.
   isolated root staged by these scripts (Kirby active, saves unchanged). Not run:
   anything on Windows 11.
 
+## 2026-10-21 — Kirby audio on DCCM's SDL3 (#248)
+
+- Fourth piece of the Windows 11 port (#241). DCCM 35.13.6 ships SDL3 alone on
+  both systems (`libSDL3.so.0` 3.4.2, `SDL3.dll` 3.4.16; each `sdl.hdll` links it).
+  `NdsAudio` used SDL2, so on Linux it found the system's SDL2 beside the game's
+  SDL3, and on Windows it would have found none and stayed silent.
+- `NdsAudio` now plays through an SDL3 audio stream on the default device, with
+  the same format, backlog bounds, pause clearing and gain. `NativeLibraries`
+  maps `SDL3` to `libSDL3.so.0` and `SDL3.dll`, the copies the game has loaded.
+  Activation logs whether the stream opened, or SDL's reason.
+- Source: `python3 scripts/check.py` passed (102 Python tests, 6 new in
+  `tests/test_sdl_audio.py`). `tests/audio` passes on DCCM's Linux SDL3 (dummy
+  and default device), and built for Windows under Wine with DCCM's `SDL3.dll`
+  (dummy and default device); the SDL2 build of it fails there with
+  `Unable to load DLL 'SDL2'`.
+- Live, Linux: a 70-second movement run in `repros/audio-248` opened the stream,
+  stepped 2,256 original frames into it with no audio error, and the game mapped
+  only DCCM's SDL3. Not run: anything on Windows 11.
+
