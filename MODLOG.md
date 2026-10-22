@@ -3012,3 +3012,21 @@ the all-ability rendering tests as full gameplay acceptance.
   byte-identical to `main`'s.
 - Source: `python3 scripts/check.py` passed (70 Python tests). Not run: anything on
   Windows 11, and a live game check (no game code runs differently on Linux).
+
+## 2026-10-21 — the runtime adapter on Windows (#244)
+
+- Second piece of the Windows 11 port (#241). `src/runtime/NativeLibraries.cs`
+  maps the three native libraries the runtime calls to each system's files: the
+  bridge (`libkssu_bridge.so` or `kssu_bridge.dll`), the game's SDL2 and its
+  OpenGL. One resolver serves the whole assembly. `KirbyNdsProvider` loads the
+  bridge file named for the system it runs on.
+- The performance probe reads Linux-only sources, so on other systems it writes
+  an `unsupported` note and stops.
+- `-p:ModReadyToRunOS=windows` compiles the packed DLLs for Windows on Linux
+  against the Windows framework 10.0.12. The default stays the build machine's
+  system.
+- Source: `python3 scripts/check.py` passed (78 Python tests, 8 of them new in
+  `tests/test_windows_runtime.py`). `tests/nds` passes on Linux. The same test,
+  built for Windows, passes under Wine against the #242 DLL with the same result.
+- Not run: anything on Windows 11, the Windows game's SDL2 and OpenGL names, and a
+  live game check (on Linux the runtime loads the same files as before).

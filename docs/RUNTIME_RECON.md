@@ -112,6 +112,22 @@ Paths:
 
 The setup script pins release URLs and archive hashes, uses local environment variables, and never installs into the game. The staging script copies the runtime into the lab, excludes the optional Goldberg emulator, explicitly sets `EnableGoldberg=false`, and links game files as inputs. It creates no links to real saves. **Neither script starts the game.** The lab's `save/` is only the loader's default mod-data location; isolation of all original-game Steam/cloud writes has not been proven and must be checked before the first game launch. Do not assume the directory alone proves save isolation.
 
+## Windows (#244)
+
+The adapter's source is the same on Linux and Windows. What differs is the names of the native libraries and the system the packed DLLs are compiled for.
+
+- **Library names.** `src/runtime/NativeLibraries.cs` registers one import resolver for the assembly when it loads. P/Invokes use three short names. `kssu_bridge` is the bridge that `NdsRuntime.Open` loaded from the mod's folder: `libkssu_bridge.so` or `kssu_bridge.dll`, the files `tools/nds_build.py` builds for each system. `SDL2` is `libSDL2-2.0.so.0` or `SDL2.dll`, and `GL` is `libGL.so.1` or `opengl32.dll`, the game's own copies. Before this change the resolver was set inside `NdsRuntime.Open`, and SDL and OpenGL were named by their Linux files.
+- **Performance probe.** `KIRBY_LAB_PERF` reads `/proc`, HashLink's `libhl.so` and Linux thread IDs. On other systems it only writes `perf.json` with an `unsupported` note.
+- **ReadyToRun.** `-p:ModReadyToRunOS=windows` compiles the packed `Kirby.Core` and `Kirby.Runtime` for Windows on Linux. It references the Windows framework of the same runtime version (`Microsoft.NETCore.App.Runtime.win-x64` 10.0.12, restored from NuGet only for that build). The default is the build machine's system, so the Linux build compiles as before. Images go to `obj/Release/net10.0/r2r/<system>/`.
+
+Checked on 2026-10-21. This is Linux and Wine evidence; nothing has run on Windows 11 yet.
+
+- `python3 scripts/check.py` passes on Linux (78 Python tests, including `tests/test_windows_runtime.py`, plus every C# build).
+- `tests/nds` against the Linux bridge, the ROM and `oracle/ready2/000.state` passes: ABI sizes, seed, walking, facing, RAM bounds, 3 live hits.
+- The same `tests/nds` source, published for `win-x64` (self-contained .NET 10.0.12), passes under Wine (Proton Experimental) against the #242 `kssu_bridge.dll` with the same result. Under Wine it needs `DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1`, because Wine's ICU lacks a function .NET calls, and Wine's own `mscoree`, which loads .NET images.
+- The packed DLLs are Linux x64 images (PE machine `0xFD1D`) by default and Windows x64 images (`0x8664`) with `-p:ModReadyToRunOS=windows`. The Linux compiler arguments are the same as before apart from the output folder. Whether the Windows runtime uses the precompiled code was not measured.
+- **Not checked:** the SDL2 and OpenGL file names against the Windows game, which was not inspected. Whether the Windows game's process has SDL2 loaded is also unchecked; without it, audio reports the error and stays silent, as on Linux. Also unchecked: DCCM on Windows, staging, the launcher, anything on Windows 11, and a live game check.
+
 The upstream loader intentionally disables achievement unlocks (`Game` and `SteamPlatformModule` hooks). Do not promise that achievements remain enabled. This differs from the existing Sonic archive-only approach. The upstream runtime also intercepts platform functions; no ownership-check changes were authored here, and no Steam emulator was enabled or launched. The separately documented Nintendo DS oracle uses FreeBIOS in a standalone process.
 
 ## Validation completed

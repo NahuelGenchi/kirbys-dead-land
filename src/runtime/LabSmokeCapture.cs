@@ -30,9 +30,9 @@ internal static class LabSmokeCapture
     private static long lastPoll, hostTraced = -1;
     [DllImport("kssu_bridge", EntryPoint = "kssu_save_state", CallingConvention = CallingConvention.Cdecl)]
     private static extern int SaveNdsState(nint handle, [MarshalAs(UnmanagedType.LPUTF8Str)] string path);
-    [DllImport("libGL.so.1")] private static extern void glGetIntegerv(uint name, [Out] int[] value);
-    [DllImport("libGL.so.1")] private static extern void glReadPixels(int x, int y, int width, int height, uint format, uint type, [Out] byte[] pixels);
-    [DllImport("libGL.so.1")] private static extern void glPixelStorei(uint name, int value);
+    [DllImport(NativeLibraries.OpenGl)] private static extern void glGetIntegerv(uint name, [Out] int[] value);
+    [DllImport(NativeLibraries.OpenGl)] private static extern void glReadPixels(int x, int y, int width, int height, uint format, uint type, [Out] byte[] pixels);
+    [DllImport(NativeLibraries.OpenGl)] private static extern void glPixelStorei(uint name, int value);
 
     public static void Install()
     {

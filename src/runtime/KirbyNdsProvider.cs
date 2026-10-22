@@ -168,13 +168,13 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         KirbySpriteRenderer.EquipmentAtlas();
         LabActivationTrace.Mark("Equipment atlas fetched", gc: true);
         if (nds is not null || opening is not null) return;
-        string library = Path.Combine(modRoot, "libkssu_bridge.so"), rom = config.RomPath, state = config.SeedStatePath;
+        string library = Path.Combine(modRoot, NativeLibraries.BridgeFile), rom = config.RomPath, state = config.SeedStatePath;
         opening = Task.Run(() => NdsRuntime.Open(library, rom, state));
     }
     private nint TakeOpenedMachine()
     {
         if (opening is not { } task)
-            return NdsRuntime.Open(Path.Combine(modRoot, "libkssu_bridge.so"), config.RomPath, config.SeedStatePath);
+            return NdsRuntime.Open(Path.Combine(modRoot, NativeLibraries.BridgeFile), config.RomPath, config.SeedStatePath);
         opening = null;
         LabActivationTrace.Mark(task.IsCompleted ? "Opened machine ready" : "Waiting for the opened machine");
         return task.GetAwaiter().GetResult();
