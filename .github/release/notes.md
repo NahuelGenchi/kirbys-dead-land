@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="$media/banner.png" alt="Kirby's Dead Land $version. Play as Kirby in Dead Cells on $platforms. Now with a launcher: no terminal needed." width="100%">
+  <img src="$media/banner.png" alt="Kirby's Dead Land $version. Play as Kirby in Dead Cells on $platforms, with a launcher: no terminal needed." width="100%">
 </p>
 
 <!-- linux-only -->
@@ -127,7 +127,7 @@ Something not working? [Open an issue](https://github.com/$repo/issues/new) and 
 
 | File | What it is |
 | :--- | :--- |
-| `KirbysDeadLand-$version-x86_64.AppImage` | The launcher, one file (recommended) |
+| `KirbysDeadLand-$version-x86_64.AppImage` | The launcher for Linux, one file (recommended) |
 | `KirbysDeadLand-$version-x86_64.tar.gz` | The same launcher as a folder. Unpack it and double-click `kirbys-dead-land`; `add-to-menu.sh` adds it to your applications menu. |
 <!-- windows -->
 | `KirbysDeadLand-$version-windows-x64.zip` | The launcher for Windows, as a folder. Extract it and double-click `Kirby's Dead Land`. |

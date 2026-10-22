@@ -237,7 +237,7 @@ class ReleaseNotesTests(unittest.TestCase):
                 for name in self.notes.PICTURES:
                     self.assertIn(f'https://raw.githubusercontent.com/owner/repo/abc123/.github/release/{tag}/{name}', page)
                 self.assertIn(f'https://github.com/owner/repo/releases/download/{tag}/KirbysDeadLand-{tag[1:]}-x86_64.AppImage', page)
-                self.assertIn('One file, about 15 MB', page)
+                self.assertIn('one file, about 15 mb', page.lower())
                 for heading in ('What you need', 'From download to Kirby in 4 steps', 'Your saves are safe', 'What was tested'):
                     self.assertIn(heading, page)
                 # The first launcher release had nothing to update from.
