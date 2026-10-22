@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Build the player packages on this machine the way the release workflow does: the
-# committed HEAD, in the same pinned Ubuntu 22.04 container, with the same steps
+# committed HEAD, in the same pinned Ubuntu containers (22.04 for Linux, 24.04 for
+# Windows), with the same steps
 # (.github/workflows/release.yml). Needs Docker. The packages, the source archive
 # and their .sha256 files land in dist/.
 #
@@ -12,6 +13,7 @@
 set -euo pipefail
 
 IMAGE='ubuntu:22.04@sha256:0a9887931b0e38af2e3487ed39e29436b0535c4f3f52e57745baaf79d1898956'
+WINDOWS_IMAGE='ubuntu:24.04@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac'
 project=$(cd "$(dirname "$0")/.." && pwd)
 tag=${1:-}
 inputs=$(mktemp -d)
@@ -20,11 +22,13 @@ git -C "$project" bundle create "$inputs/source.bundle" HEAD ${tag:+"refs/tags/$
 mkdir -p "$project/dist"
 
 for target in ${RELEASE_TARGETS:-linux windows}; do
+image=$IMAGE
+if [ "$target" = windows ]; then image=$WINDOWS_IMAGE; fi
 # shellcheck disable=SC2086 # RELEASE_DOCKER_ARGS holds separate options.
 docker run --rm ${RELEASE_DOCKER_ARGS:-} \
     -e TAG="$tag" -e TARGET="$target" -e OWNER="$(id -u):$(id -g)" \
     -v "$inputs:/inputs:ro" -v "$project/dist:/output" \
-    "$IMAGE" bash -euo pipefail -c '
+    "$image" bash -euo pipefail -c '
         export HOME=/github/home
         mkdir -p "$HOME"
         apt-get update -qq

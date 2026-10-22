@@ -128,8 +128,11 @@ it only builds the chosen branch and keeps the files as a workflow artifact.
 - **Build** (read-only token), once per target (`linux`, `windows`): an
   `ubuntu:22.04` container pinned by digest on an `ubuntu-24.04` runner, so the
   Linux programs need only glibc 2.35 and the libstdc++ of Ubuntu 22.04.
-  `release_tools.sh windows` adds Ubuntu's MinGW-w64 with POSIX threads and Rust's
-  `x86_64-pc-windows-gnu` target. `scripts/release_tools.sh` installs Ubuntu's compilers, CMake,
+  The Windows leg runs in `ubuntu:24.04`, also pinned by digest: Ubuntu 22.04's
+  MinGW-w64 8 lacks the Windows memory calls melonDS's JIT uses
+  (`MEM_RESERVE_PLACEHOLDER` and the others), and Windows programs do not depend on
+  the build machine's glibc. `release_tools.sh windows` adds Ubuntu's MinGW-w64 11
+  (GCC 13) with POSIX threads and Rust's `x86_64-pc-windows-gnu` target. `scripts/release_tools.sh` installs Ubuntu's compilers, CMake,
   ALSA and fontconfig headers, ICU, OpenSSL and squashfs-tools, Python 3.14.8
   (python-build-standalone 20261009, the launcher's own pin) and rustup 1.29.1, both
   checked by SHA-256, and Rust 1.99.0. The .NET SDK 10.0.401, DCCM, melon-rs and

@@ -26,13 +26,18 @@ jobs:
   packages:
     name: Build the ${{ matrix.target }} packages
     runs-on: ubuntu-24.04
-    # Ubuntu 22.04's glibc 2.35 and libstdc++ let the programs run on older systems too.
-    # The Windows programs are cross-built in the same image with MinGW-w64 (#252).
-    container: ubuntu:22.04@sha256:0a9887931b0e38af2e3487ed39e29436b0535c4f3f52e57745baaf79d1898956
+    # Ubuntu 22.04's glibc 2.35 and libstdc++ let the Linux programs run on older
+    # systems too. The Windows programs are cross-built with MinGW-w64 (#252) on
+    # Ubuntu 24.04, whose MinGW-w64 11 has the Windows memory calls melonDS uses.
+    container: ${{ matrix.image }}
     timeout-minutes: 90
     strategy:
       matrix:
-        target: [linux, windows]
+        include:
+          - target: linux
+            image: ubuntu:22.04@sha256:0a9887931b0e38af2e3487ed39e29436b0535c4f3f52e57745baaf79d1898956
+          - target: windows
+            image: ubuntu:24.04@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac
     env:
       TAG: ${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
       TARGET: ${{ matrix.target }}

@@ -201,8 +201,9 @@ class ReleaseWorkflowTests(unittest.TestCase):
     def test_local_container_matches_the_workflow(self):
         workflow = (PROJECT / '.github/workflows/release.yml').read_text()
         local = (PROJECT / 'scripts/release_container.sh').read_text()
-        image = re.search(r'ubuntu:22\.04@sha256:[0-9a-f]{64}', workflow).group()
-        self.assertIn(f"IMAGE='{image}'", local)
+        for name, release in (('IMAGE', '22'), ('WINDOWS_IMAGE', '24')):
+            image = re.search(rf'ubuntu:{release}\.04@sha256:[0-9a-f]{{64}}', workflow).group()
+            self.assertIn(f"{name}='{image}'", local)
         for step in ('bash scripts/release_tools.sh "$TARGET"',
                      'python3 scripts/build_packages.py --target "$TARGET" --output dist ${TAG:+--tag "$TAG"}',
                      'python3 scripts/package_release.py --ref HEAD --output dist'):
