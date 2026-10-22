@@ -3030,3 +3030,23 @@ the all-ability rendering tests as full gameplay acceptance.
   built for Windows, passes under Wine against the #242 DLL with the same result.
 - Not run: anything on Windows 11, the Windows game's SDL2 and OpenGL names, and a
   live game check (on Linux the runtime loads the same files as before).
+
+## 2026-10-21 — the scripts on Windows (#246)
+
+- Third piece of the Windows 11 port (#241). Setup, staging and launch run on
+  Windows from the same scripts: the data root in `%LOCALAPPDATA%`, one lab lock
+  (`flock` or `msvcrt.locking`), pinned DCCM and .NET SDK `win-x64` archives, Steam
+  from the registry, and game files as hard links or copies instead of symbolic
+  links. `crossgen2.exe` is found on a Windows build machine.
+- The owner chose the Windows sandbox: the lab is labeled low integrity and the
+  game starts with a low-integrity token, in a job that closes it with the script.
+  The save backup and check stay. `--normal-integrity` is the recorded fallback.
+- Under Wine with a stand-in game: setup and build with the Windows SDK, staging
+  (hard links, copies, refusals), the lock, the job, and a play launch that reached
+  DCCM loading Kirby's DLLs. Wine does not apply integrity levels, so the
+  confinement itself is unchecked.
+- Source: `python3 scripts/check.py` passed (96 Python tests, 18 new in
+  `tests/test_windows_scripts.py`). Live, Linux: a 60-second movement run in an
+  isolated root staged by these scripts (Kirby active, saves unchanged). Not run:
+  anything on Windows 11.
+

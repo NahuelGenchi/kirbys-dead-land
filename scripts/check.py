@@ -5,7 +5,7 @@ from pathlib import Path
 import subprocess
 import sys
 
-from setup_runtime import DEFAULT_ROOT, environment
+from setup_runtime import DEFAULT_ROOT, environment, sdk_program
 
 
 def main():
@@ -15,7 +15,7 @@ def main():
     args = parser.parse_args()
     project = Path(__file__).resolve().parents[1]
     root = args.data_root.expanduser().resolve()
-    dotnet = root / 'dotnet/dotnet'
+    dotnet = sdk_program(root)
     if not dotnet.is_file():
         parser.error('Run scripts/setup_runtime.py --build first.')
     commands = [

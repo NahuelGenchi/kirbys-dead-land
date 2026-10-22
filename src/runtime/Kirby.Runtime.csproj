@@ -38,6 +38,7 @@
       <ModReadyToRunPath>$(IntermediateOutputPath)r2r/$(ModReadyToRunOS)/</ModReadyToRunPath>
       <ModReadyToRunFramework Condition="'$(ModReadyToRunOS)' == 'windows' and '$(ModBuildOS)' != 'windows'">$(NuGetPackageRoot)microsoft.netcore.app.runtime.win-x64/$(BundledNETCoreAppPackageVersion)/runtimes/win-x64/</ModReadyToRunFramework>
       <ModCrossgen>$(NuGetPackageRoot)microsoft.netcore.app.crossgen2.$(NETCoreSdkRuntimeIdentifier)/$(BundledNETCoreAppPackageVersion)/tools/crossgen2</ModCrossgen>
+      <ModCrossgen Condition="'$(ModBuildOS)' == 'windows'">$(ModCrossgen).exe</ModCrossgen>
     </PropertyGroup>
     <ItemGroup>
       <!-- The game runs on the SDK's own runtime, so its framework is the reference. -->
