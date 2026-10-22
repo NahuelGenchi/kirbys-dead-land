@@ -262,6 +262,22 @@ deletion (see [work tracking](TRACKING.md#enforcement-boundary)). Public
 repositories run standard Actions runners at no cost, so the tracking workflow,
 stopped by billing on the private repository, runs again.
 
+## v0.3.0 (2026-10-22, pre-release)
+
+The first release with a Windows download (#253, from #252):
+`KirbysDeadLand-0.3.0-windows-x64.zip` beside the two Linux downloads. Published
+as a pre-release, so Latest stays v0.2.1 and v0.2.x launchers are not told about
+it, until a Windows 11 check (#241) shows it works; then it is published as Latest.
+
+- One version, 0.3.0, in `mod.json`, the runtime adapter's project and the launcher
+  (`Cargo.toml`, its `Cargo.lock` entry and `launcher/NOTICES.txt`).
+- For Linux players it carries the Windows port's shared changes since v0.2.1:
+  Kirby's audio on the SDL3 that DCCM ships (#248), and the scripts and launcher
+  changes of #246 and #250.
+- Its page is the [release page](#release-page-239) with both downloads; the
+  pictures and the two parts are in `.github/release/v0.3.0/`. The page says the
+  Windows download has not run on Windows 11.
+
 ## v0.2.1 (2026-10-21)
 
 A fix release for one bug (#236): in v0.2.0 Kirby could not break the Collector's

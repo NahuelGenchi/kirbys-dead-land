@@ -1,0 +1,3 @@
+- **Linux** (Ubuntu 26.04, Steam, Dead Cells 35): the 0.3.0 launcher from this page, on a new folder: checks, setup and a short test run as Kirby, with Kirby's sounds playing through the game's own audio system. Your saves were backed up and left unchanged.
+- **Windows**: only in a Windows-compatible environment on Linux (Wine), with stand-ins for Steam and Dead Cells: the launcher's checks, setup and pressing Play. It has never run with the real Windows Dead Cells.
+- **Not tested yet:** a real Windows 11 PC, the Steam Deck and other PCs. If you try it, tell us how it went!

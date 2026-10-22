@@ -156,9 +156,12 @@ def banner(shots: Path, out: Path, version: str) -> None:
     draw.text((x - 6, 330), "Kirby's", font=title, fill=INK)
     draw.text((x - 6, 500), 'Dead Land', font=title, fill=INK)
     body = font('Nunito', 46, 600)
-    platforms = 'Linux and Windows' if has_windows(f'v{version}') else 'Linux'
-    draw.text((x, 730), f'Play as Kirby in Dead Cells on {platforms}.', font=body, fill=INK_DIM)
-    draw.text((x, 795), 'Now with a launcher: no terminal needed.', font=body, fill=INK_DIM)
+    if has_windows(f'v{version}'):
+        lines = ('Play as Kirby in Dead Cells.', 'On Linux and Windows, no terminal needed.')
+    else:
+        lines = ('Play as Kirby in Dead Cells on Linux.', 'Now with a launcher: no terminal needed.')
+    draw.text((x, 730), lines[0], font=body, fill=INK_DIM)
+    draw.text((x, 795), lines[1], font=body, fill=INK_DIM)
     sparkle(draw, x + 690, 395, 40, GOLD)
     sparkle(draw, x + 765, 470, 17, PINK)
     canvas.convert('RGB').save(out / 'banner.png', optimize=True)

@@ -3117,3 +3117,15 @@ the all-ability rendering tests as full gameplay acceptance.
 - Not run: the Linux leg in the container (its steps did not change), the changed
   workflow on GitHub (next tag), a fresh setup from this zip, and anything on
   Windows 11.
+
+## 2026-10-22 — v0.3.0, a test release with the Windows download (#253)
+
+- Version 0.3.0 in `mod.json`, the runtime adapter and the launcher, and its
+  release page parts and pictures in `.github/release/v0.3.0/` (both download
+  buttons; the banner names Linux and Windows).
+- The owner chose a test release: v0.3.0 goes out as a pre-release with the Linux
+  and Windows downloads, and becomes Latest only after a Windows 11 check (#241).
+- Source: the Python tests, `cargo test` in `launcher/` and `scripts/check.py`
+  (results in the PR). The tag, the workflow run and the download checks follow
+  this change and are recorded in `docs/RELEASE.md`.
+
