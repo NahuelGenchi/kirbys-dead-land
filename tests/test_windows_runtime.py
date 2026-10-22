@@ -32,12 +32,12 @@ class WindowsRuntimeTests(unittest.TestCase):
             self.assertLessEqual(names - LINUX_ONLY.get(source.name, set()), allowed, source.name)
 
     def test_short_names_match_the_constants(self):
-        self.assertIn('public const string Bridge = "kssu_bridge", Sdl = "SDL2", OpenGl = "GL";', LIBRARIES)
+        self.assertIn('public const string Bridge = "kssu_bridge", Sdl = "SDL3", OpenGl = "GL";', LIBRARIES)
         self.assertIn('private const string Library = NativeLibraries.Sdl;', (RUNTIME / 'NdsAudio.cs').read_text())
 
     def test_each_system_gets_its_own_files(self):
-        self.assertEqual(mapping('Sdl', windows=False), 'libSDL2-2.0.so.0')
-        self.assertEqual(mapping('Sdl', windows=True), 'SDL2.dll')
+        self.assertEqual(mapping('Sdl', windows=False), 'libSDL3.so.0')
+        self.assertEqual(mapping('Sdl', windows=True), 'SDL3.dll')
         self.assertEqual(mapping('OpenGl', windows=False), 'libGL.so.1')
         self.assertEqual(mapping('OpenGl', windows=True), 'opengl32.dll')
 

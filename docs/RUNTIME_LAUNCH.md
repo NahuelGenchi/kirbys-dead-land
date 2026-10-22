@@ -86,6 +86,24 @@ Checked on 2026-10-21 under Wine (Proton Experimental) with the Windows Python 3
 
 On Linux the same day, `python3 scripts/check.py` passed, and an isolated root (`repros/scripts-246`) staged by these scripts had the same four symbolic links and `libkssu_bridge.so`. Its 60-second movement run (`--start-game --outfit KirbySuperStarUltra --input-plan movement`) activated Kirby, traced 1,625 original frames, left the saves unchanged and ended at the expected timeout.
 
+## SDL3 audio (#248)
+
+Kirby's sound effects use the SDL3 that DCCM loads into the game ([AUDIO.md](AUDIO.md#sdl3-on-both-systems-248)). On activation the log says `Kirby audio: SDL3 playback stream open.`, or `Kirby audio unavailable:` with SDL's reason; play continues without sound in that case. The offscreen lab sets SDL's dummy audio driver, so a lab run checks the stream, not a sound device.
+
+```sh
+R=$HOME/.local/share/kirby-dead-cells/repros/audio-248
+mkdir -p "$R"; for d in research oracle rom dotnet; do ln -s "$HOME/.local/share/kirby-dead-cells/$d" "$R/$d"; done
+python3 scripts/check.py
+python3 scripts/stage_runtime.py --data-root "$R" --original-runtime \
+  --outfit-pack "$HOME/.local/share/kirby-dead-cells/outfit-build-main/res.pak"
+python3 scripts/launch_runtime.py --data-root "$R" --seconds 70 --start-game \
+  --outfit KirbySuperStarUltra --input-plan movement
+```
+
+| Run | Build | Result |
+| :--- | :--- | :--- |
+| 2026-10-21, `repros/audio-248`, `--seconds 70` | this branch on 7e95138 | Exit -15 (expected), no fatal log, saves unchanged. `Kirby audio: SDL3 playback stream open.` on the main thread at activation; the game then stepped original frames 4,168 to 6,424, each drained into the stream, with no audio error. Kirby walked (x 43 to 410) and jumped (y 105.5 to 95.0). During the run the game process (`/proc/<pid>/maps`) had mapped DCCM's `core/native/linux-x64/libSDL3.so.0` and `sdl.hdll` and no SDL2. Lowest available memory 2.1 GB. |
+
 ## Clean install from a release archive (#210)
 
 On 2026-10-20 the release archive was installed with nothing from the owner's data

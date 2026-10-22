@@ -364,9 +364,10 @@ limited-use ability; Kirby has no health flask (#101).
   shattering the freeze, and the host thaw follows. An Ice kill leaves no original
   ice block. See [Ice freeze](docs/GAMEPLAY_FIDELITY.md#ice-freezes-with-the-host-status-intentional-deviation).
 - Original sound effects play at 48 kHz stereo. Only the source BGM player is
-  muted, retaining Dead Cells music. Jump/landing audio and the SDL queue passed
-  tests, including coexistence with the host's SDL3 and successful queuing to the
-  default desktop audio device.
+  muted, retaining Dead Cells music. They go through the SDL3 that DCCM ships on
+  Linux and Windows. Jump/landing audio and the SDL3 stream passed tests on
+  DCCM's SDL3 for Linux and, under Wine, for Windows, including queuing to the
+  default desktop audio device; Windows 11 is unchecked.
 - In live Kirby runs the start level's starting bow, weapons and skills became
   ability items while shields and gold stayed. An ability item was inhaled, spat
   back to its cell, inhaled again and swallowed into its ability, which then
