@@ -121,7 +121,8 @@ public sealed unsafe class NdsAudio : IDisposable
     }
     private static class Sdl
     {
-        private const string Library = "libSDL2-2.0.so.0";
+        // The game's own SDL2, already loaded in its process (NativeLibraries maps the name).
+        private const string Library = NativeLibraries.Sdl;
         [DllImport(Library, EntryPoint = "SDL_InitSubSystem", CallingConvention = CallingConvention.Cdecl)] internal static extern int Init(uint flags);
         [DllImport(Library, EntryPoint = "SDL_QuitSubSystem", CallingConvention = CallingConvention.Cdecl)] internal static extern void Quit(uint flags);
         [DllImport(Library, EntryPoint = "SDL_GetError", CallingConvention = CallingConvention.Cdecl)] internal static extern nint GetError();

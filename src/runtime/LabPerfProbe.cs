@@ -135,6 +135,12 @@ internal static unsafe class LabPerfProbe
         string? mode = Environment.GetEnvironmentVariable("KIRBY_LAB_PERF");
         if (run is null || !Directory.Exists(run) || Environment.GetEnvironmentVariable("KIRBY_LAB_PLAY") == "1" ||
             mode is not ("1" or "quiet")) return;
+        // It reads /proc, HashLink's libhl.so and the thread's Linux ID (#244).
+        if (!OperatingSystem.IsLinux())
+        {
+            File.WriteAllText(Path.Combine(run, "perf.json"), "{\"unsupported\": \"The performance probe runs on Linux only.\"}\n");
+            return;
+        }
         Quiet = mode == "quiet";
         path = Path.Combine(run, "perf.json");
         framesPath = Path.Combine(run, "perf-frames.json");

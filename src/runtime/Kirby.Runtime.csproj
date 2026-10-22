@@ -19,21 +19,30 @@
 
   <!-- The packed Kirby.Core and Kirby.Runtime carry ahead-of-time (ReadyToRun) code, so the
        first frame Kirby plays does not wait for the JIT (#184). The IL build in bin/ is
-       unchanged. -p:ModReadyToRun=false packs the IL alone. -->
+       unchanged. -p:ModReadyToRun=false packs the IL alone. The code is for the build
+       machine's system; -p:ModReadyToRunOS=windows compiles it for Windows on Linux (#244). -->
   <PropertyGroup>
     <ModReadyToRun Condition="'$(ModReadyToRun)' == ''">true</ModReadyToRun>
+    <ModBuildOS Condition="$([MSBuild]::IsOSPlatform('Windows'))">windows</ModBuildOS>
+    <ModBuildOS Condition="'$(ModBuildOS)' == ''">linux</ModBuildOS>
+    <ModReadyToRunOS Condition="'$(ModReadyToRunOS)' == ''">$(ModBuildOS)</ModReadyToRunOS>
   </PropertyGroup>
   <ItemGroup Condition="'$(ModReadyToRun)' == 'true'">
     <PackageDownload Include="Microsoft.NETCore.App.Crossgen2.$(NETCoreSdkRuntimeIdentifier)" Version="[$(BundledNETCoreAppPackageVersion)]" />
+    <!-- Compiled for another system, the code references that system's own framework, as the SDK's ReadyToRun does. -->
+    <PackageDownload Include="Microsoft.NETCore.App.Runtime.win-x64" Version="[$(BundledNETCoreAppPackageVersion)]"
+                     Condition="'$(ModReadyToRunOS)' == 'windows' and '$(ModBuildOS)' != 'windows'" />
   </ItemGroup>
   <Target Name="ModReadyToRunInputs">
     <PropertyGroup>
-      <ModReadyToRunPath>$(IntermediateOutputPath)r2r/</ModReadyToRunPath>
+      <ModReadyToRunPath>$(IntermediateOutputPath)r2r/$(ModReadyToRunOS)/</ModReadyToRunPath>
+      <ModReadyToRunFramework Condition="'$(ModReadyToRunOS)' == 'windows' and '$(ModBuildOS)' != 'windows'">$(NuGetPackageRoot)microsoft.netcore.app.runtime.win-x64/$(BundledNETCoreAppPackageVersion)/runtimes/win-x64/</ModReadyToRunFramework>
       <ModCrossgen>$(NuGetPackageRoot)microsoft.netcore.app.crossgen2.$(NETCoreSdkRuntimeIdentifier)/$(BundledNETCoreAppPackageVersion)/tools/crossgen2</ModCrossgen>
     </PropertyGroup>
     <ItemGroup>
       <!-- The game runs on the SDK's own runtime, so its framework is the reference. -->
-      <ModReadyToRunReference Include="$(NetCoreRoot)shared/Microsoft.NETCore.App/$(BundledNETCoreAppPackageVersion)/*.dll" />
+      <ModReadyToRunReference Include="$(NetCoreRoot)shared/Microsoft.NETCore.App/$(BundledNETCoreAppPackageVersion)/*.dll" Condition="'$(ModReadyToRunFramework)' == ''" />
+      <ModReadyToRunReference Include="$(ModReadyToRunFramework)lib/net10.0/*.dll" Condition="'$(ModReadyToRunFramework)' != ''" />
       <ModReadyToRunReference Include="@(ReferencePath)" Condition="'%(ReferencePath.FrameworkReferenceName)' == '' and '%(ReferencePath.ReferenceSourceTarget)' != 'ProjectReference'" />
       <ModReadyToRunReference Include="@(_MDK_ModAssembly_Dll)" />
     </ItemGroup>
@@ -42,9 +51,11 @@
           Inputs="@(_MDK_ModAssembly_Dll);@(ModReadyToRunReference);$(MSBuildProjectFullPath)"
           Outputs="@(_MDK_ModAssembly_Dll->'$(ModReadyToRunPath)%(Filename)%(Extension)')">
     <Error Condition="!Exists('$(ModCrossgen)')" Text="crossgen2 was not restored: $(ModCrossgen)" />
+    <Error Condition="'$(ModReadyToRunOS)' != 'linux' and '$(ModReadyToRunOS)' != 'windows'" Text="ModReadyToRunOS is linux or windows, not $(ModReadyToRunOS)." />
+    <Error Condition="'$(ModReadyToRunOS)' != '$(ModBuildOS)' and '$(ModReadyToRunOS)' != 'windows'" Text="Linux code is compiled on Linux." />
     <!-- One image per assembly: each is its own version bubble, as the SDK compiles them. -->
     <WriteLinesToFile File="$(ModReadyToRunPath)%(_MDK_ModAssembly_Dll.Filename).rsp" Overwrite="true"
-                      Lines="%(_MDK_ModAssembly_Dll.FullPath);-o:$(ModReadyToRunPath)%(_MDK_ModAssembly_Dll.Filename)%(_MDK_ModAssembly_Dll.Extension);--targetos:linux;--targetarch:x64;-O;@(ModReadyToRunReference->'-r:%(FullPath)')" />
+                      Lines="%(_MDK_ModAssembly_Dll.FullPath);-o:$(ModReadyToRunPath)%(_MDK_ModAssembly_Dll.Filename)%(_MDK_ModAssembly_Dll.Extension);--targetos:$(ModReadyToRunOS);--targetarch:x64;-O;@(ModReadyToRunReference->'-r:%(FullPath)')" />
     <Exec Command="&quot;$(ModCrossgen)&quot; @&quot;$(ModReadyToRunPath)%(_MDK_ModAssembly_Dll.Filename).rsp&quot;" />
   </Target>
   <Target Name="PackModReadyToRun" BeforeTargets="CopyOutputFiles" DependsOnTargets="CompileModReadyToRun"

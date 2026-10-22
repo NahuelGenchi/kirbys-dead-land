@@ -74,8 +74,7 @@ public sealed unsafe class NdsRuntime : IDisposable
             if (library == 0)
             {
                 library = NativeLibrary.Load(Path.GetFullPath(nativeLibrary));
-                NativeLibrary.SetDllImportResolver(typeof(NdsRuntime).Assembly,
-                    (name, _, _) => name == "kssu_bridge" ? library : 0);
+                NativeLibraries.BridgeHandle = library;
                 FindExports();
             }
         }

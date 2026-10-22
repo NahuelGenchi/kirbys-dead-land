@@ -514,6 +514,8 @@ On `main` (`28f4086`) with this branch's probe, the IL build took 53.6 and 54.6 
 
 The build now compiles `Kirby.Core` and `Kirby.Runtime` ahead of time (ReadyToRun) with crossgen2, the compiler behind the SDK's `PublishReadyToRun`, at the version of the runtime the game runs (10.0.12, restored from NuGet with the build; `src/runtime/Kirby.Runtime.csproj`). The packed DLLs carry native code beside their IL. The IL build in `bin/` is unchanged, and `-p:ModReadyToRun=false` packs it instead: the DLLs it packed were byte for byte those of `bin/`. The runtime uses a method's native code at its first call when the code's recorded assumptions about other assemblies still hold, compiles the method as before when they do not, and still compiles hot methods again in the background at tier 1.
 
+The code is compiled for the build machine's system; `-p:ModReadyToRunOS=windows` compiles it for Windows on Linux (#244, [Windows](RUNTIME_RECON.md#windows-244)). The performance probe itself runs on Linux only.
+
 Lab runs, 2026-10-17: isolated profile `repros/perf-184`, a new game from seed 174 each time (`KIRBY_LAB_SEED=174`), the `movement` plan, `KIRBY_LAB_PERF=quiet` with the host phases (`KIRBY_LAB_PERF_HOST=1`), software drawing, `performance` power profile, outfit pack `2cbd0a47…`, bridge `bae16c0e…`. The two builds of the same tree, IL (`7256e416…`) and ReadyToRun (`d3274ea9…`), were swapped in the same lab between games, IL first. "JIT" is the game thread's.
 
 | Build | Runs | First Kirby frame | its JIT (methods) | `Native` | Frame before | Activation frame (JIT, methods) | JIT from activation to the 600th played frame |
