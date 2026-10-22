@@ -13,6 +13,7 @@ import subprocess
 from PIL import Image
 from oracle_snapshot import ROM_SHA256
 from data_root import data_root
+from oracle_build import runner_binary
 
 ROOT = data_root() / "oracle"
 
@@ -28,7 +29,7 @@ def main():
     parser.add_argument("--plan", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--state", type=Path)
-    parser.add_argument("--runner", type=Path, default=ROOT / "vendor/melon-rs/target/release/kssu-oracle-runner")
+    parser.add_argument("--runner", type=Path, default=runner_binary(ROOT / "vendor/melon-rs"))
     args = parser.parse_args()
     root, output = ROOT.resolve(), args.output.expanduser().resolve()
     if root not in output.parents or output.exists():

@@ -114,3 +114,8 @@ fn main() -> Result<(),Box<dyn std::error::Error>> {
     }))?)?;
     Ok(())
 }
+
+// Kept last so the Linux build, which leaves it out, keeps its line numbers.
+#[cfg(windows)]
+#[path = "../src/nds/melon_windows.rs"]
+mod melon_windows;
