@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 """Make the pictures for a release page from the launcher's own screenshots.
 
-    launcher/target/debug/kirbys-dead-land --screenshot SHOTS --scale 2
-    python3 .github/release/make_media.py SHOTS .github/release/v0.2.0
+    cargo build --manifest-path launcher/Cargo.toml
+    python3 .github/release/make_media.py
 
-SHOTS must come from --screenshot without --art-from: those use stand-in art, so
-the pictures hold nothing from the game. Writes banner.png, download.png and one
-framed screenshot per step. Needs Pillow; uses the launcher's fonts.
+Runs the launcher's --screenshot mode (never with --art-from, so the pictures use
+stand-in art and hold nothing from the game) and writes banner.png, download.png
+and one framed screenshot per step to .github/release/v<launcher version>/, the
+pictures that notes.py links. Needs Pillow; uses the launcher's fonts.
 """
 import argparse
 import random
+import subprocess
+import tempfile
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
@@ -135,7 +138,7 @@ def tracked(draw: ImageDraw.ImageDraw, xy: tuple[int, int], text: str, face: Ima
         x += face.getlength(char) + spacing
 
 
-def banner(shots: Path, out: Path) -> None:
+def banner(shots: Path, out: Path, version: str) -> None:
     w, h = 2400, 1100
     canvas = sky((w, h), seed=7, clear=(0, 200, 1120, 900))
     castle(canvas, seed=3)
@@ -145,7 +148,7 @@ def banner(shots: Path, out: Path) -> None:
     canvas.alpha_composite(front, (1130, h - front.height + 10))
     draw = ImageDraw.Draw(canvas)
     x = 130
-    tracked(draw, (x, 270), 'NEW · VERSION 0.2.0', font('Nunito', 40, 900), PINK, 9)
+    tracked(draw, (x, 270), f'NEW · VERSION {version}', font('Nunito', 40, 900), PINK, 9)
     title = font('Fredoka', 160, 700)
     draw.text((x - 6, 330), "Kirby's", font=title, fill=INK)
     draw.text((x - 6, 500), 'Dead Land', font=title, fill=INK)
@@ -195,15 +198,19 @@ def steps(shots: Path, out: Path) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('shots', type=Path, help='Folder written by kirbys-dead-land --screenshot (no --art-from).')
-    parser.add_argument('out', type=Path)
+    parser.add_argument('--launcher', type=Path, default=PROJECT / 'launcher/target/debug/kirbys-dead-land',
+                        help='The built launcher (default: the debug build).')
     args = parser.parse_args()
-    args.out.mkdir(parents=True, exist_ok=True)
-    banner(args.shots, args.out)
-    download_button(args.out)
-    steps(args.shots, args.out)
-    for path in sorted(args.out.glob('*.png')):
-        print(f'{path.name}: {path.stat().st_size // 1024} KB')
+    version = subprocess.run([args.launcher, '--version'], check=True, capture_output=True, text=True).stdout.split()[-1]
+    out = Path(__file__).resolve().parent / f'v{version}'
+    out.mkdir(exist_ok=True)
+    with tempfile.TemporaryDirectory() as shots:
+        subprocess.run([args.launcher, '--screenshot', shots, '--scale', '2'], check=True, stdout=subprocess.DEVNULL)
+        banner(Path(shots), out, version)
+        download_button(out)
+        steps(Path(shots), out)
+    for path in sorted(out.glob('*.png')):
+        print(f'{path.relative_to(PROJECT)}: {path.stat().st_size // 1024} KB')
 
 
 if __name__ == '__main__':

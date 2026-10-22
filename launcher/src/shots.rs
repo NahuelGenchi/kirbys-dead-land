@@ -159,7 +159,7 @@ pub fn run(out: &Path, art_root: Option<PathBuf>, scale: f32) -> Result<(), Stri
     let (w, h) = ((1040.0 * scale).round() as u32, (680.0 * scale).round() as u32);
     window.set_size(slint::PhysicalSize::new(w, h));
     app.show().map_err(|e| e.to_string())?;
-    app.set_version("0.2.0".into());
+    app.set_version(env!("CARGO_PKG_VERSION").into());
     app.set_game_detail("Dead Cells v35".into());
     app.set_rom_name("Kirby Super Star Ultra (USA).nds".into());
     app.set_rom_detail("USA · revision 0 · verified\n~/Documents/ROMS/Nintendo DS".into());

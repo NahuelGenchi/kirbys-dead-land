@@ -2976,3 +2976,21 @@ the all-ability rendering tests as full gameplay acceptance.
   launcher updated in about 5 s, ran Kirby, and left the Kirby save unchanged.
 - Published as Latest with notes for players (the fix, updating, what was tested).
   Not tested: the Steam Deck and 0.2.1 on other distributions.
+
+## 2026-10-21 — the same release page for every version (#239)
+
+- The v0.2.1 page had lost the v0.2.0 design and sent new players to the v0.2.0
+  notes, because the v0.2.0 pictures show "0.2.0". Every release page is now
+  `.github/release/notes.md` filled in by `.github/release/notes.py`, with two
+  short per-version parts (`new.md`, `tested.md`) and per-version pictures.
+- `--screenshot` shows the launcher's own version instead of a fixed "0.2.0";
+  `make_media.py` runs it and writes the version's pictures in one command.
+- The release workflow stops before building a tag without its notes and
+  pictures, and gives a new draft the rendered notes. A test checks the current
+  version's folder and renders every version's page.
+- v0.2.1 got its own pictures and the full page; v0.2.0 was re-rendered from the
+  same template.
+- Source: the Python tests, `cargo test` in `launcher/` and `scripts/check.py`
+  (results in the PR). Not run: the changed workflow (it runs at the next tag) and
+  any live game check (no game code changed).
+

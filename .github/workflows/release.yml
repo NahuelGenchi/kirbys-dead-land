@@ -1,8 +1,9 @@
 name: Release packages
 
 # Builds the player packages (docs/RELEASE.md) and the source archive from a
-# version tag and attaches them to that tag's release. Run by hand without a tag,
-# it builds the chosen branch and keeps the files as a workflow artifact only.
+# version tag and attaches them to that tag's release; a new release gets the
+# player notes from .github/release/notes.py. Run by hand without a tag, it builds
+# the chosen branch and keeps the files as a workflow artifact only.
 on:
   push:
     tags: ['v*']
@@ -41,6 +42,11 @@ jobs:
       - name: Install the pinned build tools
         run: bash scripts/release_tools.sh
 
+      # Stops before the build when the tag's notes or pictures are missing.
+      - name: Check the release notes
+        if: env.TAG != ''
+        run: python3 .github/release/notes.py "$TAG" > /dev/null
+
       - name: Build the AppImage and the .tar.gz
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
@@ -58,6 +64,20 @@ jobs:
             dist/*.sha256
           if-no-files-found: error
 
+      - name: Write the release notes
+        if: env.TAG != ''
+        run: |
+          mkdir notes
+          python3 .github/release/notes.py "$TAG" --ref "$(git rev-parse HEAD)" \
+            --appimage-bytes "$(stat -c %s dist/*.AppImage)" > notes/notes.md
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: env.TAG != ''
+        with:
+          name: notes
+          path: notes/notes.md
+          if-no-files-found: error
+
   release:
     name: Attach to the release
     needs: packages
@@ -72,14 +92,19 @@ jobs:
           name: packages
           path: dist
 
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: notes
+          path: notes
+
       - name: Upload the files
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
         run: |
-          # A tag without a release gets a draft pre-release; its notes are written by hand.
+          # A tag without a release gets a draft pre-release with the player notes.
           if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
             gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --draft --prerelease \
-              --title "Kirby's Dead Land ${TAG#v}" --notes 'Packages built by the release workflow. Notes to follow.'
+              --title "Kirby's Dead Land ${TAG#v}" --notes-file notes/notes.md
           fi
           gh release upload "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --clobber

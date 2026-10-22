@@ -115,9 +115,12 @@ it only builds the chosen branch and keeps the files as a workflow artifact.
   melonDS are pinned by the build scripts. Then `build_packages.py --tag` and
   `package_release.py`, and the two packages, the source archive and the `.sha256`
   files are uploaded as the `packages` artifact.
+- **Notes**: before the build, the job stops if the tag has no
+  [release page](#release-page-239) parts or pictures; after it, it writes the
+  page with the AppImage's size and the pictures linked at the tag's commit.
 - **Attach** (the only job that can write): `gh release upload --clobber` to the
-  tag's release, or to a new draft pre-release when the tag has none yet; its notes
-  are written by hand.
+  tag's release, or to a new draft pre-release, with those notes, when the tag has
+  none yet. An existing release keeps its notes.
 
 Actions are pinned by commit, the checkout keeps no credentials, and the tag
 reaches shell commands only through environment variables.
@@ -128,6 +131,33 @@ packages, the source archive and their `.sha256` files to `dist/`. It needs
 Docker; `RELEASE_DOCKER_ARGS` passes extra `docker run` options such as
 `--memory 4g`. A test checks that it and the workflow use one image and the same
 build commands.
+
+### Release page (#239)
+
+Every release page is one design: `.github/release/notes.md`, filled in by
+`.github/release/notes.py vX.Y.Z`. It holds the banner, the download button, how
+to update from an older version (from 0.2.1 on), what the mod is, what players
+need, the four steps with pictures, their saves, how Kirby plays, help, and the
+files and licenses. Each version adds a folder, `.github/release/vX.Y.Z/`, with
+two short parts in players' words, `new.md` (what is new or fixed) and
+`tested.md` (what was tested), and its pictures:
+
+```bash
+cargo build --manifest-path launcher/Cargo.toml
+python3 .github/release/make_media.py
+```
+
+`make_media.py` runs the launcher's `--screenshot --scale 2` (stand-in art, never
+`--art-from`) and writes the banner, the download button and the four step
+pictures, all showing the launcher's version, to that version's folder. Commit the
+folder with the version change, before the tag: a test fails while the current
+version's folder is incomplete, and the workflow will not build a tag without it.
+The pictures hold no game art; pictures from the game itself (Kirby, his
+abilities, Dead Cells) stay out of the repository and the releases.
+
+To rewrite a published release's notes, render them with `--ref` set to a commit
+that holds the folder and `--appimage-bytes` set to the AppImage's size, then
+update the release's body.
 
 ### Verification (#222)
 
@@ -231,8 +261,10 @@ names.
   before and after, and the real saves unchanged.
 - Published 2026-10-21 as a regular release, shown as Latest, with notes for
   players: the fix, how to update from 0.2.0, and what was tested. The download
-  button reuses the v0.2.0 picture; the v0.2.0 screenshots show "0.2.0", so the
-  notes link to the v0.2.0 notes for the step-by-step guide instead.
+  button reused the v0.2.0 picture and the notes sent new players to the v0.2.0
+  notes, because those screenshots show "0.2.0".
+- Rewritten the same day with the [release page](#release-page-239) (#239): its
+  own pictures showing 0.2.1, and the whole guide for new players.
 
 ## v0.2.0 (2026-10-21)
 
