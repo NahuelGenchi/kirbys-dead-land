@@ -1,5 +1,6 @@
-//! Finds Steam (native, Flatpak or Snap), every Steam library, and Dead Cells
-//! in them, by reading Steam's own files. Nothing in Steam is changed.
+//! Finds Steam (native, Flatpak or Snap on Linux; the registry's on Windows),
+//! every Steam library, and Dead Cells in them, by reading Steam's own files.
+//! Nothing in Steam is changed.
 
 use std::path::{Path, PathBuf};
 
@@ -9,7 +10,10 @@ pub const TESTED_BUILD: &str = "23762174";
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Kind {
     Native,
+    // Linux only.
+    #[cfg_attr(windows, allow(dead_code))]
     Flatpak,
+    #[cfg_attr(windows, allow(dead_code))]
     Snap,
 }
 
@@ -163,7 +167,36 @@ pub mod vdf {
     }
 }
 
+/// A folder's real path, to tell two names for one folder apart. Windows paths
+/// keep their usual form, without the `\\?\` that canonicalizing adds there.
+fn real(path: &Path) -> PathBuf {
+    let Ok(real) = path.canonicalize() else { return path.to_path_buf() };
+    #[cfg(windows)]
+    if let Some(rest) = real.to_str().and_then(|s| s.strip_prefix(r"\\?\")).filter(|rest| rest.as_bytes().get(1) == Some(&b':')) {
+        return PathBuf::from(rest);
+    }
+    real
+}
+
+/// The Steam installation the Steam client records in the registry, then the
+/// installer's default folder, each once (#250).
+#[cfg(windows)]
+pub fn installations(_home: &Path) -> Vec<Steam> {
+    // Steam records it with forward slashes, often in lower case.
+    let recorded = crate::windows::user_registry_text(r"Software\Valve\Steam", "SteamPath").map(|path| PathBuf::from(path.replace('/', "\\")));
+    let default = std::env::var_os("ProgramFiles(x86)").map(|dir| PathBuf::from(dir).join("Steam"));
+    let mut found: Vec<Steam> = Vec::new();
+    for root in recorded.into_iter().chain(default) {
+        let root = real(&root);
+        if root.join("steamapps").is_dir() && !found.iter().any(|steam| steam.root == root) {
+            found.push(Steam { root, kind: Kind::Native });
+        }
+    }
+    found
+}
+
 /// Every Steam installation in the player's home folder, each once.
+#[cfg(unix)]
 pub fn installations(home: &Path) -> Vec<Steam> {
     let candidates = [
         (".local/share/Steam", Kind::Native),
@@ -181,7 +214,7 @@ pub fn installations(home: &Path) -> Vec<Steam> {
         if !root.join("steamapps").is_dir() {
             continue;
         }
-        let real = root.canonicalize().unwrap_or_else(|_| root.clone());
+        let real = real(&root);
         if !seen.contains(&real) {
             seen.push(real.clone());
             found.push(Steam { root: real, kind });
@@ -193,15 +226,14 @@ pub fn installations(home: &Path) -> Vec<Steam> {
 /// Every library folder of one Steam installation, its own first.
 pub fn libraries(steam: &Path) -> Vec<PathBuf> {
     let mut libraries = vec![steam.to_path_buf()];
-    let file = steam.join("steamapps/libraryfolders.vdf");
+    let file = steam.join("steamapps").join("libraryfolders.vdf");
     if let Some(root) = std::fs::read_to_string(file).ok().and_then(|text| vdf::parse(&text)) {
         let folders = root.get("libraryfolders").or_else(|| root.get("LibraryFolders"));
         for (_, entry) in folders.map(vdf::Value::entries).unwrap_or_default() {
             // Newer files nest a map with "path"; older ones give the path directly.
             let path = entry.get("path").and_then(vdf::Value::text).or_else(|| entry.text());
-            if let Some(path) = path.filter(|p| p.starts_with('/')) {
-                let path = PathBuf::from(path);
-                let real = path.canonicalize().unwrap_or(path);
+            if let Some(path) = path.filter(|p| Path::new(p).is_absolute()) {
+                let real = real(Path::new(path));
                 if !libraries.contains(&real) {
                     libraries.push(real);
                 }
@@ -217,18 +249,35 @@ pub fn read_manifest(text: &str) -> Option<(String, Option<String>)> {
     let state = root.get("AppState")?;
     let dir = state.get("installdir")?.text()?.to_string();
     let build = state.get("buildid").and_then(vdf::Value::text).map(str::to_string);
-    (!dir.is_empty() && !dir.contains('/')).then_some((dir, build))
+    (!dir.is_empty() && !dir.contains(['/', '\\'])).then_some((dir, build))
+}
+
+#[derive(Debug, PartialEq)]
+enum Files {
+    Ready,
+    Windows,
+    Incomplete,
+}
+
+/// What the game folder's files make it, given which exist. On Windows the
+/// Windows game is the one to play: its code is in `deadcells_gl.exe`, the files
+/// `scripts/stage_runtime.py` places there (#246).
+fn files(has: impl Fn(&str) -> bool, windows_host: bool) -> Files {
+    let needed: &[&str] = if windows_host { &["deadcells_gl.exe", "res.pak"] } else { &["hlboot.dat", "res.pak", "steam.hdll", "libsteam_api.so"] };
+    if !windows_host && !has("deadcells") && (has("deadcells.exe") || has("DeadCells.exe")) {
+        Files::Windows
+    } else if needed.iter().all(|name| has(name)) {
+        Files::Ready
+    } else {
+        Files::Incomplete
+    }
 }
 
 fn status(game: Game) -> GameStatus {
-    let has = |name: &str| game.dir.join(name).is_file();
-    if !has("deadcells") && (has("deadcells.exe") || has("DeadCells.exe")) {
-        return GameStatus::Windows(game);
-    }
-    if ["hlboot.dat", "res.pak", "steam.hdll", "libsteam_api.so"].iter().all(|name| has(name)) {
-        GameStatus::Ready(game)
-    } else {
-        GameStatus::Incomplete(game)
+    match files(|name| game.dir.join(name).is_file(), cfg!(windows)) {
+        Files::Ready => GameStatus::Ready(game),
+        Files::Windows => GameStatus::Windows(game),
+        Files::Incomplete => GameStatus::Incomplete(game),
     }
 }
 
@@ -238,11 +287,12 @@ pub fn find_game(steams: &[Steam]) -> GameStatus {
     let mut fallback = GameStatus::Missing;
     for steam in steams {
         for library in libraries(&steam.root) {
-            let manifest = library.join(format!("steamapps/appmanifest_{APP_ID}.acf"));
+            let manifest = library.join("steamapps").join(format!("appmanifest_{APP_ID}.acf"));
             let Some((dir, build)) = std::fs::read_to_string(&manifest).ok().and_then(|t| read_manifest(&t)) else {
                 continue;
             };
-            let dir = library.join("steamapps/common").join(dir);
+            // One part at a time, so Windows paths keep their backslashes.
+            let dir = library.join("steamapps").join("common").join(dir);
             if !dir.is_dir() {
                 continue;
             }
@@ -256,7 +306,14 @@ pub fn find_game(steams: &[Steam]) -> GameStatus {
     fallback
 }
 
+/// Whether a Steam client is running.
+#[cfg(windows)]
+pub fn running() -> bool {
+    crate::windows::process_running("steam.exe")
+}
+
 /// Whether a Steam client is running for this user.
+#[cfg(unix)]
 pub fn running() -> bool {
     let uid = unsafe { libc::getuid() };
     let Ok(entries) = std::fs::read_dir("/proc") else { return false };
@@ -268,8 +325,16 @@ pub fn running() -> bool {
 }
 
 /// Starts Steam in the background, the way this installation is started.
-pub fn start(kind: Kind) -> std::io::Result<()> {
-    let (program, args): (&str, &[&str]) = match kind {
+#[cfg(windows)]
+pub fn start(steam: &Steam) -> std::io::Result<()> {
+    let program = steam.root.join("steam.exe");
+    if program.is_file() { crate::system::spawn_detached(program, &["-silent"]) } else { crate::system::open("steam://open/main") }
+}
+
+/// Starts Steam in the background, the way this installation is started.
+#[cfg(unix)]
+pub fn start(steam: &Steam) -> std::io::Result<()> {
+    let (program, args): (&str, &[&str]) = match steam.kind {
         Kind::Flatpak => ("flatpak", &["run", "com.valvesoftware.Steam", "-silent"]),
         Kind::Snap => ("snap", &["run", "steam", "-silent"]),
         Kind::Native if crate::system::which("steam").is_some() => ("steam", &["-silent"]),
@@ -347,7 +412,9 @@ mod tests {
         assert_eq!(read_manifest("\"AppState\" { \"appid\" \"1\" }"), None);
     }
 
-    fn fake_steam(home: &Path, files: &[&str]) -> PathBuf {
+    const GAME_FILES: &[&str] = if cfg!(windows) { &["deadcells.exe", "deadcells_gl.exe", "res.pak", "steam.hdll", "steam_api64.dll"] } else { &["deadcells", "hlboot.dat", "res.pak", "steam.hdll", "libsteam_api.so"] };
+
+    fn fake_steam(home: &Path, files: &[&str]) -> Steam {
         let steam = home.join(".local/share/Steam");
         let common = steam.join("steamapps/common/Dead Cells");
         std::fs::create_dir_all(&common).unwrap();
@@ -355,37 +422,70 @@ mod tests {
         for file in files {
             std::fs::write(common.join(file), "").unwrap();
         }
-        steam
+        Steam { root: real(&steam), kind: Kind::Native }
     }
 
     #[test]
-    fn finds_the_game_and_its_kind() {
+    #[cfg(unix)]
+    fn finds_steam_in_the_home_folder() {
+        let home = std::env::temp_dir().join(format!("kdl-steam-home-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        assert!(installations(&home).is_empty());
+        let steam = fake_steam(&home, &[]);
+        assert_eq!(installations(&home), [steam]);
+        std::fs::remove_dir_all(&home).unwrap();
+    }
+
+    #[test]
+    fn finds_the_game_and_its_build() {
         let home = std::env::temp_dir().join(format!("kdl-steam-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&home);
-        fake_steam(&home, &["deadcells", "hlboot.dat", "res.pak", "steam.hdll", "libsteam_api.so"]);
-        let steams = installations(&home);
-        assert_eq!(steams.len(), 1);
-        assert_eq!(steams[0].kind, Kind::Native);
-        match find_game(&steams) {
+        let steam = fake_steam(&home, GAME_FILES);
+        match find_game(&[steam]) {
             GameStatus::Ready(game) => {
                 assert!(game.dir.ends_with("steamapps/common/Dead Cells"));
                 assert_eq!(game.build.as_deref(), Some(TESTED_BUILD));
             }
             other => panic!("{other:?}"),
         }
-        std::fs::remove_file(home.join(".local/share/Steam/steamapps/common/Dead Cells/deadcells")).unwrap();
-        std::fs::write(home.join(".local/share/Steam/steamapps/common/Dead Cells/deadcells.exe"), "").unwrap();
-        assert!(matches!(find_game(&steams), GameStatus::Windows(_)));
         std::fs::remove_dir_all(&home).unwrap();
+    }
+
+    #[test]
+    fn each_system_needs_its_own_game_files() {
+        let has = |names: &'static [&'static str]| move |name: &str| names.contains(&name);
+        let linux = &["deadcells", "hlboot.dat", "res.pak", "steam.hdll", "libsteam_api.so"];
+        let windows = &["deadcells.exe", "deadcells_gl.exe", "res.pak", "steam.hdll", "steam_api64.dll"];
+        assert_eq!(files(has(linux), false), Files::Ready);
+        assert_eq!(files(has(windows), false), Files::Windows);
+        assert_eq!(files(has(windows), true), Files::Ready);
+        assert_eq!(files(has(&["deadcells_gl.exe", "res.pak"]), true), Files::Ready);
+        assert_eq!(files(has(&["deadcells.exe", "res.pak"]), true), Files::Incomplete);
+        assert_eq!(files(has(linux), true), Files::Incomplete);
     }
 
     #[test]
     fn incomplete_and_missing_games() {
         let home = std::env::temp_dir().join(format!("kdl-steam-partial-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&home);
-        assert_eq!(find_game(&installations(&home)), GameStatus::Missing);
-        fake_steam(&home, &["deadcells", "hlboot.dat"]);
-        assert!(matches!(find_game(&installations(&home)), GameStatus::Incomplete(_)));
+        assert_eq!(find_game(&[]), GameStatus::Missing);
+        let steam = fake_steam(&home, &["res.pak"]);
+        assert!(matches!(find_game(&[steam]), GameStatus::Incomplete(_)));
+        std::fs::remove_dir_all(&home).unwrap();
+    }
+
+    #[test]
+    fn reads_other_libraries_in_this_systems_paths() {
+        let home = std::env::temp_dir().join(format!("kdl-steam-libraries-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        let steam = fake_steam(&home, &[]);
+        let other = home.join("Games Library");
+        std::fs::create_dir_all(&other).unwrap();
+        // Steam escapes the backslashes of Windows paths.
+        let path = other.display().to_string().replace('\\', "\\\\");
+        let text = format!("\"libraryfolders\" {{ \"0\" {{ \"path\" \"{}\" }} \"1\" {{ \"path\" \"{path}\" }} \"2\" {{ \"path\" \"relative\" }} }}", steam.root.display().to_string().replace('\\', "\\\\"));
+        std::fs::write(steam.root.join("steamapps/libraryfolders.vdf"), text).unwrap();
+        assert_eq!(libraries(&steam.root), [steam.root.clone(), real(&other)]);
         std::fs::remove_dir_all(&home).unwrap();
     }
 }

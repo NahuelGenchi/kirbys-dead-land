@@ -195,7 +195,7 @@ SOFTWARE.
 
 RUST CRATES
 
-Built into the launcher, from Cargo.lock 829413fb77a443b3.
+Built into the launcher, from Cargo.lock 051ae1d2bbabdafb.
 
 ab_glyph 0.2.32 - Apache-2.0 (offered: Apache-2.0)
     Copyright the ab_glyph authors: Alex Butler
@@ -209,6 +209,8 @@ accesskit_consumer 0.38.0 - MIT (offered: MIT OR Apache-2.0)
     Copyright the accesskit_consumer authors: The AccessKit contributors
 accesskit_unix 0.22.1 - MIT (offered: MIT OR Apache-2.0)
     Copyright the accesskit_unix authors: The AccessKit contributors
+accesskit_windows 0.34.0 - MIT (offered: MIT OR Apache-2.0)
+    Copyright the accesskit_windows authors: The AccessKit contributors
 accesskit_winit 0.33.2 - Apache-2.0 (offered: Apache-2.0)
     Copyright the accesskit_winit authors: The AccessKit contributors
 adler2 2.0.1 - MIT (offered: 0BSD OR MIT OR Apache-2.0)
@@ -300,6 +302,7 @@ cfg-if 1.0.5 - MIT (offered: MIT OR Apache-2.0)
     Copyright (c) 2014 Alex Crichton
 chrono 0.4.45 - MIT (offered: MIT OR Apache-2.0)
     Copyright (c) 2014, Kang Seonghoon.
+clipboard-win 5.4.1 - BSL-1.0 (offered: BSL-1.0)
 clru 0.6.3 - MIT (offered: MIT)
     Copyright (c) 2020 Élie ROUDNINSKI (marmeladema) <xademax@gmail.com>
 codespan-reporting 0.13.1 - Apache-2.0 (offered: Apache-2.0)
@@ -322,6 +325,10 @@ crc32fast 1.5.3 - MIT (offered: MIT OR Apache-2.0)
     Copyright (c) 2018 Sam Rijs, Alex Crichton and contributors
 critical-section 1.2.0 - MIT (offered: MIT OR Apache-2.0)
     Copyright (c) 2022 The critical-section authors
+crossbeam-channel 0.5.17 - MIT (offered: MIT OR Apache-2.0)
+    Copyright (c) 2019 The Crossbeam Project Developers
+    COPYRIGHT AND/OR OTHER APPLICABLE LAW. ANY USE OF THE WORK OTHER THAN AS
+    Copyright (c) 2009 The Go Authors. All rights reserved.
 crossbeam-deque 0.8.8 - MIT (offered: MIT OR Apache-2.0)
     Copyright (c) 2019 The Crossbeam Project Developers
 crossbeam-epoch 0.9.21 - MIT (offered: MIT OR Apache-2.0)
@@ -391,6 +398,7 @@ equivalent 1.0.3 - MIT (offered: Apache-2.0 OR MIT)
     Copyright (c) 2016--2023
 errno 0.3.14 - MIT (offered: MIT OR Apache-2.0)
     Copyright (c) 2014 Chris Wong
+error-code 3.4.0 - BSL-1.0 (offered: BSL-1.0)
 euclid 0.22.14 - MIT (offered: MIT OR Apache-2.0)
     Copyright (c) 2012-2013 Mozilla Foundation
 event-listener 5.4.2 - MIT (offered: Apache-2.0 OR MIT)
@@ -463,6 +471,9 @@ getrandom 0.2.17 - MIT (offered: MIT OR Apache-2.0)
 getrandom 0.3.4 - MIT (offered: MIT OR Apache-2.0)
     Copyright (c) 2018-2025 The rust-random Project Developers
     Copyright (c) 2014 The Rust Project Developers
+getrandom 0.4.3 - MIT (offered: MIT OR Apache-2.0)
+    Copyright (c) 2018-2026 The rust-random Project Developers
+    Copyright (c) 2014 The Rust Project Developers
 gif 0.14.2 - MIT (offered: MIT OR Apache-2.0)
     Copyright (c) 2015 nwin
 glow 0.18.0 - MIT (offered: MIT OR Apache-2.0 OR Zlib)
@@ -474,6 +485,8 @@ glutin-winit 0.5.0 - MIT (offered: MIT)
 glutin_egl_sys 0.7.1 - Apache-2.0 (offered: Apache-2.0)
     Copyright 2022 Kirill Chibisov
 glutin_glx_sys 0.6.1 - Apache-2.0 (offered: Apache-2.0)
+    Copyright 2022 Kirill Chibisov
+glutin_wgl_sys 0.6.1 - Apache-2.0 (offered: Apache-2.0)
     Copyright 2022 Kirill Chibisov
 gpu-allocator 0.28.0 - MIT (offered: MIT OR Apache-2.0)
     Copyright 2021 Traverse Research B.V.
@@ -567,6 +580,8 @@ itertools 0.15.0 - MIT (offered: MIT OR Apache-2.0)
     Copyright (c) 2015
 itoa 1.0.18 - MIT (offered: MIT OR Apache-2.0)
     Copyright the itoa authors: David Tolnay
+keyboard-types 0.7.0 - MIT (offered: MIT OR Apache-2.0)
+    Copyright (c) 2017 Pyfisch
 kurbo 0.13.1 - MIT (offered: Apache-2.0 OR MIT)
     Copyright (c) 2018 Raph Levien
 lazy_static 1.5.1 - MIT (offered: MIT OR Apache-2.0)
@@ -634,6 +649,8 @@ miniz_oxide 0.9.1 - MIT (offered: MIT OR Zlib OR Apache-2.0)
 moxcms 0.8.1 - Apache-2.0 (offered: BSD-3-Clause OR Apache-2.0)
     Copyright 2024 Radzivon Bartoshyk
     Copyright (c) Radzivon Bartoshyk. All rights reserved.
+muda 0.19.3 - MIT (offered: Apache-2.0 OR MIT)
+    Copyright (c) 2022-2022 Tauri Programme within The Commons Conservancy
 naga 30.0.1 - MIT (offered: MIT OR Apache-2.0)
     Copyright (c) 2025 The gfx-rs developers
 naga-types 30.0.1 - MIT (offered: MIT OR Apache-2.0)
@@ -729,6 +746,8 @@ quick-xml 0.41.0 - MIT (offered: MIT)
     Copyright (c) 2016 Johann Tuffe
 quote 1.0.47 - MIT (offered: MIT OR Apache-2.0)
     Copyright the quote authors: David Tolnay
+range-alloc 0.1.5 - MIT (offered: MIT OR Apache-2.0)
+    Copyright (c) 2023 The gfx-rs developers
 raw-window-handle 0.6.2 - MIT (offered: MIT OR Apache-2.0 OR Zlib)
     Copyright (c) 2019 Osspial
     Copyright (c) 2020 Osspial
@@ -864,6 +883,8 @@ taffy 0.10.1 - MIT (offered: MIT)
     Copyright the taffy authors: Alice Cecile, Johnathan Kelley, Nico Burns
 tar 0.4.46 - MIT (offered: MIT OR Apache-2.0)
     Copyright (c) The tar-rs Project Contributors
+tempfile 3.27.0 - MIT (offered: MIT OR Apache-2.0)
+    Copyright (c) 2015 Steven Allen
 text-size 1.1.1 - MIT (offered: MIT OR Apache-2.0)
     Copyright the text-size authors: Aleksey Kladov, Christopher Durham (CAD97)
 thiserror 1.0.69 - MIT (offered: MIT OR Apache-2.0)
@@ -914,6 +935,8 @@ typenum 1.20.1 - MIT (offered: MIT OR Apache-2.0)
     Copyright (c) 2014 Paho Lurie-Gregg
 udev 0.9.3 - MIT (offered: MIT)
     Copyright (c) 2015 David Cuddeback
+uds_windows 1.2.1 - MIT (offered: MIT)
+    Copyright (c) Microsoft Corporation. All rights reserved.
 unicase 2.10.0 - MIT (offered: MIT OR Apache-2.0)
     Copyright (c) 2014-2026 Sean McArthur
 unicode-bidi 0.3.18 - MIT (offered: MIT OR Apache-2.0)
@@ -1012,7 +1035,23 @@ windows-result 0.4.1 - MIT (offered: MIT OR Apache-2.0)
     Copyright (c) Microsoft Corporation.
 windows-strings 0.5.1 - MIT (offered: MIT OR Apache-2.0)
     Copyright (c) Microsoft Corporation.
+windows-sys 0.48.0 - MIT (offered: MIT OR Apache-2.0)
+    Copyright (c) Microsoft Corporation.
+windows-sys 0.52.0 - MIT (offered: MIT OR Apache-2.0)
+    Copyright (c) Microsoft Corporation.
+windows-sys 0.59.0 - MIT (offered: MIT OR Apache-2.0)
+    Copyright (c) Microsoft Corporation.
+windows-sys 0.61.2 - MIT (offered: MIT OR Apache-2.0)
+    Copyright (c) Microsoft Corporation.
+windows-targets 0.48.5 - MIT (offered: MIT OR Apache-2.0)
+    Copyright (c) Microsoft Corporation.
+windows-targets 0.52.6 - MIT (offered: MIT OR Apache-2.0)
+    Copyright (c) Microsoft Corporation.
 windows-threading 0.2.1 - MIT (offered: MIT OR Apache-2.0)
+    Copyright (c) Microsoft Corporation.
+windows_x86_64_gnu 0.48.5 - MIT (offered: MIT OR Apache-2.0)
+    Copyright (c) Microsoft Corporation.
+windows_x86_64_gnu 0.52.6 - MIT (offered: MIT OR Apache-2.0)
     Copyright (c) Microsoft Corporation.
 winit 0.30.13 - Apache-2.0 (offered: Apache-2.0)
     Copyright the winit authors: The winit contributors, Pierre Krieger
@@ -1355,6 +1394,33 @@ DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
 THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+
+LICENSE OF clipboard-win 5.4.1 (BSL-1.0), error-code 3.4.0 (BSL-1.0)
+
+Boost Software License - Version 1.0 - August 17th, 2003
+
+Permission is hereby granted, free of charge, to any person or organization
+obtaining a copy of the software and accompanying documentation covered by
+this license (the "Software") to use, reproduce, display, distribute,
+execute, and transmit the Software, and to prepare derivative works of the
+Software, and to permit third-parties to whom the Software is furnished to
+do so, all subject to the following:
+
+The copyright notices in the Software and this entire statement, including
+the above license grant, this restriction and the following disclaimer,
+must be included in all copies of the Software, in whole or in part, and
+all derivative works of the Software, unless such copies or derivative
+works are solely in the form of machine-executable object code generated by
+a source language processor.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE, TITLE AND NON-INFRINGEMENT. IN NO EVENT
+SHALL THE COPYRIGHT HOLDERS OR ANYONE DISTRIBUTING THE SOFTWARE BE LIABLE
+FOR ANY DAMAGES OR OTHER LIABILITY, WHETHER IN CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
 
 
 LICENSE OF fixed_decimal 0.7.2 (Unicode-3.0), icu_collections 2.3.0 (Unicode-3.0), icu_decimal 2.3.0 (Unicode-3.0), icu_decimal_data 2.3.0 (Unicode-3.0), icu_locale_core 2.3.0 (Unicode-3.0), icu_locale_fallback 2.3.0 (Unicode-3.0), icu_locale_fallback_data 2.3.0 (Unicode-3.0), icu_normalizer 2.3.0 (Unicode-3.0), icu_normalizer_data 2.3.0 (Unicode-3.0), icu_plurals 2.3.0 (Unicode-3.0), icu_plurals_data 2.3.0 (Unicode-3.0), icu_properties 2.3.0 (Unicode-3.0), icu_properties_data 2.3.0 (Unicode-3.0), icu_provider 2.3.1 (Unicode-3.0), icu_segmenter 2.3.0 (Unicode-3.0), icu_segmenter_data 2.3.0 (Unicode-3.0), litemap 0.8.3 (Unicode-3.0), potential_utf 0.1.6 (Unicode-3.0), tinystr 0.8.4 (Unicode-3.0), writeable 0.6.4 (Unicode-3.0), yoke 0.8.3 (Unicode-3.0), yoke-derive 0.8.4 (Unicode-3.0), zerofrom 0.1.8 (Unicode-3.0), zerofrom-derive 0.1.8 (Unicode-3.0), zerotrie 0.2.5 (Unicode-3.0), zerovec 0.11.8 (Unicode-3.0), zerovec-derive 0.11.6 (Unicode-3.0)

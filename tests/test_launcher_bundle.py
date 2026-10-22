@@ -61,7 +61,8 @@ class BundleTests(unittest.TestCase):
                 self.assertIn(needed, names)
         self.assertFalse(any(name.startswith(('docs/', 'src/', 'launcher/', 'tests/')) for name in names))
 
-    def build(self, folder: Path, runtime_body: bytes, *extra: str) -> subprocess.CompletedProcess:
+    def build(self, folder: Path, runtime_body: bytes, *extra: str,
+              programs: dict[str, bytes] = {'libkssu_bridge.so': b'\x7fELF program', 'kssu-oracle-runner': b'\x7fELF program'}) -> subprocess.CompletedProcess:
         runtime, native = folder / 'runtime', folder / 'native'
         runtime.mkdir(exist_ok=True)
         native.mkdir(exist_ok=True)
@@ -70,8 +71,8 @@ class BundleTests(unittest.TestCase):
         (runtime / 'Kirby.Runtime.pdb').write_bytes(b'symbols')
         (runtime / 'config.json').write_text('{"EnableOriginalRuntime": false}\n')
         (runtime / 'modinfo.json').write_text('{}\n')
-        for name in ('libkssu_bridge.so', 'kssu-oracle-runner'):
-            (native / name).write_bytes(b'\x7fELF program')
+        for name, body in programs.items():
+            (native / name).write_bytes(body)
         return subprocess.run([sys.executable, str(PROJECT / 'scripts/build_bundle.py'), '--output', str(folder / 'bundle'),
                                '--runtime', str(runtime), '--native', str(native), *extra],
                               capture_output=True, text=True)
@@ -89,6 +90,21 @@ class BundleTests(unittest.TestCase):
             self.assertEqual(sorted(p.name for p in runtime.iterdir()), ['Kirby.Core.dll', 'Kirby.Runtime.dll', 'config.json', 'modinfo.json'])
             self.assertTrue(os.access(bundle / 'bin/kssu-oracle-runner', os.X_OK))
             self.assertTrue((bundle / 'project/scripts/launch_runtime.py').is_file())
+
+    def test_windows_bundle(self):
+        # The smallest file pe_machine reads: a DOS header pointing at a PE header.
+        image = lambda machine: b'MZ' + bytes(0x3a) + (0x40).to_bytes(4, 'little') + b'PE\0\0' + machine.to_bytes(2, 'little')
+        windows = {'kssu_bridge.dll': b'MZ library', 'kssu-oracle-runner.exe': b'MZ program'}
+        with tempfile.TemporaryDirectory() as name:
+            folder = Path(name)
+            result = self.build(folder, image(0x8664), '--target', 'windows', programs=windows)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(sorted(p.name for p in (folder / 'bundle/bin').iterdir()), ['kssu-oracle-runner.exe', 'kssu_bridge.dll'])
+            linux_runtime = self.build(folder, image(0xFD1D), '--target', 'windows', programs=windows)
+            self.assertIn('not compiled for Windows', linux_runtime.stderr)
+            (folder / 'native/kssu_bridge.dll').write_bytes(b'\x7fELF library')
+            linux_bridge = self.build(folder, image(0x8664), '--target', 'windows', programs={})
+            self.assertIn('kssu_bridge.dll: missing or not a Windows program; run tools/nds_build.py --target windows', linux_bridge.stderr)
 
     def test_programs_naming_this_home_folder_need_private(self):
         with tempfile.TemporaryDirectory() as name:

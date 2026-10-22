@@ -4,8 +4,8 @@
 The launcher shows this file in Settings › Licenses, followed by
 packaging/NOTICES-emulator.txt (tools/emulator_notices.py). It covers the launcher's own
 license, the programs a launcher package ships or setup downloads, the fonts and
-icons, and every Rust crate built into the launcher with the license text that
-applies to it. Run it again after launcher/Cargo.lock changes; a launcher test
+icons, and every Rust crate built into the launcher, for Linux or Windows, with
+the license text that applies to it. Run it again after launcher/Cargo.lock changes; a launcher test
 fails until it is.
 """
 from __future__ import annotations
@@ -18,9 +18,11 @@ import subprocess
 PROJECT = Path(__file__).resolve().parents[1]
 LAUNCHER = PROJECT / 'launcher'
 TARGET = 'x86_64-unknown-linux-gnu'
+# The launcher is built for both (#250), and each build shows the same notices.
+LAUNCHER_TARGETS = (TARGET, 'x86_64-pc-windows-gnu')
 # When a crate offers a choice, the first of these it offers is used.
 PREFERRED = ['MIT', 'Apache-2.0', 'BSD-3-Clause', 'BSD-2-Clause', 'ISC', 'Zlib', 'Unicode-3.0',
-             'CDLA-Permissive-2.0', '0BSD', 'Unlicense', 'CC0-1.0', 'MPL-2.0', 'GPL-3.0-only', 'GPL-3.0-or-later',
+             'CDLA-Permissive-2.0', '0BSD', 'Unlicense', 'CC0-1.0', 'BSL-1.0', 'MPL-2.0', 'GPL-3.0-only', 'GPL-3.0-or-later',
              'OFL-1.1', 'Ubuntu-font-1.0']
 # The system's copies of standard license texts, for crates that ship none.
 COMMON_LICENSES = Path('/usr/share/common-licenses')
@@ -96,10 +98,11 @@ Fredoka and Nunito, used under the SIL Open Font License 1.1:
 """
 
 
-def metadata(manifest: Path = LAUNCHER / 'Cargo.toml', offline: bool = False) -> dict:
+def metadata(manifest: Path = LAUNCHER / 'Cargo.toml', offline: bool = False, targets: tuple[str, ...] = (TARGET,)) -> dict:
+    platforms = [option for target in targets for option in ('--filter-platform', target)]
     output = subprocess.check_output(
         ['cargo', 'metadata', '--format-version', '1', '--locked', *(['--offline'] if offline else []),
-         '--filter-platform', TARGET, '--manifest-path', str(manifest)])
+         *platforms, '--manifest-path', str(manifest)])
     return json.loads(output)
 
 
@@ -161,7 +164,8 @@ def copyrights(package: dict) -> list[str]:
 def own_text(package: dict, license: str) -> str | None:
     """The crate's own text for a license that names its holders inside it."""
     keys = {'BSD-3-Clause': ('bsd', 'whatwg'), 'BSD-2-Clause': ('bsd',), 'ISC': ('isc',), 'Zlib': ('zlib',),
-            'Unicode-3.0': ('unicode',), 'CDLA-Permissive-2.0': ('cdla',), 'MPL-2.0': ('mpl',)}.get(license, ())
+            'Unicode-3.0': ('unicode',), 'CDLA-Permissive-2.0': ('cdla',), 'BSL-1.0': ('bsl', 'boost'),
+            'MPL-2.0': ('mpl',)}.get(license, ())
     files = license_files(package)
     named = [f for f in files if any(k in f.name.lower() for k in keys)]
     generic = [f for f in files if f.name.lower() in ('license', 'license.txt', 'license.md', 'copying')]
@@ -169,6 +173,14 @@ def own_text(package: dict, license: str) -> str | None:
         return path.read_text(errors='replace').strip()
     if (COMMON_LICENSES / license).is_file():
         return (COMMON_LICENSES / license).read_text().strip()
+    return None
+
+
+def shared_text(packages: list[dict], license: str) -> str | None:
+    """The text another crate ships for this license, for a crate that ships none."""
+    for other in packages:
+        if license in choose(other['license'] or '') and (text := own_text(other, license)):
+            return text
     return None
 
 
@@ -182,7 +194,7 @@ def apache_text(packages: list[dict]) -> str:
 
 
 def main() -> None:
-    meta = metadata()
+    meta = metadata(targets=LAUNCHER_TARGETS)
     version = next(p['version'] for p in meta['packages'] if p['id'] == meta['resolve']['root'])
     packages = shipped(meta)
     lock = hashlib.sha256((LAUNCHER / 'Cargo.lock').read_bytes()).hexdigest()
@@ -207,7 +219,8 @@ def main() -> None:
             elif license.startswith('GPL'):
                 out.append('    Copyright SixtyFPS GmbH (Slint); GPL-3.0, see the top of this file.')
             else:
-                text = own_text(package, license) or f'{license} (no license file shipped with the crate)'
+                text = (own_text(package, license) or shared_text(packages, license)
+                        or f'{license} (no license file shipped with the crate)')
                 nonstandard.setdefault(text, []).append(f'{label} ({license})')
     out.append('\n\nMIT LICENSE\n\nUsed by the crates marked MIT above, with the copyright lines listed under each.\n')
     out.append(MIT)

@@ -4,10 +4,10 @@
 //! root. Steps that are already done are skipped, so a retry resumes.
 
 use crate::config::SetupRecord;
-use crate::paths::Bundle;
+use crate::paths::{self, Bundle};
 use sha2::{Digest, Sha256, Sha512};
+use crate::system::Group;
 use std::io::{BufRead, BufReader, Read, Write};
-use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -59,7 +59,7 @@ struct Helper {
 /// Pinned downloads. DCCM and the .NET runtime match `scripts/setup_runtime.py`,
 /// TurboJPEG matches `scripts/launch_runtime.py`; Pillow and NumPy are the
 /// versions the asset tools were verified with.
-const HELPERS: [Helper; 6] = [
+const LINUX_HELPERS: &[Helper] = &[
     Helper {
         name: "Dead Cells Core Modding 35.13.6",
         file: "linux-x64.zip",
@@ -116,7 +116,57 @@ const HELPERS: [Helper; 6] = [
     },
 ];
 
-const SITE_PACKAGES: &str = "python/lib/python3.14/site-packages";
+/// The same helpers for Windows (#250). The Windows launch needs no TurboJPEG.
+const WINDOWS_HELPERS: &[Helper] = &[
+    Helper {
+        name: "Dead Cells Core Modding 35.13.6",
+        file: "win-x64.zip",
+        url: "https://github.com/dead-cells-core-modding/core/releases/download/v35.13.6/win-x64.zip",
+        hash: Hash::Sha256("9ceb86e7c79f882ffdb9a7d7a3d39bc0bcc3a16b7bd8a3bd3dc6248bdce131ba"),
+        size: 52_237_923,
+        install: Install::Zip("research/dccm-35.13.6"),
+        installed: "research/dccm-35.13.6/core/host/startup/DeadCellsModding.exe",
+    },
+    Helper {
+        name: ".NET runtime 10.0.12",
+        file: "dotnet-runtime-10.0.12-win-x64.zip",
+        url: "https://builds.dotnet.microsoft.com/dotnet/Runtime/10.0.12/dotnet-runtime-10.0.12-win-x64.zip",
+        hash: Hash::Sha512("844fa99e16fd6f44e0a7c29def7a82d7846902334d6a955248a9519a4dddb3f5acceb9c9223bef69f8c83b8ae2417537e5b76dddf79fb7117dc85b5039bc1297"),
+        size: 36_960_258,
+        install: Install::Zip("dotnet"),
+        installed: "dotnet/shared/Microsoft.NETCore.App/10.0.12/coreclr.dll",
+    },
+    Helper {
+        name: "Python 3.14.8",
+        file: "cpython-3.14.8+20261009-x86_64-pc-windows-msvc-install_only.tar.gz",
+        url: "https://github.com/astral-sh/python-build-standalone/releases/download/20261009/cpython-3.14.8%2B20261009-x86_64-pc-windows-msvc-install_only.tar.gz",
+        hash: Hash::Sha256("6c03535bfa5888dd73b0c0ebd91b76a2fdfa06eedaa411b0c4c9e664db6b4bb4"),
+        size: 50_154_505,
+        install: Install::TarGz("."),
+        installed: "python/python.exe",
+    },
+    Helper {
+        name: "Pillow 12.1.1",
+        file: "pillow-12.1.1-cp314-cp314-win_amd64.whl",
+        url: "https://files.pythonhosted.org/packages/40/72/4c245f7d1044b67affc7f134a09ea619d4895333d35322b775b928180044/pillow-12.1.1-cp314-cp314-win_amd64.whl",
+        hash: Hash::Sha256("50480dcd74fa63b8e78235957d302d98d98d82ccbfac4c7e12108ba9ecbdba15"),
+        size: 7_176_748,
+        install: Install::Wheel,
+        installed: "python/Lib/site-packages/PIL/__init__.py",
+    },
+    Helper {
+        name: "NumPy 2.3.5",
+        file: "numpy-2.3.5-cp314-cp314-win_amd64.whl",
+        url: "https://files.pythonhosted.org/packages/a3/2e/235b4d96619931192c91660805e5e49242389742a7a82c27665021db690c/numpy-2.3.5-cp314-cp314-win_amd64.whl",
+        hash: Hash::Sha256("e6a0bc88393d65807d751a614207b7129a310ca4fe76a74e5c7da5fa5671417e"),
+        size: 12_919_388,
+        install: Install::Wheel,
+        installed: "python/Lib/site-packages/numpy/__init__.py",
+    },
+];
+
+const HELPERS: &[Helper] = if cfg!(windows) { WINDOWS_HELPERS } else { LINUX_HELPERS };
+const SITE_PACKAGES: &str = if cfg!(windows) { "python/Lib/site-packages" } else { "python/lib/python3.14/site-packages" };
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum State {
@@ -147,35 +197,21 @@ pub struct Inputs {
 #[derive(Clone, Default)]
 pub struct Control {
     cancel: Arc<AtomicBool>,
-    child: Arc<Mutex<Option<u32>>>,
+    child: Arc<Mutex<Option<Group>>>,
 }
 
 impl Control {
+    /// Stops the setup, ending the running script and what it started.
     pub fn cancel(&self) {
         self.cancel.store(true, Ordering::SeqCst);
-        if let Some(pid) = *self.child.lock().unwrap() {
-            interrupt(pid);
+        if let Some(group) = self.child.lock().unwrap().as_ref() {
+            group.interrupt();
         }
     }
 
     fn cancelled(&self) -> bool {
         self.cancel.load(Ordering::SeqCst)
     }
-}
-
-/// Ends a child's whole process group: an interrupt first, so the mod's
-/// scripts clean up their locks and partial output, then a kill.
-fn interrupt(pid: u32) {
-    let group = -(pid as i32);
-    unsafe {
-        libc::kill(group, libc::SIGINT);
-    }
-    std::thread::spawn(move || {
-        std::thread::sleep(Duration::from_secs(6));
-        unsafe {
-            libc::kill(group, libc::SIGKILL);
-        }
-    });
 }
 
 /// The command for one of the mod's Python scripts, with the launcher's
@@ -203,7 +239,7 @@ pub fn python_command(python: &Path, project: &Path, root: &Path, rom: Option<&P
 }
 
 pub fn python(root: &Path) -> PathBuf {
-    root.join("python/bin/python3")
+    root.join(if cfg!(windows) { "python/python.exe" } else { "python/bin/python3" })
 }
 
 pub fn project(root: &Path) -> PathBuf {
@@ -260,14 +296,10 @@ impl Runner<'_> {
         let shown: Vec<String> = args.iter().map(|a| a.to_string_lossy().into_owned()).collect();
         self.log(&format!("$ python3 {}", shown.join(" ")));
         let (reader, writer) = std::io::pipe().map_err(|e| e.to_string())?;
-        command
-            .stdin(Stdio::null())
-            .stdout(writer.try_clone().map_err(|e| e.to_string())?)
-            .stderr(writer)
-            .process_group(0);
-        let mut child = command.spawn().map_err(|e| format!("Python could not start: {e}"))?;
+        command.stdin(Stdio::null()).stdout(writer.try_clone().map_err(|e| e.to_string())?).stderr(writer);
+        let (mut child, group) = Group::spawn(&mut command).map_err(|e| format!("Python could not start: {e}"))?;
         drop(command);
-        *self.control.child.lock().unwrap() = Some(child.id());
+        *self.control.child.lock().unwrap() = Some(group);
         let mut last = String::new();
         for line in BufReader::new(reader).lines().map_while(Result::ok) {
             self.log(&line);
@@ -420,10 +452,10 @@ impl Runner<'_> {
         let root = &self.inputs.root;
         let bundle = &self.inputs.bundle;
         let stamp = root.join("app/bundle-id");
-        let release = root.join("oracle/vendor/melon-rs/target/release");
+        let release = root.join(paths::NATIVE_DIR);
         let current = std::fs::read_to_string(&stamp).unwrap_or_default();
         if !self.inputs.repair && current == bundle.id() && project(root).join("scripts/launch_runtime.py").is_file()
-            && release.join("libkssu_bridge.so").is_file() && release.join("kssu-oracle-runner").is_file() {
+            && release.join(paths::BRIDGE).is_file() && release.join(paths::RUNNER).is_file() {
             return Ok(false);
         }
         self.detail(format!("Kirby's Dead Land {}", bundle.version));
@@ -433,7 +465,7 @@ impl Runner<'_> {
         remove(&project(root))?;
         std::fs::rename(&partial, project(root)).map_err(|e| e.to_string())?;
         std::fs::create_dir_all(&release).map_err(|e| e.to_string())?;
-        for (source, name) in [(bundle.bridge(), "libkssu_bridge.so"), (bundle.runner(), "kssu-oracle-runner")] {
+        for (source, name) in [(bundle.bridge(), paths::BRIDGE), (bundle.runner(), paths::RUNNER)] {
             let target = release.join(name);
             let _ = std::fs::remove_file(&target);
             std::fs::copy(&source, &target).map_err(|e| format!("{name} could not be copied: {e}"))?;
@@ -534,7 +566,9 @@ impl Runner<'_> {
     fn step_stage(&self) -> Result<bool, Failure> {
         let root = &self.inputs.root;
         let game = &self.inputs.game;
-        // The lab links to the game's files; if the game moved, link the new place.
+        // The Linux lab links to the game's files; if the game moved, link the new
+        // place. On Windows the staging script follows a moved game itself.
+        #[cfg(unix)]
         for name in ["hlboot.dat", "res.pak", "steam.hdll", "libsteam_api.so"] {
             let link = root.join("lab").join(name);
             if link.is_symlink() && std::fs::read_link(&link).ok().as_deref() != Some(&game.join(name)) {
@@ -548,8 +582,11 @@ impl Runner<'_> {
               "--rom".as_ref(), self.inputs.rom.as_os_str(), "--outfit-pack".as_ref(), pack.as_os_str()],
             |_| {},
         )?;
-        self.detail("Unpacking the image library the game needs");
-        self.python(&["scripts/launch_runtime.py".as_ref(), "--prepare".as_ref()], |_| {})?;
+        // Only the Linux game needs TurboJPEG unpacked.
+        if cfg!(unix) {
+            self.detail("Unpacking the image library the game needs");
+            self.python(&["scripts/launch_runtime.py".as_ref(), "--prepare".as_ref()], |_| {})?;
+        }
         Ok(true)
     }
 
@@ -573,7 +610,7 @@ impl Runner<'_> {
 /// The helpers to download: the missing ones, and the wheels again whenever
 /// Python itself is replaced, since they live inside it.
 fn needed_helpers(root: &Path, repair: bool) -> Vec<&'static Helper> {
-    let python_needed = repair || !root.join("python/bin/python3").is_file();
+    let python_needed = repair || !python(root).is_file();
     HELPERS
         .iter()
         .filter(|h| repair || !root.join(h.installed).is_file() || (python_needed && matches!(h.install, Install::Wheel)))
@@ -610,16 +647,23 @@ fn install_wheel(wheel: &Path, site: &Path) -> Result<(), String> {
         }
         let mut out = std::fs::File::create(&target).map_err(|e| e.to_string())?;
         std::io::copy(&mut entry, &mut out).map_err(|e| e.to_string())?;
-        if let Some(mode) = entry.unix_mode() {
+        if let Some(mode) = entry.unix_mode().filter(|_| cfg!(unix)) {
             set_mode(&target, mode & 0o777)?;
         }
     }
     Ok(())
 }
 
+/// Sets a file's Linux permissions; Windows files have none to set.
 fn set_mode(path: &Path, mode: u32) -> Result<(), String> {
-    use std::os::unix::fs::PermissionsExt;
-    std::fs::set_permissions(path, std::fs::Permissions::from_mode(mode)).map_err(|e| e.to_string())
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(mode)).map_err(|e| e.to_string())?;
+    }
+    #[cfg(windows)]
+    let _ = (path, mode);
+    Ok(())
 }
 
 fn remove(path: &Path) -> Result<(), String> {
@@ -798,7 +842,7 @@ mod tests {
 
     #[test]
     fn helper_pins_are_complete() {
-        for helper in &HELPERS {
+        for helper in LINUX_HELPERS.iter().chain(WINDOWS_HELPERS) {
             let digest = match helper.hash {
                 Hash::Sha256(d) => { assert_eq!(d.len(), 64); d }
                 Hash::Sha512(d) => { assert_eq!(d.len(), 128); d }
@@ -813,10 +857,12 @@ mod tests {
     #[test]
     fn helper_pins_match_the_mod_scripts() {
         let scripts = concat!(include_str!("../../scripts/setup_runtime.py"), include_str!("../../scripts/launch_runtime.py"));
-        for helper in HELPERS.iter().filter(|h| h.name.starts_with("Dead Cells") || h.name.starts_with("TurboJPEG")) {
+        for helper in LINUX_HELPERS.iter().chain(WINDOWS_HELPERS).filter(|h| h.name.starts_with("Dead Cells") || h.name.starts_with("TurboJPEG")) {
             let (Hash::Sha256(digest) | Hash::Sha512(digest)) = helper.hash;
             assert!(scripts.contains(digest), "{} hash differs from the scripts", helper.name);
-            assert!(scripts.contains(helper.file), "{} file differs from the scripts", helper.name);
+            // The scripts name DCCM's archive by system, as in 'win-x64' (#246).
+            let file = helper.file.strip_suffix(".zip").map(|system| format!("'{system}'")).unwrap_or_else(|| helper.file.to_string());
+            assert!(scripts.contains(&file), "{} file differs from the scripts", helper.name);
         }
     }
 
@@ -850,5 +896,16 @@ mod tests {
         assert_eq!(explain_script_error("SystemExit: The ROM must match"), "The ROM must match");
         assert!(explain_script_error("MemoryError").contains("out of memory"));
         assert!(explain_script_error("").contains("Show details"));
+    }
+
+    #[test]
+    fn both_systems_get_the_same_helpers() {
+        let names = |helpers: &[Helper]| helpers.iter().map(|h| h.name).filter(|n| !n.starts_with("TurboJPEG")).collect::<Vec<_>>();
+        assert_eq!(names(LINUX_HELPERS), names(WINDOWS_HELPERS));
+        for helper in WINDOWS_HELPERS {
+            assert!(!helper.installed.contains("/bin/") && !helper.file.contains("linux"), "{}", helper.file);
+        }
+        // The wheels go where this system's Python looks for them.
+        assert!(HELPERS.iter().filter(|h| matches!(h.install, Install::Wheel)).all(|h| h.installed.starts_with(SITE_PACKAGES)));
     }
 }

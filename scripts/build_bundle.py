@@ -10,6 +10,10 @@ lint), the compiled runtime adapter and the two native programs:
     bin/libkssu_bridge.so            the melonDS bridge (tools/nds_build.py)
     bin/kssu-oracle-runner           the original-ROM runner (tools/oracle_build.py)
 
+--target windows assembles the Windows launcher's bundle (#250): the same
+project files, a runtime built with -p:ModReadyToRunOS=windows, and
+bin/kssu_bridge.dll and bin/kssu-oracle-runner.exe from --target windows builds.
+
 Build the runtime and native programs from the same tree first. Programs built on
 a personal machine embed its home folder in their debug paths, so they are only
 accepted with --private, which marks the bundle as not for release.
@@ -26,13 +30,27 @@ from package_release import lint
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
 from data_root import data_root
+from oracle_build import TARGETS, release_dir
 
 PROJECT = Path(__file__).resolve().parents[1]
 # What the launcher's setup and play steps run, and what a player is owed.
 INCLUDED = ('scripts/', 'tools/', 'mod.json', 'LICENSE', 'README.md', 'THIRD_PARTY_NOTICES.md')
 RUNTIME = 'src/runtime/bin/Release/net10.0/output/KirbySuperStarUltra'
 RUNTIME_FILES = {'Kirby.Runtime.dll', 'Kirby.Core.dll', 'config.json', 'modinfo.json'}
-NATIVE = {'libkssu_bridge.so': b'\x7fELF', 'kssu-oracle-runner': b'\x7fELF'}
+# Each system's program files start with its executable format's magic bytes.
+MAGIC = {'linux': b'\x7fELF', 'windows': b'MZ'}
+# The Linux bundle's programs, as scripts/build_packages.py checks them.
+NATIVE = {name: MAGIC['linux'] for name in TARGETS['linux'][1:3]}
+# The PE machine of a ReadyToRun image compiled for Windows x64; Linux ones differ.
+WINDOWS_READY_TO_RUN = 0x8664
+
+
+def pe_machine(path: Path) -> int | None:
+    data = path.read_bytes()
+    if data[:2] != b'MZ' or len(data) < 0x40:
+        return None
+    header = int.from_bytes(data[0x3c:0x40], 'little')
+    return int.from_bytes(data[header + 4:header + 6], 'little') if data[header:header + 4] == b'PE\0\0' else None
 
 
 def git(*args: str) -> str:
@@ -53,10 +71,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--output', type=Path, required=True, help='Bundle folder to create (replaced if it is an earlier bundle).')
     parser.add_argument('--runtime', type=Path, default=PROJECT / RUNTIME, help='Built runtime folder (default: this tree\'s build).')
-    parser.add_argument('--native', type=Path, default=data_root() / 'oracle/vendor/melon-rs/target/release',
-                        help='Folder with libkssu_bridge.so and kssu-oracle-runner (default: the data root\'s build).')
+    parser.add_argument('--target', choices=sorted(TARGETS), default='linux', help='The system the bundle is for (default: linux).')
+    parser.add_argument('--native', type=Path,
+                        help='Folder with the bridge and kssu-oracle-runner for --target (default: the data root\'s build).')
     parser.add_argument('--private', action='store_true', help='Accept programs that name this machine\'s home folder; the bundle is for local tests only.')
     args = parser.parse_args()
+    native_names = TARGETS[args.target][1:3]
     output = args.output.expanduser().resolve()
     if output == PROJECT or PROJECT in output.parents and not output.is_relative_to(PROJECT / 'dist'):
         raise SystemExit('Write the bundle outside the project, or under dist/.')
@@ -75,17 +95,23 @@ def main() -> None:
     for name in runtime_files:
         if Path(name).suffix not in ('.dll', '.json'):
             problems.append(f'{runtime / name}: only the compiled adapter and its settings are bundled')
+    if args.target == 'windows':
+        for name in sorted(name for name in present if name.startswith('Kirby.') and name.endswith('.dll')):
+            if pe_machine(runtime / name) != WINDOWS_READY_TO_RUN:
+                problems.append(f'{runtime / name}: not compiled for Windows; build the runtime with -p:ModReadyToRunOS=windows')
     settings = json.loads((runtime / 'config.json').read_text()) if 'config.json' in present else {}
     if settings.get('EnableOriginalRuntime') or 'RomPath' in settings or 'SeedStatePath' in settings:
         problems.append(f'{runtime / "config.json"}: holds staged lab settings; rebuild the runtime')
-    native = args.native.expanduser().resolve()
-    for name, magic in NATIVE.items():
+    native = (args.native or release_dir(data_root() / 'oracle/vendor/melon-rs', args.target)).expanduser().resolve()
+    magic = MAGIC[args.target]
+    for name in native_names:
         path = native / name
-        if not path.is_file() or path.read_bytes()[:4] != magic:
-            problems.append(f'{path}: missing or not a Linux program; run tools/nds_build.py and tools/oracle_build.py')
+        if not path.is_file() or path.read_bytes()[:len(magic)] != magic:
+            build = '' if args.target == 'linux' else f' --target {args.target}'
+            problems.append(f'{path}: missing or not a {args.target.capitalize()} program; run tools/nds_build.py{build} and tools/oracle_build.py{build}')
     if problems:
         raise SystemExit('Bundle check failed:\n' + '\n'.join(f'- {problem}' for problem in problems))
-    shipped = [runtime / name for name in runtime_files] + [native / name for name in NATIVE]
+    shipped = [runtime / name for name in runtime_files] + [native / name for name in native_names]
     local = sorted(str(path) for path in shipped if personal_paths(path))
     if local and not args.private:
         raise SystemExit('These programs name this machine\'s home folder, so they cannot be released:\n'
@@ -106,7 +132,7 @@ def main() -> None:
     for name in runtime_files:
         shutil.copy2(runtime / name, partial / 'project' / RUNTIME / name)
     (partial / 'bin').mkdir()
-    for name in NATIVE:
+    for name in native_names:
         shutil.copy2(native / name, partial / 'bin' / name)
         (partial / 'bin' / name).chmod(0o755)
     version = json.loads(files['mod.json'])['version']

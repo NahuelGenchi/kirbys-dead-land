@@ -9,8 +9,11 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tarfile
+import threading
 import time
+import _thread
 from save_backup import back_up
 from setup_runtime import DEFAULT_ROOT, download_checked, environment
 from lab_lock import hold
@@ -59,6 +62,18 @@ def extract_deb(archive: Path, destination: Path) -> None:
             return
         position += 60 + size + (size & 1)
     raise SystemExit(f'{archive.name} has no data archive.')
+
+
+def stop_on_request() -> None:
+    """Close the game when `stop` arrives on the input, as Ctrl+C does.
+
+    The launcher asks this way on Windows (#250), where a program without a
+    console window of its own cannot be sent Ctrl+C.
+    """
+    for line in sys.stdin:
+        if line.strip() == 'stop':
+            _thread.interrupt_main()
+            return
 
 
 def snapshot(paths: list[Path]) -> dict[str, str]:
@@ -353,11 +368,14 @@ def main() -> None:
         else:
             process = subprocess.Popen(command, env=env, stdout=output, stderr=subprocess.STDOUT)
         deadline = time.monotonic() + args.seconds
+        stopped = False
+        if WINDOWS and args.play and sys.stdin is not None:
+            threading.Thread(target=stop_on_request, daemon=True).start()
         try:
             while process.poll() is None and (args.play or time.monotonic() < deadline):
                 time.sleep(.1)
         except KeyboardInterrupt:
-            pass
+            stopped = True
         finally:
             if process.poll() is None:
                 process.terminate()
@@ -395,7 +413,8 @@ def main() -> None:
         raise SystemExit('Source save files changed during smoke test; inspect the recorded backups.')
     if fatal:
         raise SystemExit('The runtime reported a fatal error; inspect the smoke log.')
-    if process.returncode not in (0, -15):
+    # A Windows game closed on request ends with TerminateProcess's code 1.
+    if process.returncode not in (0, -15) and not (WINDOWS and stopped):
         raise SystemExit('The game exited with an error; inspect the smoke log.')
     if not frames and not args.play:
         raise SystemExit('No rendered frame was captured.')
