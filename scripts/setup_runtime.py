@@ -87,6 +87,8 @@ def main() -> None:
     parser.add_argument('--data-root', type=Path, default=DEFAULT_ROOT)
     parser.add_argument('--build', action='store_true', help='Compile the runtime adapter after setup.')
     parser.add_argument('--rebuild', action='store_true', help='With --build, compile everything again instead of reusing earlier output.')
+    parser.add_argument('--ready-to-run-os', choices=('linux', 'windows'),
+                        help="With --build, the system the precompiled code is for (default: this machine's).")
     args = parser.parse_args()
     root = args.data_root.resolve()
     project = Path(__file__).resolve().parents[1]
@@ -118,7 +120,8 @@ def main() -> None:
         raise SystemExit(f'Expected SDK {SDK_VERSION}, found {version}. Use another --data-root.')
     if args.build:
         subprocess.run([str(sdk), 'build', str(project / 'src/runtime/Kirby.Runtime.csproj'),
-                        '-c', 'Release', '-v', 'minimal', *(['--no-incremental'] if args.rebuild else [])],
+                        '-c', 'Release', '-v', 'minimal', *(['--no-incremental'] if args.rebuild else []),
+                        *([f'-p:ModReadyToRunOS={args.ready_to_run_os}'] if args.ready_to_run_os else [])],
                        env=env, check=True)
     print(json.dumps({'data_root': str(root), 'dotnet': str(sdk),
                       'dccm_version': DCCM_VERSION, 'mdk': env['DCCM_MDK_ROOT'],

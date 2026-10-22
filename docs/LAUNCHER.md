@@ -24,8 +24,18 @@ from the player's own files.
   `kirbys-dead-land` in the folder, keeping the `share` folder beside it.
   `add-to-menu.sh` adds a menu entry for that folder.
 
-Each has a `.sha256` beside it. Both carry the GPL `LICENSE`, `NOTICES.txt` and
-`NOTICES-emulator.txt` (together, the text of Settings › Licenses).
+From v0.3.0 a third download is for Windows (#252):
+
+- **`KirbysDeadLand-<version>-windows-x64.zip`**: extract it anywhere and
+  double-click `Kirby's Dead Land` in the folder, keeping the `share` folder beside
+  it. The program is not signed, so Windows SmartScreen may ask first (*More info*,
+  then *Run anyway*). See [Windows](#windows-250) for what differs; it has not run
+  on a Windows 11 PC yet (#241).
+
+Each has a `.sha256` beside it. All carry the GPL `LICENSE`, `NOTICES.txt` and
+`NOTICES-emulator.txt` (together, the text of Settings › Licenses); the Windows one
+also carries `NOTICES-windows-runtime.txt`, the licenses of the MinGW-w64 and GCC
+runtime libraries linked into its programs.
 
 Both are built on Ubuntu 22.04, so they need a 64-bit Linux with glibc 2.35 or
 later, plus the fontconfig library and at least one installed font, which every

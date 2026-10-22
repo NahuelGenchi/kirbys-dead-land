@@ -7,7 +7,8 @@
 Runs the launcher's --screenshot mode (never with --art-from, so the pictures use
 stand-in art and hold nothing from the game) and writes banner.png, download.png
 and one framed screenshot per step to .github/release/v<launcher version>/, the
-pictures that notes.py links. Needs Pillow; uses the launcher's fonts.
+pictures that notes.py links, with download-windows.png from the first version
+with a Windows download. Needs Pillow; uses the launcher's fonts.
 """
 import argparse
 import random
@@ -16,6 +17,8 @@ import tempfile
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
+
+from notes import has_windows
 
 PROJECT = Path(__file__).resolve().parents[2]
 FONTS = PROJECT / 'launcher/ui/fonts'
@@ -153,14 +156,15 @@ def banner(shots: Path, out: Path, version: str) -> None:
     draw.text((x - 6, 330), "Kirby's", font=title, fill=INK)
     draw.text((x - 6, 500), 'Dead Land', font=title, fill=INK)
     body = font('Nunito', 46, 600)
-    draw.text((x, 730), 'Play as Kirby in Dead Cells on Linux.', font=body, fill=INK_DIM)
+    platforms = 'Linux and Windows' if has_windows(f'v{version}') else 'Linux'
+    draw.text((x, 730), f'Play as Kirby in Dead Cells on {platforms}.', font=body, fill=INK_DIM)
     draw.text((x, 795), 'Now with a launcher: no terminal needed.', font=body, fill=INK_DIM)
     sparkle(draw, x + 690, 395, 40, GOLD)
     sparkle(draw, x + 765, 470, 17, PINK)
     canvas.convert('RGB').save(out / 'banner.png', optimize=True)
 
 
-def download_button(out: Path) -> None:
+def download_button(out: Path, system: str = 'Linux', name: str = 'download.png') -> None:
     w, h, margin = 900, 176, 50
     pill = gradient((w, h), PINK, ORANGE, horizontal=True).convert('RGBA')
     mask = Image.new('L', (w, h), 0)
@@ -181,9 +185,10 @@ def download_button(out: Path) -> None:
     draw.line((ix - s, iy + s * 0.55, ix - s, iy + s), **line)
     draw.line((ix - s, iy + s, ix + s, iy + s), **line)
     draw.line((ix + s, iy + s * 0.55, ix + s, iy + s), **line)
-    text = font('Fredoka', 70, 600)
-    draw.text((margin + 180, margin + h // 2), 'Download for Linux', font=text, fill=INK, anchor='lm')
-    canvas.save(out / 'download.png', optimize=True)
+    # Sized so the longest label, 'Download for Windows', fits; every button uses it.
+    text = font('Fredoka', 62, 600)
+    draw.text((margin + 180, margin + h // 2), f'Download for {system}', font=text, fill=INK, anchor='lm')
+    canvas.save(out / name, optimize=True)
 
 
 def steps(shots: Path, out: Path) -> None:
@@ -208,6 +213,8 @@ def main() -> None:
         subprocess.run([args.launcher, '--screenshot', shots, '--scale', '2'], check=True, stdout=subprocess.DEVNULL)
         banner(Path(shots), out, version)
         download_button(out)
+        if has_windows(f'v{version}'):
+            download_button(out, 'Windows', 'download-windows.png')
         steps(Path(shots), out)
     for path in sorted(out.glob('*.png')):
         print(f'{path.relative_to(PROJECT)}: {path.stat().st_size // 1024} KB')

@@ -6,8 +6,9 @@
 #
 #   bash scripts/release_container.sh [vX.Y.Z]
 #
-# Uncommitted changes are not built. Extra `docker run` options, such as
-# --memory 4g, can be given in RELEASE_DOCKER_ARGS.
+# Uncommitted changes are not built. Like the workflow's matrix, each target builds
+# in a container of its own: RELEASE_TARGETS (default "linux windows") picks them.
+# Extra `docker run` options, such as --memory 4g, can be given in RELEASE_DOCKER_ARGS.
 set -euo pipefail
 
 IMAGE='ubuntu:22.04@sha256:0a9887931b0e38af2e3487ed39e29436b0535c4f3f52e57745baaf79d1898956'
@@ -18,9 +19,10 @@ trap 'rm -rf "$inputs"' EXIT
 git -C "$project" bundle create "$inputs/source.bundle" HEAD ${tag:+"refs/tags/$tag"}
 mkdir -p "$project/dist"
 
+for target in ${RELEASE_TARGETS:-linux windows}; do
 # shellcheck disable=SC2086 # RELEASE_DOCKER_ARGS holds separate options.
 docker run --rm ${RELEASE_DOCKER_ARGS:-} \
-    -e TAG="$tag" -e OWNER="$(id -u):$(id -g)" \
+    -e TAG="$tag" -e TARGET="$target" -e OWNER="$(id -u):$(id -g)" \
     -v "$inputs:/inputs:ro" -v "$project/dist:/output" \
     "$IMAGE" bash -euo pipefail -c '
         export HOME=/github/home
@@ -35,12 +37,15 @@ docker run --rm ${RELEASE_DOCKER_ARGS:-} \
         cd "$workspace"
         git checkout -q --detach "${TAG:-HEAD}"
         git remote set-url origin https://github.com/NahuelGenchi/kirbys-dead-land.git
-        bash scripts/release_tools.sh
+        bash scripts/release_tools.sh "$TARGET"
         export PATH="/opt/python/bin:$HOME/.cargo/bin:$PATH"
         git config --global --add safe.directory "$workspace"
-        python3 scripts/build_packages.py --output dist ${TAG:+--tag "$TAG"}
-        python3 scripts/package_release.py --ref HEAD --output dist
-        cp dist/*.AppImage dist/*.tar.gz dist/*.sha256 /output/
+        python3 scripts/build_packages.py --target "$TARGET" --output dist ${TAG:+--tag "$TAG"}
+        if [ "$TARGET" = linux ]; then
+            python3 scripts/package_release.py --ref HEAD --output dist
+        fi
+        cp dist/* /output/
         chown "$OWNER" /output/*
     '
+done
 ls -l "$project/dist"

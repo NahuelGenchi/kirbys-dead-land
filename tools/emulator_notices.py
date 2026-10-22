@@ -23,7 +23,7 @@ import shutil
 import tempfile
 
 from data_root import data_root
-from launcher_notices import MIT, apache_text, choose, copyrights, metadata, own_text, shipped
+from launcher_notices import LAUNCHER_TARGETS, MIT, apache_text, choose, copyrights, metadata, own_text, shipped
 from oracle_build import CORE, WRAPPER, bridge_manifest, git_output, runner_manifest
 
 PROJECT = Path(__file__).resolve().parents[1]
@@ -40,9 +40,9 @@ HEADER = """Kirby's Dead Land: notices for the emulator programs
 
 libkssu_bridge.so (the bridge the game loads to run Kirby's original code) and
 kssu-oracle-runner (the program setup uses to read Kirby's sprites and copy
-abilities from the player's own game) are built from melonDS and melon-rs with
-this project's patches, the libraries melonDS bundles and the Rust crates
-listed below.
+abilities from the player's own game), kssu_bridge.dll and kssu-oracle-runner.exe
+on Windows, are built from melonDS and melon-rs with this project's patches, the
+libraries melonDS bundles and the Rust crates listed below (for both systems).
 
 Both programs are free software, distributed under the GNU General Public
 License version 3 (the LICENSE file shipped beside this file, and
@@ -54,7 +54,9 @@ apply this project's patches, and packaging/bridge.Cargo.lock and
 packaging/runner.Cargo.lock pin every crate, whose source is on crates.io at the
 version listed.
 
-The programs use the system's own C and C++ runtime libraries; none are shipped.
+On Linux the programs use the system's own C and C++ runtime libraries; none are
+shipped. The Windows programs link in the MinGW-w64 and GCC runtime libraries
+instead; NOTICES-windows-runtime.txt in the Windows download holds their licenses.
 
 
 MELONDS AND MELON-RS
@@ -171,7 +173,8 @@ def crates(vendor: Path) -> tuple[list[tuple[dict, list[str]]], dict[str, str]]:
             crate.mkdir()
             (crate / 'Cargo.toml').write_text(manifest(source, vendor))
             shutil.copyfile(lock, crate / 'Cargo.lock')
-            meta = metadata(crate / 'Cargo.toml', offline=True)
+            # Both systems' crates (#252): the Windows download ships these programs too.
+            meta = metadata(crate / 'Cargo.toml', offline=True, targets=LAUNCHER_TARGETS)
             if (crate / 'Cargo.lock').read_bytes() != lock.read_bytes():
                 raise SystemExit(f'Cargo changed {lock.relative_to(PROJECT)}; the manifests no longer match it.')
             hashes[name] = hashlib.sha256(lock.read_bytes()).hexdigest()

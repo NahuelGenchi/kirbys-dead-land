@@ -36,13 +36,15 @@ commit passes.
 
 ## Player packages
 
-`scripts/build_packages.py` makes the two downloads described in
-[Player launcher](LAUNCHER.md#download), each with a `.sha256`:
+`scripts/build_packages.py` makes the downloads described in
+[Player launcher](LAUNCHER.md#download), each with a `.sha256`: the two Linux
+ones, and with `--target windows` the Windows one (#252):
 
 | File | Layout |
 | :--- | :--- |
 | `KirbysDeadLand-<version>-x86_64.AppImage` | `AppRun`, the desktop entry and icon at the top; `usr/bin/kirbys-dead-land`; the bundle at `usr/share/kirbys-dead-land`, found through `$APPDIR`; `LICENSE`, `NOTICES.txt` and `NOTICES-emulator.txt` in `usr/share/doc/kirbys-dead-land/` |
 | `KirbysDeadLand-<version>-x86_64.tar.gz` | One folder, `KirbysDeadLand-<version>-x86_64/`: `kirbys-dead-land`, the bundle at `share/kirbys-dead-land` beside it, `LICENSE`, `NOTICES.txt`, `NOTICES-emulator.txt`, `README.txt`, the desktop entry, the icon and `add-to-menu.sh` |
+| `KirbysDeadLand-<version>-windows-x64.zip` | One folder, `KirbysDeadLand-<version>-windows-x64/`: `Kirby's Dead Land.exe`, the Windows bundle (`build_bundle.py --target windows`) at `share/kirbys-dead-land` beside it, `LICENSE`, `NOTICES.txt`, `NOTICES-emulator.txt`, `NOTICES-windows-runtime.txt` and `README.txt` (`packaging/README-windows.txt`) |
 
 The bundle is `scripts/build_bundle.py`'s ([Player
 launcher](LAUNCHER.md#building-and-checking)): the tracked scripts and tools, the
@@ -58,7 +60,24 @@ launcher's own code (`--write-icon`), not taken from the ROM.
 
 ```sh
 python3 scripts/build_packages.py --output dist [--tag v0.2.0]
+python3 scripts/build_packages.py --target windows --output dist [--wine WINE]
 ```
+
+`--target windows` (#252) builds in a root of its own (`release-build-windows`):
+the runtime precompiled for Windows (`setup_runtime.py --build --ready-to-run-os
+windows`), `kssu_bridge.dll` and `kssu-oracle-runner.exe` (`--target windows`,
+#242) and the launcher for `x86_64-pc-windows-gnu`, all with MinGW-w64's POSIX
+compilers and linked statically (`oracle_build.windows_environment`), so they need
+only Windows' own DLLs. It writes `NOTICES-windows-runtime.txt` from the license
+records of the build machine's MinGW-w64 packages
+(`/usr/share/doc/mingw-w64-x86-64-dev/copyright`, the MinGW-w64 C runtime and
+winpthreads, and `/usr/share/doc/gcc-mingw-w64-base/copyright`, libgcc and libstdc++
+under the GCC Runtime Library Exception), lints the package like the others (every
+program must start with `MZ`), writes the `.zip` (file times the commit time,
+members in name order) and reads it back. The launcher's `--check` runs only when
+`--wine` names a Wine program. The runtime's in-tree build is replaced by the
+Windows one; run `setup_runtime.py --build` again before a Linux lab run.
+`tools/emulator_notices.py` lists the bridge's and runner's crates for both systems.
 
 The script:
 
@@ -106,28 +125,32 @@ the machine that built them. Releases use the workflow below instead.
 existing tag it builds that tag and attaches the files to its release; without one
 it only builds the chosen branch and keeps the files as a workflow artifact.
 
-- **Build** (read-only token): an `ubuntu:22.04` container pinned by digest on an
-  `ubuntu-24.04` runner, so the programs need only glibc 2.35 and the libstdc++ of
-  Ubuntu 22.04. `scripts/release_tools.sh` installs Ubuntu's compilers, CMake,
+- **Build** (read-only token), once per target (`linux`, `windows`): an
+  `ubuntu:22.04` container pinned by digest on an `ubuntu-24.04` runner, so the
+  Linux programs need only glibc 2.35 and the libstdc++ of Ubuntu 22.04.
+  `release_tools.sh windows` adds Ubuntu's MinGW-w64 with POSIX threads and Rust's
+  `x86_64-pc-windows-gnu` target. `scripts/release_tools.sh` installs Ubuntu's compilers, CMake,
   ALSA and fontconfig headers, ICU, OpenSSL and squashfs-tools, Python 3.14.8
   (python-build-standalone 20261009, the launcher's own pin) and rustup 1.29.1, both
   checked by SHA-256, and Rust 1.99.0. The .NET SDK 10.0.401, DCCM, melon-rs and
-  melonDS are pinned by the build scripts. Then `build_packages.py --tag` and
-  `package_release.py`, and the two packages, the source archive and the `.sha256`
-  files are uploaded as the `packages` artifact.
-- **Notes**: before the build, the job stops if the tag has no
-  [release page](#release-page-239) parts or pictures; after it, it writes the
-  page with the AppImage's size and the pictures linked at the tag's commit.
-- **Attach** (the only job that can write): `gh release upload --clobber` to the
-  tag's release, or to a new draft pre-release, with those notes, when the tag has
-  none yet. An existing release keeps its notes.
+  melonDS are pinned by the build scripts. Then `build_packages.py --target <target>
+  --tag`, and on Linux `package_release.py`; the packages, the source archive and
+  the `.sha256` files are uploaded as `packages-linux` and `packages-windows`.
+- **Notes**: before the build, each job stops if the tag has no
+  [release page](#release-page-239) parts or pictures.
+- **Attach** (the only job that can write): checks out `.github/release` at the
+  tag (no credentials kept), writes the page with the AppImage's and the `.zip`'s
+  sizes and the pictures linked at the tag's commit, and runs `gh release upload
+  --clobber` to the tag's release, or to a new draft pre-release with those notes
+  when the tag has none yet. An existing release keeps its notes.
 
 Actions are pinned by commit, the checkout keeps no credentials, and the tag
 reaches shell commands only through environment variables.
 
 `scripts/release_container.sh [vX.Y.Z]` runs the same steps on this machine, in
-the same container image, from the committed `HEAD` (or the tag), and copies the
-packages, the source archive and their `.sha256` files to `dist/`. It needs
+the same container image, from the committed `HEAD` (or the tag), one container
+per target (`RELEASE_TARGETS`, default `linux windows`), and copies the packages,
+the source archive and their `.sha256` files to `dist/`. It needs
 Docker; `RELEASE_DOCKER_ARGS` passes extra `docker run` options such as
 `--memory 4g`. A test checks that it and the workflow use one image and the same
 build commands.
@@ -140,7 +163,9 @@ to update from an older version (from 0.2.1 on), what the mod is, what players
 need, the four steps with pictures, their saves, how Kirby plays, help, and the
 files and licenses. Each version adds a folder, `.github/release/vX.Y.Z/`, with
 two short parts in players' words, `new.md` (what is new or fixed) and
-`tested.md` (what was tested), and its pictures:
+`tested.md` (what was tested), and its pictures. From v0.3.0 (#252) the page
+offers the Windows download beside the Linux one, with the Windows first step and
+a `download-windows.png` button; earlier versions render as before:
 
 ```bash
 cargo build --manifest-path launcher/Cargo.toml
