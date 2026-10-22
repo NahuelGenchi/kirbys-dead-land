@@ -11,16 +11,24 @@ without --private:
                                    melonDS's link-time optimization off
     launcher                       cargo build --release --locked in launcher/
 
+--target windows cross-builds the same programs for Windows with MinGW-w64 (#252):
+the runtime precompiled for Windows, kssu_bridge.dll, kssu-oracle-runner.exe and
+the launcher for x86_64-pc-windows-gnu, linked with GCC's and MinGW-w64's runtime
+libraries, whose licenses the package carries.
+
 Downloads, native sources and their builds stay in --build-root, a data root of
 their own, so the development lab's bridge is never replaced. The packages and a
 .sha256 for each go to --output:
 
     KirbysDeadLand-<version>-x86_64.AppImage   bundle at usr/share/kirbys-dead-land
     KirbysDeadLand-<version>-x86_64.tar.gz     bundle at share/kirbys-dead-land, beside the launcher
+    KirbysDeadLand-<version>-windows-x64.zip   (--target windows) one folder: the launcher
+                                               and the bundle at share/kirbys-dead-land
 
 Each package is read back after it is written: it must hold exactly the files
 that passed the package lint (scripts/package_release.py), and its launcher must
-find its bundle with --check. Never reads the ROM, the game or a save.
+find its bundle with --check (the Windows launcher only with --wine). Never reads
+the ROM, the game or a save.
 """
 import argparse
 import gzip
@@ -35,14 +43,17 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import time
 import tomllib
+import zipfile
 
-from build_bundle import NATIVE, RUNTIME, RUNTIME_FILES
+from build_bundle import MAGIC, RUNTIME, RUNTIME_FILES
 from package_release import lint_package
 from setup_runtime import download_checked
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
 from data_root import data_root
+from oracle_build import TARGETS, release_dir, windows_environment
 
 PROJECT = Path(__file__).resolve().parents[1]
 PACKAGING = PROJECT / 'packaging'
@@ -58,6 +69,14 @@ LOCKS = {'bridge': PACKAGING / 'bridge.Cargo.lock', 'runner': PACKAGING / 'runne
 NOTICES = {'LICENSE': PROJECT / 'LICENSE', 'NOTICES.txt': PROJECT / 'launcher/NOTICES.txt',
            'NOTICES-emulator.txt': PACKAGING / 'NOTICES-emulator.txt'}
 ELF, MZ, PNG, JSON = b'\x7fELF', b'MZ', b'\x89PNG\r\n\x1a\n', b'{'
+# The Windows download's program, named for the person double-clicking it.
+WINDOWS_PROGRAM = "Kirby's Dead Land.exe"
+# Where the build machine's MinGW-w64 packages record the licenses of the runtime
+# libraries linked into every Windows program: the MinGW-w64 C runtime and
+# winpthreads, and GCC's libgcc and libstdc++ (GPL with the GCC Runtime Library Exception).
+WINDOWS_RUNTIME_LICENSES = {'MinGW-w64 runtime and winpthreads': Path('/usr/share/doc/mingw-w64-x86-64-dev/copyright'),
+                            "GCC's runtime libraries": Path('/usr/share/doc/gcc-mingw-w64-base/copyright')}
+WINDOWS_RUNTIME_NOTICES = 'NOTICES-windows-runtime.txt'
 
 
 def run(command: list[str], env: dict[str, str], cwd: Path = PROJECT) -> None:
@@ -88,31 +107,63 @@ def build_environment(build_root: Path) -> dict[str, str]:
     return env
 
 
-def build(env: dict[str, str], build_root: Path) -> None:
+def build(env: dict[str, str], build_root: Path, target: str = 'linux') -> None:
     for name, lock in LOCKS.items():
         (build_root / 'oracle' / name).mkdir(parents=True, exist_ok=True)
         shutil.copyfile(lock, build_root / 'oracle' / name / 'Cargo.lock')
-    run([sys.executable, 'scripts/setup_runtime.py', '--build', '--rebuild'], env)
-    run([sys.executable, 'tools/oracle_build.py'], env)
-    run([sys.executable, 'tools/nds_build.py'], env)
+    windows = ['--target', 'windows'] if target == 'windows' else []
+    run([sys.executable, 'scripts/setup_runtime.py', '--build', '--rebuild', *(['--ready-to-run-os', 'windows'] if windows else [])], env)
+    run([sys.executable, 'tools/oracle_build.py', *windows], env)
+    run([sys.executable, 'tools/nds_build.py', *windows], env)
     for name, lock in LOCKS.items():
         used = build_root / 'oracle' / name / 'Cargo.lock'
         if used.read_bytes() != lock.read_bytes():
             raise SystemExit(f'Cargo changed the pinned {lock.relative_to(PROJECT)}; check {used} and copy it there.')
-    run(['cargo', 'build', '--release', '--locked'], env, cwd=PROJECT / 'launcher')
+    if windows:
+        run(['cargo', 'build', '--release', '--locked', '--target', TARGETS['windows'][0]], {**env, **windows_environment(env)},
+            cwd=PROJECT / 'launcher')
+    else:
+        run(['cargo', 'build', '--release', '--locked'], env, cwd=PROJECT / 'launcher')
 
 
 def notice_paths(kind: str) -> list[str]:
     """Where a package keeps the license and notices."""
+    if kind == 'zip':
+        return [*NOTICES, WINDOWS_RUNTIME_NOTICES]
     return [f'usr/share/doc/{APP}/{name}' if kind == 'appimage' else name for name in NOTICES]
 
 
-def layout(kind: str, bundle: Path, launcher: bytes, icon: bytes) -> tuple[dict[str, tuple[bytes, int]], dict[str, bytes]]:
+def windows_runtime_notices(sources: dict[str, Path] = WINDOWS_RUNTIME_LICENSES) -> bytes:
+    """The licenses of the runtime libraries the Windows programs link in, as the
+    build machine's MinGW-w64 packages record them."""
+    missing = [str(path) for path in sources.values() if not path.is_file()]
+    if missing:
+        raise SystemExit('MinGW-w64 license files missing: ' + ', '.join(missing) + ' (install MinGW-w64 from the system packages).')
+    out = ["Kirby's Dead Land: notices for the Windows runtime libraries\n\n"
+           f"{WINDOWS_PROGRAM}, kssu_bridge.dll and kssu-oracle-runner.exe are linked with\n"
+           'the MinGW-w64 C runtime and winpthreads, and with GCC\'s libgcc and libstdc++\n'
+           '(GPL version 3 with the GCC Runtime Library Exception), from the MinGW-w64\n'
+           'packages of the machine that built them. Their licenses follow, as those\n'
+           'packages record them.\n']
+    for name, path in sources.items():
+        out.append(f'\n\n{name.upper()} ({path.parent.name})\n\n{path.read_text(errors="replace").strip()}\n')
+    return ''.join(out).encode()
+
+
+def layout(kind: str, bundle: Path, launcher: bytes, icon: bytes,
+           runtime_notices: bytes = b'') -> tuple[dict[str, tuple[bytes, int]], dict[str, bytes]]:
     """A package's files as {path: (data, mode)}, and the ones the build made, each
     with the bytes it starts with."""
     notices = {name: path.read_bytes() for name, path in NOTICES.items()}
     desktop = (PACKAGING / f'{APP}.desktop').read_bytes()
-    if kind == 'appimage':
+    target = 'windows' if kind == 'zip' else 'linux'
+    if kind == 'zip':
+        share = f'share/{APP}/'
+        files = {WINDOWS_PROGRAM: (launcher, 0o755), 'README.txt': ((PACKAGING / 'README-windows.txt').read_bytes(), 0o644),
+                 WINDOWS_RUNTIME_NOTICES: (runtime_notices, 0o644)}
+        files.update({name: (data, 0o644) for name, data in notices.items()})
+        built = {WINDOWS_PROGRAM: MZ}
+    elif kind == 'appimage':
         share = f'usr/share/{APP}/'
         files = {'AppRun': ((PACKAGING / 'AppRun').read_bytes(), 0o755), f'{APP}.desktop': (desktop, 0o644),
                  f'{APP}.png': (icon, 0o644), '.DirIcon': (icon, 0o644), f'usr/bin/{APP}': (launcher, 0o755)}
@@ -131,7 +182,7 @@ def layout(kind: str, bundle: Path, launcher: bytes, icon: bytes) -> tuple[dict[
         if path.is_file():
             mode = 0o755 if os.access(path, os.X_OK) else 0o644
             files[share + path.relative_to(bundle).as_posix()] = (path.read_bytes(), mode)
-    built.update({f'{share}bin/{name}': magic for name, magic in NATIVE.items()})
+    built.update({f'{share}bin/{name}': MAGIC[target] for name in TARGETS[target][1:3]})
     built.update({f'{share}project/{RUNTIME}/{name}': MZ if name.endswith('.dll') else JSON for name in RUNTIME_FILES})
     return files, built
 
@@ -164,6 +215,31 @@ def read_tar(path: Path, top: str) -> dict[str, tuple[bytes, int]]:
                 files[member.name[len(top) + 1:]] = (tar.extractfile(member).read(), member.mode)
             elif not member.isdir():
                 raise SystemExit(f'{path.name}: {member.name} is not a plain file or folder')
+    return files
+
+
+def write_zip(path: Path, top: str, files: dict[str, tuple[bytes, int]], mtime: int) -> None:
+    """A .zip with one top folder, every time the commit time, members in name order."""
+    stamp = time.gmtime(max(mtime, 315532800))[:6]
+    with zipfile.ZipFile(path, 'w', zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
+        for name in [''] + folders(files):
+            info = zipfile.ZipInfo(f'{top}/{name}'.rstrip('/') + '/', stamp)
+            info.external_attr = (0o40755 << 16) | 0x10
+            archive.writestr(info, b'')
+        for name, (data, mode) in sorted(files.items()):
+            info = zipfile.ZipInfo(f'{top}/{name}', stamp)
+            info.external_attr, info.compress_type = (0o100000 | mode) << 16, zipfile.ZIP_DEFLATED
+            archive.writestr(info, data)
+
+
+def read_zip(path: Path, top: str) -> dict[str, tuple[bytes, int]]:
+    files = {}
+    with zipfile.ZipFile(path) as archive:
+        for member in archive.infolist():
+            if not member.filename.startswith(f'{top}/'):
+                raise SystemExit(f'{path.name}: {member.filename} is outside {top}/')
+            if not member.is_dir():
+                files[member.filename[len(top) + 1:]] = (archive.read(member), (member.external_attr >> 16) & 0o777)
     return files
 
 
@@ -230,12 +306,17 @@ def sha256_file(path: Path) -> str:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--output', type=Path, default=PROJECT / 'dist', help='Folder for the packages (default dist/).')
-    parser.add_argument('--build-root', type=Path, default=data_root() / 'release-build',
-                        help='Data root for the builds and downloads (default: release-build in the data root).')
+    parser.add_argument('--build-root', type=Path,
+                        help='Data root for the builds and downloads (default: release-build, or release-build-windows, in the data root).')
+    parser.add_argument('--target', choices=sorted(TARGETS), default='linux',
+                        help='linux: the AppImage and the .tar.gz; windows: the .zip (default: linux).')
     parser.add_argument('--tag', help='Release tag being built; it must be v<version> and name this commit.')
     parser.add_argument('--skip-build', action='store_true', help='Package the programs a previous run built.')
+    parser.add_argument('--wine', help='With --target windows, a wine program to run the packaged launcher\'s --check with.')
     args = parser.parse_args()
-    build_root = args.build_root.expanduser().resolve()
+    windows = args.target == 'windows'
+    default_root = data_root() / ('release-build-windows' if windows else 'release-build')
+    build_root = (args.build_root or default_root).expanduser().resolve()
     output = args.output.expanduser().resolve()
     if build_root == PROJECT or PROJECT in build_root.parents:
         raise SystemExit('The build root must be outside the project.')
@@ -247,33 +328,59 @@ def main() -> None:
         raise SystemExit(f'{args.tag} does not name the checked-out commit.')
     if args.tag and git('status', '--porcelain', '--untracked-files=no'):
         raise SystemExit('Tracked files differ from the commit; a release is built from the commit alone.')
-    if shutil.which('desktop-file-validate'):
+    if not windows and shutil.which('desktop-file-validate'):
         subprocess.run(['desktop-file-validate', str(PACKAGING / f'{APP}.desktop')], check=True)
+    runtime_notices = windows_runtime_notices() if windows else b''
 
     env = build_environment(build_root)
     build_root.mkdir(parents=True, exist_ok=True)
     if not args.skip_build:
-        build(env, build_root)
+        build(env, build_root, args.target)
     work = build_root / 'packages'
     work.mkdir(exist_ok=True)
-    run([sys.executable, 'scripts/build_bundle.py', '--output', str(work / 'bundle'),
-         '--native', str(build_root / 'oracle/vendor/melon-rs/target/release')], env)
+    run([sys.executable, 'scripts/build_bundle.py', '--output', str(work / 'bundle'), '--target', args.target,
+         '--native', str(release_dir(build_root / 'oracle/vendor/melon-rs', args.target))], env)
     record = json.loads((work / 'bundle/bundle.json').read_text())
     if record['private'] or (args.tag and record['commit'].endswith('-dirty')):
         raise SystemExit(f'The bundle is {"private" if record["private"] else "from a changed tree"}; it cannot be released.')
     bundle_id = f'{record["version"]}+{record["commit"]}'
-    launcher = PROJECT / 'launcher/target/release' / APP
-    run([str(launcher), '--write-icon', str(work / f'{APP}.png')], env)
     mtime = int(git('show', '-s', '--format=%ct', 'HEAD'))
     private = sorted({os.fsencode(Path.home()) + b'/', os.fsencode(build_root), os.fsencode(PROJECT)})
-
     output.mkdir(parents=True, exist_ok=True)
+    report = {'version': version, 'bundle': bundle_id, 'packages': {}}
+
+    if windows:
+        launcher = PROJECT / 'launcher/target' / TARGETS['windows'][0] / 'release' / f'{APP}.exe'
+        stem = f'{NAME}-{version}-windows-x64'
+        path = output / f'{stem}.zip'
+        files, built = layout('zip', work / 'bundle', launcher.read_bytes(), b'', runtime_notices)
+        problems = lint_package({name: data for name, (data, _) in files.items()}, built, private, notice_paths('zip'))
+        if problems:
+            raise SystemExit(f'Package lint failed for {path.name}:\n' + '\n'.join(f'- {problem}' for problem in problems))
+        write_zip(path, stem, files, mtime)
+        if read_zip(path, stem) != files:
+            raise SystemExit(f'{path.name} does not hold the files that passed the lint.')
+        found = 'not run (no --wine)'
+        if args.wine:
+            unpacked = work / 'zip-contents'
+            if unpacked.exists():
+                shutil.rmtree(unpacked)
+            with zipfile.ZipFile(path) as archive:
+                archive.extractall(unpacked)
+            found = check_finds_bundle([args.wine, str(unpacked / stem / WINDOWS_PROGRAM)], bundle_id,
+                                       {key: os.environ[key] for key in ('WINEPREFIX', 'WINEDEBUG', 'WINEDLLOVERRIDES') if key in os.environ})
+        report['packages'][path.name] = {'files': len(files), 'bytes': path.stat().st_size,
+                                         'sha256': sha256_file(path), 'check': found}
+        print(json.dumps(report, indent=2))
+        return
+
+    launcher = PROJECT / 'launcher/target/release' / APP
+    run([str(launcher), '--write-icon', str(work / f'{APP}.png')], env)
     stem = f'{NAME}-{version}-x86_64'
     runtime_file = build_root / 'downloads' / f'appimage-runtime-{APPIMAGE_RUNTIME_SHA256[:12]}'
     runtime_file.parent.mkdir(exist_ok=True)
     download_checked(APPIMAGE_RUNTIME, runtime_file, 'sha256', APPIMAGE_RUNTIME_SHA256)
     runtime = runtime_file.read_bytes()
-    report = {'version': version, 'bundle': bundle_id, 'packages': {}}
     for kind, path in (('appimage', output / f'{stem}.AppImage'), ('tar', output / f'{stem}.tar.gz')):
         files, built = layout(kind, work / 'bundle', launcher.read_bytes(), (work / f'{APP}.png').read_bytes())
         problems = lint_package({name: data for name, (data, _) in files.items()}, built, private, notice_paths(kind))

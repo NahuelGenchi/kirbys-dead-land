@@ -2,9 +2,9 @@ Kirby's Dead Land: notices for the emulator programs
 
 libkssu_bridge.so (the bridge the game loads to run Kirby's original code) and
 kssu-oracle-runner (the program setup uses to read Kirby's sprites and copy
-abilities from the player's own game) are built from melonDS and melon-rs with
-this project's patches, the libraries melonDS bundles and the Rust crates
-listed below.
+abilities from the player's own game), kssu_bridge.dll and kssu-oracle-runner.exe
+on Windows, are built from melonDS and melon-rs with this project's patches, the
+libraries melonDS bundles and the Rust crates listed below (for both systems).
 
 Both programs are free software, distributed under the GNU General Public
 License version 3 (the LICENSE file shipped beside this file, and
@@ -16,7 +16,9 @@ apply this project's patches, and packaging/bridge.Cargo.lock and
 packaging/runner.Cargo.lock pin every crate, whose source is on crates.io at the
 version listed.
 
-The programs use the system's own C and C++ runtime libraries; none are shipped.
+On Linux the programs use the system's own C and C++ runtime libraries; none are
+shipped. The Windows programs link in the MinGW-w64 and GCC runtime libraries
+instead; NOTICES-windows-runtime.txt in the Windows download holds their licenses.
 
 
 MELONDS AND MELON-RS
@@ -110,10 +112,13 @@ chrono 0.4.45 - MIT (offered: MIT OR Apache-2.0) - bridge, runner
     Copyright (c) 2014, Kang Seonghoon.
 claxon 0.4.3 - Apache-2.0 (offered: Apache-2.0) - bridge, runner
     Copyright the claxon authors: Ruud van Asseldonk
+clipboard-win 5.4.1 - BSL-1.0 (offered: BSL-1.0) - bridge, runner
 codespan-reporting 0.13.1 - Apache-2.0 (offered: Apache-2.0) - bridge, runner
     Copyright the codespan-reporting authors: Brendan Zabarauskas
 color 0.3.3 - MIT (offered: Apache-2.0 OR MIT) - bridge, runner
     Copyright the color authors
+concurrent-queue 2.5.0 - MIT (offered: Apache-2.0 OR MIT) - bridge, runner
+    Copyright the concurrent-queue authors: Stjepan Glavina, Taiki Endo, John Nunley
 core_detect 1.0.0 - MIT (offered: MIT/Apache-2.0) - bridge, runner
     Copyright (c) 2017-2020 The Rust Project Developers
 cpal 0.15.3 - Apache-2.0 (offered: Apache-2.0) - bridge, runner
@@ -122,6 +127,8 @@ cpufeatures 0.2.17 - MIT (offered: MIT OR Apache-2.0) - bridge
     Copyright (c) 2020-2025 The RustCrypto Project Developers
 crc32fast 1.5.2 - MIT (offered: MIT OR Apache-2.0) - bridge, runner
     Copyright (c) 2018 Sam Rijs, Alex Crichton and contributors
+crossbeam-utils 0.8.23 - MIT (offered: MIT OR Apache-2.0) - bridge, runner
+    Copyright (c) 2019 The Crossbeam Project Developers
 crypto-common 0.1.7 - MIT (offered: MIT OR Apache-2.0) - bridge
     Copyright (c) 2021 RustCrypto Developers
 cursor-icon 1.2.0 - MIT (offered: MIT OR Apache-2.0 OR Zlib) - bridge, runner
@@ -189,6 +196,7 @@ equivalent 1.0.2 - MIT (offered: Apache-2.0 OR MIT) - bridge, runner
     Copyright (c) 2016--2023
 errno 0.3.14 - MIT (offered: MIT OR Apache-2.0) - bridge, runner
     Copyright (c) 2014 Chris Wong
+error-code 3.4.0 - BSL-1.0 (offered: BSL-1.0) - bridge, runner
 euclid 0.22.14 - MIT (offered: MIT OR Apache-2.0) - bridge, runner
     Copyright (c) 2012-2013 Mozilla Foundation
 fax 0.2.7 - MIT (offered: MIT) - bridge, runner
@@ -225,6 +233,8 @@ glutin-winit 0.5.0 - MIT (offered: MIT) - bridge, runner
 glutin_egl_sys 0.7.1 - Apache-2.0 (offered: Apache-2.0) - bridge, runner
     Copyright 2022 Kirill Chibisov
 glutin_glx_sys 0.6.1 - Apache-2.0 (offered: Apache-2.0) - bridge, runner
+    Copyright 2022 Kirill Chibisov
+glutin_wgl_sys 0.6.1 - Apache-2.0 (offered: Apache-2.0) - bridge, runner
     Copyright 2022 Kirill Chibisov
 guillotiere 0.7.0 - MIT (offered: MIT/Apache-2.0) - bridge, runner
     Copyright 2019 Nicolas Silva
@@ -537,6 +547,42 @@ wgpu-naga-bridge 29.0.4 - MIT (offered: MIT OR Apache-2.0) - bridge, runner
     Copyright (c) 2025 The gfx-rs developers
 wgpu-types 29.0.4 - MIT (offered: MIT OR Apache-2.0) - bridge, runner
     Copyright (c) 2025 The gfx-rs developers
+winapi-util 0.1.11 - MIT (offered: Unlicense OR MIT) - bridge, runner
+    Copyright (c) 2017 Andrew Gallant
+windows 0.54.0 - MIT (offered: MIT OR Apache-2.0) - bridge, runner
+    Copyright (c) Microsoft Corporation.
+windows-core 0.54.0 - MIT (offered: MIT OR Apache-2.0) - bridge, runner
+    Copyright (c) Microsoft Corporation.
+windows-core 0.62.2 - MIT (offered: MIT OR Apache-2.0) - bridge, runner
+    Copyright (c) Microsoft Corporation.
+windows-implement 0.60.2 - MIT (offered: MIT OR Apache-2.0) - bridge, runner
+    Copyright (c) Microsoft Corporation.
+windows-interface 0.59.3 - MIT (offered: MIT OR Apache-2.0) - bridge, runner
+    Copyright (c) Microsoft Corporation.
+windows-link 0.2.1 - MIT (offered: MIT OR Apache-2.0) - bridge, runner
+    Copyright (c) Microsoft Corporation.
+windows-result 0.1.2 - MIT (offered: MIT OR Apache-2.0) - bridge, runner
+    Copyright (c) Microsoft Corporation.
+windows-result 0.4.1 - MIT (offered: MIT OR Apache-2.0) - bridge, runner
+    Copyright (c) Microsoft Corporation.
+windows-strings 0.5.1 - MIT (offered: MIT OR Apache-2.0) - bridge, runner
+    Copyright (c) Microsoft Corporation.
+windows-sys 0.52.0 - MIT (offered: MIT OR Apache-2.0) - bridge, runner
+    Copyright (c) Microsoft Corporation.
+windows-sys 0.59.0 - MIT (offered: MIT OR Apache-2.0) - bridge, runner
+    Copyright (c) Microsoft Corporation.
+windows-sys 0.60.2 - MIT (offered: MIT OR Apache-2.0) - bridge, runner
+    Copyright (c) Microsoft Corporation.
+windows-sys 0.61.2 - MIT (offered: MIT OR Apache-2.0) - bridge, runner
+    Copyright (c) Microsoft Corporation.
+windows-targets 0.52.6 - MIT (offered: MIT OR Apache-2.0) - bridge, runner
+    Copyright (c) Microsoft Corporation.
+windows-targets 0.53.5 - MIT (offered: MIT OR Apache-2.0) - bridge, runner
+    Copyright (c) Microsoft Corporation.
+windows_x86_64_gnu 0.52.6 - MIT (offered: MIT OR Apache-2.0) - bridge, runner
+    Copyright (c) Microsoft Corporation.
+windows_x86_64_gnu 0.53.1 - MIT (offered: MIT OR Apache-2.0) - bridge, runner
+    Copyright (c) Microsoft Corporation.
 winit 0.30.13 - Apache-2.0 (offered: Apache-2.0) - bridge, runner
     Copyright the winit authors: The winit contributors, Pierre Krieger
 writeable 0.6.4 - Unicode-3.0 (offered: Unicode-3.0) - bridge, runner
@@ -1819,6 +1865,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 
 
+LICENSE OF clipboard-win 5.4.1 (BSL-1.0)
+
+BSL-1.0 (no license file shipped with the crate)
+
+
 LICENSE OF encoding_rs 0.8.42 (BSD-3-Clause)
 
 Copyright © WHATWG (Apple, Google, Mozilla, Microsoft).
@@ -2090,6 +2141,33 @@ Permission is hereby granted, free of charge, to any person obtaining a copy of 
 The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+
+LICENSE OF error-code 3.4.0 (BSL-1.0)
+
+Boost Software License - Version 1.0 - August 17th, 2003
+
+Permission is hereby granted, free of charge, to any person or organization
+obtaining a copy of the software and accompanying documentation covered by
+this license (the "Software") to use, reproduce, display, distribute,
+execute, and transmit the Software, and to prepare derivative works of the
+Software, and to permit third-parties to whom the Software is furnished to
+do so, all subject to the following:
+
+The copyright notices in the Software and this entire statement, including
+the above license grant, this restriction and the following disclaimer,
+must be included in all copies of the Software, in whole or in part, and
+all derivative works of the Software, unless such copies or derivative
+works are solely in the form of machine-executable object code generated by
+a source language processor.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE, TITLE AND NON-INFRINGEMENT. IN NO EVENT
+SHALL THE COPYRIGHT HOLDERS OR ANYONE DISTRIBUTING THE SOFTWARE BE LIABLE
+FOR ANY DAMAGES OR OTHER LIABILITY, WHETHER IN CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
 
 
 LICENSE OF foldhash 0.2.0 (Zlib)

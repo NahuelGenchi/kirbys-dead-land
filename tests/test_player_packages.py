@@ -15,16 +15,16 @@ import unittest
 PROJECT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT / 'scripts'))
 from build_bundle import RUNTIME, project_files
-from build_packages import APP, LOCKS, NOTICES, build_environment, layout, notice_paths, read_appimage, read_tar, \
-    write_appimage, write_tar
+from build_packages import APP, LOCKS, NOTICES, WINDOWS_PROGRAM, WINDOWS_RUNTIME_NOTICES, build_environment, layout, \
+    notice_paths, read_appimage, read_tar, read_zip, windows_runtime_notices, write_appimage, write_tar, write_zip
 from oracle_build import CORE, WRAPPER
 from package_release import lint_package
 
 HOME = os.fsencode(Path.home()) + b'/'
 
 
-def fake_bundle(folder: Path) -> Path:
-    bundle = folder / 'bundle'
+def fake_bundle(folder: Path, windows: bool = False) -> Path:
+    bundle = folder / ('bundle-windows' if windows else 'bundle')
     (bundle / 'project/scripts').mkdir(parents=True)
     (bundle / 'project/scripts/launch_runtime.py').write_text('print("launch")\n')
     (bundle / 'bundle.json').write_text(json.dumps({'version': '0.2.0', 'commit': 'abc', 'private': False}))
@@ -35,8 +35,9 @@ def fake_bundle(folder: Path) -> Path:
     for name in ('config.json', 'modinfo.json'):
         (runtime / name).write_text('{}\n')
     (bundle / 'bin').mkdir()
-    for name in ('libkssu_bridge.so', 'kssu-oracle-runner'):
-        (bundle / 'bin' / name).write_bytes(b'\x7fELF program')
+    programs = ('kssu_bridge.dll', 'kssu-oracle-runner.exe') if windows else ('libkssu_bridge.so', 'kssu-oracle-runner')
+    for name in programs:
+        (bundle / 'bin' / name).write_bytes(b'MZ program' if windows else b'\x7fELF program')
         (bundle / 'bin' / name).chmod(0o755)
     return bundle
 
@@ -105,6 +106,41 @@ class PackageLayoutTests(unittest.TestCase):
         self.assertEqual(first.read_bytes(), second.read_bytes())
         self.assertEqual(read_tar(first, 'KirbysDeadLand-0.2.0-x86_64'), files)
 
+    def windows_package(self):
+        sources = {}
+        for name in ('MinGW-w64', 'GCC'):
+            sources[name] = self.folder / f'{name}.copyright'
+            sources[name].write_text(f'{name} license text\n')
+        return layout('zip', fake_bundle(self.folder, windows=True), b'MZ launcher', b'', windows_runtime_notices(sources))
+
+    def test_zip_keeps_the_bundle_beside_the_windows_launcher(self):
+        files, built = self.windows_package()
+        self.assertEqual(files[WINDOWS_PROGRAM][0], b'MZ launcher')
+        self.assertIn(f'share/{APP}/bin/kssu_bridge.dll', files)
+        self.assertIn(f'share/{APP}/bin/kssu-oracle-runner.exe', files)
+        self.assertNotIn(APP, files)
+        self.assertIn(b'GCC license text', files[WINDOWS_RUNTIME_NOTICES][0])
+        self.assertIn(b'kssu_bridge.dll', files[WINDOWS_RUNTIME_NOTICES][0])
+        for name in ('LICENSE', 'NOTICES.txt', 'NOTICES-emulator.txt', WINDOWS_RUNTIME_NOTICES, 'README.txt'):
+            self.assertIn(name, files)
+        self.assertEqual(lint_package({name: data for name, (data, _) in files.items()}, built, [HOME], notice_paths('zip')), [])
+        # A Linux program in the Windows download is refused.
+        changed = {name: data for name, (data, _) in files.items()}
+        changed[f'share/{APP}/bin/kssu_bridge.dll'] = b'\x7fELF program'
+        self.assertTrue(lint_package(changed, built, [HOME], notice_paths('zip')))
+
+    def test_zip_round_trip_is_reproducible(self):
+        files, _ = self.windows_package()
+        first, second = self.folder / 'first.zip', self.folder / 'second.zip'
+        write_zip(first, 'KirbysDeadLand-0.3.0-windows-x64', files, 1_760_000_000)
+        write_zip(second, 'KirbysDeadLand-0.3.0-windows-x64', files, 1_760_000_000)
+        self.assertEqual(first.read_bytes(), second.read_bytes())
+        self.assertEqual(read_zip(first, 'KirbysDeadLand-0.3.0-windows-x64'), files)
+
+    def test_windows_notices_need_the_mingw_licenses(self):
+        with self.assertRaises(SystemExit):
+            windows_runtime_notices({'MinGW-w64': self.folder / 'missing'})
+
     @unittest.skipUnless(shutil.which('mksquashfs') and shutil.which('unsquashfs'), 'squashfs-tools not installed')
     def test_appimage_round_trip(self):
         files, _ = self.package('appimage')
@@ -165,9 +201,11 @@ class ReleaseWorkflowTests(unittest.TestCase):
     def test_local_container_matches_the_workflow(self):
         workflow = (PROJECT / '.github/workflows/release.yml').read_text()
         local = (PROJECT / 'scripts/release_container.sh').read_text()
-        image = re.search(r'ubuntu:22\.04@sha256:[0-9a-f]{64}', workflow).group()
-        self.assertIn(f"IMAGE='{image}'", local)
-        for step in ('bash scripts/release_tools.sh', 'python3 scripts/build_packages.py --output dist ${TAG:+--tag "$TAG"}',
+        for name, release in (('IMAGE', '22'), ('WINDOWS_IMAGE', '24')):
+            image = re.search(rf'ubuntu:{release}\.04@sha256:[0-9a-f]{{64}}', workflow).group()
+            self.assertIn(f"{name}='{image}'", local)
+        for step in ('bash scripts/release_tools.sh "$TARGET"',
+                     'python3 scripts/build_packages.py --target "$TARGET" --output dist ${TAG:+--tag "$TAG"}',
                      'python3 scripts/package_release.py --ref HEAD --output dist'):
             with self.subTest(step=step):
                 self.assertIn(step, workflow)
@@ -212,7 +250,31 @@ class ReleaseNotesTests(unittest.TestCase):
     def test_the_workflow_writes_the_notes(self):
         workflow = (PROJECT / '.github/workflows/release.yml').read_text()
         self.assertIn('python3 .github/release/notes.py "$TAG"', workflow)
-        self.assertIn('--notes-file notes/notes.md', workflow)
+        self.assertIn('--notes-file notes.md', workflow)
+
+    def test_pages_offer_windows_from_its_first_version(self):
+        folder = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, folder)
+        shutil.copyfile(self.notes.HERE / 'notes.md', folder / 'notes.md')
+        for tag in ('v0.2.9', 'v0.3.0'):
+            (folder / tag).mkdir()
+            for name in self.notes.pictures(tag) + self.notes.PARTS:
+                (folder / tag / name).write_text('part\n')
+        here, self.notes.HERE = self.notes.HERE, folder
+        self.addCleanup(setattr, self.notes, 'HERE', here)
+        linux = self.notes.render('v0.2.9', 'abc', 'owner/repo', 15_000_000)
+        both = self.notes.render('v0.3.0', 'abc', 'owner/repo', 15_000_000, 29_000_000)
+        self.assertNotIn('windows', linux.lower())
+        self.assertNotRegex(both, r'\$[a-z]|<!--')
+        self.assertIn('releases/download/v0.3.0/KirbysDeadLand-0.3.0-windows-x64.zip', both)
+        self.assertIn('v0.3.0/download-windows.png', both)
+        self.assertIn('<b>Windows:</b> one .zip, about 29 MB', both)
+        self.assertIn('**Linux** or **Windows 11**', both)
+        self.assertIn('Run anyway', both)
+        self.assertNotIn('Download the new file above and allow it to run', both)
+        (folder / 'v0.3.0' / 'download-windows.png').unlink()
+        with self.assertRaises(SystemExit):
+            self.notes.render('v0.3.0', 'abc', 'owner/repo')
 
 
 class MenuEntryTests(unittest.TestCase):

@@ -1,7 +1,8 @@
 <p align="center">
-  <img src="$media/banner.png" alt="Kirby's Dead Land $version. Play as Kirby in Dead Cells on Linux. Now with a launcher: no terminal needed." width="100%">
+  <img src="$media/banner.png" alt="Kirby's Dead Land $version. Play as Kirby in Dead Cells on $platforms. Now with a launcher: no terminal needed." width="100%">
 </p>
 
+<!-- linux-only -->
 <p align="center">
   <a href="$download/KirbysDeadLand-$version-x86_64.AppImage"><img src="$media/download.png" alt="Download for Linux" width="380"></a>
 </p>
@@ -10,17 +11,35 @@
   <b>$size</b> · for 64-bit Linux PCs<br>
   <sub>Prefer a normal folder? Get the <a href="$download/KirbysDeadLand-$version-x86_64.tar.gz">folder version (.tar.gz)</a> instead.</sub>
 </p>
+<!-- /linux-only -->
+<!-- windows -->
+<p align="center">
+  <a href="$download/KirbysDeadLand-$version-x86_64.AppImage"><img src="$media/download.png" alt="Download for Linux" width="340"></a>
+  &nbsp;
+  <a href="$download/KirbysDeadLand-$version-windows-x64.zip"><img src="$media/download-windows.png" alt="Download for Windows" width="340"></a>
+</p>
+
+<p align="center">
+  <b>Linux:</b> $size · <b>Windows:</b> $zip_size<br>
+  <sub>Prefer a normal folder on Linux? Get the <a href="$download/KirbysDeadLand-$version-x86_64.tar.gz">folder version (.tar.gz)</a> instead.</sub>
+</p>
+<!-- /windows -->
 
 $new
 
 <!-- updating -->
 ## ⬆️ Already playing an older version?
 
+<!-- linux-only -->
 1. Download the new file above and allow it to run (right-click › **Properties** › **Allow running as a program**).
+<!-- /linux-only -->
+<!-- windows -->
+1. Download the new version for your system above. On Linux, allow it to run (right-click › **Properties** › **Allow running as a program**); on Windows, unzip it.
+<!-- /windows -->
 2. Open it. It finds your existing setup, Kirby and saves by itself.
 3. It updates its mod files in a few seconds. Then press **Play**.
 
-Your Kirby saves and your normal Dead Cells saves are kept. You can delete the old file afterwards.
+Your Kirby saves and your normal Dead Cells saves are kept. You can delete the old version afterwards.
 <!-- /updating -->
 
 ## 🌟 What is this?
@@ -31,7 +50,7 @@ The launcher checks your PC, sets everything up once and starts the game. No ter
 
 ## ✅ What you need
 
-- 🐧 A 64-bit **Linux** PC
+- 💻 A 64-bit PC with $platforms_bold
 - 🎮 **Steam** with **Dead Cells** installed (tested with version 35)
 - ⭐ **Your own copy of Kirby Super Star Ultra (USA)** as a `.nds` file. It is not included here. The mod only reads it and never changes it.
 - 💾 About **1 GB** of free disk space, and about **6 GB** of free memory while playing
@@ -40,7 +59,13 @@ The launcher checks your PC, sets everything up once and starts the game. No ter
 
 ### 1 · Open the launcher
 
+<!-- linux-only -->
 Download the file above. Right-click it, open **Properties**, and turn on **Allow running as a program** (some PCs call it *Executable as program*). Then double-click it.
+<!-- /linux-only -->
+<!-- windows -->
+- 🐧 **Linux:** download the Linux file above. Right-click it, open **Properties**, and turn on **Allow running as a program** (some PCs call it *Executable as program*). Then double-click it.
+- 🪟 **Windows:** download the Windows file above, right-click it and choose **Extract All**. Open the new folder and double-click **Kirby's Dead Land**. If Windows says it protected your PC, choose **More info**, then **Run anyway**.
+<!-- /windows -->
 
 ### 2 · Let it check your PC
 
@@ -104,10 +129,13 @@ Something not working? [Open an issue](https://github.com/$repo/issues/new) and 
 | :--- | :--- |
 | `KirbysDeadLand-$version-x86_64.AppImage` | The launcher, one file (recommended) |
 | `KirbysDeadLand-$version-x86_64.tar.gz` | The same launcher as a folder. Unpack it and double-click `kirbys-dead-land`; `add-to-menu.sh` adds it to your applications menu. |
+<!-- windows -->
+| `KirbysDeadLand-$version-windows-x64.zip` | The launcher for Windows, as a folder. Extract it and double-click `Kirby's Dead Land`. |
+<!-- /windows -->
 | `kirbys-dead-land-$version.tar.gz` | Source code |
 | `*.sha256` | Checksums to check the downloads |
 
-Kirby's Dead Land is free software under the GNU GPL version 3. The launcher's **Settings › Licenses** (and `NOTICES.txt` and `NOTICES-emulator.txt` in each download) list the other software inside it.
+Kirby's Dead Land is free software under the GNU GPL version 3. The launcher's **Settings › Licenses** (and `NOTICES.txt` and `NOTICES-emulator.txt` in each download$windows_notices) list the other software inside it.
 
 Kirby Super Star Ultra and Dead Cells are not included. This project is not affiliated with or endorsed by Nintendo, HAL Laboratory, Motion Twin or Evil Empire.
 

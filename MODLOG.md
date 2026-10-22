@@ -3091,3 +3091,29 @@ the all-ability rendering tests as full gameplay acceptance.
   Kirby, and Close ending the game with the saves checked. On Linux, the launcher
   from the same tree set up a new data folder and ran the 72-second movement check
   in game (saves unchanged). Not run: anything on Windows 11.
+
+## 2026-10-22 — a Windows download in the release (#252)
+
+- Piece of the Windows 11 port (#241). `scripts/build_packages.py --target windows`
+  builds the runtime precompiled for Windows, `kssu_bridge.dll`,
+  `kssu-oracle-runner.exe` and the launcher with MinGW-w64, and packs
+  `KirbysDeadLand-<version>-windows-x64.zip` (`Kirby's Dead Land.exe` with the
+  bundle at `share/kirbys-dead-land`), linted and read back.
+- Notices: the bridge's and runner's crates for both systems in
+  `packaging/NOTICES-emulator.txt`, and `NOTICES-windows-runtime.txt` in the zip with
+  the MinGW-w64 runtime, winpthreads and GCC runtime licenses from the build
+  machine's packages.
+- The release workflow builds Linux and Windows as a matrix; the Windows leg runs
+  in a pinned `ubuntu:24.04` because Ubuntu 22.04's MinGW-w64 8 lacks the
+  placeholder memory calls melonDS's JIT uses (found by the first container build).
+  The release job writes the notes with both sizes; from v0.3.0 the page offers both
+  downloads and the Windows first step.
+- Build: `RELEASE_TARGETS=windows bash scripts/release_container.sh` on the branch:
+  the zip (58 files, 29.2 MB); every program imports only Windows system DLLs; no
+  home paths. Under Proton's Wine with the #250 stand-ins, the zip's launcher
+  `--check` found its own bundle, and `--autopilot --yes sandbox` re-ran the mod,
+  outfit and staging steps with that bundle, then stopped at the stand-in game as
+  in #250.
+- Not run: the Linux leg in the container (its steps did not change), the changed
+  workflow on GitHub (next tag), a fresh setup from this zip, and anything on
+  Windows 11.
