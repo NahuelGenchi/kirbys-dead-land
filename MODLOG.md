@@ -3141,7 +3141,11 @@ the all-ability rendering tests as full gameplay acceptance.
   1.18.1 an unfocused scope accepts the press that focuses it. The five scopes in
   `launcher/ui` now have `focus-on-click: false`; Tab still focuses them.
 - `tests/test_launcher_ui.py` checks every scope. Record in `docs/LAUNCHER.md`.
-- Not run: `cargo test`, a launcher build, a click in the window.
+- 2026-10-23, Linux: a launcher test sends one press and release to each of the
+  four exported button kinds in an offscreen window; each runs once, and with
+  `focus-on-click: true` none does. `cargo test` 37 passed, also as a Windows
+  program under Wine; both release builds built. Not run: a click in a real
+  window.
 
 ## 2026-10-22 — Kirby's textures in the host's RGBA value (#262)
 

@@ -403,5 +403,17 @@ system. The five scopes now have `focus-on-click: false`: a click goes to the
 `python -m unittest tests.test_launcher_ui` checks that every scope in
 `launcher/ui` says so.
 
-Not run: `cargo test`, a launcher build and a click in the window (this PC has no
-Rust toolchain; the owner's check follows a build).
+`shots::tests::one_click_runs_each_button` (in `launcher/src/shots.rs`) draws a
+`PrimaryButton`, `SecondaryButton`, `LinkButton` and `IconButton` in an
+offscreen software window and sends each one pointer press and release through
+Slint's own input path: each runs once. With `focus-on-click: true` put back in
+`widgets.slint` it fails with none run (`[0, 0, 0, 0]`), the fault seen on
+Windows. The settings `Switch` is not exported, so only the source check covers it.
+
+2026-10-23, Linux build machine, branch merged with `main` (`a6e493a`):
+`cargo test` in `launcher/`, 37 passed; the same tests built with `--target
+x86_64-pc-windows-gnu` and run under Wine (Proton Experimental), 37 passed;
+`cargo build --release` and `cargo build --release --target
+x86_64-pc-windows-gnu` both built. Not run: a click in a real window on either
+system (no input tool on this machine's Wayland desktop); the owner's check on
+Windows 11 follows a build.
