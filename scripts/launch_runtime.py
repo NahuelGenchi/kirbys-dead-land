@@ -336,6 +336,9 @@ def main() -> None:
             except OSError as error:
                 raise SystemExit(f'Windows refused to label the lab low integrity ({error}). '
                                  'With --normal-integrity the game runs with only the save backup and check.')
+            # At low integrity SDL's DirectInput start fails and SDL then finds no controller at
+            # all, though XInput works (#257). Without DirectInput it finds an Xbox controller.
+            env['SDL_JOYSTICK_DIRECTINPUT'] = '0'
     else:
         command = ['bwrap', '--die-with-parent', '--unshare-pid', '--ro-bind', '/', '/',
                    '--dev-bind' if args.play else '--dev', '/dev']

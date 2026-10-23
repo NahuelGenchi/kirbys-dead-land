@@ -3133,3 +3133,15 @@ the all-ability rendering tests as full gameplay acceptance.
   as Kirby with SDL3 audio; the released Windows `.zip` passed `--check` under
   Wine. Details in `docs/RELEASE.md`.
 
+
+## 2026-10-22 — a controller in the sandboxed Windows game (#257)
+
+- On the owner's Windows 11 PC the low-integrity game ignored an Xbox One
+  controller. A probe of DCCM's `SDL3.dll` (3.4.16) started by
+  `low_integrity.WindowsProcess` found the controller at normal integrity and
+  nothing at low integrity, though XInput read it at both. With
+  `SDL_JOYSTICK_DIRECTINPUT=0` SDL found it at low integrity, through XInput,
+  RawInput or WGI alone; turning off RawInput, HIDAPI or WGI instead did not.
+- `scripts/launch_runtime.py` sets `SDL_JOYSTICK_DIRECTINPUT=0` for a
+  low-integrity game only. Record in `docs/RUNTIME_LAUNCH.md`.
+- Not run: play with the controller in the game.

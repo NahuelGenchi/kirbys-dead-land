@@ -159,6 +159,14 @@ class LaunchTests(unittest.TestCase):
         self.assertIn("('DeadCellsModding.exe' if WINDOWS else 'DeadCellsModding')", LAUNCH)
         self.assertIn('(mod / TARGETS[HOST][1]).is_file()', LAUNCH)
 
+    def test_a_low_integrity_game_reads_controllers_without_directinput(self):
+        sandboxed = LAUNCH.index('label_low(lab)')
+        hint = LAUNCH.index("env['SDL_JOYSTICK_DIRECTINPUT'] = '0'")
+        self.assertLess(LAUNCH.index('if args.normal_integrity:'), sandboxed)
+        self.assertLess(sandboxed, hint)
+        self.assertLess(hint, LAUNCH.index("command = ['bwrap'"))
+        self.assertEqual(LAUNCH.count('SDL_JOYSTICK_DIRECTINPUT'), 1)
+
     def test_the_launcher_stops_a_windows_game_through_the_input(self):
         self.assertIn("if WINDOWS and args.play and sys.stdin is not None:\n            threading.Thread(target=stop_on_request, daemon=True).start()", LAUNCH)
         self.assertIn('not (WINDOWS and stopped)', LAUNCH)

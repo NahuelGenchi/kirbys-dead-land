@@ -86,6 +86,22 @@ Checked on 2026-10-21 under Wine (Proton Experimental) with the Windows Python 3
 
 On Linux the same day, `python3 scripts/check.py` passed, and an isolated root (`repros/scripts-246`) staged by these scripts had the same four symbolic links and `libkssu_bridge.so`. Its 60-second movement run (`--start-game --outfit KirbySuperStarUltra --input-plan movement`) activated Kirby, traced 1,625 original frames, left the saves unchanged and ended at the expected timeout.
 
+### Controllers at low integrity (#257)
+
+On the owner's Windows 11 PC (v0.3.0 download, one Xbox One controller on USB), the low-integrity game did not react to the controller. The game reads controllers through DCCM's `sdl.hdll` and `SDL3.dll` (SDL 3.4.16). A probe that starts SDL's joystick and gamepad subsystems and counts devices, started by `low_integrity.WindowsProcess`, found on 2026-10-22:
+
+| Started | XInput slot 0 | SDL joysticks / gamepads |
+| :--- | :--- | :--- |
+| Normal integrity | connected | 1 / 1 (`Xbox One Controller`) |
+| Low integrity | connected | 0 / 0 |
+| Low integrity, `SDL_JOYSTICK_RAWINPUT=0`, `_HIDAPI=0` or `_WGI=0` | connected | 0 / 0 |
+| Low integrity, `SDL_JOYSTICK_DIRECTINPUT=0` | connected | 1 / 1 |
+| Low integrity, DirectInput off and only XInput, only RawInput or only WGI | connected | 1 / 1 each |
+
+XInput works at low integrity; SDL's DirectInput start does not, and SDL then reports no controller. So a sandboxed game starts with `SDL_JOYSTICK_DIRECTINPUT=0`; `--normal-integrity` keeps SDL's defaults. A controller that only DirectInput reads (an older generic pad) stays unread at low integrity, as before. Steam Input does not reach a low-integrity game either: the game's log shows its shared memory and mutexes refused (`Failed creating mutex SteamController_Master_Command_mutex-IPCWrapper (GLE: 5)`), so the controller comes to the game through SDL alone.
+
+Not run: play with the controller in the game itself; a controller other than an Xbox One pad; Bluetooth.
+
 ## SDL3 audio (#248)
 
 Kirby's sound effects use the SDL3 that DCCM loads into the game ([AUDIO.md](AUDIO.md#sdl3-on-both-systems-248)). On activation the log says `Kirby audio: SDL3 playback stream open.`, or `Kirby audio unavailable:` with SDL's reason; play continues without sound in that case. The offscreen lab sets SDL's dummy audio driver, so a lab run checks the stream, not a sound device.
