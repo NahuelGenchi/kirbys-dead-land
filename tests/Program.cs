@@ -343,6 +343,24 @@ var fastSteps = new List<int>();
 int fastTotal = Run(fast, 144, 1440, fastSteps);
 Check(!fast.Locked && Math.Abs(fastTotal - FramePacer.DsRefreshRate * 10) <= 1 && fastSteps.All(n => n is 0 or 1),
     "A 144 Hz display keeps original real-time speed");
+// Steps so far plus the phase is the original time drawn: on a display the pacer does not lock to,
+// it advances by the same amount every host frame (#265).
+foreach (double hz in new[] { 75.0, 144.0, 50.0 })
+{
+    var even = new FramePacer();
+    double drawnBefore = double.NaN, drawnStep = FramePacer.DsRefreshRate / hz;
+    int stepsSoFar = 0;
+    bool smooth = true;
+    for (int i = 0; i < 600; i++)
+    {
+        stepsSoFar += even.Steps(1 / hz);
+        double drawn = stepsSoFar + even.Phase;
+        if (i > 0 && Math.Abs(drawn - drawnBefore - drawnStep) > 1e-9) smooth = false;
+        drawnBefore = drawn;
+    }
+    Check(!even.Locked && smooth && even.Phase is >= 0 and < 1, $"At {hz} Hz the drawn original time advances evenly");
+}
+Check(vsync.Locked && vsync.Phase == 1, "A locked display draws the last original frame");
 var slow = new FramePacer();
 Check(Run(slow, 30, 300) is >= 597 and <= 600, "A 30 Hz host runs two original frames per host frame");
 var paused = new FramePacer();

@@ -1297,6 +1297,22 @@ the log line `Kirby original machine:` names which one runs. Tools, tests and
 verifiers use the interpreter. Not verified: play in a window, bosses, a long
 session, and how it sounds.
 
+### Standing on host floors (#267, intentional deviation)
+
+Kirby's canvas is centred on the original's whole-pixel position of him, 14.5 px
+above his physical foot, and his standing body ends 12 px below that centre
+(frame trace: body bounds `(-12, -12, 11, 11)`). On a flat floor the original
+therefore draws his soles 3 px above its floor line. The host's walkable art
+(planks, stone tops) is drawn on the line, where the Beheaded's feet are, so on
+the owner's Windows PC Kirby and his helper stood about 3 px (9 screen px) above
+a wooden bridge and a stone ledge; foliage that rises above the line hid the gap
+elsewhere (owner's screenshots, 2026-10-23). The canvas is now drawn 3 px lower
+(`KirbySpriteRenderer.SoleDrop`), with everything in it: the helper, the
+original's effects and his projectiles. His physics, hurtbox, host position and
+the host equipment, which stands on the host hero's feet, are unchanged.
+
+Live, owner's Windows 11 PC, run `20261023-032041` (this change with #265's and #262's, launched with #257's script): the owner stood Kirby and his helper on the wooden bridge and the foliage ledge and reported them touching both. Exit 0, no fatal log, saves unchanged. Not run: Linux, ladders and ceilings, a held weapon or shield checked on purpose.
+
 ### The original's collision pool (#151, intentional deviation)
 
 The original takes every hit box and health record of an actor, a collision
@@ -1376,12 +1392,14 @@ cells above it (`ElevatorRide`):
   ride (live runs `20261006-000609` to `001130`, see [RUNTIME_LAUNCH.md](RUNTIME_LAUNCH.md#host-elevators)).
 - The host draws a moving elevator's platform behind its physical surface, by
   up to a tick of travel (13 px measured on a 64-cell elevator). Kirby standing
-  on it is drawn with the same lag (`KirbySpriteRenderer.SetDrawOffset`, set from
-  an `Elevator.postUpdate` hook), as are his sword and shield. Off the
-  platform, the offset eases back within a few frames. Drawn at his physical
-  position instead, he floated above the platform on the way up and sank into
-  it on the way down (owner recording 2026-10-06 19:50). His physics position is
-  unchanged.
+  on it is drawn with the same lag (`KirbySpriteRenderer.SetDrawOffset`), as are
+  his sword and shield. Off the platform, the offset eases back within a few
+  frames. Drawn at his physical position instead, he floated above the platform
+  on the way up and sank into it on the way down (owner recording 2026-10-06
+  19:50). His physics position is unchanged. Since #265 the offset is taken just
+  before Kirby is drawn, from where he then is: the host places the elevator's
+  sprite before the hero's update, and the original moves him in that update
+  (see [Between original frames](#between-original-frames-265-intentional-deviation)).
 - His host cell position is copied from the elevator exactly, as its own carry
   does. A pixel round trip could leave him a rounding error below the cell's
   ground height, and the host then called its landing handler every few
@@ -1940,6 +1958,43 @@ Live run `20261005-214713` took the T_Courtyard door: 148 of 149 cinematic polls
 were in the original Walk action (`0x060B`), facing right, with no Fall. Captured
 frames show changing walk poses up the steps until the fade. Exits where the
 host drops the hero, and walks to the left, have not been checked live.
+
+### Between original frames (#265, intentional deviation)
+
+The original runs at the DS's 59.83 Hz. `FramePacer` presents one original frame
+per host frame on a display within 3% of that rate; on any other display it runs
+the original in real time, so at 75 Hz one host frame in five has no original
+step (`Kirby pacing: … locked 0%, frames without a step 898–903` a minute on the
+owner's Windows PC). On those frames Kirby, his helper (drawn in his canvas) and
+his equipment stood still while the host camera and world moved on, and on a
+moving elevator he left its platform for that frame.
+
+On a display the pacer does not lock to, Kirby's canvas and equipment are now
+drawn between his last two original positions, by how far the host frame falls
+between those original frames (`FramePacer.Phase`, `KirbyNdsProvider.Smooth`):
+he moves at an even speed, half an original frame (about 8 ms) behind his physics
+position. The picture still changes once per original frame, and his physics,
+hurtbox and host position are the original's. Not in pauses, cinematics or
+deaths, not across a move of more than a cell (a teleport or a door), and not up
+and down while he stands on an elevator, where the elevator offset places him.
+Locked (60 Hz), the phase is 1 and nothing changes.
+
+The host's frame runs the camera and every entity's `postUpdate` (where an
+elevator places its sprite) before the hero's update, where the original steps,
+and then draws. The elevator offset used to be set in an `Elevator.postUpdate`
+hook, before the step that carries Kirby; at 60 Hz a step always followed. It is
+now taken in Kirby's render, after his steps, as the elevator's surface plus its
+sprite's lag, less his feet.
+
+Live, owner's Windows 11 PC, 75 Hz, every presented frame captured (DXGI desktop
+duplication) while riding an elevator with a helper: before the
+change Kirby's feet left the platform on two frames in five by 9 to 45 screen px
+(3 to 15 host px); after it, 554 of 568 frames are within one host pixel, and the
+rest are the arrival into a floor stop (the existing sunk stop) and frames where
+the platform left the measured strip. A trace at draw time put Kirby's canvas
+15 px above the elevator sprite on all 2,108 frames. Walking, his movement through
+the world advanced on every frame (median 3 host px) with no still frame. Not
+run: a 60 Hz display with this change, 144 Hz.
 ### Ability descriptions
 
 Issue #45. Intentional addition, mod-written text: these descriptions do not come

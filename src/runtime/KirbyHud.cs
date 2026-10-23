@@ -135,7 +135,7 @@ internal static class KirbyHud
     {
         if (texture is null)
         {
-            pixels = Pixels.Class.alloc(AbilityIcon.Size, AbilityIcon.Size, new PixelFormat.RGBA());
+            pixels = Pixels.Class.alloc(AbilityIcon.Size, AbilityIcon.Size, KirbySpriteRenderer.HostRgba());
             texture = Texture.Class.fromPixels(pixels, null!);
             texture.name = "kirby-original-ability-icon".AsHaxeString();
             texture.set_filter(new Filter.Nearest());

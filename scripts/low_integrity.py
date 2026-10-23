@@ -18,6 +18,21 @@ import subprocess
 LOW = 'S-1-16-4096'
 # A low label with no write up; a folder's also passes to what is created in it.
 FOLDER_LABEL, FILE_LABEL = 'S:(ML;OICI;NW;;;LW)', 'S:(ML;;NW;;;LW)'
+# The Steam client's objects that Steam's overlay opens in the game for XInput and Steam
+# Input (#257). Steam makes them at normal integrity, so a low-integrity game cannot open
+# them, and the overlay's XInput hook then reads through a null pointer. The owner chose to
+# label these, and only these, low (2026-10-22).
+STEAM_INPUT_OBJECTS = (
+    ('mapping', 'SteamXInput_mem-IPCWrapper'), ('mutex', 'SteamXInput_mutex-IPCWrapper'),
+    ('mapping', 'SteamController_Master_mem-IPCWrapper'), ('mapping', 'SteamController_Fast_Master_mem-IPCWrapper'),
+    ('mapping', 'SteamController_Slow_Master_mem-IPCWrapper'),
+    ('mutex', 'SteamController_Master_Command_mutex-IPCWrapper'),
+    ('mutex', 'SteamController_Master_Cursor_Control_mutex-IPCWrapper'),
+    ('mutex', 'SteamController_Master_Cursor_Data_mutex-IPCWrapper'),
+    ('mutex', 'SteamController_Master_Visualization_Data_mutex-IPCWrapper'),
+    ('event', 'SteamController_Master_DataWrittenSteam-IPCWrapper'),
+    ('event', 'SteamController_Master_DataWrittenGame-IPCWrapper'),
+)
 
 
 def environment_block(env: dict[str, str]) -> str:
@@ -100,6 +115,13 @@ if os.name == 'nt':
     ConvertSddl = _declare(advapi32, 'ConvertStringSecurityDescriptorToSecurityDescriptorW', BOOL, wintypes.LPCWSTR,
                            DWORD, P(ctypes.c_void_p), ctypes.c_void_p)
     SetFileSecurityW = _declare(advapi32, 'SetFileSecurityW', BOOL, wintypes.LPCWSTR, DWORD, ctypes.c_void_p)
+    GetSecurityDescriptorSacl = _declare(advapi32, 'GetSecurityDescriptorSacl', BOOL, ctypes.c_void_p, P(BOOL),
+                                         P(ctypes.c_void_p), P(BOOL))
+    SetSecurityInfo = _declare(advapi32, 'SetSecurityInfo', DWORD, HANDLE, ctypes.c_int, DWORD, ctypes.c_void_p,
+                               ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p)
+    OPENERS = {kind: _declare(kernel32, name, HANDLE, DWORD, BOOL, wintypes.LPCWSTR)
+               for kind, name in (('mapping', 'OpenFileMappingW'), ('mutex', 'OpenMutexW'), ('event', 'OpenEventW'))}
+    SE_KERNEL_OBJECT, WRITE_OWNER, ERROR_FILE_NOT_FOUND = 6, 0x80000, 2
 
     def _check(result):
         if not result:
@@ -131,6 +153,33 @@ if os.name == 'nt':
             for descriptor in descriptors:
                 LocalFree(descriptor)
         return files
+
+    def label_steam_input() -> tuple[int, list[str]]:
+        """Label the Steam client's input objects (STEAM_INPUT_OBJECTS) low integrity in this
+        session. Returns how many were labeled and the ones Windows refused; one Steam has
+        not made yet is skipped, since the game then makes it itself, at low integrity."""
+        descriptor, sacl = ctypes.c_void_p(), ctypes.c_void_p()
+        present, defaulted = BOOL(), BOOL()
+        _check(ConvertSddl(FILE_LABEL, SDDL_REVISION_1, ctypes.byref(descriptor), None))
+        labeled, refused = 0, []
+        try:
+            _check(GetSecurityDescriptorSacl(descriptor, ctypes.byref(present), ctypes.byref(sacl), ctypes.byref(defaulted)))
+            for kind, name in STEAM_INPUT_OBJECTS:
+                handle = OPENERS[kind](WRITE_OWNER, False, name)
+                if not handle:
+                    if ctypes.get_last_error() != ERROR_FILE_NOT_FOUND:
+                        refused.append(name)
+                    continue
+                try:
+                    if SetSecurityInfo(handle, SE_KERNEL_OBJECT, LABEL_SECURITY_INFORMATION, None, None, None, sacl):
+                        refused.append(name)
+                    else:
+                        labeled += 1
+                finally:
+                    CloseHandle(handle)
+        finally:
+            LocalFree(descriptor)
+        return labeled, refused
 
     def _token(low: bool):
         """A primary copy of this process's token, at low integrity if low is true."""
