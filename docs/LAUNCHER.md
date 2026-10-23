@@ -388,3 +388,20 @@ Not run: Windows 11 or the Windows Dead Cells; the low-integrity sandbox itself
 (Wine refuses the labels and ignores integrity levels); the file picker; opening
 folders and links with the shell; Cancel during setup from the window (the job is
 covered by its unit test only); and a person using the window.
+
+### One click per button (#258)
+
+On the owner's Windows 11 PC (v0.3.0 download), every button needed two clicks.
+Each button and the settings switch has a keyboard `FocusScope` above its
+`TouchArea`. In Slint 1.18.1 (`FocusScope::input_event` in
+`internal/core/items/input_items.rs`) an enabled scope that may take focus on a
+click (`focus-on-click`, true by default) and does not have it takes the press
+to focus itself and accepts it, so the `TouchArea` beneath never saw the first
+click; the second found the scope focused and passed. This does not depend on the
+system. The five scopes now have `focus-on-click: false`: a click goes to the
+`TouchArea`, and Tab, Return and Space work as before.
+`python -m unittest tests.test_launcher_ui` checks that every scope in
+`launcher/ui` says so.
+
+Not run: `cargo test`, a launcher build and a click in the window (this PC has no
+Rust toolchain; the owner's check follows a build).

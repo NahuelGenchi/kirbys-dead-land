@@ -31,6 +31,7 @@ component Switch {
         clicked => { root.checked = !root.checked; root.toggled(root.checked); }
     }
     focus := FocusScope {
+        focus-on-click: false;
         key-pressed(event) => {
             if event.text == " " || event.text == Key.Return { root.checked = !root.checked; root.toggled(root.checked); return accept; }
             reject

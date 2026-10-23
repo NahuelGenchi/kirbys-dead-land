@@ -3133,3 +3133,12 @@ the all-ability rendering tests as full gameplay acceptance.
   as Kirby with SDL3 audio; the released Windows `.zip` passed `--check` under
   Wine. Details in `docs/RELEASE.md`.
 
+
+## 2026-10-22 — one click per launcher button (#258)
+
+- Every launcher button needed two clicks on the owner's Windows 11 PC. The
+  buttons' keyboard `FocusScope`s lie above their `TouchArea`s, and in Slint
+  1.18.1 an unfocused scope accepts the press that focuses it. The five scopes in
+  `launcher/ui` now have `focus-on-click: false`; Tab still focuses them.
+- `tests/test_launcher_ui.py` checks every scope. Record in `docs/LAUNCHER.md`.
+- Not run: `cargo test`, a launcher build, a click in the window.
