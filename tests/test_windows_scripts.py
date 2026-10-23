@@ -159,6 +159,31 @@ class LaunchTests(unittest.TestCase):
         self.assertIn("('DeadCellsModding.exe' if WINDOWS else 'DeadCellsModding')", LAUNCH)
         self.assertIn('(mod / TARGETS[HOST][1]).is_file()', LAUNCH)
 
+    def test_a_low_integrity_game_reads_controllers_without_directinput(self):
+        sandboxed = LAUNCH.index('label_low(lab)')
+        hint = LAUNCH.index("env['SDL_JOYSTICK_DIRECTINPUT'] = '0'")
+        self.assertLess(LAUNCH.index('if args.normal_integrity:'), sandboxed)
+        self.assertLess(sandboxed, hint)
+        self.assertLess(hint, LAUNCH.index("command = ['bwrap'"))
+        self.assertEqual(LAUNCH.count('SDL_JOYSTICK_DIRECTINPUT'), 1)
+
+    def test_steam_input_is_opened_to_the_game_before_xinput(self):
+        # Steam's overlay crashes in XInput when the game cannot open these (#257).
+        steam = LAUNCH.index('labeled, refused = label_steam_input()')
+        self.assertLess(LAUNCH.index('label_low(lab)'), steam)
+        self.assertLess(steam, LAUNCH.index('if refused:'))
+        self.assertLess(LAUNCH.index('if refused:'), LAUNCH.index("env['SDL_JOYSTICK_DIRECTINPUT'] = '0'"))
+        self.assertIn("            else:\n                env['SDL_JOYSTICK_DIRECTINPUT'] = '0'", LAUNCH)
+
+    def test_only_the_chosen_steam_objects_are_labeled(self):
+        names = [name for _, name in low_integrity.STEAM_INPUT_OBJECTS]
+        self.assertEqual(len(names), 11)
+        self.assertEqual(len(set(names)), 11)
+        self.assertTrue(all(name.endswith('-IPCWrapper') and name.startswith(('SteamXInput_', 'SteamController_'))
+                            for name in names))
+        self.assertEqual({kind for kind, _ in low_integrity.STEAM_INPUT_OBJECTS}, {'mapping', 'mutex', 'event'})
+        self.assertIn(('mapping', 'SteamXInput_mem-IPCWrapper'), low_integrity.STEAM_INPUT_OBJECTS)
+
     def test_the_launcher_stops_a_windows_game_through_the_input(self):
         self.assertIn("if WINDOWS and args.play and sys.stdin is not None:\n            threading.Thread(target=stop_on_request, daemon=True).start()", LAUNCH)
         self.assertIn('not (WINDOWS and stopped)', LAUNCH)

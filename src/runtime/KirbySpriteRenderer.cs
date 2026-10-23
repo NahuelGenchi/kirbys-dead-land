@@ -53,6 +53,9 @@ public sealed unsafe class KirbySpriteRenderer : IDisposable
     // Whole host pixels Kirby and his equipment are drawn below their physical
     // position: the lag of the elevator sprite he stands on (see SetDrawOffset).
     private double drawOffsetY, bitmapBaseY, equipmentBaseY;
+    // Host pixels from Kirby's physical position to where he is drawn between
+    // two original frames (see SetSmoothing).
+    private double smoothX, smoothY;
     public int RenderedObjects { get; private set; }
     public int BodyPixels { get; private set; }
     /// <summary>Body pixel bounds relative to Kirby's anchor in the last texture (diagnostics).</summary>
@@ -105,8 +108,8 @@ public sealed unsafe class KirbySpriteRenderer : IDisposable
         // below it, so the original draws his soles 3 px above its floor line.
         // Host floor art is drawn on the line, as the Beheaded's feet are; the
         // canvas is drawn that much lower so he stands on it (#267).
-        bitmap!.x = System.Math.Floor((hero.cx + hero.xr) * 24 + 1e-6);
-        bitmapBaseY = System.Math.Floor((hero.cy + hero.yr) * 24 - 14.5 + 1e-6) + SoleDrop;
+        bitmap!.x = System.Math.Floor((hero.cx + hero.xr) * 24 + smoothX + 1e-6);
+        bitmapBaseY = System.Math.Floor((hero.cy + hero.yr) * 24 + smoothY - 14.5 + 1e-6) + SoleDrop;
         bitmap.y = bitmapBaseY + drawOffsetY;
         bitmap.alpha = hostSprite.alpha;
         bitmap.visible = hero.visible && hostSprite.visible && !arriving;
@@ -135,6 +138,14 @@ public sealed unsafe class KirbySpriteRenderer : IDisposable
     }
 
     public double DrawOffset => drawOffsetY;
+
+    /// <summary>
+    /// Draw Kirby, his canvas (the helper with him) and his equipment this many
+    /// host pixels from his physical position at the next Render: where he is
+    /// between the last two original frames on a display the frame pacer does
+    /// not lock to (#265). The picture still changes once per original frame.
+    /// </summary>
+    public void SetSmoothing(double x, double y) => (smoothX, smoothY) = (x, y);
 
     /// <summary>Forget flash-softening history after the machine loads another state.</summary>
     public void ResetPalette() => softener?.Reset();
@@ -273,9 +284,9 @@ public sealed unsafe class KirbySpriteRenderer : IDisposable
         // LightedLayers pass and does not reproduce the host material.
         equipment.blendMode = host.blendMode;
         equipment.color = host.color;
-        equipment.x = host.x;
-        equipmentBaseY = host.y;
-        equipment.y = host.y + drawOffsetY;
+        equipment.x = host.x + smoothX;
+        equipmentBaseY = host.y + smoothY;
+        equipment.y = equipmentBaseY + drawOffsetY;
         equipment.scaleX = host.scaleX;
         equipment.scaleY = host.scaleY;
         equipment.rotation = host.rotation;
@@ -328,10 +339,21 @@ public sealed unsafe class KirbySpriteRenderer : IDisposable
         equipment!.shaders = new dc.hxsl.ShaderList(equipmentNormal, tail!);
     }
 
+    /// <summary>
+    /// The host's own RGBA format value, for pixels a texture is made from. The
+    /// texture takes the host's format, and the Windows game converts pixels in
+    /// another RGBA value instead of accepting it ("Cannot convert from RGBA to
+    /// RGBA", #262). The pixels are written as RGBA bytes, so another native
+    /// format is refused.
+    /// </summary>
+    internal static PixelFormat HostRgba() => Texture.Class.nativeFormat is PixelFormat.RGBA rgba
+        ? rgba
+        : throw new InvalidOperationException($"Kirby needs RGBA textures; the host's native format is {Texture.Class.nativeFormat}.");
+
     private void EnsureTexture()
     {
         if (bitmap is not null) return;
-        pixels = Pixels.Class.alloc(CanvasWidth, CanvasHeight, new PixelFormat.RGBA());
+        pixels = Pixels.Class.alloc(CanvasWidth, CanvasHeight, HostRgba());
         texture = Texture.Class.fromPixels(pixels, null!);
         texture.name = "kirby-original-nds-obj".AsHaxeString();
         texture.set_filter(new dc.h3d.mat.Filter.Nearest());
