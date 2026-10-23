@@ -24,6 +24,15 @@ public sealed class FramePacer(double sourceRate)
     /// <summary>True while host frames are presented one original frame each.</summary>
     public bool Locked { get; private set; }
 
+    /// <summary>
+    /// Where this host frame falls between the last two original frames, from
+    /// 0 (the one before the last) to 1 (the last), after <see cref="Steps"/>.
+    /// Drawing a position this far between them moves it at an even speed on a
+    /// display the pacer does not lock to, half an original frame behind (#265).
+    /// Locked, every host frame shows the last original frame: 1.
+    /// </summary>
+    public double Phase => Locked ? 1 : credit;
+
     /// <param name="delta">Host frame time in seconds.</param>
     public int Steps(double delta)
     {
