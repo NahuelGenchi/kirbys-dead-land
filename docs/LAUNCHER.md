@@ -485,7 +485,7 @@ with no warnings: for Linux in `ubuntu:22.04` (packages 31.4 MB), and for
 `x86_64-pc-windows-gnu` with MinGW-w64 in `ubuntu:24.04` (packages 29.1 MB). That
 covers the XInput and evdev code paths. A build is not a test.
 
-2026-10-23, Linux build machine, the branch merged with `main` (`6d33368`, with
+2026-10-23, Linux build machine, the branch merged with `main` (`dbbb064`, with
 #258's `focus-on-click: false` beside each scope's `focus-on-tab-navigation`):
 `cargo test` in `launcher/` first failed `xinput_buttons_and_stick`. The shared
 `axis` helper centred XInput's −32768…32767 range at −0.5, so a stick at rest
