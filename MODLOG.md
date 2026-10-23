@@ -3148,6 +3148,8 @@ the all-ability rendering tests as full gameplay acceptance.
   focus; Tab visits only the overlay on top (`FocusLayer` in `launcher/ui/widgets.slint`)
   and no longer stops on the closed Settings sheet or the hidden clipboard field.
 - Unit tests for the mapping in `gamepad.rs`. Record in `docs/LAUNCHER.md`.
+- Build: the release workflow on the branch (run 39873165461) built the launcher
+  for Linux and `x86_64-pc-windows-gnu` with `--locked`, no warnings.
 - Not run here (no Rust or Python on this PC): `cargo test`, the Python tests and a
   controller in the window. The owner still has to check it with a real controller
   on Windows 11.

@@ -445,3 +445,22 @@ Not run: Windows 11 or the Windows Dead Cells; the low-integrity sandbox itself
 (Wine refuses the labels and ignores integrity levels); the file picker; opening
 folders and links with the shell; Cancel during setup from the window (the job is
 covered by its unit test only); and a person using the window.
+
+### Game controllers (#261)
+
+2026-10-22, the release workflow run by hand on branch `feat/261-launcher-gamepad`
+at `69230d6`, with no tag, so it kept the files as workflow artifacts only ([run
+39873165461](https://github.com/NahuelGenchi/kirbys-dead-land/actions/runs/39873165461)).
+Both legs passed. In each, `cargo build --release --locked` compiled the launcher
+with no warnings: for Linux in `ubuntu:22.04` (packages 31.4 MB), and for
+`x86_64-pc-windows-gnu` with MinGW-w64 in `ubuntu:24.04` (packages 29.1 MB). That
+covers the XInput and evdev code paths. A build is not a test.
+
+Not run: `cargo test` in `launcher/` (the 10 tests in `src/gamepad.rs`), on Linux
+or for Windows under Wine; the Python tests; and any controller in the window. The
+change was written on the owner's Windows 11 PC, which has neither Rust nor Python.
+The owner still has to check it with a real controller on Windows 11: the D-pad
+and stick move the ring through each screen's buttons, A presses, B closes
+Settings, Licenses and a question, and the controller does nothing while the game
+runs or another window is in front. The same check is open on Linux with the xpad
+driver.
