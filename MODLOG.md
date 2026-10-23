@@ -3134,6 +3134,19 @@ the all-ability rendering tests as full gameplay acceptance.
   Wine. Details in `docs/RELEASE.md`.
 
 
+## 2026-10-22 — one click per launcher button (#258)
+
+- Every launcher button needed two clicks on the owner's Windows 11 PC. The
+  buttons' keyboard `FocusScope`s lie above their `TouchArea`s, and in Slint
+  1.18.1 an unfocused scope accepts the press that focuses it. The five scopes in
+  `launcher/ui` now have `focus-on-click: false`; Tab still focuses them.
+- `tests/test_launcher_ui.py` checks every scope. Record in `docs/LAUNCHER.md`.
+- 2026-10-23, Linux: a launcher test sends one press and release to each of the
+  four exported button kinds in an offscreen window; each runs once, and with
+  `focus-on-click: true` none does. `cargo test` 37 passed, also as a Windows
+  program under Wine; both release builds built. Not run: a click in a real
+  window.
+
 ## 2026-10-22 — Kirby's textures in the host's RGBA value (#262)
 
 - On Windows 11 a new game ended when Kirby's session made his body texture:
