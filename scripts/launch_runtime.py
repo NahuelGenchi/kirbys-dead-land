@@ -22,7 +22,7 @@ from steam_paths import steam_root
 
 WINDOWS = os.name == 'nt'
 if WINDOWS:
-    from low_integrity import WindowsProcess, label_low
+    from low_integrity import WindowsProcess, label_low, label_steam_input
 
 
 TURBOJPEG_URL = 'https://archive.ubuntu.com/ubuntu/pool/universe/libj/libjpeg-turbo/libturbojpeg0_2.1.5-4ubuntu4_amd64.deb'
@@ -337,8 +337,15 @@ def main() -> None:
                 raise SystemExit(f'Windows refused to label the lab low integrity ({error}). '
                                  'With --normal-integrity the game runs with only the save backup and check.')
             # At low integrity SDL's DirectInput start fails and SDL then finds no controller at
-            # all, though XInput works (#257). Without DirectInput it finds an Xbox controller.
-            env['SDL_JOYSTICK_DIRECTINPUT'] = '0'
+            # all; only XInput sees one (#257). Steam's overlay hooks XInput in the game and
+            # needs the Steam client's input objects, so those are labeled low first. If any
+            # is refused, SDL keeps DirectInput and finds no controller, which cannot crash.
+            labeled, refused = label_steam_input()
+            if refused:
+                print(f'Windows refused to open Steam\'s controller channel to the game ({", ".join(refused)}); '
+                      'the game will not see a controller.', flush=True)
+            else:
+                env['SDL_JOYSTICK_DIRECTINPUT'] = '0'
     else:
         command = ['bwrap', '--die-with-parent', '--unshare-pid', '--ro-bind', '/', '/',
                    '--dev-bind' if args.play else '--dev', '/dev']

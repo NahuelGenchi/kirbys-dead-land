@@ -3145,3 +3145,19 @@ the all-ability rendering tests as full gameplay acceptance.
 - `scripts/launch_runtime.py` sets `SDL_JOYSTICK_DIRECTINPUT=0` for a
   low-integrity game only. Record in `docs/RUNTIME_LAUNCH.md`.
 - Not run: play with the controller in the game.
+
+## 2026-10-23 — Steam's overlay and the controller in the sandbox (#257)
+
+- With DirectInput off, the sandboxed game crashed at start whenever the Xbox
+  controller was connected. Steam's overlay, loaded into the game, hooks XInput and
+  reads the Steam client's input objects; a low-integrity game cannot open those,
+  and the hook read through a null pointer. Reproduced by loading
+  `gameoverlayrenderer64.dll` into the SDL probe. At low integrity only XInput
+  sees the pad (the earlier RawInput/WGI results used a wrong hint name).
+- The owner kept the overlay on and chose to label eleven Steam objects low
+  (`low_integrity.STEAM_INPUT_OBJECTS`) before a sandboxed game starts; the
+  DirectInput setting is applied only when none is refused. A deviation recorded
+  in `docs/RUNTIME_LAUNCH.md`.
+- Live, Windows 11: the owner played about 2.5 minutes as Kirby with the
+  controller in the sandbox, overlay on; it answered fully. Not run: the script's
+  labeling from a fresh Steam start (labeled by hand first), other controllers.

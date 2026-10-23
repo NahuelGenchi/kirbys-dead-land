@@ -88,19 +88,27 @@ On Linux the same day, `python3 scripts/check.py` passed, and an isolated root (
 
 ### Controllers at low integrity (#257)
 
-On the owner's Windows 11 PC (v0.3.0 download, one Xbox One controller on USB), the low-integrity game did not react to the controller. The game reads controllers through DCCM's `sdl.hdll` and `SDL3.dll` (SDL 3.4.16). A probe that starts SDL's joystick and gamepad subsystems and counts devices, started by `low_integrity.WindowsProcess`, found on 2026-10-22:
+On the owner's Windows 11 PC (v0.3.0 download, one Xbox One controller on USB, Steam overlay on), the low-integrity game did not react to the controller. The game reads controllers through DCCM's `sdl.hdll` and `SDL3.dll` (SDL 3.4.16). Two things stood in the way.
 
-| Started | XInput slot 0 | SDL joysticks / gamepads |
+**SDL finds no controller.** A probe that starts SDL's joystick and gamepad subsystems and counts devices, started by `low_integrity.WindowsProcess`, found on 2026-10-22:
+
+| Started | XInput slot 0 | SDL gamepads |
 | :--- | :--- | :--- |
-| Normal integrity | connected | 1 / 1 (`Xbox One Controller`) |
-| Low integrity | connected | 0 / 0 |
-| Low integrity, `SDL_JOYSTICK_RAWINPUT=0`, `_HIDAPI=0` or `_WGI=0` | connected | 0 / 0 |
-| Low integrity, `SDL_JOYSTICK_DIRECTINPUT=0` | connected | 1 / 1 |
-| Low integrity, DirectInput off and only XInput, only RawInput or only WGI | connected | 1 / 1 each |
+| Normal integrity | connected | 1 (`Xbox One Controller`) |
+| Low integrity | connected | 0 |
+| Low integrity, `SDL_JOYSTICK_RAWINPUT=0`, `_HIDAPI=0` or `_WGI=0` | connected | 0 |
+| Low integrity, `SDL_JOYSTICK_DIRECTINPUT=0` | connected | 1 |
+| Low integrity, DirectInput and XInput (`SDL_XINPUT_ENABLED=0`) off; RawInput with or without XInput correlation, or WGI alone | — | 0 |
 
-XInput works at low integrity; SDL's DirectInput start does not, and SDL then reports no controller. So a sandboxed game starts with `SDL_JOYSTICK_DIRECTINPUT=0`; `--normal-integrity` keeps SDL's defaults. A controller that only DirectInput reads (an older generic pad) stays unread at low integrity, as before. Steam Input does not reach a low-integrity game either: the game's log shows its shared memory and mutexes refused (`Failed creating mutex SteamController_Master_Command_mutex-IPCWrapper (GLE: 5)`), so the controller comes to the game through SDL alone.
+SDL's DirectInput start fails at low integrity, and SDL then reports no controller; with DirectInput off it finds the pad, and only through XInput. (A first version of this table credited RawInput and WGI; those runs used `SDL_JOYSTICK_XINPUT`, which is not SDL3's name, so XInput stayed on.)
 
-Not run: play with the controller in the game itself; a controller other than an Xbox One pad; Bluetooth.
+**Steam's overlay then crashes the game.** With `SDL_JOYSTICK_DIRECTINPUT=0` and the controller connected, the game stopped about a second after `Steam init... done` with `0xC0000005` in `Boot.main` (runs `20261022-232607`, `20261022-234249`; also with only SDL's XInput backend on). Unplugged at start, it reached the menu (`20261022-232909`). The game's own controller code is not the cause: in its bytecode `hxd.Pad.wait` opens each controller by index through `sdl.GameController`, and DCCM's SDL3 `gctrl_open` passes that index to `SDL_OpenGamepad`, which takes an ID (IDs start at 1), but `hxd.Pad.initPad` returns when the open fails (`SDL_OpenGamepad(0)`: `Couldn't find mapping for device (0)`). The crash is Steam's overlay (`gameoverlayrenderer64.dll`), which Steam loads into the game and which hooks XInput. Loaded into the probe at low integrity, it made a plain `XInputGetState` read address `0x11`; at normal integrity, or without it, the same call works. The overlay opens the Steam client's objects in the session's `BaseNamedObjects` (the game's log: `Failed creating mutex SteamController_Master_Command_mutex-IPCWrapper (GLE: 5)`). Steam makes them at normal integrity, so a low-integrity game may not open them for writing. Turning the overlay off was ruled out by the owner, and the overlay ignores `SteamGameId`: without it the game still loaded the overlay and crashed (`20261022-234548`).
+
+**The launch.** The owner chose (2026-10-22) to label eleven of the Steam client's objects low integrity before a low-integrity game starts (`low_integrity.STEAM_INPUT_OBJECTS`, `label_steam_input`): `SteamXInput_mem` and `SteamXInput_mutex`, the three `SteamController_*Master_mem` mappings, the four `SteamController_Master_*_mutex` mutexes and the two `SteamController_Master_DataWritten*` events, each with the `-IPCWrapper` suffix. Each gets the files' label (`S:(ML;;NW;;;LW)`); Steam's own access list is kept, and the label lasts until Steam closes them. This is a deviation from the sandbox: while Steam runs, any low-integrity process in the session may read and write those eleven objects (controller and cursor data between Steam and a game), not only the game. Nothing else of Steam's is changed. An object Steam has not made is skipped, since the game then makes it itself. Only when none is refused does the game start with `SDL_JOYSTICK_DIRECTINPUT=0`; otherwise the launch says so and SDL keeps DirectInput, finding no controller, which cannot crash. `--normal-integrity` changes neither.
+
+With the eleven labeled, the probe with the overlay loaded at low integrity read XInput slot 0 and opened the `Xbox One Controller` (ID 1), and the game started with the controller connected and the overlay on (`20261022-235653`, the #262 test lab). The owner played about 2.5 minutes as Kirby with the controller: menus and Kirby's moves and attacks all answered it. Exit code 0, no fatal log, saves unchanged. The overlay logged no failure at start; near the end it could not create four objects that were not labeled (`Failed creating auto reset event SteamController_Master_Command_written-IPCWrapper (GLE: 0)`, and the same for `Cursor_Control`, `Cursor_Data` and `Visualization_Data`), with no effect seen. The owner kept those, and the other `_avail` and `_mem` stream objects, out of the list.
+
+Not run: a controller other than an Xbox One pad; Bluetooth; Steam Input features (Steam's controller configurator in the game); `label_steam_input` from a fresh Steam start, as the objects had been labeled by hand beforehand.
 
 ## SDL3 audio (#248)
 
