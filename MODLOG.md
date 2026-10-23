@@ -3209,3 +3209,15 @@ the all-ability rendering tests as full gameplay acceptance.
   deviation in `docs/GAMEPLAY_FIDELITY.md`.
 - Live, Windows 11: the owner reported both feet touching on a bridge and a
   foliage ledge. Not run: Linux, ladders, ceilings, a held weapon on purpose.
+
+## 2026-10-23 — Linux live check of #265 and #267 (#269)
+
+- `main` (`a6e493a`) on the Linux build machine, isolated profile
+  `repros/m5-linux-20261023`: a movement run and an elevator run, offscreen. Walk,
+  hop and landing normal; Kirby's soles on the floor art and on the elevator
+  platform as drawn on all 5,075 riding frames; no fatal log, saves unchanged.
+- The offscreen lab has no frame cap: the pacing line read 83.6 host fps, locked
+  0%, so these runs used the in-between drawing of #265. The locked 60 Hz case
+  needs play in a window, started by a person; not run.
+- `python3 scripts/check.py` on the same commit passed. Record in
+  `docs/GAMEPLAY_FIDELITY.md`.
