@@ -112,3 +112,29 @@ existing checked GPU read covers these ranges. 2D OBJ mapping, 8bpp and affine
 icons are rejected rather than guessed. See
 [GAMEPLAY_FIDELITY.md](GAMEPLAY_FIDELITY.md#hud-ability-slot) for how the host
 slot is drawn.
+
+## The host's RGBA value (#262)
+
+Kirby's body texture (`KirbySpriteRenderer.EnsureTexture`) and the HUD ability
+icon (`KirbyHud.Upload`) are made with `Texture.fromPixels` from `hxd.Pixels` the
+adapter allocates. They were allocated with `new PixelFormat.RGBA()`. On the owner's
+Windows 11 PC (Dead Cells v35 `deadcells_gl.exe`, DCCM 35.13.6) the first host
+update of a Kirby session then ended the game: `GlDriver.uploadTexturePixels`
+threw `Cannot convert from RGBA to RGBA` from `Texture.fromPixels`
+(`lab/play-runs/20261022-232909`). The texture takes the host's own format value,
+and the Windows game did not take a separately made RGBA value as the same format;
+the Linux game does, for reasons not established. Both textures now allocate their
+pixels in `Texture.nativeFormat`, the value the texture itself gets, and the adapter
+refuses a native format other than RGBA, since both write RGBA bytes.
+
+2026-10-22, the same PC, runtime built there with the pinned SDK
+(`setup_runtime.py --data-root …\repros\sprite-texture --build`, 0 errors), staged
+into that private root with the installed bridge, seed state and outfit, and
+started with `launch_runtime.py --play` at low integrity. New game as Kirby for
+47 s: the session started (`Kirby audio: SDL3 playback stream open.`), Kirby broke
+two doors, took two hits and killed an Archer, the owner closed the game, exit code
+0, no fatal log, saves unchanged. The only error line is the known first-use
+`Shader missing from cache: shaderLinker_ad70e08c` ([PERFORMANCE.md](PERFORMANCE.md)).
+
+Not run: a copy ability, so the HUD icon's texture was not made in this run; the
+Linux game with this change.

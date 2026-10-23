@@ -3134,6 +3134,44 @@ the all-ability rendering tests as full gameplay acceptance.
   Wine. Details in `docs/RELEASE.md`.
 
 
+## 2026-10-22 — Kirby's textures in the host's RGBA value (#262)
+
+- On Windows 11 a new game ended when Kirby's session made his body texture:
+  `Cannot convert from RGBA to RGBA` in `Texture.fromPixels`. The body texture and
+  the HUD ability icon now allocate their pixels in `Texture.nativeFormat` and
+  refuse a native format other than RGBA. Record in `docs/RENDERING.md`.
+- Built and run on the owner's Windows 11 PC from a private root: 47 s as Kirby,
+  no fatal log, saves unchanged.
+- Not run: a copy ability (HUD icon), Linux.
+## 2026-10-22 — a controller in the sandboxed Windows game (#257)
+
+- On the owner's Windows 11 PC the low-integrity game ignored an Xbox One
+  controller. A probe of DCCM's `SDL3.dll` (3.4.16) started by
+  `low_integrity.WindowsProcess` found the controller at normal integrity and
+  nothing at low integrity, though XInput read it at both. With
+  `SDL_JOYSTICK_DIRECTINPUT=0` SDL found it at low integrity, through XInput,
+  RawInput or WGI alone; turning off RawInput, HIDAPI or WGI instead did not.
+- `scripts/launch_runtime.py` sets `SDL_JOYSTICK_DIRECTINPUT=0` for a
+  low-integrity game only. Record in `docs/RUNTIME_LAUNCH.md`.
+- Not run: play with the controller in the game.
+
+## 2026-10-23 — Steam's overlay and the controller in the sandbox (#257)
+
+- With DirectInput off, the sandboxed game crashed at start whenever the Xbox
+  controller was connected. Steam's overlay, loaded into the game, hooks XInput and
+  reads the Steam client's input objects; a low-integrity game cannot open those,
+  and the hook read through a null pointer. Reproduced by loading
+  `gameoverlayrenderer64.dll` into the SDL probe. At low integrity only XInput
+  sees the pad (the earlier RawInput/WGI results used a wrong hint name).
+- The owner kept the overlay on and chose to label eleven Steam objects low
+  (`low_integrity.STEAM_INPUT_OBJECTS`) before a sandboxed game starts; the
+  DirectInput setting is applied only when none is refused. A deviation recorded
+  in `docs/RUNTIME_LAUNCH.md`.
+- Live, Windows 11: the owner played about 2.5 minutes as Kirby with the
+  controller in the sandbox, overlay on; it answered fully. After a Steam restart
+  the launch script labeled the objects itself and the game started with the pad
+  connected; in a second run from the script the controller answered fully.
+  Not run: other controllers.
 ## 2026-10-23 — Kirby between original frames at 75 Hz (#265)
 
 - On the owner's 75 Hz Windows display one host frame in five runs no original

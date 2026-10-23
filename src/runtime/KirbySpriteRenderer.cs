@@ -333,10 +333,21 @@ public sealed unsafe class KirbySpriteRenderer : IDisposable
         equipment!.shaders = new dc.hxsl.ShaderList(equipmentNormal, tail!);
     }
 
+    /// <summary>
+    /// The host's own RGBA format value, for pixels a texture is made from. The
+    /// texture takes the host's format, and the Windows game converts pixels in
+    /// another RGBA value instead of accepting it ("Cannot convert from RGBA to
+    /// RGBA", #262). The pixels are written as RGBA bytes, so another native
+    /// format is refused.
+    /// </summary>
+    internal static PixelFormat HostRgba() => Texture.Class.nativeFormat is PixelFormat.RGBA rgba
+        ? rgba
+        : throw new InvalidOperationException($"Kirby needs RGBA textures; the host's native format is {Texture.Class.nativeFormat}.");
+
     private void EnsureTexture()
     {
         if (bitmap is not null) return;
-        pixels = Pixels.Class.alloc(CanvasWidth, CanvasHeight, new PixelFormat.RGBA());
+        pixels = Pixels.Class.alloc(CanvasWidth, CanvasHeight, HostRgba());
         texture = Texture.Class.fromPixels(pixels, null!);
         texture.name = "kirby-original-nds-obj".AsHaxeString();
         texture.set_filter(new dc.h3d.mat.Filter.Nearest());
