@@ -320,6 +320,11 @@ limited-use ability; Kirby has no health flask (#101).
   Original objects ride with him while it moves (an intentional deviation; see
   [Host elevators](docs/GAMEPLAY_FIDELITY.md#host-elevators-deviation)). Other
   elevator types and generated elevator levels were not run live.
+- On a display the frame pacer does not lock to (75 Hz on the owner's Windows
+  PC), Kirby is drawn between his last two original positions, so he and his
+  helper move evenly and stay on a moving elevator (an intentional deviation; see
+  [Between original frames](docs/GAMEPLAY_FIDELITY.md#between-original-frames-265-intentional-deviation)).
+  At 60 Hz nothing changes; that was not run again live.
 - In live runs `20261005-232657` and `20261005-232901`, Kirby climbed natural
   vines grown through the host's own `VineLadder.activate`, hung, climbed down,
   stood on the ledge at the top and climbed back down from it.

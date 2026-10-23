@@ -450,7 +450,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
             if (paused) { pacer.Reset(); audio?.Pause(); }
             else StepDeath(delta);
             Smooth(h, normal: false);
-            RenderSource();
+            RenderSource(h);
             return;
         }
         if (sourceDead) ReviveSource(session);
@@ -460,10 +460,10 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
             if (!paused) CancelStomp();
             Smooth(h, normal: false);
             int walk = paused ? 0 : cinematicWalk.Update((h.cx + h.xr) * 24, delta);
-            if (walk == 0) { pacer.Reset(); audio?.Pause(); RenderSource(); return; }
+            if (walk == 0) { pacer.Reset(); audio?.Pause(); RenderSource(h); return; }
             int walkSteps = pacer.Steps(delta);
             for (int i = 0; i < walkSteps; i++) StepCinematicWalk(h, walk);
-            RenderSource();
+            RenderSource(h);
             PumpAudio();
             return;
         }
@@ -482,7 +482,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         long stepped = System.Diagnostics.Stopwatch.GetTimestamp();
         mark = LabPerfProbe.Start();
         Smooth(h, normal: true);
-        RenderSource();
+        RenderSource(h);
         LabPerfProbe.Stop(LabPerfProbe.Section.Render, mark);
         mark = LabPerfProbe.Start();
         KirbyAbilityItems.Sync(session, mouthfulItems, pendingCopy, starItems);
@@ -627,9 +627,10 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         previousAbility = nds.State.Ability;
         nds.SetHealth((ushort)Math.Clamp(session.Hero.life, 1, sourceMaxLife), (ushort)sourceMaxLife);
     }
-    private void RenderSource()
+    private void RenderSource(Hero hero)
     {
         if (nds is null || renderer is null) return;
+        AlignToElevator(hero);
         if (firstRender) LabActivationTrace.Mark("First source Render begin", gc: true);
         renderer.Render(nds);
         if (firstRender) { LabActivationTrace.Mark("First source Render complete", gc: true); firstRender = false; }
@@ -926,7 +927,7 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
         // Kirby standing on an elevator is drawn with its platform (AlignToElevator);
         // off it, that offset eases back over a few frames instead of jumping.
         standingOn = riding?.Tracked is { } on && Math.Abs(feet + lift - on.Surface) < 0.01 ? on.Elevator : null;
-        (standingFeet, standingSunk) = (feet + lift, riding?.Tracked.Sunk ?? false);
+        standingSunk = riding?.Tracked.Sunk ?? false;
         if (standingOn is null && renderer is { DrawOffset: not 0 } drawn) drawn.SetDrawOffset(drawn.DrawOffset * 0.5);
         // Host shields block from the front and host weapons aim by this facing.
         hero.dir = state.FacesLeft ? -1 : 1;
@@ -1010,26 +1011,27 @@ public sealed unsafe class KirbyNdsProvider(RuntimeConfig config, string modRoot
     internal (int X, int Y)? SourceWindow => window;
     // Host pixels the current step's window is lifted by (ElevatorRide): host y = original-frame y + lift.
     private double lift;
-    // The elevator Kirby stood on at the end of the latest original frame, the
-    // host y of his feet then, and whether its surface was sunk into a floor.
+    // The elevator Kirby stood on at the end of the latest original frame, and
+    // whether its surface was sunk into a floor.
     private dc.en.inter.Elevator? standingOn;
-    private double standingFeet;
     private bool standingSunk;
     // Host pixels the elevator sprite may lag its physical surface: over a tick of the fastest elevators.
     private const double MaxElevatorDrawLag = 48;
     /// <summary>
-    /// Host frame event, after an elevator placed its sprite: draw Kirby standing
-    /// on it with the same lag behind its physical surface (see SetDrawOffset).
-    /// The original carries him only in its own frames, so on a host frame with
-    /// none (one in five at 75 Hz) the elevator has moved on from where it left
-    /// him; he is drawn with that carry too, on the platform (#265).
+    /// Before Kirby is drawn: draw him standing on his elevator with the same lag
+    /// behind its physical surface as its sprite (see SetDrawOffset). The host
+    /// places that sprite before the hero's update, and the original moves Kirby
+    /// in that update, so the offset is taken here, from where he now is: an
+    /// original frame carries him with the elevator, and a host frame with none
+    /// (one in five at 75 Hz) leaves him where he was, under a sprite that has
+    /// moved on (#265).
     /// </summary>
-    internal void AlignToElevator(dc.en.inter.Elevator elevator)
+    private void AlignToElevator(Hero hero)
     {
-        if (renderer is null || standingOn?.HashlinkPointer != elevator.HashlinkPointer || elevator.spr is not { } sprite) return;
+        if (renderer is null || standingOn is not { spr: { } sprite } elevator) return;
         double lag = sprite.y - ElevatorRide.Surface(elevator.cy, elevator.yr);
-        double missed = ElevatorRide.Effective(elevator.cy, elevator.yr, standingSunk) - standingFeet;
-        renderer.SetDrawOffset((Math.Abs(lag) <= MaxElevatorDrawLag ? lag : 0) + (Math.Abs(missed) <= MaxElevatorDrawLag ? missed : 0));
+        double offset = ElevatorRide.Effective(elevator.cy, elevator.yr, standingSunk) + (Math.Abs(lag) <= MaxElevatorDrawLag ? lag : 0) - HostPixel(hero).Y;
+        renderer.SetDrawOffset(Math.Abs(offset) <= 2 * MaxElevatorDrawLag ? offset : 0);
     }
     // Host elevators on this level, with each one's surface at the previous original frame.
     private sealed class TrackedElevator(dc.en.inter.Elevator elevator)
