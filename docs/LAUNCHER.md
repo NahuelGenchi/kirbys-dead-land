@@ -485,9 +485,19 @@ with no warnings: for Linux in `ubuntu:22.04` (packages 31.4 MB), and for
 `x86_64-pc-windows-gnu` with MinGW-w64 in `ubuntu:24.04` (packages 29.1 MB). That
 covers the XInput and evdev code paths. A build is not a test.
 
-Not run: `cargo test` in `launcher/` (the 10 tests in `src/gamepad.rs`), on Linux
-or for Windows under Wine; the Python tests; and any controller in the window. The
-change was written on the owner's Windows 11 PC, which has neither Rust nor Python.
+2026-10-23, Linux build machine, the branch merged with `main` (`6d33368`, with
+#258's `focus-on-click: false` beside each scope's `focus-on-tab-navigation`):
+`cargo test` in `launcher/` first failed `xinput_buttons_and_stick`. The shared
+`axis` helper centred XInput's −32768…32767 range at −0.5, so a stick at rest
+read 0.000015 instead of 0. `from_xinput` now scales from 0, XInput's rest
+position, and `axis` serves only evdev. Then `cargo test`, 47 passed; the same
+tests built for `x86_64-pc-windows-gnu` and run under Wine (Proton
+Experimental), 47 passed; `cargo build --release` for both targets with no
+warnings; the Python tests, 112 passed.
+
+Not run: any controller in the window, on Linux or Windows (none is connected to
+the Linux build machine). The change was written on the owner's Windows 11 PC,
+which has neither Rust nor Python.
 The owner still has to check it with a real controller on Windows 11: the D-pad
 and stick move the ring through each screen's buttons, A presses, B closes
 Settings, Licenses and a question, and the controller does nothing while the game

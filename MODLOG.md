@@ -3150,9 +3150,13 @@ the all-ability rendering tests as full gameplay acceptance.
 - Unit tests for the mapping in `gamepad.rs`. Record in `docs/LAUNCHER.md`.
 - Build: the release workflow on the branch (run 39873165461) built the launcher
   for Linux and `x86_64-pc-windows-gnu` with `--locked`, no warnings.
-- Not run here (no Rust or Python on this PC): `cargo test`, the Python tests and a
-  controller in the window. The owner still has to check it with a real controller
-  on Windows 11.
+- Not run on the owner's PC (no Rust or Python there): `cargo test`, the Python
+  tests and a controller in the window.
+- 2026-10-23, Linux build machine, merged with main: `cargo test` caught a stick at
+  rest reading 0.000015 through XInput (the range's middle is −0.5); `from_xinput`
+  now scales from 0. Then 47 tests passed on Linux and under Wine, both release
+  builds had no warnings, and the Python tests passed. No controller was connected
+  there; the owner still has to check one on Windows 11.
 
 ## 2026-10-22 — one click per launcher button (#258)
 

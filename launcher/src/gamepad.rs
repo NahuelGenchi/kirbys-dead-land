@@ -119,6 +119,7 @@ impl Navigator {
 }
 
 /// A raw axis reading between `min` and `max`, from -1 to 1.
+#[cfg(any(unix, test))]
 fn axis(value: i32, min: i32, max: i32) -> f32 {
     if max <= min {
         return 0.0;
@@ -131,7 +132,7 @@ fn axis(value: i32, min: i32, max: i32) -> f32 {
 /// XInput, on Windows.
 #[cfg(any(windows, test))]
 mod xinput {
-    use super::{axis, Pad};
+    use super::Pad;
     #[cfg(windows)]
     use windows_sys::Win32::UI::Input::XboxController::{XInputGetState, XINPUT_STATE};
 
@@ -153,8 +154,9 @@ mod xinput {
             right: buttons & DPAD_RIGHT != 0,
             a: buttons & A != 0,
             b: buttons & B != 0,
-            x: axis(x.into(), i16::MIN.into(), i16::MAX.into()),
-            y: -axis(y.into(), i16::MIN.into(), i16::MAX.into()),
+            // XInput's stick rests at exactly 0; the middle of its range is -0.5.
+            x: (f32::from(x) / f32::from(i16::MAX)).clamp(-1.0, 1.0),
+            y: -(f32::from(y) / f32::from(i16::MAX)).clamp(-1.0, 1.0),
         }
     }
 
