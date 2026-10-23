@@ -3133,3 +3133,13 @@ the all-ability rendering tests as full gameplay acceptance.
   as Kirby with SDL3 audio; the released Windows `.zip` passed `--check` under
   Wine. Details in `docs/RELEASE.md`.
 
+
+## 2026-10-22 — Kirby's textures in the host's RGBA value (#262)
+
+- On Windows 11 a new game ended when Kirby's session made his body texture:
+  `Cannot convert from RGBA to RGBA` in `Texture.fromPixels`. The body texture and
+  the HUD ability icon now allocate their pixels in `Texture.nativeFormat` and
+  refuse a native format other than RGBA. Record in `docs/RENDERING.md`.
+- Built and run on the owner's Windows 11 PC from a private root: 47 s as Kirby,
+  no fatal log, saves unchanged.
+- Not run: a copy ability (HUD icon), Linux.
