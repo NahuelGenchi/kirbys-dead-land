@@ -108,7 +108,9 @@ SDL's DirectInput start fails at low integrity, and SDL then reports no controll
 
 With the eleven labeled, the probe with the overlay loaded at low integrity read XInput slot 0 and opened the `Xbox One Controller` (ID 1), and the game started with the controller connected and the overlay on (`20261022-235653`, the #262 test lab). The owner played about 2.5 minutes as Kirby with the controller: menus and Kirby's moves and attacks all answered it. Exit code 0, no fatal log, saves unchanged. The overlay logged no failure at start; near the end it could not create four objects that were not labeled (`Failed creating auto reset event SteamController_Master_Command_written-IPCWrapper (GLE: 0)`, and the same for `Cursor_Control`, `Cursor_Data` and `Visualization_Data`), with no effect seen. The owner kept those, and the other `_avail` and `_mem` stream objects, out of the list.
 
-Not run: a controller other than an Xbox One pad; Bluetooth; Steam Input features (Steam's controller configurator in the game); `label_steam_input` from a fresh Steam start, as the objects had been labeled by hand beforehand.
+The launch script's own labeling, after the owner restarted Steam (the objects carried no label again): `launch_runtime.py --play` from this branch, run `20261022-221352`, reported no refusal; afterwards all nine `SteamController_*` objects carried the low label. The game started with the controller connected, the overlay logged no failure at start, and the owner played about 1.5 minutes as Kirby without using the controller (the four unlabeled `_written` events failed near the end, as before). Exit code 0, no fatal log, saves unchanged.
+
+Not run: controller input in a run labeled by the launch script itself (it was shown in `20261022-235653` with the same eleven labels set by the same calls); a controller other than an Xbox One pad; Bluetooth; Steam Input features (Steam's controller configurator in the game).
 
 ## SDL3 audio (#248)
 

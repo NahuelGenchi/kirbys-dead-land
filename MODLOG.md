@@ -3159,5 +3159,6 @@ the all-ability rendering tests as full gameplay acceptance.
   DirectInput setting is applied only when none is refused. A deviation recorded
   in `docs/RUNTIME_LAUNCH.md`.
 - Live, Windows 11: the owner played about 2.5 minutes as Kirby with the
-  controller in the sandbox, overlay on; it answered fully. Not run: the script's
-  labeling from a fresh Steam start (labeled by hand first), other controllers.
+  controller in the sandbox, overlay on; it answered fully. After a Steam restart
+  the launch script labeled the objects itself and the game started with the pad
+  connected (controller not used in that run). Not run: other controllers.
