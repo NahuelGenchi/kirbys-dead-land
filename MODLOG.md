@@ -3245,3 +3245,12 @@ the all-ability rendering tests as full gameplay acceptance.
   needs play in a window, started by a person; not run.
 - `python3 scripts/check.py` on the same commit passed. Record in
   `docs/GAMEPLAY_FIDELITY.md`.
+
+## 2026-10-23 — v0.3.1, a second Windows test release (#271)
+
+- Version 0.3.1 in `mod.json`, the runtime adapter and the launcher, and its
+  release page parts and pictures in `.github/release/v0.3.1/`, with everything
+  merged since v0.3.0 (#257, #258, #261, #262, #265, #267).
+- A pre-release like v0.3.0: Latest stays v0.2.1 until the owner checks the
+  Windows download on Windows 11 (#241). The container build, the tag, the
+  workflow run and the download checks follow in `docs/RELEASE.md`.
