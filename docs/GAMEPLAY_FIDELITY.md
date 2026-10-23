@@ -1311,7 +1311,19 @@ elsewhere (owner's screenshots, 2026-10-23). The canvas is now drawn 3 px lower
 original's effects and his projectiles. His physics, hurtbox, host position and
 the host equipment, which stands on the host hero's feet, are unchanged.
 
-Live, owner's Windows 11 PC, run `20261023-032041` (this change with #265's and #262's, launched with #257's script): the owner stood Kirby and his helper on the wooden bridge and the foliage ledge and reported them touching both. Exit 0, no fatal log, saves unchanged. Not run: Linux, ladders and ceilings, a held weapon or shield checked on purpose.
+Live, owner's Windows 11 PC, run `20261023-032041` (this change with #265's and #262's, launched with #257's script): the owner stood Kirby and his helper on the wooden bridge and the foliage ledge and reported them touching both. Exit 0, no fatal log, saves unchanged. Not run: ladders and ceilings, a held weapon or shield checked on purpose.
+
+Live, Linux build machine, 2026-10-23, `main` at `a6e493a`, isolated profile
+`repros/m5-linux-20261023`, offscreen. Run `20261023-014302`, `--input-plan
+movement`: Kirby walked 195 px, stopped, hopped and landed back on the same
+floor line (feet 1800 before and after), and inhaled, at 76/76; a capture of him
+standing after the walk (original frame 4473) shows his soles on the top row of
+the stone floor art. Run `20261023-014531` (the elevator rides under #265 above):
+his canvas sat 2.5 px below the old placement at rest (`kirbyY − (feet − 14.5)`;
+3 px less the half pixel the whole-pixel anchor drops) and 2.5 to 3.3 px while
+moving, with his soles on the platform as drawn. Both ended at the time limit
+with no fatal log; the launcher reported the source saves unchanged, and the
+owner's 17 real save files hashed the same before and after.
 
 ### The original's collision pool (#151, intentional deviation)
 
@@ -1995,6 +2007,20 @@ the platform left the measured strip. A trace at draw time put Kirby's canvas
 15 px above the elevator sprite on all 2,108 frames. Walking, his movement through
 the world advanced on every frame (median 3 host px) with no still frame. Not
 run: a 60 Hz display with this change, 144 Hz.
+
+Live, Linux build machine, 2026-10-23, `main` at `a6e493a` (#265, #267 and the
+Windows fixes), isolated profile `repros/m5-linux-20261023`, offscreen lab run
+`20261023-014531` (software drawing, no frame cap): the pacing line read `host
+83.6 fps, original 59.6 fps, locked 0%, frames without a step 1521, with several
+62`, so the in-between drawing was on for the whole run. An elevator built in the
+first level (`elevator-spawn`) made five 264 px rides, three up and two down,
+with no input: all 5,075 original frames on it standing (`0406`) at 76/76, and
+Kirby's drawn soles (canvas `y` + 12) on the elevator sprite's `y` on every one,
+moving (360) and stopped (4,715). The trace has one row per original frame, so it
+does not show the host frames drawn between them. Ended at the time limit, no
+fatal log, saves unchanged. Not run: the locked case at 60 Hz. The lab has no
+frame cap, and play in a window (`--play`), which locks to the display, waits for
+a person to start a game.
 ### Ability descriptions
 
 Issue #45. Intentional addition, mod-written text: these descriptions do not come
