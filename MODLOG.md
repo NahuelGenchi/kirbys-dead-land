@@ -3153,3 +3153,91 @@ the all-ability rendering tests as full gameplay acceptance.
 - Not run here (no Rust or Python on this PC): `cargo test`, the Python tests and a
   controller in the window. The owner still has to check it with a real controller
   on Windows 11.
+
+## 2026-10-22 — one click per launcher button (#258)
+
+- Every launcher button needed two clicks on the owner's Windows 11 PC. The
+  buttons' keyboard `FocusScope`s lie above their `TouchArea`s, and in Slint
+  1.18.1 an unfocused scope accepts the press that focuses it. The five scopes in
+  `launcher/ui` now have `focus-on-click: false`; Tab still focuses them.
+- `tests/test_launcher_ui.py` checks every scope. Record in `docs/LAUNCHER.md`.
+- 2026-10-23, Linux: a launcher test sends one press and release to each of the
+  four exported button kinds in an offscreen window; each runs once, and with
+  `focus-on-click: true` none does. `cargo test` 37 passed, also as a Windows
+  program under Wine; both release builds built. Not run: a click in a real
+  window.
+
+## 2026-10-22 — Kirby's textures in the host's RGBA value (#262)
+
+- On Windows 11 a new game ended when Kirby's session made his body texture:
+  `Cannot convert from RGBA to RGBA` in `Texture.fromPixels`. The body texture and
+  the HUD ability icon now allocate their pixels in `Texture.nativeFormat` and
+  refuse a native format other than RGBA. Record in `docs/RENDERING.md`.
+- Built and run on the owner's Windows 11 PC from a private root: 47 s as Kirby,
+  no fatal log, saves unchanged.
+- Not run: a copy ability (HUD icon), Linux.
+## 2026-10-22 — a controller in the sandboxed Windows game (#257)
+
+- On the owner's Windows 11 PC the low-integrity game ignored an Xbox One
+  controller. A probe of DCCM's `SDL3.dll` (3.4.16) started by
+  `low_integrity.WindowsProcess` found the controller at normal integrity and
+  nothing at low integrity, though XInput read it at both. With
+  `SDL_JOYSTICK_DIRECTINPUT=0` SDL found it at low integrity, through XInput,
+  RawInput or WGI alone; turning off RawInput, HIDAPI or WGI instead did not.
+- `scripts/launch_runtime.py` sets `SDL_JOYSTICK_DIRECTINPUT=0` for a
+  low-integrity game only. Record in `docs/RUNTIME_LAUNCH.md`.
+- Not run: play with the controller in the game.
+
+## 2026-10-23 — Steam's overlay and the controller in the sandbox (#257)
+
+- With DirectInput off, the sandboxed game crashed at start whenever the Xbox
+  controller was connected. Steam's overlay, loaded into the game, hooks XInput and
+  reads the Steam client's input objects; a low-integrity game cannot open those,
+  and the hook read through a null pointer. Reproduced by loading
+  `gameoverlayrenderer64.dll` into the SDL probe. At low integrity only XInput
+  sees the pad (the earlier RawInput/WGI results used a wrong hint name).
+- The owner kept the overlay on and chose to label eleven Steam objects low
+  (`low_integrity.STEAM_INPUT_OBJECTS`) before a sandboxed game starts; the
+  DirectInput setting is applied only when none is refused. A deviation recorded
+  in `docs/RUNTIME_LAUNCH.md`.
+- Live, Windows 11: the owner played about 2.5 minutes as Kirby with the
+  controller in the sandbox, overlay on; it answered fully. After a Steam restart
+  the launch script labeled the objects itself and the game started with the pad
+  connected; in a second run from the script the controller answered fully.
+  Not run: other controllers.
+## 2026-10-23 — Kirby between original frames at 75 Hz (#265)
+
+- On the owner's 75 Hz Windows display one host frame in five runs no original
+  step. Kirby, his helper and his equipment stopped on those frames, and on a
+  moving elevator he left the platform. When the pacer is not locked, Kirby is
+  now drawn between his last two original positions by `FramePacer.Phase`; at
+  60 Hz nothing changes.
+- The elevator offset moved from an `Elevator.postUpdate` hook into Kirby's
+  render: a frame trace showed the host runs every `postUpdate` before the
+  hero's update, where the original carries him, and then draws.
+- Checked by capturing every presented frame (DXGI duplication) while riding:
+  Kirby within one host pixel of the platform on 554 of 568 frames (before:
+  off by up to 15 host px on two frames in five). Recorded as an intentional
+  deviation in `docs/GAMEPLAY_FIDELITY.md`.
+- Not run: a 60 Hz display, Linux, `scripts/check.py`.
+## 2026-10-23 — Kirby stands on host floors (#267)
+
+- Kirby and his helper stood 3 px above flat host floors (planks, stone): the
+  original draws his soles 3 px above its floor line, and host floor art is on
+  the line. The canvas is drawn 3 px lower (`KirbySpriteRenderer.SoleDrop`);
+  physics, hurtbox and host equipment are unchanged. Recorded as an intentional
+  deviation in `docs/GAMEPLAY_FIDELITY.md`.
+- Live, Windows 11: the owner reported both feet touching on a bridge and a
+  foliage ledge. Not run: Linux, ladders, ceilings, a held weapon on purpose.
+
+## 2026-10-23 — Linux live check of #265 and #267 (#269)
+
+- `main` (`a6e493a`) on the Linux build machine, isolated profile
+  `repros/m5-linux-20261023`: a movement run and an elevator run, offscreen. Walk,
+  hop and landing normal; Kirby's soles on the floor art and on the elevator
+  platform as drawn on all 5,075 riding frames; no fatal log, saves unchanged.
+- The offscreen lab has no frame cap: the pacing line read 83.6 host fps, locked
+  0%, so these runs used the in-between drawing of #265. The locked 60 Hz case
+  needs play in a window, started by a person; not run.
+- `python3 scripts/check.py` on the same commit passed. Record in
+  `docs/GAMEPLAY_FIDELITY.md`.

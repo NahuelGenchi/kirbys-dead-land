@@ -290,3 +290,49 @@ pub fn run(out: &Path, art_root: Option<PathBuf>, scale: f32) -> Result<(), Stri
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::Offscreen;
+    use slint::platform::software_renderer::{MinimalSoftwareWindow, RepaintBufferType};
+    use slint::platform::{PointerEventButton, WindowEvent};
+    use slint::ComponentHandle;
+
+    slint::slint! {
+        // The app's own fonts, as in app.slint: a test program may find no system font (Wine).
+        import "ui/fonts/Fredoka.ttf";
+        import "ui/fonts/Nunito.ttf";
+        import { Theme } from "ui/theme.slint";
+        import { PrimaryButton, SecondaryButton, LinkButton, IconButton } from "ui/widgets.slint";
+        export component Clicks inherits Window {
+            width: 400px;
+            height: 200px;
+            default-font-family: Theme.body;
+            in-out property <[int]> counts: [0, 0, 0, 0];
+            PrimaryButton { x: 0; y: 0; width: 200px; height: 50px; text: "Primary"; clicked => { root.counts[0] += 1; } }
+            SecondaryButton { x: 200px; y: 0; width: 200px; height: 50px; text: "Secondary"; clicked => { root.counts[1] += 1; } }
+            LinkButton { x: 0; y: 100px; width: 200px; height: 50px; text: "Link"; clicked => { root.counts[2] += 1; } }
+            IconButton { x: 200px; y: 100px; label: "Icon"; clicked => { root.counts[3] += 1; } }
+        }
+    }
+
+    /// One press and release on each button runs it once (#258): the keyboard
+    /// focus scope above each button's touch area must not take the first click.
+    #[test]
+    fn one_click_runs_each_button() {
+        let window = MinimalSoftwareWindow::new(RepaintBufferType::NewBuffer);
+        slint::platform::set_platform(Box::new(Offscreen { window: window.clone() })).unwrap();
+        let clicks = Clicks::new().unwrap();
+        window.set_size(slint::PhysicalSize::new(400, 200));
+        clicks.show().unwrap();
+        for (x, y) in [(100.0, 25.0), (300.0, 25.0), (100.0, 125.0), (220.0, 120.0)] {
+            let position = slint::LogicalPosition::new(x, y);
+            window.dispatch_event(WindowEvent::PointerMoved { position });
+            window.dispatch_event(WindowEvent::PointerPressed { position, button: PointerEventButton::Left });
+            window.dispatch_event(WindowEvent::PointerReleased { position, button: PointerEventButton::Left });
+            slint::platform::update_timers_and_animations();
+        }
+        let counts: Vec<i32> = slint::Model::iter(&clicks.get_counts()).collect();
+        assert_eq!(counts, [1, 1, 1, 1], "Primary, Secondary, Link and Icon buttons after one click each");
+    }
+}

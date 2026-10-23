@@ -176,6 +176,9 @@ export component PrimaryButton {
         clicked => { root.clicked(); }
     }
     focus := FocusScope {
+        // Focus comes from Tab only: a scope that takes focus on a click keeps that
+        // first click from the TouchArea beneath it (#258).
+        focus-on-click: false;
         enabled: root.enabled && root.interactive;
         focus-on-tab-navigation: root.layer == FocusLayer.top;
         key-pressed(event) => {
@@ -248,6 +251,7 @@ export component SecondaryButton {
         clicked => { root.clicked(); }
     }
     focus := FocusScope {
+        focus-on-click: false;
         enabled: root.enabled;
         focus-on-tab-navigation: root.layer == FocusLayer.top;
         key-pressed(event) => {
@@ -302,6 +306,7 @@ export component LinkButton {
         clicked => { root.clicked(); }
     }
     focus := FocusScope {
+        focus-on-click: false;
         focus-on-tab-navigation: root.layer == FocusLayer.top;
         key-pressed(event) => {
             if event.text == Key.Return || event.text == " " { root.clicked(); return accept; }
@@ -345,6 +350,7 @@ export component IconButton {
         clicked => { root.clicked(); }
     }
     focus := FocusScope {
+        focus-on-click: false;
         focus-on-tab-navigation: root.layer == FocusLayer.top;
         key-pressed(event) => {
             if event.text == Key.Return || event.text == " " { root.clicked(); return accept; }

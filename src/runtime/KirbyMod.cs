@@ -56,7 +56,6 @@ public sealed class KirbyMod(ModInfo info) : ModBase(info), IOnHeroUpdate,
         KirbyHealing.Install();
         KirbyVines.Install();
         KirbyBumps.Install();
-        dc.en.inter.Hook_Elevator.postUpdate += (orig, elevator) => { orig(elevator); NativeProvider?.AlignToElevator(elevator); };
         if (config.EnableOriginalRuntime)
         {
             if (string.IsNullOrWhiteSpace(config.RomPath) || string.IsNullOrWhiteSpace(config.SeedStatePath))

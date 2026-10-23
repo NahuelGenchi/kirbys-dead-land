@@ -446,6 +446,35 @@ Not run: Windows 11 or the Windows Dead Cells; the low-integrity sandbox itself
 folders and links with the shell; Cancel during setup from the window (the job is
 covered by its unit test only); and a person using the window.
 
+### One click per button (#258)
+
+On the owner's Windows 11 PC (v0.3.0 download), every button needed two clicks.
+Each button and the settings switch has a keyboard `FocusScope` above its
+`TouchArea`. In Slint 1.18.1 (`FocusScope::input_event` in
+`internal/core/items/input_items.rs`) an enabled scope that may take focus on a
+click (`focus-on-click`, true by default) and does not have it takes the press
+to focus itself and accepts it, so the `TouchArea` beneath never saw the first
+click; the second found the scope focused and passed. This does not depend on the
+system. The five scopes now have `focus-on-click: false`: a click goes to the
+`TouchArea`, and Tab, Return and Space work as before.
+`python -m unittest tests.test_launcher_ui` checks that every scope in
+`launcher/ui` says so.
+
+`shots::tests::one_click_runs_each_button` (in `launcher/src/shots.rs`) draws a
+`PrimaryButton`, `SecondaryButton`, `LinkButton` and `IconButton` in an
+offscreen software window and sends each one pointer press and release through
+Slint's own input path: each runs once. With `focus-on-click: true` put back in
+`widgets.slint` it fails with none run (`[0, 0, 0, 0]`), the fault seen on
+Windows. The settings `Switch` is not exported, so only the source check covers it.
+
+2026-10-23, Linux build machine, branch merged with `main` (`a6e493a`):
+`cargo test` in `launcher/`, 37 passed; the same tests built with `--target
+x86_64-pc-windows-gnu` and run under Wine (Proton Experimental), 37 passed;
+`cargo build --release` and `cargo build --release --target
+x86_64-pc-windows-gnu` both built. Not run: a click in a real window on either
+system (no input tool on this machine's Wayland desktop); the owner's check on
+Windows 11 follows a build.
+
 ### Game controllers (#261)
 
 2026-10-22, the release workflow run by hand on branch `feat/261-launcher-gamepad`

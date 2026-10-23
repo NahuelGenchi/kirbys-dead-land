@@ -32,6 +32,7 @@ component Switch {
         clicked => { root.checked = !root.checked; root.toggled(root.checked); }
     }
     focus := FocusScope {
+        focus-on-click: false;
         focus-on-tab-navigation: root.layer == FocusLayer.top;
         key-pressed(event) => {
             if event.text == " " || event.text == Key.Return { root.checked = !root.checked; root.toggled(root.checked); return accept; }
