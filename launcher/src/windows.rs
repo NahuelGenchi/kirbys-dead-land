@@ -1,6 +1,7 @@
 //! The Windows calls behind the launcher's system questions (#250): the
-//! registry, the process list, free memory, the shell, drive permissions and
-//! job objects. Linux answers the same questions in `system.rs` and `steam.rs`.
+//! registry, the process list, free memory, the shell, drive permissions, job
+//! objects and the window in front. Linux answers the same questions in
+//! `system.rs` and `steam.rs`.
 
 use std::ffi::OsStr;
 use std::os::windows::ffi::{OsStrExt, OsStringExt};
@@ -17,7 +18,7 @@ use windows_sys::Win32::System::Registry::{RegGetValueW, HKEY_CURRENT_USER, RRF_
 use windows_sys::Win32::System::SystemInformation::{GlobalMemoryStatusEx, MEMORYSTATUSEX};
 use windows_sys::Win32::System::SystemServices::FILE_PERSISTENT_ACLS;
 use windows_sys::Win32::UI::Shell::ShellExecuteW;
-use windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+use windows_sys::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId, SW_SHOWNORMAL};
 
 /// What `CreateProcess` gets for every script the launcher starts: a console of
 /// its own that never shows, as the launcher has none to share.
@@ -95,6 +96,14 @@ pub fn drive_permissions(path: &Path) -> Option<(String, bool)> {
 /// which a Windows GUI program is not given.
 pub fn attach_parent_console() {
     unsafe { AttachConsole(ATTACH_PARENT_PROCESS) };
+}
+
+/// Whether the window in front is the launcher's. XInput reads a controller
+/// whichever program is in front, so the launcher acts on it only then (#261).
+pub fn in_front() -> bool {
+    let mut process = 0u32;
+    unsafe { GetWindowThreadProcessId(GetForegroundWindow(), &mut process) };
+    process == std::process::id()
 }
 
 /// A job object that holds a script and every program it starts, and ends them

@@ -77,6 +77,13 @@ export component Icon inherits Image {
     height: 20px;
 }
 
+// The layer that has the focus: 0 for the screens, then each overlay above them
+// (AppWindow sets it). Tab, and so a game controller, visits only the buttons on
+// it, and its main button takes the focus by itself (#261).
+export global FocusLayer {
+    in-out property <int> top: 0;
+}
+
 export component FocusRing inherits Rectangle {
     in property <bool> shown;
     in property <length> radius;
@@ -104,6 +111,9 @@ export component PrimaryButton {
     in property <length> font-size: 17px;
     in property <color> from: Theme.pink;
     in property <color> to: Theme.peach;
+    // Its FocusLayer, and whether it takes the focus whenever it can be pressed there.
+    in property <int> layer: 0;
+    in property <bool> autofocus: false;
     out property <bool> hovered: touch.has-hover;
     callback clicked;
     height: 50px;
@@ -113,6 +123,10 @@ export component PrimaryButton {
     accessible-label: root.text;
     accessible-enabled: root.enabled;
     accessible-action-default => { if root.enabled && !root.busy { root.clicked(); } }
+
+    property <bool> wants-focus: root.autofocus && root.enabled && root.interactive && root.layer == FocusLayer.top;
+    init => { if root.wants-focus { focus.focus(); } }
+    changed wants-focus => { if root.wants-focus { focus.focus(); } }
 
     if root.glow: Drawn {
         x: -22px;
@@ -163,6 +177,7 @@ export component PrimaryButton {
     }
     focus := FocusScope {
         enabled: root.enabled && root.interactive;
+        focus-on-tab-navigation: root.layer == FocusLayer.top;
         key-pressed(event) => {
             if event.text == Key.Return || event.text == " " {
                 if root.enabled && !root.busy { root.clicked(); }
@@ -183,6 +198,8 @@ export component SecondaryButton {
     in property <bool> busy: false;
     in property <length> font-size: 14.5px;
     in property <color> accent: Theme.ink;
+    in property <int> layer: 0;
+    in property <bool> autofocus: false;
     callback clicked;
     height: 38px;
     min-width: content.min-width;
@@ -191,6 +208,10 @@ export component SecondaryButton {
     accessible-label: root.text;
     accessible-enabled: root.enabled;
     accessible-action-default => { if root.enabled { root.clicked(); } }
+
+    property <bool> wants-focus: root.autofocus && root.enabled && root.layer == FocusLayer.top;
+    init => { if root.wants-focus { focus.focus(); } }
+    changed wants-focus => { if root.wants-focus { focus.focus(); } }
 
     Rectangle {
         border-radius: root.height / 2;
@@ -228,6 +249,7 @@ export component SecondaryButton {
     }
     focus := FocusScope {
         enabled: root.enabled;
+        focus-on-tab-navigation: root.layer == FocusLayer.top;
         key-pressed(event) => {
             if event.text == Key.Return || event.text == " " {
                 if root.enabled { root.clicked(); }
@@ -246,6 +268,7 @@ export component LinkButton {
     in property <bool> has-icon: false;
     in property <color> color: Theme.pink-soft;
     in property <length> font-size: 14px;
+    in property <int> layer: 0;
     callback clicked;
     min-width: content.min-width;
     min-height: 24px;
@@ -279,6 +302,7 @@ export component LinkButton {
         clicked => { root.clicked(); }
     }
     focus := FocusScope {
+        focus-on-tab-navigation: root.layer == FocusLayer.top;
         key-pressed(event) => {
             if event.text == Key.Return || event.text == " " { root.clicked(); return accept; }
             reject
@@ -292,6 +316,8 @@ export component IconButton {
     in property <string> label;
     in property <length> size: 40px;
     in property <color> color: Theme.ink-dim;
+    in property <int> layer: 0;
+    in property <bool> autofocus: false;
     callback clicked;
     width: root.size;
     height: root.size;
@@ -299,6 +325,10 @@ export component IconButton {
     accessible-role: button;
     accessible-label: root.label;
     accessible-action-default => { root.clicked(); }
+
+    property <bool> wants-focus: root.autofocus && root.layer == FocusLayer.top;
+    init => { if root.wants-focus { focus.focus(); } }
+    changed wants-focus => { if root.wants-focus { focus.focus(); } }
     Rectangle {
         border-radius: root.size / 2;
         background: touch.pressed ? #ffffff14 : touch.has-hover ? #ffffff1f : transparent;
@@ -315,6 +345,7 @@ export component IconButton {
         clicked => { root.clicked(); }
     }
     focus := FocusScope {
+        focus-on-tab-navigation: root.layer == FocusLayer.top;
         key-pressed(event) => {
             if event.text == Key.Return || event.text == " " { root.clicked(); return accept; }
             reject
