@@ -8,6 +8,7 @@ mod art;
 mod autopilot;
 mod config;
 mod controller;
+mod gamepad;
 mod paths;
 mod play;
 mod rom;
@@ -145,6 +146,7 @@ fn main() {
         autopilot::start(&app, PathBuf::from(dir), choices)
     });
     controller.start();
+    gamepad::start(&app);
     if let Err(error) = app.run() {
         eprintln!("{error}");
         std::process::exit(1);

@@ -193,6 +193,7 @@ export component ChecksScreen {
                     has-icon: true;
                     enabled: root.ready && !root.checking;
                     glow: root.ready && !root.checking;
+                    autofocus: true;
                     width: 196px;
                     clicked => { root.next(); }
                 }
@@ -412,6 +413,7 @@ export component SetupScreen {
                 }
                 if root.state != SetupState.running: PrimaryButton {
                     text: root.state == SetupState.failed ? "Try again" : "Continue setup";
+                    autofocus: true;
                     icon: Icons.refresh;
                     has-icon: true;
                     width: 176px;
@@ -509,6 +511,7 @@ export component HomeScreen {
                 has-icon: !root.playing;
                 busy: root.busy;
                 interactive: !root.playing && !root.busy;
+                autofocus: true;
                 from: root.playing ? Theme.mint : Theme.pink;
                 to: root.playing ? #3fc9d6 : Theme.peach;
                 clicked => { root.play(); }

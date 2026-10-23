@@ -1,7 +1,7 @@
 import "fonts/Fredoka.ttf";
 import "fonts/Nunito.ttf";
 import { Theme, Art, Tone } from "theme.slint";
-import { Drawn, Icons, Icon, Sparkle, IconButton, LinkButton } from "widgets.slint";
+import { Drawn, Icons, Icon, Sparkle, IconButton, LinkButton, FocusLayer } from "widgets.slint";
 import { ChecksScreen, SetupScreen, HomeScreen, CheckItem, StepItem, Ability, PlayState, SetupState } from "screens.slint";
 import { SettingsSheet, Question, Licenses, Toast } from "overlays.slint";
 
@@ -109,6 +109,22 @@ export component AppWindow inherits Window {
         root.show-toast("Copied");
     }
 
+    // The overlay on top has the focus (FocusLayer): 3 a question, 2 the
+    // licenses, 1 the settings, 0 the screen (#261).
+    property <int> focus-layer: root.question-id != "" ? 3 : root.licenses-open ? 2 : root.settings-open ? 1 : 0;
+    changed focus-layer => { FocusLayer.top = root.focus-layer; }
+
+    // B on a game controller: closes the overlay on top, as a click beside it does.
+    public function back() {
+        if root.question-id != "" {
+            root.answer(root.question-id, false);
+        } else if root.licenses-open {
+            root.licenses-open = false;
+        } else if root.settings-open {
+            root.settings-open = false;
+        }
+    }
+
     toast-timer := Timer {
         interval: 2200ms;
         running: false;
@@ -118,12 +134,19 @@ export component AppWindow inherits Window {
         }
     }
 
-    clipboard := TextInput {
-        x: -100px;
-        width: 10px;
-        height: 10px;
-        opacity: 0;
-        read-only: true;
+    // Clipped to nothing, so Tab and the controller pass it by (#261).
+    Rectangle {
+        x: 0;
+        y: 0;
+        width: 0;
+        height: 0;
+        clip: true;
+        clipboard := TextInput {
+            width: 10px;
+            height: 10px;
+            opacity: 0;
+            read-only: true;
+        }
     }
 
     Drawn {

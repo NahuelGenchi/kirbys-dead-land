@@ -1,10 +1,11 @@
 // Settings, licenses, questions and the short notices that float above the screens.
 import { Theme, Art, Tone } from "theme.slint";
-import { Drawn, Icons, Icon, PrimaryButton, SecondaryButton, LinkButton, IconButton, Card } from "widgets.slint";
+import { Drawn, Icons, Icon, PrimaryButton, SecondaryButton, LinkButton, IconButton, Card, FocusLayer } from "widgets.slint";
 
 component Switch {
     in-out property <bool> checked;
     in property <string> label;
+    in property <int> layer: 0;
     callback toggled(bool);
     width: 44px;
     height: 26px;
@@ -32,6 +33,7 @@ component Switch {
     }
     focus := FocusScope {
         focus-on-click: false;
+        focus-on-tab-navigation: root.layer == FocusLayer.top;
         key-pressed(event) => {
             if event.text == " " || event.text == Key.Return { root.checked = !root.checked; root.toggled(root.checked); return accept; }
             reject
@@ -82,6 +84,7 @@ component SettingRow {
             SecondaryButton {
                 text: root.action;
                 height: 34px;
+                layer: 1;
                 font-size: 13.5px;
                 enabled: root.action-enabled;
                 busy: root.action-busy;
@@ -152,7 +155,7 @@ export component SettingsSheet {
             }
             VerticalLayout {
                 alignment: center;
-                IconButton { icon: Icons.x; label: "Close settings"; clicked => { root.close(); } }
+                IconButton { icon: Icons.x; label: "Close settings"; layer: 1; autofocus: true; clicked => { root.close(); } }
             }
         }
         list := Flickable {
@@ -245,6 +248,7 @@ export component SettingsSheet {
                     VerticalLayout {
                         alignment: center;
                         Switch {
+                            layer: 1;
                             label: "Look for a new version when the launcher opens";
                             checked <=> root.auto-update;
                             toggled(value) => { root.auto-update-changed(value); }
@@ -257,8 +261,8 @@ export component SettingsSheet {
                 HorizontalLayout {
                     spacing: 18px;
                     alignment: start;
-                    LinkButton { text: "Licenses"; font-size: 13.5px; clicked => { root.act("licenses"); } }
-                    LinkButton { text: "Source code"; icon: Icons.external; has-icon: true; font-size: 13.5px; clicked => { root.act("source"); } }
+                    LinkButton { text: "Licenses"; layer: 1; font-size: 13.5px; clicked => { root.act("licenses"); } }
+                    LinkButton { text: "Source code"; layer: 1; icon: Icons.external; has-icon: true; font-size: 13.5px; clicked => { root.act("source"); } }
                 }
                 Rectangle { height: 8px; }
                 Text {
@@ -336,9 +340,9 @@ export component Question {
                 alignment: end;
                 if root.cancel != "": VerticalLayout {
                     alignment: center;
-                    SecondaryButton { text: root.cancel; clicked => { root.answer(false); } }
+                    SecondaryButton { text: root.cancel; layer: 3; autofocus: true; clicked => { root.answer(false); } }
                 }
-                PrimaryButton { text: root.confirm; height: 44px; font-size: 15.5px; glow: false; clicked => { root.answer(true); } }
+                PrimaryButton { text: root.confirm; height: 44px; font-size: 15.5px; glow: false; layer: 3; autofocus: root.cancel == ""; clicked => { root.answer(true); } }
             }
         }
     }
@@ -372,7 +376,7 @@ export component Licenses {
             }
             VerticalLayout {
                 alignment: center;
-                IconButton { icon: Icons.x; label: "Close"; clicked => { root.close(); } }
+                IconButton { icon: Icons.x; label: "Close"; layer: 2; autofocus: true; clicked => { root.close(); } }
             }
         }
         Rectangle {

@@ -1,6 +1,6 @@
 # Player launcher
 
-[Back to README](../README.md) · Issues #221, #222, #223 · Milestone M4 · Windows: #250 (M5)
+[Back to README](../README.md) · Issues #221, #222, #223 · Milestone M4 · Windows: #250, controllers: #261 (M5)
 
 The launcher is a desktop program for players who do not use a terminal. Each
 time it opens it checks Steam, Dead Cells, the player's own Kirby Super Star Ultra
@@ -77,6 +77,10 @@ font lookup stops it before the window opens (see [Verification](#other-distribu
    backups or the last game log, repair the setup, open the launcher's files, check
    for updates (and turn off *Look for a new version when the launcher opens*),
    licenses and the source code.
+
+An Xbox controller works in the window too: the D-pad or left stick moves between
+the buttons, A presses, B closes Settings or a question ([Game
+controllers](#game-controllers-261)).
 
 Changing the ROM later, or Steam moving the game, sets up only what depends on it.
 A new launcher version installs its own mod files the next time Setup runs.
@@ -199,8 +203,9 @@ pinned by hash.
 Tests: `cargo test` in `launcher/` (Steam library and manifest parsing, game
 status, ROM verdicts and messages, the ROM search, config and setup records,
 bundle discovery, helper pins against the mod scripts for both systems, wheel
-install, check rows, time left, notices, and the Windows game files and sandbox
-messages); `python3 -m unittest tests.test_launcher_bundle
+install, check rows, time left, notices, the Windows game files and sandbox
+messages, and the controller mapping: directions, repeat, the stick's two
+thresholds, A and B, XInput and Linux event decoding); `python3 -m unittest tests.test_launcher_bundle
 tests.test_release_package` (bundle layout and refusals for both systems, `.deb`
 unpacking without `dpkg-deb`, the font exception). The same `cargo test` builds
 for Windows with `--target x86_64-pc-windows-gnu`, and its test program runs under Wine.
@@ -250,6 +255,58 @@ option such as `--check`, it prints to the terminal that started it. What differ
   opened by the Windows shell, the Windows file picker, and Consolas for logs.
   `--smoke-play` stays on Linux.
 
+## Game controllers (#261)
+
+The window also works with an Xbox controller, or another controller the system
+reads as one. `src/gamepad.rs` reads the controllers on a thread every 16 ms and
+turns what it reads into the window's keys:
+
+| On the controller | In the window | Same as |
+| :--- | :--- | :--- |
+| D-pad or left stick down or right | the next button | Tab |
+| D-pad or left stick up or left | the previous button | Shift+Tab |
+| A | presses the focused button | Return |
+| B | closes the question, Licenses or Settings, whichever is on top | a click beside it |
+
+A held direction moves again after 450 ms, then every 140 ms. The stick counts once
+it is pushed past half way, and lets go below 35 %, so a wobble at the edge does
+not move twice. A button held when the launcher opens waits for its release. Two
+controllers count as one. While Dead Cells is starting, running or closing, the
+launcher leaves the controller to the game.
+
+- **Windows.** XInput (`XInputGetState` in `xinput1_4.dll`, slots 0 to 3), which
+  reads Xbox controllers and the ones that present themselves as one; pads that
+  only speak DirectInput are not read. Empty slots are asked every 2 s, as asking
+  them is slow. XInput reads a controller whichever program is in front, so the
+  launcher acts on it only while its own window is in front.
+- **Linux.** The kernel's event devices `/dev/input/event*` that have an A button
+  (`BTN_SOUTH`), read without blocking and looked for again every 2 s. The D-pad
+  counts as a hat (the xpad driver for Xbox controllers) or as four buttons.
+  Reading them needs the access that logind gives the active session for
+  joysticks (systemd's `uaccess` rule); a controller the player cannot open is not
+  read, and the window does not say so. The launcher reads it in the background
+  too, unlike on Windows.
+- **No new crate.** gilrs, the usual Rust choice, would add its crates to
+  `Cargo.lock` (and libudev on Linux), which the release builds use with
+  `--locked` and the licenses are generated from, and the PC this was written on
+  had no Rust to update them. The two reads need only what the launcher already
+  pins: `windows-sys` 0.61.2 with the `Win32_UI_Input_XboxController` feature, and
+  `libc` for two `ioctl` calls. `Cargo.lock` and `NOTICES.txt` are unchanged.
+
+**Focus.** Each screen's main button takes the focus whenever it can be pressed:
+*Set up Kirby* or *Continue* on the checks, *Continue setup* or *Try again* after
+setup stops, *Play* at home. The gold focus ring shows on the focused button. An
+overlay takes the focus when it opens: Settings and Licenses on their close
+button, a question on its cancel answer (or its only answer). Tab, and so the
+controller, visits only the overlay on top: `FocusLayer` in `ui/widgets.slint`
+holds its number, set by `AppWindow`, and each button's `FocusScope` takes Tab only
+on its own layer (`focus-on-tab-navigation`). When the overlay closes, the screen's
+main button has the focus again. By Slint 1.18.1's rule (`ItemRc::is_visible`
+counts only clipping parents), Tab could also stop on the closed Settings sheet
+beyond the window's edge and on the hidden text field the clipboard goes through;
+the layers keep it off the first, and the field is now clipped to nothing.
+
+Escape on the keyboard still does not close overlays; only B does.
 
 ## Verification
 
@@ -417,3 +474,32 @@ x86_64-pc-windows-gnu` and run under Wine (Proton Experimental), 37 passed;
 x86_64-pc-windows-gnu` both built. Not run: a click in a real window on either
 system (no input tool on this machine's Wayland desktop); the owner's check on
 Windows 11 follows a build.
+
+### Game controllers (#261)
+
+2026-10-22, the release workflow run by hand on branch `feat/261-launcher-gamepad`
+at `69230d6`, with no tag, so it kept the files as workflow artifacts only ([run
+39873165461](https://github.com/NahuelGenchi/kirbys-dead-land/actions/runs/39873165461)).
+Both legs passed. In each, `cargo build --release --locked` compiled the launcher
+with no warnings: for Linux in `ubuntu:22.04` (packages 31.4 MB), and for
+`x86_64-pc-windows-gnu` with MinGW-w64 in `ubuntu:24.04` (packages 29.1 MB). That
+covers the XInput and evdev code paths. A build is not a test.
+
+2026-10-23, Linux build machine, the branch merged with `main` (`dbbb064`, with
+#258's `focus-on-click: false` beside each scope's `focus-on-tab-navigation`):
+`cargo test` in `launcher/` first failed `xinput_buttons_and_stick`. The shared
+`axis` helper centred XInput's −32768…32767 range at −0.5, so a stick at rest
+read 0.000015 instead of 0. `from_xinput` now scales from 0, XInput's rest
+position, and `axis` serves only evdev. Then `cargo test`, 47 passed; the same
+tests built for `x86_64-pc-windows-gnu` and run under Wine (Proton
+Experimental), 47 passed; `cargo build --release` for both targets with no
+warnings; the Python tests, 112 passed.
+
+Not run: any controller in the window, on Linux or Windows (none is connected to
+the Linux build machine). The change was written on the owner's Windows 11 PC,
+which has neither Rust nor Python.
+The owner still has to check it with a real controller on Windows 11: the D-pad
+and stick move the ring through each screen's buttons, A presses, B closes
+Settings, Licenses and a question, and the controller does nothing while the game
+runs or another window is in front. The same check is open on Linux with the xpad
+driver.

@@ -3134,6 +3134,30 @@ the all-ability rendering tests as full gameplay acceptance.
   Wine. Details in `docs/RELEASE.md`.
 
 
+## 2026-10-22 — a game controller in the launcher (#261)
+
+- The owner asked for an Xbox controller to work in the launcher on Windows 11 and
+  Linux. `launcher/src/gamepad.rs` reads it on a thread: XInput on Windows (the
+  `windows-sys` the launcher already pins, feature `Win32_UI_Input_XboxController`),
+  `/dev/input/event*` with `libc` on Linux. The D-pad or left stick sends Tab or
+  Shift+Tab to the window, A sends Return, B closes the overlay on top. It does
+  nothing while the game starts or runs, nor on Windows while another program is in
+  front. No new crate, so `Cargo.lock` and the notices are unchanged (gilrs would
+  have needed a lock update this PC could not make).
+- Each screen's main button and each overlay's close or cancel button take the
+  focus; Tab visits only the overlay on top (`FocusLayer` in `launcher/ui/widgets.slint`)
+  and no longer stops on the closed Settings sheet or the hidden clipboard field.
+- Unit tests for the mapping in `gamepad.rs`. Record in `docs/LAUNCHER.md`.
+- Build: the release workflow on the branch (run 39873165461) built the launcher
+  for Linux and `x86_64-pc-windows-gnu` with `--locked`, no warnings.
+- Not run on the owner's PC (no Rust or Python there): `cargo test`, the Python
+  tests and a controller in the window.
+- 2026-10-23, Linux build machine, merged with main: `cargo test` caught a stick at
+  rest reading 0.000015 through XInput (the range's middle is −0.5); `from_xinput`
+  now scales from 0. Then 47 tests passed on Linux and under Wine, both release
+  builds had no warnings, and the Python tests passed. No controller was connected
+  there; the owner still has to check one on Windows 11.
+
 ## 2026-10-22 — one click per launcher button (#258)
 
 - Every launcher button needed two clicks on the owner's Windows 11 PC. The
