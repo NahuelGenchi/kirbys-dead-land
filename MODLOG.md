@@ -3133,3 +3133,13 @@ the all-ability rendering tests as full gameplay acceptance.
   as Kirby with SDL3 audio; the released Windows `.zip` passed `--check` under
   Wine. Details in `docs/RELEASE.md`.
 
+
+## 2026-10-23 — Kirby stands on host floors (#267)
+
+- Kirby and his helper stood 3 px above flat host floors (planks, stone): the
+  original draws his soles 3 px above its floor line, and host floor art is on
+  the line. The canvas is drawn 3 px lower (`KirbySpriteRenderer.SoleDrop`);
+  physics, hurtbox and host equipment are unchanged. Recorded as an intentional
+  deviation in `docs/GAMEPLAY_FIDELITY.md`.
+- Live, Windows 11: the owner reported both feet touching on a bridge and a
+  foliage ledge. Not run: Linux, ladders, ceilings, a held weapon on purpose.

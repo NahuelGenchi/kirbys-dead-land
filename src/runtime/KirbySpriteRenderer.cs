@@ -20,6 +20,8 @@ namespace Kirby.Runtime;
 public sealed unsafe class KirbySpriteRenderer : IDisposable
 {
     private const int CanvasWidth = NdsObjRenderer.CanvasWidth, CanvasHeight = NdsObjRenderer.CanvasHeight;
+    // Host pixels the canvas is drawn below the original's position (see Render).
+    private const int SoleDrop = 3;
     private readonly Hero hero;
     private readonly NdsBackgroundEffects backgroundEffects;
     private byte[] oam = new byte[1024];
@@ -99,8 +101,12 @@ public sealed unsafe class KirbySpriteRenderer : IDisposable
         // from an integer camera). Anchor it to that pixel in host space, as
         // the original does, instead of the fractional physics position; at
         // the Kirby camera zoom a fraction of a pixel is several screen pixels.
+        // That pixel is 14.5 px above his foot, and his standing body ends 12 px
+        // below it, so the original draws his soles 3 px above its floor line.
+        // Host floor art is drawn on the line, as the Beheaded's feet are; the
+        // canvas is drawn that much lower so he stands on it (#267).
         bitmap!.x = System.Math.Floor((hero.cx + hero.xr) * 24 + 1e-6);
-        bitmapBaseY = System.Math.Floor((hero.cy + hero.yr) * 24 - 14.5 + 1e-6);
+        bitmapBaseY = System.Math.Floor((hero.cy + hero.yr) * 24 - 14.5 + 1e-6) + SoleDrop;
         bitmap.y = bitmapBaseY + drawOffsetY;
         bitmap.alpha = hostSprite.alpha;
         bitmap.visible = hero.visible && hostSprite.visible && !arriving;

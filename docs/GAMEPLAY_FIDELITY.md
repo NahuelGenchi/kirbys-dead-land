@@ -1297,6 +1297,22 @@ the log line `Kirby original machine:` names which one runs. Tools, tests and
 verifiers use the interpreter. Not verified: play in a window, bosses, a long
 session, and how it sounds.
 
+### Standing on host floors (#267, intentional deviation)
+
+Kirby's canvas is centred on the original's whole-pixel position of him, 14.5 px
+above his physical foot, and his standing body ends 12 px below that centre
+(frame trace: body bounds `(-12, -12, 11, 11)`). On a flat floor the original
+therefore draws his soles 3 px above its floor line. The host's walkable art
+(planks, stone tops) is drawn on the line, where the Beheaded's feet are, so on
+the owner's Windows PC Kirby and his helper stood about 3 px (9 screen px) above
+a wooden bridge and a stone ledge; foliage that rises above the line hid the gap
+elsewhere (owner's screenshots, 2026-10-23). The canvas is now drawn 3 px lower
+(`KirbySpriteRenderer.SoleDrop`), with everything in it: the helper, the
+original's effects and his projectiles. His physics, hurtbox, host position and
+the host equipment, which stands on the host hero's feet, are unchanged.
+
+Live, owner's Windows 11 PC, run `20261023-032041` (this change with #265's and #262's, launched with #257's script): the owner stood Kirby and his helper on the wooden bridge and the foliage ledge and reported them touching both. Exit 0, no fatal log, saves unchanged. Not run: Linux, ladders and ceilings, a held weapon or shield checked on purpose.
+
 ### The original's collision pool (#151, intentional deviation)
 
 The original takes every hit box and health record of an actor, a collision
