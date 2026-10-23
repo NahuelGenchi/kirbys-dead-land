@@ -51,6 +51,9 @@ public sealed unsafe class KirbySpriteRenderer : IDisposable
     // Whole host pixels Kirby and his equipment are drawn below their physical
     // position: the lag of the elevator sprite he stands on (see SetDrawOffset).
     private double drawOffsetY, bitmapBaseY, equipmentBaseY;
+    // Host pixels from Kirby's physical position to where he is drawn between
+    // two original frames (see SetSmoothing).
+    private double smoothX, smoothY;
     public int RenderedObjects { get; private set; }
     public int BodyPixels { get; private set; }
     /// <summary>Body pixel bounds relative to Kirby's anchor in the last texture (diagnostics).</summary>
@@ -99,8 +102,8 @@ public sealed unsafe class KirbySpriteRenderer : IDisposable
         // from an integer camera). Anchor it to that pixel in host space, as
         // the original does, instead of the fractional physics position; at
         // the Kirby camera zoom a fraction of a pixel is several screen pixels.
-        bitmap!.x = System.Math.Floor((hero.cx + hero.xr) * 24 + 1e-6);
-        bitmapBaseY = System.Math.Floor((hero.cy + hero.yr) * 24 - 14.5 + 1e-6);
+        bitmap!.x = System.Math.Floor((hero.cx + hero.xr) * 24 + smoothX + 1e-6);
+        bitmapBaseY = System.Math.Floor((hero.cy + hero.yr) * 24 + smoothY - 14.5 + 1e-6);
         bitmap.y = bitmapBaseY + drawOffsetY;
         bitmap.alpha = hostSprite.alpha;
         bitmap.visible = hero.visible && hostSprite.visible && !arriving;
@@ -129,6 +132,14 @@ public sealed unsafe class KirbySpriteRenderer : IDisposable
     }
 
     public double DrawOffset => drawOffsetY;
+
+    /// <summary>
+    /// Draw Kirby, his canvas (the helper with him) and his equipment this many
+    /// host pixels from his physical position at the next Render: where he is
+    /// between the last two original frames on a display the frame pacer does
+    /// not lock to (#265). The picture still changes once per original frame.
+    /// </summary>
+    public void SetSmoothing(double x, double y) => (smoothX, smoothY) = (x, y);
 
     /// <summary>Forget flash-softening history after the machine loads another state.</summary>
     public void ResetPalette() => softener?.Reset();
@@ -267,9 +278,9 @@ public sealed unsafe class KirbySpriteRenderer : IDisposable
         // LightedLayers pass and does not reproduce the host material.
         equipment.blendMode = host.blendMode;
         equipment.color = host.color;
-        equipment.x = host.x;
-        equipmentBaseY = host.y;
-        equipment.y = host.y + drawOffsetY;
+        equipment.x = host.x + smoothX;
+        equipmentBaseY = host.y + smoothY;
+        equipment.y = equipmentBaseY + drawOffsetY;
         equipment.scaleX = host.scaleX;
         equipment.scaleY = host.scaleY;
         equipment.rotation = host.rotation;

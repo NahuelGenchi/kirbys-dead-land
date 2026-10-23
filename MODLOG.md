@@ -3172,3 +3172,18 @@ the all-ability rendering tests as full gameplay acceptance.
   the launch script labeled the objects itself and the game started with the pad
   connected; in a second run from the script the controller answered fully.
   Not run: other controllers.
+## 2026-10-23 — Kirby between original frames at 75 Hz (#265)
+
+- On the owner's 75 Hz Windows display one host frame in five runs no original
+  step. Kirby, his helper and his equipment stopped on those frames, and on a
+  moving elevator he left the platform. When the pacer is not locked, Kirby is
+  now drawn between his last two original positions by `FramePacer.Phase`; at
+  60 Hz nothing changes.
+- The elevator offset moved from an `Elevator.postUpdate` hook into Kirby's
+  render: a frame trace showed the host runs every `postUpdate` before the
+  hero's update, where the original carries him, and then draws.
+- Checked by capturing every presented frame (DXGI duplication) while riding:
+  Kirby within one host pixel of the platform on 554 of 568 frames (before:
+  off by up to 15 host px on two frames in five). Recorded as an intentional
+  deviation in `docs/GAMEPLAY_FIDELITY.md`.
+- Not run: a 60 Hz display, Linux, `scripts/check.py`.
