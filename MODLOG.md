@@ -3161,4 +3161,5 @@ the all-ability rendering tests as full gameplay acceptance.
 - Live, Windows 11: the owner played about 2.5 minutes as Kirby with the
   controller in the sandbox, overlay on; it answered fully. After a Steam restart
   the launch script labeled the objects itself and the game started with the pad
-  connected (controller not used in that run). Not run: other controllers.
+  connected; in a second run from the script the controller answered fully.
+  Not run: other controllers.
