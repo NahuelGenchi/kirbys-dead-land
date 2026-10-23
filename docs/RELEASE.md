@@ -262,7 +262,25 @@ deletion (see [work tracking](TRACKING.md#enforcement-boundary)). Public
 repositories run standard Actions runners at no cost, so the tracking workflow,
 stopped by billing on the private repository, runs again.
 
-## v0.3.0 (2026-10-22, pre-release)
+## v0.3.1 (2026-10-23, pre-release)
+
+The second Windows test release (#271), with what the owner's first tries of
+v0.3.0 on Windows 11 found and fixed. Published as a pre-release, as v0.3.0 was:
+Latest stays v0.2.1 until the owner checks this Windows download on Windows 11
+(#241).
+
+- One version, 0.3.1, in `mod.json`, the runtime adapter's project and the launcher
+  (`Cargo.toml`, its `Cargo.lock` entry and `launcher/NOTICES.txt`).
+- Since v0.3.0: Kirby's textures in the host's RGBA value (#262), the controller
+  and Steam's overlay in the sandboxed Windows game (#257), Kirby drawn between
+  original frames and kept on elevators on displays the pacer does not lock to
+  (#265), his canvas 3 px lower so he stands on host floors (#267), one click per
+  launcher button (#258) and controller navigation in the launcher (#261).
+- Its page is the [release page](#release-page-239) with both downloads; the
+  pictures and the two parts are in `.github/release/v0.3.1/`. The page says the
+  fixes were played on Windows 11 from a test build, and that this download has
+  not run there.
+
 
 The first release with a Windows download (#253, from #252):
 `KirbysDeadLand-0.3.0-windows-x64.zip` beside the two Linux downloads. Published
