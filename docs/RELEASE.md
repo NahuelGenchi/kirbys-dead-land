@@ -281,6 +281,28 @@ Latest stays v0.2.1 until the owner checks this Windows download on Windows 11
   fixes were played on Windows 11 from a test build, and that this download has
   not run there.
 
+Release record (2026-10-23): before the tag, `RELEASE_DOCKER_ARGS="--memory 5g"
+bash scripts/release_container.sh` on the branch (`c8dff50`) built both legs, the
+launcher with no warnings (the bridge keeps its four `static mut` warnings). PR
+#272 merged as `b302297`; the annotated tag `v0.3.1` on it ran the release
+workflow (run 39903879443): both legs and the attach job passed and made a draft
+pre-release with the rendered notes and eight files (the `.zip` is 29,216,050
+bytes, 58 files; the AppImage 15,251,960 bytes, the same size as the local build).
+
+- All four checksums matched after downloading the draft. The `.zip`'s only
+  `/home` strings are the build container's `/build/home/.cargo` paths.
+- Linux, the released AppImage on a new data root (`--autopilot --smoke-play
+  72`): checks passed, setup took 73 s, Play ran Kirby's session (`Kirby audio:
+  SDL3 playback stream open.`) and the game closed after 72 s; exit 0, no fatal
+  log. The 17 backed-up normal save files matched the live ones by hash.
+- Windows, the released `.zip` under Wine (the #250 prefix with stand-ins):
+  `--version` reported 0.3.1, and `--check` passed all four checks and found its
+  own bundle (`0.3.1+b302297…`).
+- Published as a pre-release with `make_latest=false`; `releases/latest` stayed
+  v0.2.1. The page showed all seven pictures.
+- Not run: this download on Windows 11 (the owner's check, #241), a controller in
+  the launcher, the Steam Deck.
+
 
 The first release with a Windows download (#253, from #252):
 `KirbysDeadLand-0.3.0-windows-x64.zip` beside the two Linux downloads. Published

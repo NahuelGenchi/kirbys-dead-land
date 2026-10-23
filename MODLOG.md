@@ -3254,3 +3254,7 @@ the all-ability rendering tests as full gameplay acceptance.
 - A pre-release like v0.3.0: Latest stays v0.2.1 until the owner checks the
   Windows download on Windows 11 (#241). The container build, the tag, the
   workflow run and the download checks follow in `docs/RELEASE.md`.
+- Published 2026-10-23 as a pre-release from tag `v0.3.1` (`b302297`); Latest
+  stays v0.2.1. The released AppImage passed a new-folder setup and a 72 s run
+  as Kirby; the released Windows `.zip` passed `--check` under Wine. Details in
+  `docs/RELEASE.md`.
