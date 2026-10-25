@@ -3258,3 +3258,18 @@ the all-ability rendering tests as full gameplay acceptance.
   stays v0.2.1. The released AppImage passed a new-folder setup and a 72 s run
   as Kirby; the released Windows `.zip` passed `--check` under Wine. Details in
   `docs/RELEASE.md`.
+
+## 2026-10-25 — A README for players, with gameplay clips (#274)
+
+- `README.md` rewritten for people who just want to play: a banner, download
+  buttons, what Kirby does shown in short clips, a gallery of nine copy abilities,
+  the four install steps with the launcher's pictures, controls, and plain-language
+  answers. The full rules, bindings, settings, verified behavior and developer
+  notes stay, folded into `<details>` blocks. The anchors other docs link to stay.
+- The clips are animated WebP in `.github/readme/`, cut by its `make_clips.py` from
+  isolated lab runs of `main` (`6986fcc`) with `CameraZoom` 2; the owner chose real
+  captures. `AGENTS.md` and `CONTRIBUTING.md` now allow these clips and nothing else
+  of the kind. Runs and results in `docs/RUNTIME_LAUNCH.md`.
+- The `items` take rolled Paint for the starting sword, so its clip shows the item
+  and its card, not a swallow; a second take was not run (not enough memory free).
+  The first two takes ran while another lab game was running.

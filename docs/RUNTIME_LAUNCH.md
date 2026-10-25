@@ -1790,3 +1790,38 @@ python3 scripts/launch_runtime.py --data-root "$R" --seconds 80 --start-game \
 | Run | Build | Result |
 | :--- | :--- | :--- |
 | 2026-10-20, `repros/thorny-206`, `--seconds 80` | 8046114 | `thorny.json` `passed: true`, exit -15 (expected). Kirby 76 -> 67 on his hit, no counter dropped; helper-marked hit: 1 counter dropped, Kirby stayed at 67; Kirby again 67 -> 58, none dropped. About 7.8 GB of RAM was available, 5.9 GB free after |
+
+## README clips (#274)
+
+The README's clips and its banner are cut from isolated lab runs by
+`.github/readme/make_clips.py`, which names each run and the stretch it shows. To
+make them again, stage a fresh data root as for #206 above, set `"CameraZoom": 2` in
+its `lab/coremod/mods/KirbySuperStarUltra/config.json` so Kirby fills more of the
+view, record the runs with `--capture-fps 15`, and point the script at them:
+
+```sh
+python3 scripts/launch_runtime.py --data-root "$R" --seconds 60 --start-game \
+  --outfit KirbySuperStarUltra --input-plan ability --probe-ability 11 --capture-fps 15
+python3 .github/readme/make_clips.py --runs "$R/lab/smoke-runs"
+```
+
+Data root `repros/readme-274`, staged from `main` at `6986fcc` (version 0.3.1):
+runtime `Kirby.Runtime.dll` SHA-256 `c25dee603cf513cda8f692541dba67fbe7a5df9fd263fe59a698738d0002be3f`,
+outfit pack `2cbd0a47…` from `outfit-build-main`, bridge
+`bae16c0e7dafbec06239e0212cac1b436ed25db01aaaeeb1d03d6eaf7aed0169`. One game at a time,
+each started only with about 6 GB of memory available, except the first two: another
+lab game was running at the same time.
+
+| Run | Plan | Clips | Result |
+| :--- | :--- | :--- | :--- |
+| `20261025-114411` | `combat`, 80 s | `inhale-copy`, `parry`, `copy-attack`, banner | `combat.json`: Zombie swallowed into Bomb, shield 266 kept, parry started and countered |
+| `20261025-114800` | `stars`, 80 s | `spit-star`, `ability-star` | `stars.json` is empty (the run ended at its limit first); the frames show the spat star and the dropped ability star each hitting a Zombie |
+| `20261025-175554` | `items`, 130 s | `ability-item` | The starting sword became a Paint ability item, shown with its card. Paint goes to the F slot and is not swallowed, so the plan's swallow phase never ran; a second take waited for memory and was not run |
+| `20261025-175838` | `fslot`, 120 s | `f-slot` | `fslot.json` reached phase 12: Crash stored and fired (its Zombie 110 → -2, Sword back), then Mike, Cook and Paint, and the save written |
+| `20261025-193443` | `hazard`, 170 s | `projectiles` | `hazard.json`, 3 phases, none timed out: a Grenader's grenade spat back hit it (106 damage), a second one swallowed, an Archer's arrow spat back hit the Archer |
+| `20261025-193814` … `194725` | `ability` with `--probe-ability` 11, 18, 19, 10, 8, 4, 13, 16, 2, 60 s each | `abilities/` (Fire, Sword, Hammer, Ice, Wheel, Beam, Ninja, Jet, Cutter) | `ability-damage.json`: every attack damaged its target (10 to 128); Fire, Ice, Wheel, Ninja and Jet killed it |
+| `20261025-194833` | `boss`, 90 s | `boss` | `boss-crowd.json`: Kirby with Sword hit the Concierge twice for 752 |
+| `20261025-195022` | `ability`, `--probe-ability 11 --probe-hud --probe-pause`, 75 s | `pause` | The pause screen's Fire I card; `ability-damage.json` Fire killed its target |
+
+Every run reached its time limit (exit -15) with no fatal log and the real saves
+unchanged. The clips add no check beyond each plan's own.
