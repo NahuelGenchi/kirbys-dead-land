@@ -3258,3 +3258,27 @@ the all-ability rendering tests as full gameplay acceptance.
   stays v0.2.1. The released AppImage passed a new-folder setup and a 72 s run
   as Kirby; the released Windows `.zip` passed `--check` under Wine. Details in
   `docs/RELEASE.md`.
+
+## 2026-10-25 — A README for players, with gameplay clips (#274)
+
+- `README.md` rewritten for people who just want to play: a banner, download
+  buttons, what Kirby does shown in short clips, a gallery of nine copy abilities,
+  the four install steps with the launcher's pictures, controls, and plain-language
+  answers. The full rules, bindings, settings, verified behavior and developer
+  notes stay, folded into `<details>` blocks. The anchors other docs link to stay.
+- The clips are animated WebP in `.github/readme/`, cut by its `make_clips.py` from
+  isolated lab runs of `main` (`6986fcc`) with `CameraZoom` 2; the owner chose real
+  captures. `AGENTS.md` and `CONTRIBUTING.md` now allow these clips and nothing else
+  of the kind. Runs and results in `docs/RUNTIME_LAUNCH.md`.
+- The owner found the first clips laggy and confusing: they were cut at 15 fps by
+  wall clock, and the check probes left traces on screen (a Zombie respawned
+  during a swallow, a forced parry while Kirby transformed). Some clips also mixed
+  mechanics or stopped early, and one showed a boss hit with no damage. Every clip
+  was taken again with the new lab-only `--showcase` scenes (`LabShowcaseProbe`).
+  Each scene shows one mechanic, played with normal buttons and a fixed 1/60 s host
+  step, and every frame is captured, so the clips play at an even 60 fps. Targets
+  that only take hits hold still; the other enemies use their own AI. The parry is
+  now a Grenader's grenade sent back. The F slot clip shows the item, its card and
+  the slot icon. The boss clip shows the boss's hit taking Kirby's health. The
+  gallery's attacks reach their target, and each ability has a one-line caption.
+  Runs, failed takes and the recipe are in `docs/RUNTIME_LAUNCH.md`.

@@ -38,7 +38,7 @@ Run builds and live checks only when the task changes what they cover.
 
 ## Private data
 
-ROMs, Dead Cells files, saves, save states, extracted or generated asset packs, recordings and credentials stay out of commits, issues and PRs. Write derived output only under ignored paths or the private data root. ROM hashes used for verification may be cited.
+ROMs, Dead Cells files, saves, save states, extracted or generated asset packs, recordings and credentials stay out of commits, issues and PRs. Write derived output only under ignored paths or the private data root. ROM hashes used for verification may be cited. The one exception is the README's short gameplay clips in `.github/readme/`, cut by its `make_clips.py` from isolated lab runs (the owner's decision in #274); the owner's own play recordings stay private.
 
 ## Tracking and delivery
 

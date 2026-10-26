@@ -30,7 +30,7 @@ Source tests (`scripts/check.py`, `tools/nds_tests.py`, the `tools/verify_*.py` 
 
 ## Private data
 
-Keep ROMs, Dead Cells files, saves, save states, generated asset packs, recordings and credentials out of commits, issues, and PRs. The ignore rules are an accidental-staging guard, not permission to collect that data. If a secret is exposed, stop sharing it and ask the owner to revoke it.
+Keep ROMs, Dead Cells files, saves, save states, generated asset packs, recordings and credentials out of commits, issues, and PRs. The only gameplay pictures in the repository are the README's short clips in `.github/readme/`, made from isolated lab runs with `.github/readme/make_clips.py` (#274). The ignore rules are an accidental-staging guard, not permission to collect that data. If a secret is exposed, stop sharing it and ask the owner to revoke it.
 
 ## Documentation standard
 

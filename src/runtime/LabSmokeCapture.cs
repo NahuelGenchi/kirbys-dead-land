@@ -22,6 +22,9 @@ internal static class LabSmokeCapture
     private static bool savedCheckpoint;
     private static bool savedRenderTree;
     private static int captureFps;
+    // KIRBY_LAB_FIXED_STEP=1 makes every host frame 1/60 s, whatever the wall
+    // clock says, so a capture that stalls a frame does not show as a jump.
+    private static readonly bool FixedStep = Environment.GetEnvironmentVariable("KIRBY_LAB_FIXED_STEP") == "1";
     private static readonly HashSet<(int Width, int Height)> queriedHurtboxes = [];
     // The input plan, which the Beheaded baselines follow through the host's keys.
     private static readonly string? plan = Environment.GetEnvironmentVariable("KIRBY_LAB_INPUT_PLAN");
@@ -52,7 +55,15 @@ internal static class LabSmokeCapture
         if (int.TryParse(Environment.GetEnvironmentVariable("KIRBY_LAB_SEED"), out int fixedSeed))
             dc.Hook_User.newGame += (orig, user, _, level, custom, scoring, mode) => orig(user, fixedSeed, level, custom, scoring, mode);
         if (int.TryParse(Environment.GetEnvironmentVariable("KIRBY_LAB_CAPTURE_FPS"), out int requestedFps))
-            captureFps = Math.Clamp(requestedFps, 1, 30);
+            captureFps = Math.Clamp(requestedFps, 1, FixedStep ? 60 : 30);
+        if (FixedStep)
+            dc.hxd.Hook__Timer.update += orig =>
+            {
+                orig();
+                // The host's tmod follows dt.
+                var timer = dc.hxd.Timer.Class;
+                timer.dt = timer.elapsedTime = 1.0 / 60;
+            };
         if (captureFps > 0) LabAudioCapture.Install(run, () => clock.ElapsedMilliseconds);
         if (Environment.GetEnvironmentVariable("KIRBY_LAB_INPUT_PLAN") == "movement")
         {
@@ -120,6 +131,8 @@ internal static class LabSmokeCapture
             LabThornyProbe.Install(run);
         if (Environment.GetEnvironmentVariable("KIRBY_LAB_INPUT_PLAN") == "arrival")
             LabArrivalProbe.Install(run);
+        if (Environment.GetEnvironmentVariable("KIRBY_LAB_INPUT_PLAN") == "showcase")
+            LabShowcaseProbe.Install(run);
         if (Environment.GetEnvironmentVariable("KIRBY_LAB_MOVES_SCAN") == "1" || Environment.GetEnvironmentVariable("KIRBY_LAB_MOVES_SETUP") is not null)
             LabMovesProbe.Install(run);
         if (Environment.GetEnvironmentVariable("KIRBY_LAB_ITEM") is not null)
@@ -162,6 +175,7 @@ internal static class LabSmokeCapture
                 LabTentacleProbe.Poll();
                 LabThornyProbe.Poll();
                 LabArrivalProbe.Poll();
+                LabShowcaseProbe.Poll();
             }
             var host = ModCore.Modules.Game.Instance.HeroInstance;
             // The plan starts once the Beheaded plays, after the run's opening cinematic.
@@ -271,8 +285,18 @@ internal static class LabSmokeCapture
             bool gameplay = source is not null && captureHero is { destroyed: false, life: > 0, awake: true } &&
                 captureHero._level is not null && !captureHero._level.game.hasCinematic();
             bool captureAll = Environment.GetEnvironmentVariable("KIRBY_LAB_CAPTURE_ALL") == "1" && source is not null;
-            int interval = captureFps > 0 && (gameplay || captureAll) ? 1000 / captureFps : LabVisualProbe.ActiveEffect ? 100 : 2000;
-            if (clock.ElapsedMilliseconds - lastCapture < interval) return;
+            // With a fixed step, a showcase scene's stretch is captured by host frame.
+            int hostFrame = dc.hxd.Timer.Class.frameCount;
+            bool recording = FixedStep && captureFps > 0 && gameplay && LabShowcaseProbe.Recording;
+            if (recording)
+            {
+                if (hostFrame % Math.Max(1, 60 / captureFps) != 0) return;
+            }
+            else
+            {
+                int interval = captureFps > 0 && !FixedStep && (gameplay || captureAll) ? 1000 / captureFps : LabVisualProbe.ActiveEffect ? 100 : 2000;
+                if (clock.ElapsedMilliseconds - lastCapture < interval) return;
+            }
             lastCapture = clock.ElapsedMilliseconds;
             // The capture and the machine dump below are the lab's own work: KIRBY_LAB_PERF reports their frames apart.
             var captureMark = LabPerfProbe.Start();
@@ -294,8 +318,8 @@ internal static class LabSmokeCapture
             if (captureFps > 0)
                 LocalFile.AppendAllText(Path.Combine(run, "captures.jsonl"), JsonSerializer.Serialize(new
                 {
-                    file = $"frame-{frames:000000}.png", elapsedMs = lastCapture,
-                    gameplay, sourceFrame = source?.State.Frame,
+                    file = $"frame-{frames:000000}.png", elapsedMs = FixedStep ? hostFrame * 1000L / 60 : lastCapture,
+                    gameplay, recording, hostFrame, sourceFrame = source?.State.Frame,
                     animation = captureHero?.spr?.groupName?.ToString(), animationFrame = captureHero?.spr?.frame,
                     cinematic = captureHero?._level?.game?.hasCinematic(), awake = captureHero?.awake,
                     heroVisible = captureHero?.visible, spriteVisible = captureHero?.spr?.visible, life = captureHero?.life,

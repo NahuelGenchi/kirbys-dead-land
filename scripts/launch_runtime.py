@@ -94,7 +94,7 @@ def main() -> None:
     parser.add_argument('--play', action='store_true', help='Open the game for normal play, with isolated saves and no time limit.')
     parser.add_argument('--prepare', action='store_true', help='Only fetch and unpack the private TurboJPEG library a launch needs, then exit.')
     parser.add_argument('--steam-root', type=Path, help='The Steam installation whose userdata holds the cloud saves to back up (default: the one holding the game).')
-    parser.add_argument('--input-plan', choices=['movement', 'combat', 'ability', 'cook', 'healing', 'fslot', 'visual', 'breakable', 'boss', 'crowd', 'aim', 'shield', 'repro', 'hazard', 'stars', 'screen', 'water', 'items', 'rewards', 'forge', 'scroll', 'tentacle', 'thorny', 'arrival'], help='Run an isolated input test (repro tests normal keyboard/controller bindings).')
+    parser.add_argument('--input-plan', choices=['movement', 'combat', 'ability', 'cook', 'healing', 'fslot', 'visual', 'breakable', 'boss', 'crowd', 'aim', 'shield', 'repro', 'hazard', 'stars', 'screen', 'water', 'items', 'rewards', 'forge', 'scroll', 'tentacle', 'thorny', 'arrival', 'showcase'], help='Run an isolated input test (repro tests normal keyboard/controller bindings).')
     parser.add_argument('--probe-ability', type=int, choices=range(2, 26), metavar='2..25', help='Prepare this original ability through inhale/feed/swallow before the ability or screen probe.')
     parser.add_argument('--probe-scrolls', metavar='B,T,S', help='Give the ability probe this many Brutality, Tactics and Survival scrolls before measuring damage.')
     parser.add_argument('--probe-mutations', metavar='ID,ID', help='Give the ability probe these mutation item IDs (for example P_CDR_Kill) and record the text the host shows for each.')
@@ -104,7 +104,9 @@ def main() -> None:
     parser.add_argument('--probe-hud', action='store_true', help='Add a shield beside the starting sword before the ability probe and record the HUD weapon slots.')
     parser.add_argument('--probe-pause', action='store_true', help='With --probe-hud, open the pause/equipment screen while copied and record its cards.')
     parser.add_argument('--probe-legendary', action='store_true', help='With --probe-hud, add the Legendary affix to the copy\'s ability item once it is in a slot.')
-    parser.add_argument('--capture-fps', type=int, choices=range(1, 31), metavar='1..30', help='Capture real gameplay frames at this rate for a private showcase recording.')
+    parser.add_argument('--capture-fps', type=int, choices=range(1, 61), metavar='1..60', help='Capture real gameplay frames at this rate for a private showcase recording (above 30 only with --showcase).')
+    parser.add_argument('--showcase', choices=['inhale', 'spit', 'ability', 'drop', 'parry', 'item', 'fslot', 'projectile', 'boss'],
+                        help='Play one README clip scene (#274) with a fixed 1/60 s step, captured at 60 fps unless --capture-fps says otherwise.')
     parser.add_argument('--gdb', action='store_true', help=argparse.SUPPRESS)
     parser.add_argument('--start-game', action='store_true', help='Start a fresh run in the isolated lab save.')
     parser.add_argument('--resume-game', action='store_true', help='Resume the existing isolated save for a persistence check.')
@@ -129,6 +131,15 @@ def main() -> None:
         parser.error('--gpu applies to offscreen tests; play always draws on the GPU')
     if args.start_game and args.resume_game:
         parser.error('--start-game and --resume-game are mutually exclusive')
+    if args.showcase:
+        if args.input_plan not in (None, 'showcase'):
+            parser.error('--showcase is its own input plan')
+        args.input_plan = 'showcase'
+        args.capture_fps = args.capture_fps or 60
+    elif args.input_plan == 'showcase':
+        parser.error('--input-plan showcase needs --showcase SCENE')
+    elif args.capture_fps and args.capture_fps > 30:
+        parser.error('--capture-fps above 30 needs --showcase')
     if args.probe_ability is not None and args.input_plan not in ('ability', 'screen'):
         parser.error('--probe-ability requires --input-plan ability or screen')
     if args.crowd_size is not None and args.input_plan != 'crowd':
@@ -233,7 +244,7 @@ def main() -> None:
                 env.pop(key)
     for key in ['KIRBY_LAB_PLAY', 'KIRBY_LAB_INPUT_PLAN', 'KIRBY_LAB_START_GAME', 'KIRBY_LAB_OUTFIT',
                 'KIRBY_LAB_RESUME_GAME', 'KIRBY_LAB_SAVE_AFTER', 'KIRBY_LAB_TEST_ABILITY', 'KIRBY_LAB_TEST_SCROLLS', 'KIRBY_LAB_TEST_MENU', 'KIRBY_LAB_TEST_COLLECTOR', 'KIRBY_LAB_TEST_MUTATIONS', 'KIRBY_LAB_TEST_AFFECTS', 'KIRBY_LAB_TEST_HUD', 'KIRBY_LAB_TEST_PAUSE', 'KIRBY_LAB_TEST_LEGENDARY',
-                'KIRBY_LAB_CAPTURE_FPS', 'KIRBY_LAB_CROWD_SIZE']:
+                'KIRBY_LAB_CAPTURE_FPS', 'KIRBY_LAB_CROWD_SIZE', 'KIRBY_LAB_SHOWCASE', 'KIRBY_LAB_FIXED_STEP']:
         env.pop(key, None)
     env.update({
         'DCCM_OverridePath_CORE_ROOT': str(lab / 'coremod'),
@@ -311,6 +322,9 @@ def main() -> None:
         env['KIRBY_LAB_TEST_LEGENDARY'] = '1'
     if args.capture_fps:
         env['KIRBY_LAB_CAPTURE_FPS'] = str(args.capture_fps)
+    if args.showcase:
+        env['KIRBY_LAB_SHOWCASE'] = args.showcase
+        env['KIRBY_LAB_FIXED_STEP'] = '1'
     if args.start_game:
         env['KIRBY_LAB_START_GAME'] = '1'
     if args.resume_game:
