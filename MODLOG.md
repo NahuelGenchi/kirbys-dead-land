@@ -3270,6 +3270,15 @@ the all-ability rendering tests as full gameplay acceptance.
   isolated lab runs of `main` (`6986fcc`) with `CameraZoom` 2; the owner chose real
   captures. `AGENTS.md` and `CONTRIBUTING.md` now allow these clips and nothing else
   of the kind. Runs and results in `docs/RUNTIME_LAUNCH.md`.
-- The `items` take rolled Paint for the starting sword, so its clip shows the item
-  and its card, not a swallow; a second take was not run (not enough memory free).
-  The first two takes ran while another lab game was running.
+- The owner found the first clips laggy and confusing: they were cut at 15 fps by
+  wall clock, and the check probes left traces on screen (a Zombie respawned
+  during a swallow, a forced parry while Kirby transformed). Some clips also mixed
+  mechanics or stopped early, and one showed a boss hit with no damage. Every clip
+  was taken again with the new lab-only `--showcase` scenes (`LabShowcaseProbe`).
+  Each scene shows one mechanic, played with normal buttons and a fixed 1/60 s host
+  step, and every frame is captured, so the clips play at an even 60 fps. Targets
+  that only take hits hold still; the other enemies use their own AI. The parry is
+  now a Grenader's grenade sent back. The F slot clip shows the item, its card and
+  the slot icon. The boss clip shows the boss's hit taking Kirby's health. The
+  gallery's attacks reach their target, and each ability has a one-line caption.
+  Runs, failed takes and the recipe are in `docs/RUNTIME_LAUNCH.md`.

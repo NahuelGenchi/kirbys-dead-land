@@ -1794,34 +1794,82 @@ python3 scripts/launch_runtime.py --data-root "$R" --seconds 80 --start-game \
 ## README clips (#274)
 
 The README's clips and its banner are cut from isolated lab runs by
-`.github/readme/make_clips.py`, which names each run and the stretch it shows. To
-make them again, stage a fresh data root as for #206 above, set `"CameraZoom": 2` in
-its `lab/coremod/mods/KirbySuperStarUltra/config.json` so Kirby fills more of the
-view, record the runs with `--capture-fps 15`, and point the script at them:
+`.github/readme/make_clips.py`, which names each run and the stretch it shows.
+
+The first clips (`main` at `6986fcc`) came from the check plans at
+`--capture-fps 15`. The owner found them laggy and confusing. Probes that set
+up a check leave traces on screen: a second Zombie spawned during a swallow, a
+forced shield parry while Kirby transformed, a boss teleport. Some clips also
+mixed several mechanics, ended before the swallow, or showed a boss hit that
+did no damage. They were replaced with `--showcase` scenes:
+
+- **One mechanic per scene.** `LabShowcaseProbe` plays each scene with the
+  original's buttons and the host's keys, as a player would. What a player
+  would have done earlier happens before the recording starts: a copy ability
+  (original inhale, supplied contents, Down), a shield in the inventory, an
+  item on the floor. A target that only takes hits (the gallery, the drop, the
+  spit's second Zombie, the F slot's Zombies) has its AI held with
+  `lockAiS`. A Zombie's leap otherwise carries it over Kirby, and the attack
+  misses. Every other enemy uses its own AI.
+- **Even frames.** `--showcase` sets `KIRBY_LAB_FIXED_STEP`, which sets the
+  host timer's `dt` to 1/60 s after each `Timer.update`. Every host frame then
+  advances the game by one 60 Hz step, however long its capture takes. The
+  capture saves every host frame of the recorded stretch (`recording` and
+  `hostFrame` in `captures.jsonl`). The clips play at 60 fps (16–17 ms
+  frames). In the parry and Jet takes, the pacing log showed one original
+  step per host frame (locked 100%, no frame without a step or with several).
+- **Lab only.** Both are environment-gated lab code. Neither changes
+  gameplay, the player launcher or a normal run.
+
+To make them again, stage a fresh data root as for #206 above, and set
+`"CameraZoom": 2` in its `lab/coremod/mods/KirbySuperStarUltra/config.json`
+(staging resets it). Record each scene with seed 174, then run the script:
 
 ```sh
-python3 scripts/launch_runtime.py --data-root "$R" --seconds 60 --start-game \
-  --outfit KirbySuperStarUltra --input-plan ability --probe-ability 11 --capture-fps 15
+KIRBY_LAB_SEED=174 python3 scripts/launch_runtime.py --data-root "$R" --seconds 120 \
+  --start-game --outfit KirbySuperStarUltra --showcase inhale
+KIRBY_LAB_SEED=174 KIRBY_LAB_SHOWCASE_ABILITY=2 python3 scripts/launch_runtime.py \
+  --data-root "$R" --seconds 120 --start-game --outfit KirbySuperStarUltra --showcase ability
 python3 .github/readme/make_clips.py --runs "$R/lab/smoke-runs"
 ```
 
-Data root `repros/readme-274`, staged from `main` at `6986fcc` (version 0.3.1):
-runtime `Kirby.Runtime.dll` SHA-256 `c25dee603cf513cda8f692541dba67fbe7a5df9fd263fe59a698738d0002be3f`,
-outfit pack `2cbd0a47…` from `outfit-build-main`, bridge
-`bae16c0e7dafbec06239e0212cac1b436ed25db01aaaeeb1d03d6eaf7aed0169`. One game at a time,
-each started only with about 6 GB of memory available, except the first two: another
-lab game was running at the same time.
+Scenes: `inhale`, `spit`, `ability`, `drop`, `parry`, `item`, `fslot`,
+`projectile` and `boss`. The copy ability is `KIRBY_LAB_SHOWCASE_ABILITY`, as
+the original's number. The `item` scene's item is `KIRBY_LAB_SHOWCASE_ITEM`.
+Each run writes `showcase.jsonl` (each step by host frame) and `showcase.json`.
 
-| Run | Plan | Clips | Result |
+Data root `repros/readme-274`, staged from this branch's working tree over
+`main` `6986fcc`. The probe changed between takes as failed takes were fixed;
+the last staged runtime, used by the projectile take, is
+`Kirby.Runtime.dll` SHA-256 `1fb4ece11d3ff4bb1750e98287a1e9a608eb95d304ab1bf49addaa30a2c4b59b`. Outfit pack from
+`outfit-build-main`, bridge
+`bae16c0e7dafbec06239e0212cac1b436ed25db01aaaeeb1d03d6eaf7aed0169`. One game at
+a time, each started with at least 5.9 GB of memory available.
+
+| Run | Scene | Clip | Result (`showcase.jsonl`, frames reviewed) |
 | :--- | :--- | :--- | :--- |
-| `20261025-114411` | `combat`, 80 s | `inhale-copy`, `parry`, `copy-attack`, banner | `combat.json`: Zombie swallowed into Bomb, shield 266 kept, parry started and countered |
-| `20261025-114800` | `stars`, 80 s | `spit-star`, `ability-star` | `stars.json` is empty (the run ended at its limit first); the frames show the spat star and the dropped ability star each hitting a Zombie |
-| `20261025-175554` | `items`, 130 s | `ability-item` | The starting sword became a Paint ability item, shown with its card. Paint goes to the F slot and is not swallowed, so the plan's swallow phase never ran; a second take waited for memory and was not run |
-| `20261025-175838` | `fslot`, 120 s | `f-slot` | `fslot.json` reached phase 12: Crash stored and fired (its Zombie 110 → -2, Sword back), then Mike, Cook and Paint, and the save written |
-| `20261025-193443` | `hazard`, 170 s | `projectiles` | `hazard.json`, 3 phases, none timed out: a Grenader's grenade spat back hit it (106 damage), a second one swallowed, an Archer's arrow spat back hit the Archer |
-| `20261025-193814` … `194725` | `ability` with `--probe-ability` 11, 18, 19, 10, 8, 4, 13, 16, 2, 60 s each | `abilities/` (Fire, Sword, Hammer, Ice, Wheel, Beam, Ninja, Jet, Cutter) | `ability-damage.json`: every attack damaged its target (10 to 128); Fire, Ice, Wheel, Ninja and Jet killed it |
-| `20261025-194833` | `boss`, 90 s | `boss` | `boss-crowd.json`: Kirby with Sword hit the Concierge twice for 752 |
-| `20261025-195022` | `ability`, `--probe-ability 11 --probe-hud --probe-pause`, 75 s | `pause` | The pause screen's Fire I card; `ability-damage.json` Fire killed its target |
+| `20261025-214404` | `inhale` | `inhale-copy`, banner | A Zombie walks up, is inhaled and swallowed: Bomb |
+| `20261025-222152` | `parry`, Sword | `parry` | A Grenader's grenade lands at Kirby's feet. The shield goes up 40 frames later (`parry-start`), and the grenade bursts 4 frames after that. The parried grenade flies back and kills the Grenader. Kirby's health is unchanged |
+| `20261025-225825` | `spit` | `spit-star` | The first Zombie is inhaled and spat. The star kills the held Zombie, then bursts on the wall |
+| `20261025-222428` | `drop`, Fire | `ability-star` | SELECT drops Fire on its first press. The star bounces around the room and kills the held Zombie |
+| `20261025-223315` | `item`, Ice | `ability-item` | Kirby walks up to an Ice item and its card shows for 50 frames. He inhales it and swallows it: Ice |
+| `20261025-221306` | `fslot`, Crash | `f-slot` | A Crash item lies on the floor and its card shows for 100 frames. Interact takes it and its icon appears in the bottom-left slot. The Heal key fires it and the screen explodes |
+| `20261025-230827` | `projectile` | `projectiles` (from host frame 1035) | Kirby walks toward a Grenader by the left wall, and it throws. He inhales the grenade out of the air and spits it back as a star, which kills the Grenader |
+| `20261025-214028` | `boss`, Sword | `boss` (host frames 1285–1440) | The Concierge's blast hits Sword Kirby, stuns him and takes a chunk of his health bar |
+| `20261025-223521` … `224954`, `222633` | `ability` 11, 18, 19, 10, 8, 4, 13, 16, 2 | `abilities/` (Fire, Sword, Hammer, Ice, Wheel, Beam, Ninja, Jet, Cutter) | Three attacks or until the target died. Fire, Sword, Hammer, Ice and Jet killed it. Wheel, Beam, Ninja and Cutter hit it (target life 65, 80, 77, 91). The target stands where the attack reaches, so Kirby attacks from where he stands |
+| `20261025-195022` | `ability`, `--probe-ability 11 --probe-hud --probe-pause`, 75 s (first set) | `pause` | The pause screen's Fire I card |
 
-Every run reached its time limit (exit -15) with no fatal log and the real saves
-unchanged. The clips add no check beyond each plan's own.
+Failed takes, not used:
+
+- Bomb could not be dropped. With the copy, the mouthful flag stays set and
+  SELECT does nothing, so the drop uses Fire.
+- A Zombie target or spit target placed past the first room's right wall,
+  about 180 px from where Kirby wakes, was hidden. The spit now goes left.
+- A Grenader placed by the right wall died within a second, three times,
+  out of view. Placed on the left in the open, it backed away off screen
+  before throwing. By the left wall it stays in view.
+- A walking approach made Kirby slide into the target and use a close
+  attack instead of his ranged one.
+
+Every run reached its time limit (exit -15) with no fatal log and the real
+saves unchanged. The clips add no gameplay check of their own.

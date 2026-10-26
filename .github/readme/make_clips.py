@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """Make the README's gameplay clips and banner from lab runs (#274).
 
-    python3 scripts/launch_runtime.py --data-root ROOT --start-game --outfit KirbySuperStarUltra \
-        --input-plan combat --capture-fps 15 --seconds 80
+    KIRBY_LAB_SEED=174 python3 scripts/launch_runtime.py --data-root ROOT --start-game \
+        --outfit KirbySuperStarUltra --seconds 120 --showcase inhale
     python3 .github/readme/make_clips.py --runs ROOT/lab/smoke-runs
 
-Each clip is a stretch of one lab run's captured frames (`--capture-fps`),
-cropped around Kirby and kept at the run's own timing. The runs were recorded
-with `CameraZoom` 2 in the staged config.json, so Kirby fills more of the view.
+Each clip is one `--showcase` scene (LabShowcaseProbe): one mechanic, played
+with normal buttons, with a fixed 1/60 s step and every host frame captured, so
+it plays at 60 fps as the game does. The clip is the stretch the scene marks as
+recorded, cropped around Kirby. The runs were recorded with `CameraZoom` 2 in
+the staged config.json, so Kirby fills more of the view.
 Writes animated WebP files next to this script; docs/RUNTIME_LAUNCH.md records
 the runs. Like the release pictures, they stay out of the source archive.
 Needs Pillow with WebP; uses the launcher's fonts.
@@ -25,42 +27,42 @@ from make_media import GOLD, INK, INK_DIM, PINK, font, rounded, shadowed, sky, s
 
 OUT = Path(__file__).resolve().parent
 DEFAULT_RUNS = Path.home() / '.local/share/kirby-dead-cells/repros/readme-274/lab/smoke-runs'
-# name: (run, first ms, last ms, crop box (x, y, width, height) in the 1024x768 lab frame)
+# name: (run, first host frame, last host frame, crop box (x, y, width, height)
+# in the 1024x768 lab frame). None keeps the scene's whole recorded stretch.
+VIEW = (0, 96, 1024, 576)  # The whole game view, its HUD included.
 CLIPS = {
-    'inhale-copy': ('20261025-114411', 36400, 39000, (110, 100, 800, 450)),
-    'parry': ('20261025-114411', 37700, 40400, (190, 100, 800, 450)),
-    'copy-attack': ('20261025-114411', 39000, 42300, (110, 100, 800, 450)),
-    'spit-star': ('20261025-114800', 35300, 37900, (48, 30, 960, 540)),
-    'ability-star': ('20261025-114800', 41000, 45000, (0, 20, 960, 540)),
-    'ability-item': ('20261025-175554', 30700, 32400, (200, 90, 760, 428)),
-    'f-slot': ('20261025-175838', 31400, 37900, (64, 10, 896, 504)),
-    'projectiles': ('20261025-193443', 29900, 32900, (200, 100, 800, 450)),
-    'boss': ('20261025-194833', 25500, 30700, (244, 160, 780, 439)),
+    'inhale-copy': ('20261025-214404', None, None, VIEW),
+    'parry': ('20261025-222152', None, None, VIEW),
+    'spit-star': ('20261025-225825', None, None, VIEW),
+    'ability-star': ('20261025-222428', None, None, VIEW),
+    'ability-item': ('20261025-223315', None, None, VIEW),
+    'f-slot': ('20261025-221306', None, 1380, VIEW),
+    'projectiles': ('20261025-230827', 1035, None, VIEW),
+    'boss': ('20261025-214028', 1285, 1440, VIEW),
 }
-# The gallery: one ability-damage lab run per copy ability; the ms is its first hit.
+# The gallery: one showcase `ability` run per copy ability.
 ABILITIES = {
-    'fire': ('20261025-193814', 29734), 'sword': ('20261025-193923', 30492),
-    'hammer': ('20261025-194032', 29471), 'ice': ('20261025-194141', 30227),
-    'wheel': ('20261025-194250', 30162), 'beam': ('20261025-194359', 31239),
-    'ninja': ('20261025-194508', 30884), 'jet': ('20261025-194616', 31307),
-    'cutter': ('20261025-194725', 29891),
+    'fire': '20261025-223521', 'sword': '20261025-223727', 'hammer': '20261025-223931',
+    'ice': '20261025-224136', 'wheel': '20261025-224340', 'beam': '20261025-224545',
+    'ninja': '20261025-224749', 'jet': '20261025-224954', 'cutter': '20261025-222633',
 }
-ABILITY_CROP = (110, 100, 800, 450)
+ABILITY_CROP = (152, 150, 720, 405)
 # name: (run, frame file, crop box); still pictures.
 STILLS = {
     'pause': ('20261025-195022', 'frame-012760.png', (0, 84, 1024, 300)),
 }
 # The banner plays this clip in its window.
-BANNER_CLIP = ('20261025-114411', 36400, 42300, (110, 100, 800, 450))
+BANNER_CLIP = CLIPS['inhale-copy']
 
 
 def frames(runs: Path, spec: tuple, width: int) -> tuple[list[Image.Image], list[int]]:
-    """The run's frames in the stretch, cropped and scaled, with each one's time on screen in ms."""
-    run, start, end, (x, y, w, h) = spec
+    """The scene's recorded frames in the window, cropped and scaled, with each one's time on screen in ms."""
+    run, first, last, (x, y, w, h) = spec
     caps = [json.loads(line) for line in (runs / run / 'captures.jsonl').read_text().splitlines()]
-    caps = [c for c in caps if c.get('gameplay') and start <= c['elapsedMs'] <= end]
+    caps = [c for c in caps if c.get('recording') and (first is None or c['hostFrame'] >= first)
+            and (last is None or c['hostFrame'] <= last)]
     if not caps:
-        raise SystemExit(f'{run} has no gameplay frames between {start} and {end} ms.')
+        raise SystemExit(f'{run} has no recorded frames in {first}..{last}.')
     images = [Image.open(runs / run / c['file']).convert('RGB').crop((x, y, x + w, y + h))
               .resize((width, round(h * width / w)), Image.LANCZOS) for c in caps]
     times = [c['elapsedMs'] for c in caps]
@@ -118,9 +120,9 @@ def main() -> None:
             image = Image.open(args.runs / run / file).convert('RGB').crop((x, y, x + w, y + h))
             save([rounded(image.resize((800, round(h * 800 / w)), Image.LANCZOS), 18)], [0], OUT / f'{name}.webp')
     (OUT / 'abilities').mkdir(exist_ok=True)
-    for name, (run, hit) in ABILITIES.items():
+    for name, run in ABILITIES.items():
         if not args.names or name in args.names:
-            clip(args.runs, name, (run, hit - 1700, hit + 1300, ABILITY_CROP), 480, OUT / 'abilities')
+            clip(args.runs, name, (run, None, None, ABILITY_CROP), 480, OUT / 'abilities')
     if not args.names or 'banner' in args.names:
         banner(args.runs)
 

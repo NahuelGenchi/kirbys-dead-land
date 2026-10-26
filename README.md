@@ -1,5 +1,5 @@
 <p align="center">
-  <img src=".github/readme/banner.webp" alt="Kirby's Dead Land: play as Kirby in Dead Cells. Kirby inhales a Zombie, copies the Bomb ability and parries with a shield." width="100%">
+  <img src=".github/readme/banner.webp" alt="Kirby's Dead Land: play as Kirby in Dead Cells. Kirby inhales a Zombie, swallows it and copies the Bomb ability." width="100%">
 </p>
 
 <p align="center">
@@ -55,33 +55,33 @@ run to run.
       Hold the attack button to suck an enemy in, then press Down to swallow it. Kirby copies a random power. There are 24 to find.
     </td>
     <td width="50%" valign="top">
-      <img src=".github/readme/parry.webp" alt="Kirby, wearing the Bomb hat, parries a Zombie's attack with a wooden shield." width="100%">
+      <img src=".github/readme/parry.webp" alt="A Grenader's grenade lands at Sword Kirby's feet. He raises a wooden shield just before it bursts, and the parry sends it back to blow up the Grenader." width="100%">
       <h3>Keep your shield</h3>
-      Kirby carries one Dead Cells shield, even while he has a power. Block at the right moment and it's a parry.
+      Kirby carries one Dead Cells shield, even while he has a power. Block at the right moment and it's a parry: a grenade flies back at whoever threw it.
     </td>
   </tr>
   <tr>
     <td width="50%" valign="top">
-      <img src=".github/readme/spit-star.webp" alt="Kirby spits an inhaled enemy out as a star that hits a Zombie." width="100%">
+      <img src=".github/readme/spit-star.webp" alt="Kirby inhales a Zombie and spits it out as a star that flies across the room into a second Zombie." width="100%">
       <h3>Spit stars</h3>
       Don't want the power? Spit the enemy back out as a star. It flies across the room, hits hard and stuns.
     </td>
     <td width="50%" valign="top">
-      <img src=".github/readme/ability-star.webp" alt="Kirby drops his power. It becomes a star that bounces around the room and hits a Zombie." width="100%">
+      <img src=".github/readme/ability-star.webp" alt="Fire Kirby drops his power. It pops out as a star that bounces around the room and hits a Zombie." width="100%">
       <h3>Lose it, catch it</h3>
       Take a hit, or drop your power on purpose, and it pops out as a bouncing star that hurts enemies. Swallow it within 7 seconds to get it back.
     </td>
   </tr>
   <tr>
     <td width="50%" valign="top">
-      <img src=".github/readme/ability-item.webp" alt="The starting sword has turned into a Paint ability item. Its card says what Paint does and how to take it." width="100%">
+      <img src=".github/readme/ability-item.webp" alt="An Ice ability item lies on the floor. Kirby walks up, its card shows, he inhales it, swallows it and becomes Ice Kirby." width="100%">
       <h3>Weapons turn into powers</h3>
       Kirby can't hold a sword or a bow. Every weapon and skill you find becomes an <b>ability item</b> instead: inhale it and swallow it to copy that power.
     </td>
     <td width="50%" valign="top">
-      <img src=".github/readme/f-slot.webp" alt="Kirby uses Crash from his F slot and the whole screen explodes." width="100%">
+      <img src=".github/readme/f-slot.webp" alt="Kirby walks up to a Crash item and its card shows. He takes it with R and its icon appears in the bottom-left slot. Then he presses F and the whole screen explodes." width="100%">
       <h3>Save a big one for later</h3>
-      Crash, Paint, Mike and Cook are kept in a separate slot. Grab one with <kbd>R</kbd>, then press <kbd>F</kbd> whenever you need it. Kirby keeps his other power.
+      Crash, Paint, Mike and Cook are kept in a separate slot. Grab one with <kbd>R</kbd> and its icon shows at the bottom left. Press <kbd>F</kbd> whenever you need it. Kirby keeps his other power.
     </td>
   </tr>
   <tr>
@@ -91,9 +91,9 @@ run to run.
       Arrows and grenades thrown at Kirby can be inhaled too. Spit them back as a star at whoever threw them.
     </td>
     <td width="50%" valign="top">
-      <img src=".github/readme/boss.webp" alt="Kirby fights the Concierge boss with the Sword ability." width="100%">
+      <img src=".github/readme/boss.webp" alt="Sword Kirby slashes at the Concierge boss. The boss blasts him back and a chunk of his health bar goes." width="100%">
       <h3>Bosses fight back</h3>
-      Bosses are too big to swallow, just like in the DS game. Fight them with the power you bring.
+      Bosses are too big to swallow, just like in the DS game, and they hit hard. Fight them with the power you bring.
     </td>
   </tr>
 </table>
@@ -102,19 +102,19 @@ run to run.
 
 <table>
   <tr>
-    <td width="33%" align="center"><img src=".github/readme/abilities/fire.webp" alt="Fire" width="100%"><br><b>Fire</b></td>
-    <td width="33%" align="center"><img src=".github/readme/abilities/sword.webp" alt="Sword" width="100%"><br><b>Sword</b></td>
-    <td width="33%" align="center"><img src=".github/readme/abilities/hammer.webp" alt="Hammer" width="100%"><br><b>Hammer</b></td>
+    <td width="33%" align="center"><img src=".github/readme/abilities/fire.webp" alt="Kirby with Fire: breathes fire." width="100%"><br><b>Fire</b><br><sub>Breathes fire</sub></td>
+    <td width="33%" align="center"><img src=".github/readme/abilities/sword.webp" alt="Kirby with Sword: slashes." width="100%"><br><b>Sword</b><br><sub>Slashes</sub></td>
+    <td width="33%" align="center"><img src=".github/readme/abilities/hammer.webp" alt="Kirby with Hammer: swings a hammer." width="100%"><br><b>Hammer</b><br><sub>Swings a hammer</sub></td>
   </tr>
   <tr>
-    <td width="33%" align="center"><img src=".github/readme/abilities/ice.webp" alt="Ice" width="100%"><br><b>Ice</b></td>
-    <td width="33%" align="center"><img src=".github/readme/abilities/wheel.webp" alt="Wheel" width="100%"><br><b>Wheel</b></td>
-    <td width="33%" align="center"><img src=".github/readme/abilities/beam.webp" alt="Beam" width="100%"><br><b>Beam</b></td>
+    <td width="33%" align="center"><img src=".github/readme/abilities/ice.webp" alt="Kirby with Ice: breathes frost." width="100%"><br><b>Ice</b><br><sub>Breathes frost</sub></td>
+    <td width="33%" align="center"><img src=".github/readme/abilities/wheel.webp" alt="Kirby with Wheel: rolls as a wheel." width="100%"><br><b>Wheel</b><br><sub>Rolls as a wheel</sub></td>
+    <td width="33%" align="center"><img src=".github/readme/abilities/beam.webp" alt="Kirby with Beam: whips a beam." width="100%"><br><b>Beam</b><br><sub>Whips a beam</sub></td>
   </tr>
   <tr>
-    <td width="33%" align="center"><img src=".github/readme/abilities/ninja.webp" alt="Ninja" width="100%"><br><b>Ninja</b></td>
-    <td width="33%" align="center"><img src=".github/readme/abilities/jet.webp" alt="Jet" width="100%"><br><b>Jet</b></td>
-    <td width="33%" align="center"><img src=".github/readme/abilities/cutter.webp" alt="Cutter" width="100%"><br><b>Cutter</b></td>
+    <td width="33%" align="center"><img src=".github/readme/abilities/ninja.webp" alt="Kirby with Ninja: throws knives." width="100%"><br><b>Ninja</b><br><sub>Throws knives</sub></td>
+    <td width="33%" align="center"><img src=".github/readme/abilities/jet.webp" alt="Kirby with Jet: charges and dashes." width="100%"><br><b>Jet</b><br><sub>Charges and dashes</sub></td>
+    <td width="33%" align="center"><img src=".github/readme/abilities/cutter.webp" alt="Kirby with Cutter: throws a blade that comes back." width="100%"><br><b>Cutter</b><br><sub>Throws a blade that comes back</sub></td>
   </tr>
 </table>
 
